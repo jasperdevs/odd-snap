@@ -11,9 +11,10 @@
         MouseEnter="OnMouseEnter"
         MouseLeave="OnMouseLeave">
 
-    <Border x:Name="RootBorder" CornerRadius="10" Padding="2" BorderThickness="1">
+    <Border x:Name="RootBorder" CornerRadius="12" Padding="0" BorderThickness="1.5"
+            BorderBrush="#CCFFFFFF" Background="Transparent">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.3" Color="Black"/>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.4" Color="Black"/>
         </Border.Effect>
         <Border.RenderTransform>
             <TransformGroup>
@@ -23,7 +24,7 @@
         </Border.RenderTransform>
 
         <Grid>
-            <Border x:Name="ImageBorder" CornerRadius="8" ClipToBounds="True"
+            <Border x:Name="ImageBorder" CornerRadius="11" ClipToBounds="True"
                     MaxWidth="280" MaxHeight="180" MinWidth="100">
                 <Image x:Name="ThumbnailImage" Stretch="Uniform"
                        RenderOptions.BitmapScalingMode="HighQuality"/>

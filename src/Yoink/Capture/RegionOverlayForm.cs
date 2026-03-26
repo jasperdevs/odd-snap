@@ -75,10 +75,16 @@ public sealed partial class RegionOverlayForm : Form
     private Point _arrowStart;
     private bool _isArrowDragging;
 
+    // Smart eraser: filled rects sampled from the screenshot
+    private readonly List<(Rectangle rect, Color color)> _eraserFills = new();
+    private Point _eraserStart;
+    private Color _eraserColor;
+    private bool _isEraserDragging;
+
     // Window capture state
     private Rectangle _hoveredWindowRect;
 
-    // Undo stack: "draw", "blur", "arrow"
+    // Undo stack: "draw", "blur", "arrow", "eraser"
     private readonly List<string> _undoStack = new();
 
     // Events
@@ -195,7 +201,7 @@ public sealed partial class RegionOverlayForm : Form
             bg.DrawImage(small, new Rectangle(0, 0, w, h));
 
             // Dark tint over the blur
-            using var tint = new SolidBrush(Color.FromArgb(100, 0, 0, 0));
+            using var tint = new SolidBrush(Color.FromArgb(160, 0, 0, 0));
             bg.FillRectangle(tint, 0, 0, w, h);
         }
 
@@ -209,8 +215,8 @@ public sealed partial class RegionOverlayForm : Form
             {
                 // Smooth ease-out curve for the fade
                 float t = 1f - (float)y / h;
-                t = t * t; // quadratic falloff
-                byte alpha = (byte)(t * 200);
+                t = t * t * t; // cubic falloff - harsher
+                byte alpha = (byte)(t * 240);
 
                 byte* row = scan0 + y * bits.Stride;
                 for (int x = 0; x < w; x++)

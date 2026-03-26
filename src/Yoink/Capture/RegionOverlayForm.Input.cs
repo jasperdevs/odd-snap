@@ -32,7 +32,12 @@ public sealed partial class RegionOverlayForm
 
         if (_mode == CaptureMode.Eraser)
         {
-            EraseAtPoint(e.Location);
+            // Smart eraser: sample color at click point, start dragging a rect
+            int cx = Math.Clamp(e.Location.X, 0, _bmpW - 1);
+            int cy = Math.Clamp(e.Location.Y, 0, _bmpH - 1);
+            _eraserColor = Color.FromArgb(_pixelData[cy * _bmpW + cx]);
+            _eraserStart = e.Location;
+            _isEraserDragging = true;
             return;
         }
 
@@ -107,6 +112,9 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Blur when _isBlurring:
                 Invalidate();
                 break;
+            case CaptureMode.Eraser when _isEraserDragging:
+                Invalidate();
+                break;
             case CaptureMode.Window:
                 var wr = WindowDetector.GetWindowRectAtPoint(e.Location, _virtualBounds);
                 if (wr != _hoveredWindowRect)
@@ -147,6 +155,16 @@ public sealed partial class RegionOverlayForm
                 {
                     _blurRects.Add(blurRect);
                     _undoStack.Add("blur");
+                }
+                Invalidate();
+                break;
+            case CaptureMode.Eraser when _isEraserDragging:
+                _isEraserDragging = false;
+                var eraserRect = NormRect(_eraserStart, e.Location);
+                if (eraserRect.Width > 1 && eraserRect.Height > 1)
+                {
+                    _eraserFills.Add((eraserRect, _eraserColor));
+                    _undoStack.Add("eraser");
                 }
                 Invalidate();
                 break;
@@ -200,6 +218,8 @@ public sealed partial class RegionOverlayForm
                 _blurRects.RemoveAt(_blurRects.Count - 1);
             else if (last == "arrow" && _arrows.Count > 0)
                 _arrows.RemoveAt(_arrows.Count - 1);
+            else if (last == "eraser" && _eraserFills.Count > 0)
+                _eraserFills.RemoveAt(_eraserFills.Count - 1);
             Invalidate();
         }
     }
@@ -220,6 +240,7 @@ public sealed partial class RegionOverlayForm
         _isSelecting = false;
         _isBlurring = false;
         _isArrowDragging = false;
+        _isEraserDragging = false;
         _hoveredWindowRect = Rectangle.Empty;
 
         if (m == CaptureMode.ColorPicker)

@@ -16,7 +16,8 @@ public partial class ToastWindow : Window
 
         Theme.Refresh();
         Root.Background = Theme.Brush(Theme.BgElevated);
-        Root.BorderBrush = Theme.Brush(Theme.BorderSubtle);
+        Root.BorderBrush = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF));
         TitleText.Foreground = Theme.Brush(Theme.TextPrimary);
         BodyText.Foreground = Theme.Brush(Theme.TextSecondary);
 

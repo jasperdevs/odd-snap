@@ -60,9 +60,8 @@ public partial class PreviewWindow : Window
     private void ApplyTheme()
     {
         Theme.Refresh();
-        RootBorder.Background = Theme.Brush(Theme.BgElevated);
-        RootBorder.BorderBrush = Theme.Brush(Theme.BorderSubtle);
-        ImageBorder.Background = RootBorder.Background;
+        // White stroke set in XAML, background transparent so image fills to edges
+        ImageBorder.Background = Theme.Brush(Theme.BgElevated);
     }
 
     private void FitToImage()

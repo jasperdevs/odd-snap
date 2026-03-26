@@ -11,10 +11,10 @@
         Focusable="False"
         ShowActivated="False">
 
-    <Border x:Name="Root" CornerRadius="8" Padding="12,8,12,8" BorderThickness="1"
+    <Border x:Name="Root" CornerRadius="12" Padding="12,8,12,8" BorderThickness="1.5"
             MaxWidth="320" MinWidth="180">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="12" ShadowDepth="3" Opacity="0.3" Color="Black"/>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.4" Color="Black"/>
         </Border.Effect>
         <Border.RenderTransform>
             <TranslateTransform x:Name="SlideX" X="0"/>

@@ -80,6 +80,26 @@ public sealed partial class RegionOverlayForm
             PaintArrow(g, _arrowStart, cur);
         }
 
+        // Smart eraser fills
+        foreach (var (rect, color) in _eraserFills)
+        {
+            using var brush = new SolidBrush(color);
+            g.FillRectangle(brush, rect);
+        }
+
+        // Active eraser preview
+        if (_mode == CaptureMode.Eraser && _isEraserDragging)
+        {
+            var previewRect = NormRect(_eraserStart, PointToClient(System.Windows.Forms.Cursor.Position));
+            if (previewRect.Width > 0 && previewRect.Height > 0)
+            {
+                using var brush = new SolidBrush(Color.FromArgb(180, _eraserColor));
+                g.FillRectangle(brush, previewRect);
+                using var pen = new Pen(Color.FromArgb(120, 255, 255, 255), 1f) { DashStyle = DashStyle.Dash };
+                g.DrawRectangle(pen, previewRect);
+            }
+        }
+
         // Blur rects
         foreach (var br in _blurRects)
             PaintBlurRect(g, br);
