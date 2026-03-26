@@ -168,11 +168,6 @@ public partial class App : Application
     private void ShowPreview(Bitmap screenshot)
     {
         var preview = new PreviewWindow(screenshot);
-        preview.EditRequested += bmp =>
-        {
-            var editor = new AnnotationWindow(bmp);
-            editor.Show();
-        };
         preview.Show();
     }
 

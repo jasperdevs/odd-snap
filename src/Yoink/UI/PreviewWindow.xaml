@@ -7,40 +7,41 @@
         Topmost="True"
         ResizeMode="NoResize"
         Background="Transparent"
-        Width="280" Height="200"
-        MouseLeftButtonDown="OnMouseLeftDown"
-        MouseRightButtonDown="OnMouseRightDown"
-        MouseMove="OnMouseMoveHandler">
+        SizeToContent="WidthAndHeight"
+        MouseEnter="OnMouseEnter"
+        MouseLeave="OnMouseLeave">
 
-    <Border x:Name="RootBorder" CornerRadius="8" Background="#E6202020"
-            BorderBrush="#30FFFFFF" BorderThickness="1"
-            Padding="6">
+    <Border x:Name="RootBorder" CornerRadius="12" Padding="6"
+            BorderThickness="1" Cursor="Hand">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.5" Color="Black"/>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="6" Opacity="0.4" Color="Black"/>
         </Border.Effect>
 
         <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-
             <!-- Screenshot thumbnail -->
-            <Border Grid.Row="0" CornerRadius="4" ClipToBounds="True">
-                <Image x:Name="ThumbnailImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+            <Border CornerRadius="8" ClipToBounds="True">
+                <Image x:Name="ThumbnailImage" Stretch="Uniform"
+                       MaxWidth="300" MaxHeight="200" MinWidth="120" MinHeight="80"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
             </Border>
 
-            <!-- Action buttons -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
-                <Button x:Name="CopyBtn" Content="Copy" Click="CopyClick"
-                        FontSize="11" Padding="8,3" Margin="0,0,4,0"
-                        Background="#30FFFFFF" Foreground="White" BorderThickness="0"/>
-                <Button x:Name="EditBtn" Content="Edit" Click="EditClick"
-                        FontSize="11" Padding="8,3" Margin="0,0,4,0"
-                        Background="#30FFFFFF" Foreground="White" BorderThickness="0"/>
-                <Button x:Name="SaveBtn" Content="Save" Click="SaveClick"
-                        FontSize="11" Padding="8,3"
-                        Background="#30FFFFFF" Foreground="White" BorderThickness="0"/>
+            <!-- Icon overlay buttons (bottom-right) -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                        Margin="0,0,6,6">
+                <!-- Copy icon -->
+                <Border x:Name="CopyBtn" Width="28" Height="28" CornerRadius="6"
+                        Cursor="Hand" MouseLeftButtonDown="CopyClick"
+                        ToolTip="Copy to clipboard">
+                    <Path Data="M16,1H4C2.9,1,2,1.9,2,3v14h2V3h12V1z M19,5H8C6.9,5,6,5.9,6,7v14c0,1.1,0.9,2,2,2h11c1.1,0,2-0.9,2-2V7C21,5.9,20.1,5,19,5z M19,21H8V7h11V21z"
+                          Fill="White" Stretch="Uniform" Width="14" Height="14" Opacity="0.9"/>
+                </Border>
+                <!-- Save icon -->
+                <Border x:Name="SaveBtn" Width="28" Height="28" CornerRadius="6"
+                        Cursor="Hand" MouseLeftButtonDown="SaveClick" Margin="4,0,0,0"
+                        ToolTip="Save to file">
+                    <Path Data="M19,12v7H5v-7H3v7c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2v-7H19z M13,12.67l2.59-2.58L17,11.5l-5,5l-5-5l1.41-1.41L11,12.67V3h2V12.67z"
+                          Fill="White" Stretch="Uniform" Width="14" Height="14" Opacity="0.9"/>
+                </Border>
             </StackPanel>
         </Grid>
     </Border>
