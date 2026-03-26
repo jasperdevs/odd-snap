@@ -27,6 +27,16 @@ public partial class PreviewWindow : Window
 
     private static PreviewWindow? _current;
 
+    public static void DismissCurrent()
+    {
+        if (_current is null) return;
+
+        if (_current.Dispatcher.CheckAccess())
+            _current.ForceClose();
+        else
+            _current.Dispatcher.BeginInvoke(_current.ForceClose);
+    }
+
     public PreviewWindow(Bitmap screenshot, string? savedFilePath = null)
     {
         _current?.ForceClose();

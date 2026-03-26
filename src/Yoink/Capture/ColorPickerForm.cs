@@ -12,8 +12,6 @@ public sealed class ColorPickerForm : Form
 {
     private readonly Bitmap _screenshot;
     private readonly Bitmap _dimmed;
-    private readonly Bitmap _backBuffer;
-    private readonly Graphics _bufferGfx;
     private readonly int[] _pixelData;
     private readonly int _bmpW, _bmpH;
     private readonly Rectangle _virtualBounds;
@@ -32,6 +30,8 @@ public sealed class ColorPickerForm : Form
     private readonly Font _rgbFont = new("Segoe UI", 9f);
 
     private Point _cursorPos;
+    private Point _prevCursorPos;
+    private Rectangle _prevPanelRect;
     private Color _pickedColor = Color.Black;
 
     private const int GridSize = 9;
@@ -67,10 +67,6 @@ public sealed class ColorPickerForm : Form
             g.FillRectangle(dim, 0, 0, _bmpW, _bmpH);
         }
 
-        // Full-size back buffer so we can blit the whole thing at once
-        _backBuffer = new Bitmap(_bmpW, _bmpH, PixelFormat.Format32bppArgb);
-        _bufferGfx = Graphics.FromImage(_backBuffer);
-
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         TopMost = true;
@@ -93,8 +89,17 @@ public sealed class ColorPickerForm : Form
         var np = new Point(pt.X - _virtualBounds.X, pt.Y - _virtualBounds.Y);
         if (np != _cursorPos)
         {
+            _prevCursorPos = _cursorPos;
             _cursorPos = np;
-            Invalidate();
+
+            var oldCross = GetCrosshairRect(_prevCursorPos);
+            var newCross = GetCrosshairRect(_cursorPos);
+            var newPanel = GetPanelRect(_cursorPos);
+
+            if (!_prevPanelRect.IsEmpty) Invalidate(_prevPanelRect);
+            Invalidate(Rectangle.Union(oldCross, newCross));
+            Invalidate(newPanel);
+            _prevPanelRect = newPanel;
         }
     }
 
@@ -106,6 +111,15 @@ public sealed class ColorPickerForm : Form
         if (py + PanelH > ClientSize.Height) py = cursor.Y - CursorOffset - PanelH;
         return (Math.Max(4, px), Math.Max(4, py));
     }
+
+    private Rectangle GetPanelRect(Point cursor)
+    {
+        var (px, py) = CalcPanelPos(cursor);
+        return new Rectangle(px - 4, py - 4, PanelW + 8, PanelH + 8);
+    }
+
+    private static Rectangle GetCrosshairRect(Point cursor) =>
+        new(cursor.X - 14, cursor.Y - 14, 28, 28);
 
     private Color GetFastPixel(int x, int y)
     {
@@ -124,11 +138,12 @@ public sealed class ColorPickerForm : Form
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        var g = _bufferGfx;
+        var g = e.Graphics;
+        var clip = e.ClipRectangle;
 
-        // Blit dimmed background (fast, single draw)
+        // Restore only the dirty area from the dimmed screenshot.
         g.CompositingMode = CompositingMode.SourceCopy;
-        g.DrawImage(_dimmed, 0, 0);
+        g.DrawImage(_dimmed, clip, clip, GraphicsUnit.Pixel);
         g.CompositingMode = CompositingMode.SourceOver;
 
         int cx = Math.Clamp(_cursorPos.X, 0, _bmpW - 1);
@@ -199,8 +214,6 @@ public sealed class ColorPickerForm : Form
         g.DrawLine(_crossPen, _cursorPos.X, _cursorPos.Y - 10, _cursorPos.X, _cursorPos.Y - 3);
         g.DrawLine(_crossPen, _cursorPos.X, _cursorPos.Y + 3, _cursorPos.X, _cursorPos.Y + 10);
 
-        // Single blit from back buffer to screen
-        e.Graphics.DrawImage(_backBuffer, 0, 0);
     }
 
     protected override void OnMouseClick(MouseEventArgs e)
@@ -233,8 +246,6 @@ public sealed class ColorPickerForm : Form
         if (disposing)
         {
             _trackTimer.Dispose();
-            _bufferGfx.Dispose();
-            _backBuffer.Dispose();
             _dimmed.Dispose();
             _bgBrush.Dispose();
             _borderPen.Dispose();

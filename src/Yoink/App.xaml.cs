@@ -71,6 +71,7 @@ public partial class App : Application
     {
         if (_isCapturing) return;
         _isCapturing = true;
+        PreviewWindow.DismissCurrent();
         Dispatcher.BeginInvoke(() =>
         {
             try { StartColorPicker(); }
@@ -132,6 +133,7 @@ public partial class App : Application
     {
         if (_isCapturing) return;
         _isCapturing = true;
+        PreviewWindow.DismissCurrent();
         Dispatcher.BeginInvoke(() =>
         {
             try { StartCapture(false); }
@@ -147,6 +149,7 @@ public partial class App : Application
     {
         if (_isCapturing) return;
         _isCapturing = true;
+        PreviewWindow.DismissCurrent();
         Dispatcher.BeginInvoke(() =>
         {
             try { StartCapture(true); }
