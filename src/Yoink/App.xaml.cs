@@ -1,7 +1,10 @@
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Yoink.Capture;
+using Yoink.Models;
 using Yoink.Services;
 using Yoink.UI;
 
@@ -52,17 +55,12 @@ public partial class App : Application
 
     private void OnHotkeyPressed()
     {
-        if (_isCapturing)
-            return;
-
+        if (_isCapturing) return;
         _isCapturing = true;
 
         Dispatcher.BeginInvoke(() =>
         {
-            try
-            {
-                StartCapture();
-            }
+            try { StartCapture(); }
             catch (Exception ex)
             {
                 _trayIcon?.ShowBalloon("Yoink Error", ex.Message,
@@ -74,13 +72,8 @@ public partial class App : Application
 
     private void StartCapture()
     {
-        // Delay so modifier keys can release before capture
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            DoCapture();
-        };
+        timer.Tick += (_, _) => { timer.Stop(); DoCapture(); };
         timer.Start();
     }
 
@@ -93,19 +86,27 @@ public partial class App : Application
             var (bmp, bounds) = ScreenCapture.CaptureAllScreens();
             screenshot = bmp;
 
+            var lastMode = _settingsService!.Settings.LastCaptureMode;
+
             var overlayThread = new Thread(() =>
             {
                 System.Windows.Forms.Application.EnableVisualStyles();
-
-                var overlay = new RegionOverlayForm(screenshot, bounds);
+                var overlay = new RegionOverlayForm(screenshot, bounds, lastMode);
 
                 overlay.RegionSelected += selection =>
                 {
                     overlay.Hide();
-
                     using var cropped = ScreenCapture.CropRegion(screenshot, selection);
-                    ClipboardService.CopyToClipboard(cropped);
+                    HandleCaptureResult(cropped);
+                    overlay.Close();
+                    System.Windows.Forms.Application.ExitThread();
+                };
 
+                overlay.FreeformSelected += freeformBmp =>
+                {
+                    overlay.Hide();
+                    HandleCaptureResult(freeformBmp);
+                    freeformBmp.Dispose();
                     overlay.Close();
                     System.Windows.Forms.Application.ExitThread();
                 };
@@ -135,6 +136,52 @@ public partial class App : Application
             _isCapturing = false;
             throw;
         }
+    }
+
+    private void HandleCaptureResult(Bitmap captured)
+    {
+        // Clone the bitmap so we own it after this method
+        var result = new Bitmap(captured);
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            var action = _settingsService!.Settings.AfterCapture;
+
+            // Always save to file if enabled
+            if (_settingsService.Settings.SaveToFile)
+            {
+                SaveToFile(result);
+            }
+
+            if (action == AfterCaptureAction.ShowPreview)
+            {
+                ShowPreview(result);
+            }
+            else
+            {
+                ClipboardService.CopyToClipboard(result);
+                result.Dispose();
+            }
+        });
+    }
+
+    private void ShowPreview(Bitmap screenshot)
+    {
+        var preview = new PreviewWindow(screenshot);
+        preview.EditRequested += bmp =>
+        {
+            var editor = new AnnotationWindow(bmp);
+            editor.Show();
+        };
+        preview.Show();
+    }
+
+    private void SaveToFile(Bitmap screenshot)
+    {
+        var dir = _settingsService!.Settings.SaveDirectory;
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+        screenshot.Save(path, ImageFormat.Png);
     }
 
     private void ShowSettings()

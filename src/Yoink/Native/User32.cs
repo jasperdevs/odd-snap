@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Yoink.Native;
 
@@ -12,7 +13,7 @@ internal static partial class User32
     public const uint MOD_WIN = 0x0008;
     public const uint MOD_NOREPEAT = 0x4000;
 
-    public const int VK_SNAPSHOT = 0x2C;  // PrintScreen
+    public const int VK_SNAPSHOT = 0x2C;
     public const int VK_S = 0x53;
 
     public const int SRCCOPY = 0x00CC0020;
@@ -21,6 +22,13 @@ internal static partial class User32
     public const int SM_YVIRTUALSCREEN = 77;
     public const int SM_CXVIRTUALSCREEN = 78;
     public const int SM_CYVIRTUALSCREEN = 79;
+
+    public const int GWL_EXSTYLE = -20;
+    public const int WS_EX_TOOLWINDOW = 0x80;
+    public const int WS_EX_APPWINDOW = 0x40000;
+    public const uint GA_ROOTOWNER = 3;
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -41,4 +49,54 @@ internal static partial class User32
 
     [LibraryImport("user32.dll")]
     public static partial int GetLastError();
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsWindowVisible(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetWindowLongA(IntPtr hWnd, int nIndex);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr WindowFromPoint(POINT point);
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int GetWindowTextW(IntPtr hWnd, [Out] char[] lpString, int nMaxCount);
+
+    [LibraryImport("user32.dll")]
+    public static partial int GetWindowTextLengthW(IntPtr hWnd);
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int GetClassNameW(IntPtr hWnd, [Out] char[] lpClassName, int nMaxCount);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+
+        public int Width => Right - Left;
+        public int Height => Bottom - Top;
+
+        public System.Drawing.Rectangle ToRectangle() =>
+            new(Left, Top, Width, Height);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X, Y;
+
+        public POINT(int x, int y) { X = x; Y = y; }
+    }
 }
