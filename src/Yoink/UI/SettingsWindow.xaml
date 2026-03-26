@@ -8,7 +8,7 @@
         ThemeMode="System">
 
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="40" GlassFrameThickness="-1" CornerRadius="8"
+        <WindowChrome CaptionHeight="36" GlassFrameThickness="-1" CornerRadius="8"
                       UseAeroCaptionButtons="True"/>
     </WindowChrome.WindowChrome>
 
@@ -17,10 +17,9 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Bd" Padding="14,6" CornerRadius="6" Cursor="Hand"
+                        <Border x:Name="Bd" Padding="12,5" CornerRadius="6" Cursor="Hand"
                                 Background="Transparent" WindowChrome.IsHitTestVisibleInChrome="True">
-                            <TextBlock x:Name="Tb" Text="{TemplateBinding Content}"
-                                       FontSize="13"
+                            <TextBlock x:Name="Tb" Text="{TemplateBinding Content}" FontSize="12"
                                        Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
                                        Opacity="0.4"/>
                         </Border>
@@ -32,7 +31,7 @@
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#0CFFFFFF"/>
-                                <Setter TargetName="Tb" Property="Opacity" Value="0.8"/>
+                                <Setter TargetName="Tb" Property="Opacity" Value="0.7"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -44,13 +43,13 @@
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Opacity" Value="0.55"/>
-            <Setter Property="Margin" Value="2,0,0,8"/>
+            <Setter Property="Margin" Value="2,0,0,6"/>
         </Style>
 
-        <Style x:Key="SettingCard" TargetType="Border">
+        <Style x:Key="Card" TargetType="Border">
             <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Padding" Value="16,12"/>
-            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Padding" Value="14,11"/>
+            <Setter Property="Margin" Value="0,0,0,3"/>
             <Setter Property="Background" Value="#0AFFFFFF"/>
         </Style>
     </Window.Resources>
@@ -61,87 +60,66 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Custom title bar area -->
-        <Border Grid.Row="0" Padding="20,12,20,8">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="10"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <StackPanel Grid.Row="0" Orientation="Horizontal">
-                    <TextBlock Text="Yoink" FontSize="20" FontWeight="Bold"/>
-                    <Border Background="#12FFFFFF" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v0.1.0" FontSize="10" Opacity="0.3"/>
-                    </Border>
-                </StackPanel>
-
-                <StackPanel Grid.Row="2" Orientation="Horizontal">
-                    <RadioButton x:Name="SettingsTab" Content="Settings" GroupName="Tabs"
-                                 IsChecked="True" Click="TabChanged" Style="{StaticResource TabPill}"/>
-                    <RadioButton x:Name="HistoryTab" Content="History" GroupName="Tabs"
-                                 Click="TabChanged" Margin="4,0,0,0" Style="{StaticResource TabPill}"/>
-                </StackPanel>
-            </Grid>
+        <!-- Tab bar in title area -->
+        <Border Grid.Row="0" Padding="16,8,16,4">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="SettingsTab" Content="Settings" GroupName="Tabs"
+                             IsChecked="True" Click="TabChanged" Style="{StaticResource TabPill}"/>
+                <RadioButton x:Name="HistoryTab" Content="Screenshots" GroupName="Tabs"
+                             Click="TabChanged" Margin="2,0,0,0" Style="{StaticResource TabPill}"/>
+                <RadioButton x:Name="OcrTab" Content="Text" GroupName="Tabs"
+                             Click="TabChanged" Margin="2,0,0,0" Style="{StaticResource TabPill}"/>
+            </StackPanel>
         </Border>
 
-        <!-- Content -->
         <Grid Grid.Row="1">
 
-            <!-- Settings tab -->
-            <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" Padding="20,4,20,20">
+            <!-- Settings -->
+            <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" Padding="18,6,18,18">
                 <StackPanel>
-
                     <TextBlock Text="Capture" Style="{StaticResource SectionLabel}"/>
 
-                    <Border Style="{StaticResource SettingCard}">
+                    <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="Screenshot hotkey" FontSize="13"/>
-                                <TextBlock x:Name="HotkeyHint" Text="Click box, press new combo"
-                                           FontSize="11" Opacity="0.35" Visibility="Collapsed"/>
-                            </StackPanel>
+                            <TextBlock Text="Screenshot hotkey" FontSize="13" VerticalAlignment="Center"/>
                             <TextBox x:Name="HotkeyBox" Grid.Column="1" IsReadOnly="True"
-                                     FontSize="12" Padding="10,6" MinWidth="120" TextAlignment="Center"
+                                     FontSize="12" Padding="10,5" MinWidth="115" TextAlignment="Center"
                                      WindowChrome.IsHitTestVisibleInChrome="True"
                                      PreviewKeyDown="HotkeyBox_PreviewKeyDown"
-                                     GotFocus="HotkeyBox_GotFocus"
-                                     LostFocus="HotkeyBox_LostFocus"/>
+                                     GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus"/>
                         </Grid>
                     </Border>
 
-                    <Border Style="{StaticResource SettingCard}">
+                    <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="OCR hotkey" FontSize="13"/>
-                                <TextBlock Text="Extract text from screen" FontSize="11" Opacity="0.35"/>
+                                <TextBlock Text="Extract text from screen" FontSize="11" Opacity="0.3"/>
                             </StackPanel>
                             <TextBox x:Name="OcrHotkeyBox" Grid.Column="1" IsReadOnly="True"
-                                     FontSize="12" Padding="10,6" MinWidth="120" TextAlignment="Center"
+                                     FontSize="12" Padding="10,5" MinWidth="115" TextAlignment="Center"
                                      WindowChrome.IsHitTestVisibleInChrome="True"
                                      PreviewKeyDown="OcrHotkeyBox_PreviewKeyDown"
-                                     GotFocus="OcrHotkeyBox_GotFocus"
-                                     LostFocus="OcrHotkeyBox_LostFocus"/>
+                                     GotFocus="OcrHotkeyBox_GotFocus" LostFocus="OcrHotkeyBox_LostFocus"/>
                         </Grid>
                     </Border>
 
-                    <Border Style="{StaticResource SettingCard}">
+                    <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="After capture" FontSize="13" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="AfterCaptureCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="150"
+                            <TextBlock Text="After capture" FontSize="13" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="AfterCaptureCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
                                       WindowChrome.IsHitTestVisibleInChrome="True"
                                       SelectionChanged="AfterCaptureCombo_SelectionChanged">
                                 <ComboBoxItem Content="Copy to clipboard"/>
@@ -150,40 +128,39 @@
                         </Grid>
                     </Border>
 
-                    <TextBlock Text="Saving" Style="{StaticResource SectionLabel}" Margin="0,16,0,8"/>
+                    <TextBlock Text="Saving" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
 
-                    <Border Style="{StaticResource SettingCard}">
+                    <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="SaveToFileCheck" Content="Save screenshots to file" FontSize="13"
                                       WindowChrome.IsHitTestVisibleInChrome="True"
                                       Checked="SaveToFileCheck_Changed" Unchecked="SaveToFileCheck_Changed"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" x:Name="SaveDirPanel" Visibility="Collapsed">
-                                <TextBox x:Name="SaveDirBox" IsReadOnly="True" FontSize="11" Padding="8,5" Width="290"
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" x:Name="SaveDirPanel" Visibility="Collapsed">
+                                <TextBox x:Name="SaveDirBox" IsReadOnly="True" FontSize="11" Padding="7,4" Width="280"
                                          WindowChrome.IsHitTestVisibleInChrome="True"/>
-                                <Button Content="Browse" FontSize="11" Padding="10,5" Margin="6,0,0,0"
+                                <Button Content="Browse" FontSize="11" Padding="8,4" Margin="5,0,0,0"
                                         WindowChrome.IsHitTestVisibleInChrome="True" Click="BrowseButton_Click"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource SettingCard}">
+                    <Border Style="{StaticResource Card}">
                         <CheckBox x:Name="SaveHistoryCheck" Content="Save capture history" FontSize="13"
                                   WindowChrome.IsHitTestVisibleInChrome="True"
                                   Checked="SaveHistoryCheck_Changed" Unchecked="SaveHistoryCheck_Changed"/>
                     </Border>
 
-                    <TextBlock Text="General" Style="{StaticResource SectionLabel}" Margin="0,16,0,8"/>
+                    <TextBlock Text="General" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
 
-                    <Border Style="{StaticResource SettingCard}">
+                    <Border Style="{StaticResource Card}">
                         <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
                                   WindowChrome.IsHitTestVisibleInChrome="True"
                                   Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
                     </Border>
-
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- History tab -->
+            <!-- Screenshots History -->
             <Grid x:Name="HistoryPanel" Visibility="Collapsed">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
@@ -191,64 +168,42 @@
                 </Grid.RowDefinitions>
 
                 <TextBlock x:Name="HistoryEmptyText" Grid.Row="0" Text="No captures yet"
-                           FontSize="14" Opacity="0.25" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontSize="13" Opacity="0.25" HorizontalAlignment="Center" VerticalAlignment="Center"
                            Visibility="Collapsed"/>
 
-                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="12,4,12,4">
-                    <ItemsControl x:Name="HistoryItems">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border x:Name="Card" Width="152" Margin="4" CornerRadius="8" ClipToBounds="True"
-                                        Background="#08FFFFFF" Cursor="Hand" BorderThickness="2"
-                                        BorderBrush="Transparent"
-                                        MouseLeftButtonDown="HistoryItemClick"
-                                        MouseRightButtonDown="HistoryItemRightClick"
-                                        Tag="{Binding}">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="96"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
-                                        <Image Grid.Row="0" Source="{Binding ThumbPath}" Stretch="UniformToFill"
-                                               RenderOptions.BitmapScalingMode="HighQuality"/>
-                                        <!-- Selection overlay -->
-                                        <Border x:Name="SelectOverlay" Grid.Row="0" Background="#40000000"
-                                                Visibility="{Binding SelectVisible}">
-                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                      WindowChrome.IsHitTestVisibleInChrome="True"
-                                                      Click="HistorySelectToggle"/>
-                                        </Border>
-                                        <StackPanel Grid.Row="1" Margin="8,5,8,6">
-                                            <TextBlock Text="{Binding Dimensions}" FontSize="11"/>
-                                            <TextBlock Text="{Binding TimeAgo}" FontSize="10" Opacity="0.3"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Padding="10,4,10,4">
+                    <StackPanel x:Name="HistoryStack"/>
                 </ScrollViewer>
 
-                <Border Grid.Row="1" Padding="16,6,16,10">
+                <Border Grid.Row="1" Padding="14,5,14,8">
                     <Grid>
-                        <TextBlock x:Name="HistoryCountText" FontSize="12" Opacity="0.3" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="HistoryCountText" FontSize="11" Opacity="0.3" VerticalAlignment="Center"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button x:Name="SelectBtn" Content="Select" FontSize="11" Padding="10,4"
-                                    Margin="0,0,4,0" WindowChrome.IsHitTestVisibleInChrome="True"
+                            <Button x:Name="SelectBtn" Content="Select" FontSize="11" Padding="8,3"
+                                    Margin="0,0,3,0" WindowChrome.IsHitTestVisibleInChrome="True"
                                     Click="ToggleSelectMode"/>
-                            <Button x:Name="DeleteSelectedBtn" Content="Delete selected" FontSize="11"
-                                    Padding="10,4" Visibility="Collapsed"
+                            <Button x:Name="DeleteSelectedBtn" Content="Delete" FontSize="11"
+                                    Padding="8,3" Visibility="Collapsed"
                                     WindowChrome.IsHitTestVisibleInChrome="True"
                                     Click="DeleteSelectedClick"/>
                         </StackPanel>
                     </Grid>
                 </Border>
+            </Grid>
+
+            <!-- OCR History -->
+            <Grid x:Name="OcrPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="OcrEmptyText" Text="No text captures yet"
+                           FontSize="13" Opacity="0.25" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,4,14,14">
+                    <StackPanel x:Name="OcrStack"/>
+                </ScrollViewer>
             </Grid>
         </Grid>
     </Grid>

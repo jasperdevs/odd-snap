@@ -186,8 +186,14 @@ public partial class App : Application
                 if (!string.IsNullOrWhiteSpace(text))
                 {
                     System.Windows.Clipboard.SetText(text);
-                    _trayIcon?.ShowBalloon("Yoink OCR", "Text copied to clipboard.",
+                    // Show the copied text (truncated) in the balloon
+                    var preview = text.Length > 120 ? text[..120] + "..." : text;
+                    _trayIcon?.ShowBalloon("Yoink OCR", preview,
                         System.Windows.Forms.ToolTipIcon.Info);
+
+                    // Save to OCR history
+                    if (_settingsService!.Settings.SaveHistory)
+                        _historyService!.SaveOcrEntry(text);
                 }
                 else
                 {

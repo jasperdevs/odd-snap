@@ -11,42 +11,43 @@
         MouseEnter="OnMouseEnter"
         MouseLeave="OnMouseLeave">
 
-    <Border x:Name="RootBorder" CornerRadius="10" Padding="5" BorderThickness="1">
+    <Border x:Name="RootBorder" CornerRadius="10" Padding="4" BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.35" Color="Black"/>
         </Border.Effect>
         <Border.RenderTransform>
-            <ScaleTransform x:Name="DragScale" ScaleX="1" ScaleY="1"/>
+            <TransformGroup>
+                <ScaleTransform x:Name="DragScale" ScaleX="1" ScaleY="1"/>
+                <TranslateTransform x:Name="SlideX" X="0"/>
+            </TransformGroup>
         </Border.RenderTransform>
 
         <Grid>
-            <!-- Screenshot with rounded corners -->
-            <Border CornerRadius="6" ClipToBounds="True">
+            <Border CornerRadius="7" ClipToBounds="True">
+                <!-- Constrain image: max 280 wide, max 180 tall, min 100 wide -->
                 <Image x:Name="ThumbnailImage" Stretch="Uniform"
-                       MaxWidth="300" MaxHeight="200" MinWidth="120" MinHeight="80"
+                       MaxWidth="280" MaxHeight="180" MinWidth="100"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
             </Border>
 
-            <!-- X close (hover only) -->
             <Border x:Name="CloseBtn" Width="20" Height="20" CornerRadius="10"
                     Background="#90000000" Cursor="Hand"
                     MouseLeftButtonDown="CloseClick"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,4,4,0" Opacity="0">
+                    Margin="0,3,3,0" Opacity="0">
                 <Canvas Width="8" Height="8" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Line X1="0" Y1="0" X2="8" Y2="8" Stroke="White" StrokeThickness="1.5"/>
                     <Line X1="8" Y1="0" X2="0" Y2="8" Stroke="White" StrokeThickness="1.5"/>
                 </Canvas>
             </Border>
 
-            <!-- Save icon (hover only) -->
-            <Border x:Name="SaveBtn" Width="26" Height="26" CornerRadius="6"
+            <Border x:Name="SaveBtn" Width="24" Height="24" CornerRadius="6"
                     Background="#70000000" Cursor="Hand"
                     MouseLeftButtonDown="SaveClick"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="0,0,4,4" Opacity="0">
+                    Margin="0,0,3,3" Opacity="0">
                 <Path Data="M19,12v7H5v-7H3v7c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2v-7H19z M13,12.67l2.59-2.58L17,11.5l-5,5l-5-5l1.41-1.41L11,12.67V3h2V12.67z"
-                      Fill="White" Stretch="Uniform" Width="12" Height="12" Opacity="0.9"/>
+                      Fill="White" Stretch="Uniform" Width="11" Height="11" Opacity="0.9"/>
             </Border>
         </Grid>
     </Border>

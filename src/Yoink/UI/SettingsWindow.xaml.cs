@@ -3,10 +3,14 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Yoink.Models;
 using Yoink.Services;
 using RadioButton = System.Windows.Controls.RadioButton;
 using Button = System.Windows.Controls.Button;
+using CheckBox = System.Windows.Controls.CheckBox;
+using Image = System.Windows.Controls.Image;
 
 namespace Yoink.UI;
 
@@ -43,17 +47,12 @@ public partial class SettingsWindow : Window
 
     private void TabChanged(object sender, RoutedEventArgs e)
     {
-        if (SettingsTab?.IsChecked == true)
-        {
-            SettingsPanel.Visibility = Visibility.Visible;
-            HistoryPanel.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            SettingsPanel.Visibility = Visibility.Collapsed;
-            HistoryPanel.Visibility = Visibility.Visible;
-            LoadHistory();
-        }
+        SettingsPanel.Visibility = SettingsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        HistoryPanel.Visibility = HistoryTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        OcrPanel.Visibility = OcrTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+
+        if (HistoryTab.IsChecked == true) LoadHistory();
+        if (OcrTab.IsChecked == true) LoadOcrHistory();
     }
 
     // ─── Hotkey ────────────────────────────────────────────────────
@@ -62,60 +61,35 @@ public partial class SettingsWindow : Window
     {
         _isRecordingHotkey = true;
         HotkeyBox.Text = "Press keys...";
-        HotkeyHint.Visibility = Visibility.Visible;
     }
 
     private void HotkeyBox_LostFocus(object sender, RoutedEventArgs e)
     {
         _isRecordingHotkey = false;
-        HotkeyHint.Visibility = Visibility.Collapsed;
-        HotkeyBox.Text = FormatHotkey(
-            _settingsService.Settings.HotkeyModifiers,
-            _settingsService.Settings.HotkeyKey);
+        HotkeyBox.Text = FormatHotkey(_settingsService.Settings.HotkeyModifiers, _settingsService.Settings.HotkeyKey);
     }
 
     private void HotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (!_isRecordingHotkey) return;
         e.Handled = true;
-
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
-            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin
-            or Key.Escape) return;
+        if (IsModifierOnly(key)) return;
 
-        // Escape cancels recording
-        if (e.Key == Key.Escape)
-        {
-            _isRecordingHotkey = false;
-            HotkeyHint.Visibility = Visibility.Collapsed;
-            HotkeyBox.Text = FormatHotkey(
-                _settingsService.Settings.HotkeyModifiers,
-                _settingsService.Settings.HotkeyKey);
-            Keyboard.ClearFocus();
-            return;
-        }
-
-        uint modifiers = 0;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) modifiers |= Native.User32.MOD_ALT;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) modifiers |= Native.User32.MOD_CONTROL;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) modifiers |= Native.User32.MOD_SHIFT;
-        if (modifiers == 0) return; // require at least one modifier
+        uint mod = GetModifiers();
+        if (mod == 0) return;
 
         uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
-        _settingsService.Settings.HotkeyModifiers = modifiers;
+        _settingsService.Settings.HotkeyModifiers = mod;
         _settingsService.Settings.HotkeyKey = vk;
         _settingsService.Save();
-
-        HotkeyBox.Text = FormatHotkey(modifiers, vk);
+        HotkeyBox.Text = FormatHotkey(mod, vk);
         _isRecordingHotkey = false;
-        HotkeyHint.Visibility = Visibility.Collapsed;
-        FocusManager.SetFocusedElement(this, this);
         Keyboard.ClearFocus();
         HotkeyChanged?.Invoke();
     }
 
-    // ─── OCR Hotkey ───────────────────────────────────────────────
+    // ─── OCR Hotkey ────────────────────────────────────────────────
 
     private bool _isRecordingOcr;
 
@@ -128,9 +102,7 @@ public partial class SettingsWindow : Window
     private void OcrHotkeyBox_LostFocus(object sender, RoutedEventArgs e)
     {
         _isRecordingOcr = false;
-        OcrHotkeyBox.Text = FormatHotkey(
-            _settingsService.Settings.OcrHotkeyModifiers,
-            _settingsService.Settings.OcrHotkeyKey);
+        OcrHotkeyBox.Text = FormatHotkey(_settingsService.Settings.OcrHotkeyModifiers, _settingsService.Settings.OcrHotkeyKey);
     }
 
     private void OcrHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -138,24 +110,32 @@ public partial class SettingsWindow : Window
         if (!_isRecordingOcr) return;
         e.Handled = true;
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
-            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape) return;
+        if (IsModifierOnly(key)) return;
 
-        uint modifiers = 0;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) modifiers |= Native.User32.MOD_ALT;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) modifiers |= Native.User32.MOD_CONTROL;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) modifiers |= Native.User32.MOD_SHIFT;
-        if (modifiers == 0) return;
+        uint mod = GetModifiers();
+        if (mod == 0) return;
 
         uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
-        _settingsService.Settings.OcrHotkeyModifiers = modifiers;
+        _settingsService.Settings.OcrHotkeyModifiers = mod;
         _settingsService.Settings.OcrHotkeyKey = vk;
         _settingsService.Save();
-
-        OcrHotkeyBox.Text = FormatHotkey(modifiers, vk);
+        OcrHotkeyBox.Text = FormatHotkey(mod, vk);
         _isRecordingOcr = false;
         Keyboard.ClearFocus();
         HotkeyChanged?.Invoke();
+    }
+
+    private static bool IsModifierOnly(Key k) =>
+        k is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
+            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape;
+
+    private static uint GetModifiers()
+    {
+        uint m = 0;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) m |= Native.User32.MOD_ALT;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) m |= Native.User32.MOD_CONTROL;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) m |= Native.User32.MOD_SHIFT;
+        return m;
     }
 
     // ─── Settings controls ─────────────────────────────────────────
@@ -178,16 +158,16 @@ public partial class SettingsWindow : Window
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new System.Windows.Forms.FolderBrowserDialog
+        var dlg = new System.Windows.Forms.FolderBrowserDialog
         {
-            Description = "Choose where to save screenshots",
+            Description = "Choose save folder",
             SelectedPath = _settingsService.Settings.SaveDirectory,
             ShowNewFolderButton = true
         };
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
         {
-            _settingsService.Settings.SaveDirectory = dialog.SelectedPath;
-            SaveDirBox.Text = dialog.SelectedPath;
+            _settingsService.Settings.SaveDirectory = dlg.SelectedPath;
+            SaveDirBox.Text = dlg.SelectedPath;
             _settingsService.Save();
         }
     }
@@ -198,7 +178,11 @@ public partial class SettingsWindow : Window
         bool on = StartWithWindowsCheck.IsChecked == true;
         _settingsService.Settings.StartWithWindows = on;
         _settingsService.Save();
-        SetStartWithWindows(on);
+        const string rk = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(rk, true);
+        if (key is null) return;
+        if (on) { var exe = Environment.ProcessPath; if (exe != null) key.SetValue("Yoink", $"\"{exe}\""); }
+        else key.DeleteValue("Yoink", false);
     }
 
     private void SaveHistoryCheck_Changed(object sender, RoutedEventArgs e)
@@ -208,46 +192,119 @@ public partial class SettingsWindow : Window
         _settingsService.Save();
     }
 
-    private static void SetStartWithWindows(bool enable)
-    {
-        const string keyName = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(keyName, true);
-        if (key is null) return;
-        if (enable)
-        {
-            var exe = Environment.ProcessPath;
-            if (exe is not null) key.SetValue("Yoink", $"\"{exe}\"");
-        }
-        else key.DeleteValue("Yoink", false);
-    }
-
-    // ─── History ───────────────────────────────────────────────────
+    // ─── Screenshot History (date-grouped) ─────────────────────────
 
     private bool _selectMode;
+    private List<HistoryItemVM> _historyItems = new();
 
     private void LoadHistory()
     {
         _selectMode = false;
         SelectBtn.Content = "Select";
         DeleteSelectedBtn.Visibility = Visibility.Collapsed;
-        RefreshHistoryItems();
-    }
+        HistoryStack.Children.Clear();
 
-    private void RefreshHistoryItems()
-    {
-        var vis = _selectMode ? Visibility.Visible : Visibility.Collapsed;
-        var items = _historyService.Entries.Select(e => new HistoryItemVM
+        var entries = _historyService.Entries;
+        HistoryCountText.Text = $"{entries.Count} capture{(entries.Count == 1 ? "" : "s")}";
+        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        _historyItems = entries.Select(e => new HistoryItemVM
         {
-            Entry = e,
-            ThumbPath = e.FilePath,
+            Entry = e, ThumbPath = e.FilePath,
             Dimensions = $"{e.Width} x {e.Height}",
-            TimeAgo = FormatTimeAgo(e.CapturedAt),
-            SelectVisible = vis
+            TimeAgo = FormatTimeAgo(e.CapturedAt)
         }).ToList();
 
-        HistoryItems.ItemsSource = items;
-        HistoryCountText.Text = $"{items.Count} capture{(items.Count == 1 ? "" : "s")}";
-        HistoryEmptyText.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        // Group by date
+        var groups = _historyItems.GroupBy(i => i.Entry.CapturedAt.Date).OrderByDescending(g => g.Key);
+        foreach (var group in groups)
+        {
+            string label = group.Key == DateTime.Today ? "Today"
+                : group.Key == DateTime.Today.AddDays(-1) ? "Yesterday"
+                : group.Key.ToString("MMMM d, yyyy");
+
+            HistoryStack.Children.Add(new TextBlock
+            {
+                Text = label, FontSize = 12, FontWeight = FontWeights.SemiBold,
+                Opacity = 0.45, Margin = new Thickness(6, 10, 0, 4)
+            });
+
+            var wrap = new WrapPanel();
+            foreach (var item in group)
+            {
+                var thumb = CreateHistoryCard(item);
+                wrap.Children.Add(thumb);
+            }
+            HistoryStack.Children.Add(wrap);
+        }
+    }
+
+    private Border CreateHistoryCard(HistoryItemVM vm)
+    {
+        var img = new Image { Stretch = Stretch.UniformToFill };
+        RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.UriSource = new Uri(vm.ThumbPath);
+            bmp.DecodePixelWidth = 160;
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.EndInit();
+            bmp.Freeze();
+            img.Source = bmp;
+        }
+        catch { }
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(90) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        Grid.SetRow(img, 0);
+        grid.Children.Add(img);
+
+        var info = new StackPanel { Margin = new Thickness(7, 4, 7, 5) };
+        info.Children.Add(new TextBlock { Text = vm.Dimensions, FontSize = 10.5 });
+        info.Children.Add(new TextBlock { Text = vm.TimeAgo, FontSize = 9.5, Opacity = 0.3 });
+        Grid.SetRow(info, 1);
+        grid.Children.Add(info);
+
+        var card = new Border
+        {
+            Width = 148, Margin = new Thickness(3),
+            CornerRadius = new CornerRadius(7), ClipToBounds = true,
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Child = grid, Tag = vm
+        };
+
+        card.MouseLeftButtonDown += (s, e) =>
+        {
+            if (_selectMode) { vm.IsSelected = !vm.IsSelected; UpdateCardSelection(card, vm); return; }
+            if (!File.Exists(vm.Entry.FilePath)) return;
+            var viewer = new ImageViewerWindow(vm.Entry.FilePath, _historyService, vm.Entry);
+            viewer.Owner = this;
+            viewer.ShowDialog();
+            LoadHistory();
+        };
+
+        card.MouseRightButtonDown += (s, e) =>
+        {
+            if (!_selectMode) { _selectMode = true; SelectBtn.Content = "Done"; DeleteSelectedBtn.Visibility = Visibility.Visible; }
+            vm.IsSelected = !vm.IsSelected;
+            UpdateCardSelection(card, vm);
+        };
+
+        return card;
+    }
+
+    private static void UpdateCardSelection(Border card, HistoryItemVM vm)
+    {
+        card.BorderThickness = new Thickness(vm.IsSelected ? 2 : 0);
+        card.BorderBrush = vm.IsSelected
+            ? new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 255, 255, 255))
+            : System.Windows.Media.Brushes.Transparent;
     }
 
     private void ToggleSelectMode(object sender, RoutedEventArgs e)
@@ -255,39 +312,74 @@ public partial class SettingsWindow : Window
         _selectMode = !_selectMode;
         SelectBtn.Content = _selectMode ? "Done" : "Select";
         DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
-        RefreshHistoryItems();
+        if (!_selectMode) LoadHistory();
     }
 
     private void DeleteSelectedClick(object sender, RoutedEventArgs e)
     {
-        if (HistoryItems.ItemsSource is not List<HistoryItemVM> items) return;
-        var toDelete = items.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
+        var toDelete = _historyItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
         foreach (var entry in toDelete)
             _historyService.DeleteEntry(entry);
         LoadHistory();
     }
 
     private void HistorySelectToggle(object sender, RoutedEventArgs e) { }
+    private void HistoryItemClick(object sender, MouseButtonEventArgs e) { }
+    private void HistoryItemRightClick(object sender, MouseButtonEventArgs e) { }
 
-    private void HistoryItemClick(object sender, MouseButtonEventArgs e)
+    // ─── OCR History ───────────────────────────────────────────────
+
+    private void LoadOcrHistory()
     {
-        if (sender is not Border border || border.Tag is not HistoryItemVM vm) return;
-        if (_selectMode) { vm.IsSelected = !vm.IsSelected; return; }
-        if (!File.Exists(vm.Entry.FilePath)) return;
+        OcrStack.Children.Clear();
+        var entries = _historyService.OcrEntries;
+        OcrEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        var viewer = new ImageViewerWindow(vm.Entry.FilePath, _historyService, vm.Entry);
-        viewer.Owner = this;
-        viewer.ShowDialog();
-        LoadHistory();
+        foreach (var entry in entries)
+        {
+            var card = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(12, 10, 12, 10),
+                Margin = new Thickness(0, 0, 0, 4),
+                Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var textStack = new StackPanel();
+            var preview = entry.Text.Length > 80 ? entry.Text[..80] + "..." : entry.Text;
+            textStack.Children.Add(new TextBlock
+            {
+                Text = preview, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+                MaxHeight = 40
+            });
+            textStack.Children.Add(new TextBlock
+            {
+                Text = FormatTimeAgo(entry.CapturedAt), FontSize = 10, Opacity = 0.3,
+                Margin = new Thickness(0, 3, 0, 0)
+            });
+            grid.Children.Add(textStack);
+
+            var copyBtn = new Button
+            {
+                Content = "Copy", FontSize = 11, Padding = new Thickness(8, 3, 8, 3),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(copyBtn, 1);
+            var capturedText = entry.Text;
+            copyBtn.Click += (_, _) => System.Windows.Clipboard.SetText(capturedText);
+            grid.Children.Add(copyBtn);
+
+            card.Child = grid;
+            OcrStack.Children.Add(card);
+        }
     }
 
-    private void HistoryItemRightClick(object sender, MouseButtonEventArgs e)
-    {
-        // Right-click to enter select mode and toggle this item
-        if (!_selectMode) ToggleSelectMode(sender, e);
-        if (sender is Border border && border.Tag is HistoryItemVM vm)
-            vm.IsSelected = !vm.IsSelected;
-    }
+    // ─── Helpers ───────────────────────────────────────────────────
 
     private static string FormatTimeAgo(DateTime dt)
     {
@@ -299,12 +391,12 @@ public partial class SettingsWindow : Window
         return dt.ToString("MMM d, yyyy");
     }
 
-    private static string FormatHotkey(uint modifiers, uint vk)
+    private static string FormatHotkey(uint mod, uint vk)
     {
         var parts = new List<string>();
-        if ((modifiers & Native.User32.MOD_CONTROL) != 0) parts.Add("Ctrl");
-        if ((modifiers & Native.User32.MOD_ALT) != 0) parts.Add("Alt");
-        if ((modifiers & Native.User32.MOD_SHIFT) != 0) parts.Add("Shift");
+        if ((mod & Native.User32.MOD_CONTROL) != 0) parts.Add("Ctrl");
+        if ((mod & Native.User32.MOD_ALT) != 0) parts.Add("Alt");
+        if ((mod & Native.User32.MOD_SHIFT) != 0) parts.Add("Shift");
         var key = KeyInterop.KeyFromVirtualKey((int)vk);
         parts.Add(key switch { Key.Oem3 => "`", _ => key.ToString() });
         return string.Join(" + ", parts);
@@ -317,7 +409,6 @@ internal sealed class HistoryItemVM : System.ComponentModel.INotifyPropertyChang
     public string ThumbPath { get; set; } = "";
     public string Dimensions { get; set; } = "";
     public string TimeAgo { get; set; } = "";
-    public Visibility SelectVisible { get; set; } = Visibility.Collapsed;
 
     private bool _isSelected;
     public bool IsSelected

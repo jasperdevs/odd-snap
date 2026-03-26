@@ -201,12 +201,13 @@ public partial class PreviewWindow : Window
 
     private void AnimateDismiss()
     {
-        var dur = TimeSpan.FromMilliseconds(200);
+        // Swipe right + fade out
+        var dur = TimeSpan.FromMilliseconds(250);
         var ease = new CubicEase { EasingMode = EasingMode.EaseIn };
-        DragScale.BeginAnimation(ScaleTransform.ScaleXProperty,
-            new DoubleAnimation { To = 0.5, Duration = dur, EasingFunction = ease });
-        DragScale.BeginAnimation(ScaleTransform.ScaleYProperty,
-            new DoubleAnimation { To = 0.5, Duration = dur, EasingFunction = ease });
+
+        SlideX.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation { To = 350, Duration = dur, EasingFunction = ease });
+
         var fadeOut = new DoubleAnimation { To = 0, Duration = dur, EasingFunction = ease };
         fadeOut.Completed += (_, _) => ForceClose();
         BeginAnimation(OpacityProperty, fadeOut);

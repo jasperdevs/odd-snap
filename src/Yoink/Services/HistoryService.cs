@@ -14,69 +14,85 @@ public sealed class HistoryEntry
     public int Height { get; set; }
 }
 
+public sealed class OcrHistoryEntry
+{
+    public string Text { get; set; } = "";
+    public DateTime CapturedAt { get; set; }
+}
+
 public sealed class HistoryService
 {
     private static readonly string HistoryDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history");
 
     private static readonly string IndexPath = Path.Combine(HistoryDir, "index.json");
+    private static readonly string OcrIndexPath = Path.Combine(HistoryDir, "ocr_index.json");
 
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
 
     private List<HistoryEntry> _entries = new();
+    private List<OcrHistoryEntry> _ocrEntries = new();
 
     public IReadOnlyList<HistoryEntry> Entries => _entries;
+    public IReadOnlyList<OcrHistoryEntry> OcrEntries => _ocrEntries;
 
     public void Load()
     {
         Directory.CreateDirectory(HistoryDir);
 
-        if (!File.Exists(IndexPath)) return;
-
-        try
+        if (File.Exists(IndexPath))
         {
-            var json = File.ReadAllText(IndexPath);
-            _entries = JsonSerializer.Deserialize<List<HistoryEntry>>(json, JsonOpts) ?? new();
-            // Prune entries whose files no longer exist
-            _entries.RemoveAll(e => !File.Exists(e.FilePath));
+            try
+            {
+                _entries = JsonSerializer.Deserialize<List<HistoryEntry>>(
+                    File.ReadAllText(IndexPath), JsonOpts) ?? new();
+                _entries.RemoveAll(e => !File.Exists(e.FilePath));
+            }
+            catch { _entries = new(); }
         }
-        catch
+
+        if (File.Exists(OcrIndexPath))
         {
-            _entries = new();
+            try
+            {
+                _ocrEntries = JsonSerializer.Deserialize<List<OcrHistoryEntry>>(
+                    File.ReadAllText(OcrIndexPath), JsonOpts) ?? new();
+            }
+            catch { _ocrEntries = new(); }
         }
     }
 
     public HistoryEntry SaveCapture(Bitmap screenshot)
     {
         Directory.CreateDirectory(HistoryDir);
-
         var now = DateTime.Now;
         var fileName = $"yoink_{now:yyyyMMdd_HHmmss_fff}.png";
         var filePath = Path.Combine(HistoryDir, fileName);
-
         screenshot.Save(filePath, ImageFormat.Png);
 
         var entry = new HistoryEntry
         {
-            FileName = fileName,
-            FilePath = filePath,
-            CapturedAt = now,
-            Width = screenshot.Width,
-            Height = screenshot.Height
+            FileName = fileName, FilePath = filePath, CapturedAt = now,
+            Width = screenshot.Width, Height = screenshot.Height
         };
-
         _entries.Insert(0, entry);
 
-        // Keep max 100 entries
-        while (_entries.Count > 100)
+        while (_entries.Count > 200)
         {
             var old = _entries[^1];
             _entries.RemoveAt(_entries.Count - 1);
             try { File.Delete(old.FilePath); } catch { }
         }
-
         SaveIndex();
         return entry;
+    }
+
+    public void SaveOcrEntry(string text)
+    {
+        _ocrEntries.Insert(0, new OcrHistoryEntry { Text = text, CapturedAt = DateTime.Now });
+        while (_ocrEntries.Count > 200)
+            _ocrEntries.RemoveAt(_ocrEntries.Count - 1);
+        SaveOcrIndex();
     }
 
     public void DeleteEntry(HistoryEntry entry)
@@ -84,6 +100,12 @@ public sealed class HistoryService
         _entries.Remove(entry);
         try { File.Delete(entry.FilePath); } catch { }
         SaveIndex();
+    }
+
+    public void DeleteOcrEntry(OcrHistoryEntry entry)
+    {
+        _ocrEntries.Remove(entry);
+        SaveOcrIndex();
     }
 
     public void ClearAll()
@@ -94,9 +116,9 @@ public sealed class HistoryService
         SaveIndex();
     }
 
-    private void SaveIndex()
-    {
-        var json = JsonSerializer.Serialize(_entries, JsonOpts);
-        File.WriteAllText(IndexPath, json);
-    }
+    private void SaveIndex() =>
+        File.WriteAllText(IndexPath, JsonSerializer.Serialize(_entries, JsonOpts));
+
+    private void SaveOcrIndex() =>
+        File.WriteAllText(OcrIndexPath, JsonSerializer.Serialize(_ocrEntries, JsonOpts));
 }
