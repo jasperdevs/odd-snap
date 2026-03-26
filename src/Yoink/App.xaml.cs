@@ -85,7 +85,7 @@ public partial class App : Application
 
     private void StartColorPicker()
     {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
@@ -102,7 +102,12 @@ public partial class App : Application
                     {
                         SoundService.PlayColorSound();
                         System.Windows.Clipboard.SetText(hex);
-                        ToastWindow.Show("Color copied", hex);
+                        // Parse hex to Color for swatch display
+                        byte r = Convert.ToByte(hex.Substring(1, 2), 16);
+                        byte g = Convert.ToByte(hex.Substring(3, 2), 16);
+                        byte b = Convert.ToByte(hex.Substring(5, 2), 16);
+                        var swatchColor = System.Windows.Media.Color.FromRgb(r, g, b);
+                        ToastWindow.ShowWithColor("Color copied", hex, swatchColor);
                     });
                     picker.Close();
                     System.Windows.Forms.Application.ExitThread();
@@ -163,7 +168,7 @@ public partial class App : Application
 
     private void StartCapture(bool ocrMode)
     {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
         timer.Tick += (_, _) => { timer.Stop(); DoCapture(ocrMode); };
         timer.Start();
     }

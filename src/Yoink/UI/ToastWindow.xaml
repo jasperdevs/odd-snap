@@ -20,10 +20,14 @@
             <TranslateTransform x:Name="SlideX" X="0"/>
         </Border.RenderTransform>
 
-        <StackPanel>
-            <TextBlock x:Name="TitleText" FontSize="12" FontWeight="SemiBold"/>
-            <TextBlock x:Name="BodyText" FontSize="11" Opacity="0.55" TextWrapping="Wrap"
-                       MaxWidth="280" Margin="0,2,0,0"/>
+        <StackPanel Orientation="Horizontal">
+            <Border x:Name="ColorSwatch" Width="28" Height="28" CornerRadius="5"
+                    Margin="0,0,10,0" Visibility="Collapsed" VerticalAlignment="Center"/>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="TitleText" FontSize="12" FontWeight="SemiBold"/>
+                <TextBlock x:Name="BodyText" FontSize="11" Opacity="0.55" TextWrapping="Wrap"
+                           MaxWidth="280" Margin="0,2,0,0"/>
+            </StackPanel>
         </StackPanel>
     </Border>
 </Window>

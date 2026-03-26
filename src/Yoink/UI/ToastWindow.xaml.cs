@@ -10,7 +10,7 @@ public partial class ToastWindow : Window
     private bool _isDismissing;
     private static ToastWindow? _current;
 
-    private ToastWindow(string title, string body)
+    private ToastWindow(string title, string body, System.Windows.Media.Color? swatchColor)
     {
         InitializeComponent();
 
@@ -23,6 +23,12 @@ public partial class ToastWindow : Window
         TitleText.Text = title;
         BodyText.Text = body;
         if (string.IsNullOrEmpty(body)) BodyText.Visibility = Visibility.Collapsed;
+
+        if (swatchColor.HasValue)
+        {
+            ColorSwatch.Background = Theme.Brush(swatchColor.Value);
+            ColorSwatch.Visibility = Visibility.Visible;
+        }
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
         _timer.Tick += (_, _) => { _timer.Stop(); SlideAway(); };
@@ -84,10 +90,16 @@ public partial class ToastWindow : Window
 
     public static void Show(string title, string body = "")
     {
-        // Kill old toast immediately - only one at a time
         _current?.ForceClose();
+        var toast = new ToastWindow(title, body, null);
+        _current = toast;
+        toast.Show();
+    }
 
-        var toast = new ToastWindow(title, body);
+    public static void ShowWithColor(string title, string body, System.Windows.Media.Color color)
+    {
+        _current?.ForceClose();
+        var toast = new ToastWindow(title, body, color);
         _current = toast;
         toast.Show();
     }

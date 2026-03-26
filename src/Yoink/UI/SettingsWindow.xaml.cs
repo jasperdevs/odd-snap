@@ -266,7 +266,11 @@ public partial class SettingsWindow : Window
         HistoryStack.Children.Clear();
 
         var entries = _historyService.Entries;
-        HistoryCountText.Text = $"{entries.Count} capture{(entries.Count == 1 ? "" : "s")}";
+        long totalBytes = 0;
+        foreach (var e in entries)
+            try { totalBytes += new FileInfo(e.FilePath).Length; } catch { }
+        var sizeStr = FormatStorageSize(totalBytes);
+        HistoryCountText.Text = $"{entries.Count} capture{(entries.Count == 1 ? "" : "s")} \u00B7 {sizeStr}";
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         _historyItems = entries.Select(e => new HistoryItemVM
@@ -305,18 +309,8 @@ public partial class SettingsWindow : Window
         var img = new Image { Stretch = Stretch.UniformToFill };
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
 
-        try
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.UriSource = new Uri(vm.ThumbPath);
-            bmp.DecodePixelWidth = 320;
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.EndInit();
-            bmp.Freeze();
-            img.Source = bmp;
-        }
-        catch { }
+        // Lazy load: only decode when the card scrolls into view
+        img.Loaded += (_, _) => LoadThumbAsync(img, vm.ThumbPath);
 
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(90) });
@@ -442,7 +436,40 @@ public partial class SettingsWindow : Window
         }
     }
 
+    // ─── Lazy thumbnail loading ────────────────────────────────────
+
+    private static void LoadThumbAsync(Image img, string path)
+    {
+        // Already loaded (e.g. re-layout)
+        if (img.Source != null) return;
+
+        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try
+            {
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.UriSource = new Uri(path);
+                bmp.DecodePixelWidth = 320;
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.EndInit();
+                bmp.Freeze();
+
+                img.Dispatcher.BeginInvoke(() => img.Source = bmp);
+            }
+            catch { }
+        });
+    }
+
     // ─── Helpers ───────────────────────────────────────────────────
+
+    private static string FormatStorageSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
+        return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
+    }
 
     private static string FormatTimeAgo(DateTime dt)
     {
