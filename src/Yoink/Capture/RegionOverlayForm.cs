@@ -23,7 +23,7 @@ public sealed class RegionOverlayForm : Form
     private readonly List<Point> _freeformPoints = new();
     private Rectangle _hoveredWindowRect;
 
-    private readonly Rectangle[] _toolbarButtons = new Rectangle[5];
+    private readonly Rectangle[] _toolbarButtons = new Rectangle[4];
     private int _hoveredButton = -1;
     private Rectangle _toolbarRect;
     private const int ToolbarHeight = 44;
@@ -90,10 +90,10 @@ public sealed class RegionOverlayForm : Form
 
     private void CalcToolbar()
     {
-        int w = ButtonSize * 5 + ButtonSpacing * 4 + 16;
+        int w = ButtonSize * 4 + ButtonSpacing * 3 + 16;
         int x = (ClientSize.Width - w) / 2;
         _toolbarRect = new Rectangle(x, ToolbarTopMargin, w, ToolbarHeight);
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 4; i++)
             _toolbarButtons[i] = new Rectangle(
                 _toolbarRect.X + 8 + i * (ButtonSize + ButtonSpacing),
                 _toolbarRect.Y + (ToolbarHeight - ButtonSize) / 2,
@@ -175,18 +175,20 @@ public sealed class RegionOverlayForm : Form
             g.DrawPath(bp, p);
         }
 
-        string[] icons = { "rect", "free", "win", "full", "close" };
-        for (int i = 0; i < 5; i++)
+        // Buttons: 0=rect, 1=freeform, 2=fullscreen, 3=close
+        string[] icons = { "rect", "free", "full", "close" };
+        CaptureMode[] modes = { CaptureMode.Rectangle, CaptureMode.Freeform, CaptureMode.Fullscreen };
+        for (int i = 0; i < 4; i++)
         {
             var btn = new Rectangle(_toolbarButtons[i].X, _toolbarButtons[i].Y + oy,
                 ButtonSize, ButtonSize);
-            bool active = i < 4 && (int)_mode == i;
+            bool active = i < 3 && _mode == modes[i];
             bool hover = _hoveredButton == i;
             if (active || hover)
                 using (var p = RRect(btn, 6))
                 using (var b = new SolidBrush(Color.FromArgb((int)(t * (active ? 80 : 40)), 255, 255, 255)))
                     g.FillPath(b, p);
-            int ia = (int)(t * (i == 4 ? 200 : 255));
+            int ia = (int)(t * (i == 3 ? 200 : 255));
             DrawIcon(g, icons[i], btn, Color.FromArgb(ia, 255, 255, 255));
         }
         g.SmoothingMode = SmoothingMode.Default;
@@ -250,7 +252,14 @@ public sealed class RegionOverlayForm : Form
         if (e.Button != MouseButtons.Left) return;
 
         int btn = GetToolbarButtonAt(e.Location);
-        if (btn >= 0) { if (btn == 4) Cancel(); else SetMode((CaptureMode)btn); return; }
+        if (btn >= 0)
+        {
+            if (btn == 3) { Cancel(); return; }
+            // Map: 0=Rectangle, 1=Freeform, 2=Fullscreen
+            var modeMap = new[] { CaptureMode.Rectangle, CaptureMode.Freeform, CaptureMode.Fullscreen };
+            SetMode(modeMap[btn]);
+            return;
+        }
 
         _hasDragged = false;
         switch (_mode)
@@ -326,7 +335,9 @@ public sealed class RegionOverlayForm : Form
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (e.KeyCode == Keys.Escape) Cancel();
-        if (e.KeyCode >= Keys.D1 && e.KeyCode <= Keys.D4) SetMode((CaptureMode)(e.KeyCode - Keys.D1));
+        if (e.KeyCode == Keys.D1) SetMode(CaptureMode.Rectangle);
+        if (e.KeyCode == Keys.D2) SetMode(CaptureMode.Freeform);
+        if (e.KeyCode == Keys.D3) SetMode(CaptureMode.Fullscreen);
     }
 
     private int GetToolbarButtonAt(Point p)
