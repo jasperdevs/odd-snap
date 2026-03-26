@@ -11,30 +11,41 @@ public static class OcrService
 {
     public static async Task<string> RecognizeAsync(Bitmap bitmap)
     {
-        using var ms = new MemoryStream();
-        bitmap.Save(ms, ImageFormat.Bmp);
-        ms.Position = 0;
+        // Convert System.Drawing.Bitmap to PNG bytes
+        byte[] pngBytes;
+        using (var ms = new MemoryStream())
+        {
+            bitmap.Save(ms, ImageFormat.Png);
+            pngBytes = ms.ToArray();
+        }
 
-        // Convert to WinRT stream
+        // Write to WinRT InMemoryRandomAccessStream
         var ras = new InMemoryRandomAccessStream();
         using (var writer = new DataWriter(ras.GetOutputStreamAt(0)))
         {
-            writer.WriteBytes(ms.ToArray());
+            writer.WriteBytes(pngBytes);
             await writer.StoreAsync();
-            await writer.FlushAsync();
         }
         ras.Seek(0);
 
+        // Decode to SoftwareBitmap
         var decoder = await BitmapDecoder.CreateAsync(ras);
         var softwareBmp = await decoder.GetSoftwareBitmapAsync(
             Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,
             BitmapAlphaMode.Premultiplied);
 
+        // Run OCR
         var engine = OcrEngine.TryCreateFromUserProfileLanguages();
         if (engine is null)
-            return "[OCR not available - no language packs installed]";
+        {
+            // Fallback to English
+            engine = OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("en-US"));
+        }
+
+        if (engine is null)
+            return "";
 
         var result = await engine.RecognizeAsync(softwareBmp);
-        return result.Text;
+        return result.Text ?? "";
     }
 }

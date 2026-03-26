@@ -35,11 +35,11 @@
             </Setter>
         </Style>
 
-        <!-- Section label -->
+        <!-- Section label - normal case, like Windows Settings -->
         <Style x:Key="SectionLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Opacity" Value="0.35"/>
+            <Setter Property="Opacity" Value="0.6"/>
             <Setter Property="Margin" Value="2,0,0,8"/>
         </Style>
 
@@ -91,7 +91,7 @@
             <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" Padding="24,8,24,24">
                 <StackPanel>
 
-                    <TextBlock Text="CAPTURE" Style="{StaticResource SectionLabel}"/>
+                    <TextBlock Text="Capture" Style="{StaticResource SectionLabel}"/>
 
                     <!-- Hotkey card -->
                     <Border Style="{StaticResource SettingCard}">
@@ -148,7 +148,7 @@
                         </Grid>
                     </Border>
 
-                    <TextBlock Text="SAVING" Style="{StaticResource SectionLabel}" Margin="0,16,0,8"/>
+                    <TextBlock Text="Saving" Style="{StaticResource SectionLabel}" Margin="0,16,0,8"/>
 
                     <!-- Save to file card -->
                     <Border Style="{StaticResource SettingCard}">
@@ -168,7 +168,7 @@
                                   Checked="SaveHistoryCheck_Changed" Unchecked="SaveHistoryCheck_Changed"/>
                     </Border>
 
-                    <TextBlock Text="GENERAL" Style="{StaticResource SectionLabel}" Margin="0,16,0,8"/>
+                    <TextBlock Text="General" Style="{StaticResource SectionLabel}" Margin="0,16,0,8"/>
 
                     <!-- Start with Windows card -->
                     <Border Style="{StaticResource SettingCard}">

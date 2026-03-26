@@ -13,13 +13,10 @@
 
     <Border x:Name="RootBorder" CornerRadius="10" Padding="5" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect x:Name="RootShadow" BlurRadius="16" ShadowDepth="4" Opacity="0.35" Color="Black"/>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.35" Color="Black"/>
         </Border.Effect>
         <Border.RenderTransform>
-            <TransformGroup>
-                <ScaleTransform x:Name="DragScale" ScaleX="1" ScaleY="1" CenterX="150" CenterY="100"/>
-                <RotateTransform x:Name="DragRotate" Angle="0" CenterX="150" CenterY="100"/>
-            </TransformGroup>
+            <ScaleTransform x:Name="DragScale" ScaleX="1" ScaleY="1"/>
         </Border.RenderTransform>
 
         <Grid>
@@ -30,7 +27,7 @@
                        RenderOptions.BitmapScalingMode="HighQuality"/>
             </Border>
 
-            <!-- X close button (inside image, top-right, hover only) -->
+            <!-- X close (hover only) -->
             <Border x:Name="CloseBtn" Width="20" Height="20" CornerRadius="10"
                     Background="#90000000" Cursor="Hand"
                     MouseLeftButtonDown="CloseClick"
@@ -42,7 +39,7 @@
                 </Canvas>
             </Border>
 
-            <!-- Save icon (inside image, bottom-right, hover only) -->
+            <!-- Save icon (hover only) -->
             <Border x:Name="SaveBtn" Width="26" Height="26" CornerRadius="6"
                     Background="#70000000" Cursor="Hand"
                     MouseLeftButtonDown="SaveClick"
