@@ -112,8 +112,7 @@ public sealed class RegionOverlayForm : Form
         {
             _toolbarAnim = Math.Min(1f, (float)(DateTime.UtcNow - _showTime).TotalMilliseconds / 180f);
             if (_toolbarAnim >= 1f) _animTimer.Stop();
-            Invalidate(new Rectangle(_toolbarRect.X - 2, _toolbarRect.Y - 32,
-                _toolbarRect.Width + 4, _toolbarRect.Height + 36));
+            Invalidate(); // full repaint during short animation to avoid partial artifacts
         };
         _animTimer.Start();
 
@@ -146,6 +145,7 @@ public sealed class RegionOverlayForm : Form
             0, 0, 0, 0,
             Native.User32.SWP_NOMOVE | Native.User32.SWP_NOSIZE | Native.User32.SWP_SHOWWINDOW);
         Native.User32.SetForegroundWindow(Handle);
+        Invalidate(); // full repaint so no black regions remain
     }
 
     private void CalcToolbar()
