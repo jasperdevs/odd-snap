@@ -268,6 +268,8 @@ public sealed class RegionOverlayForm : Form
 
         // 0=rect, 1=freeform, 2=fullscreen, 3=OCR, 4=colorpicker, 5=draw, 6=blur, 7=settings, 8=close
         string[] icons = { "rect", "free", "full", "ocr", "picker", "draw", "blur", "gear", "close" };
+        string[] labels = { "Rectangle (1)", "Freeform (2)", "Fullscreen (3)", "OCR (4)",
+            "Color Picker (5)", "Draw (6)", "Blur (7)", "Settings", "Close" };
         CaptureMode[] modes = { CaptureMode.Rectangle, CaptureMode.Freeform,
             CaptureMode.Fullscreen, CaptureMode.Ocr, CaptureMode.ColorPicker,
             CaptureMode.Draw, CaptureMode.Blur };
@@ -285,6 +287,28 @@ public sealed class RegionOverlayForm : Form
             int ia = (int)(t * (i >= BtnCount - 2 ? 200 : 255));
             DrawIcon(g, icons[i], btn, Color.FromArgb(ia, 255, 255, 255));
         }
+
+        // Tooltip for hovered button
+        if (_hoveredButton >= 0 && _hoveredButton < labels.Length && t > 0.5f)
+        {
+            string label = labels[_hoveredButton];
+            using var tipFont = new Font("Segoe UI", 9f);
+            var sz = g.MeasureString(label, tipFont);
+            var btnRect = _toolbarButtons[_hoveredButton];
+            float tx = btnRect.X + btnRect.Width / 2f - sz.Width / 2f;
+            float ty = r.Bottom + 6 + oy;
+            var tipRect = new RectangleF(tx - 6, ty - 2, sz.Width + 12, sz.Height + 4);
+            using (var tipPath = RRect(tipRect, 5))
+            {
+                using var tipBg = new SolidBrush(Color.FromArgb(220, 24, 24, 24));
+                g.FillPath(tipBg, tipPath);
+                using var tipBorder = new Pen(Color.FromArgb(40, 255, 255, 255));
+                g.DrawPath(tipBorder, tipPath);
+            }
+            using var tipBrush = new SolidBrush(Color.FromArgb(210, 255, 255, 255));
+            g.DrawString(label, tipFont, tipBrush, tx, ty);
+        }
+
         g.SmoothingMode = SmoothingMode.Default;
     }
 
