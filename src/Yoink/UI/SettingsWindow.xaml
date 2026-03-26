@@ -6,6 +6,7 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         Foreground="White"
+        Background="Transparent"
         ThemeMode="Dark">
 
     <Window.Resources>
@@ -176,6 +177,11 @@
                     </Border>
 
                     <TextBlock Text="General" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <CheckBox x:Name="MuteSoundsCheck" Content="Mute capture sounds" FontSize="13"
+                                  Checked="MuteSoundsCheck_Changed" Unchecked="MuteSoundsCheck_Changed"/>
+                    </Border>
 
                     <Border Style="{StaticResource Card}">
                         <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"

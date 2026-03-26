@@ -282,6 +282,7 @@ public partial class PreviewWindow : Window
     {
         _fadeTimer.Stop();
         if (_current == this) _current = null;
+        _screenshot.Dispose();
         base.OnClosed(e);
     }
 }

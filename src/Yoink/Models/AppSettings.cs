@@ -26,4 +26,5 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; } = true;
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
     public bool SaveHistory { get; set; } = true;
+    public bool MuteSounds { get; set; } = false;
 }

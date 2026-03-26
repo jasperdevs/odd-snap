@@ -29,6 +29,7 @@ public partial class App : Application
 
         _settingsService = new SettingsService();
         _settingsService.Load();
+        SoundService.Muted = _settingsService.Settings.MuteSounds;
 
         _historyService = new HistoryService();
         _historyService.Load();
@@ -111,8 +112,10 @@ public partial class App : Application
                     overlay.RegionSelected += sel =>
                     {
                         overlay.Hide();
-                        using var cropped = ScreenCapture.CropRegion(screenshot, sel);
-                        HandleCaptureResult(cropped);
+                        using var annotated = overlay.RenderAnnotatedBitmap();
+                        using var cropped = ScreenCapture.CropRegion(annotated, sel);
+                        var clone = new Bitmap(cropped); // clone before thread exits
+                        HandleCaptureResult(clone);
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
                     };
@@ -120,7 +123,8 @@ public partial class App : Application
                     overlay.FreeformSelected += fbmp =>
                     {
                         overlay.Hide();
-                        HandleCaptureResult(fbmp);
+                        var clone = new Bitmap(fbmp);
+                        HandleCaptureResult(clone);
                         fbmp.Dispose();
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
@@ -130,8 +134,10 @@ public partial class App : Application
                     overlay.OcrRegionSelected += sel =>
                     {
                         overlay.Hide();
-                        using var cropped = ScreenCapture.CropRegion(screenshot, sel);
-                        HandleOcrResult(cropped);
+                        using var annotated = overlay.RenderAnnotatedBitmap();
+                        using var cropped = ScreenCapture.CropRegion(annotated, sel);
+                        var clone = new Bitmap(cropped);
+                        HandleOcrResult(clone);
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
                     };
@@ -139,7 +145,8 @@ public partial class App : Application
                     overlay.OcrFreeformSelected += fbmp =>
                     {
                         overlay.Hide();
-                        HandleOcrResult(fbmp);
+                        var clone = new Bitmap(fbmp);
+                        HandleOcrResult(clone);
                         fbmp.Dispose();
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
@@ -201,9 +208,8 @@ public partial class App : Application
 
     // ─── Result handlers ────────────────────────────────────────────
 
-    private void HandleCaptureResult(Bitmap captured)
+    private void HandleCaptureResult(Bitmap result)
     {
-        var result = new Bitmap(captured);
         SoundService.PlayCaptureSound();
 
         Dispatcher.BeginInvoke(() =>
@@ -233,9 +239,8 @@ public partial class App : Application
         });
     }
 
-    private void HandleOcrResult(Bitmap captured)
+    private void HandleOcrResult(Bitmap result)
     {
-        var result = new Bitmap(captured);
         Dispatcher.BeginInvoke(async () =>
         {
             try

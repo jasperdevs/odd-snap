@@ -28,11 +28,23 @@ public partial class SettingsWindow : Window
         _historyService = historyService;
         InitializeComponent();
         LoadSettings();
+        Loaded += (_, _) => ApplyMicaBackdrop();
         Activated += (_, _) =>
         {
-            // Refresh history when window regains focus
             if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
         };
+    }
+
+    private void ApplyMicaBackdrop()
+    {
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            int value = Native.Dwm.DWMSBT_MAINWINDOW; // Mica
+            Native.Dwm.DwmSetWindowAttribute(hwnd, Native.Dwm.DWMWA_SYSTEMBACKDROP_TYPE,
+                ref value, sizeof(int));
+        }
+        catch { }
     }
 
     private void LoadSettings()
@@ -47,6 +59,7 @@ public partial class SettingsWindow : Window
         SaveDirPanel.Visibility = s.SaveToFile ? Visibility.Visible : Visibility.Collapsed;
         StartWithWindowsCheck.IsChecked = s.StartWithWindows;
         SaveHistoryCheck.IsChecked = s.SaveHistory;
+        MuteSoundsCheck.IsChecked = s.MuteSounds;
     }
 
     // ─── Tabs ──────────────────────────────────────────────────────
@@ -260,6 +273,14 @@ public partial class SettingsWindow : Window
         _settingsService.Save();
     }
 
+    private void MuteSoundsCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.MuteSounds = MuteSoundsCheck.IsChecked == true;
+        _settingsService.Save();
+        SoundService.Muted = _settingsService.Settings.MuteSounds;
+    }
+
     // ─── Screenshot History (date-grouped) ─────────────────────────
 
     private bool _selectMode;
@@ -384,10 +405,6 @@ public partial class SettingsWindow : Window
             _historyService.DeleteEntry(entry);
         LoadHistory();
     }
-
-    private void HistorySelectToggle(object sender, RoutedEventArgs e) { }
-    private void HistoryItemClick(object sender, MouseButtonEventArgs e) { }
-    private void HistoryItemRightClick(object sender, MouseButtonEventArgs e) { }
 
     // ─── OCR History ───────────────────────────────────────────────
 

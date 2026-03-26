@@ -9,20 +9,25 @@ public static class SoundService
     private static byte[]? _colorWav;
     private static byte[]? _textWav;
 
+    public static bool Muted { get; set; }
+
     public static void PlayCaptureSound()
     {
+        if (Muted) return;
         _captureWav ??= GenerateClickWav();
         PlayAsync(_captureWav);
     }
 
     public static void PlayColorSound()
     {
+        if (Muted) return;
         _colorWav ??= GenerateColorWav();
         PlayAsync(_colorWav);
     }
 
     public static void PlayTextSound()
     {
+        if (Muted) return;
         _textWav ??= GenerateTextWav();
         PlayAsync(_textWav);
     }

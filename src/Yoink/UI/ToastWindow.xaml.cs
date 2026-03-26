@@ -33,6 +33,7 @@ public partial class ToastWindow : Window
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
         _timer.Tick += (_, _) => { _timer.Stop(); SlideAway(); };
 
+        MouseLeftButtonDown += (_, _) => SlideAway();
         Loaded += OnLoaded;
     }
 

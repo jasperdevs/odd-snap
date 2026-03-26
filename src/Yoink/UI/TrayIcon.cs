@@ -35,7 +35,8 @@ public sealed class TrayIcon : IDisposable
 
     private ContextMenuStrip CreateThemedMenu()
     {
-        bool isDark = IsDarkTheme();
+        Theme.Refresh();
+        bool isDark = Theme.IsDark;
         var bg = isDark ? Color.FromArgb(44, 44, 44) : Color.FromArgb(249, 249, 249);
         var fg = isDark ? Color.FromArgb(240, 240, 240) : Color.FromArgb(20, 20, 20);
         var hoverBg = isDark ? Color.FromArgb(60, 60, 60) : Color.FromArgb(230, 230, 230);
@@ -81,18 +82,6 @@ public sealed class TrayIcon : IDisposable
         var showMethod = typeof(NotifyIcon).GetMethod("ShowContextMenu",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         showMethod?.Invoke(_notifyIcon, null);
-    }
-
-    private static bool IsDarkTheme()
-    {
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            var val = key?.GetValue("AppsUseLightTheme");
-            return val is int i && i == 0;
-        }
-        catch { return true; }
     }
 
     private static Icon CreateDefaultIcon()

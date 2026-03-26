@@ -62,18 +62,20 @@ public sealed class RegionOverlayForm : Form
     private const int MagOff = 22, MagMargin = 4;
 
     // ─── Draw / Blur state ─────────────────────────────────────────
-    private readonly List<(Point pt, Color col)> _drawPoints = new();
+    private readonly List<List<Point>> _drawStrokes = new();  // each stroke is a list of points
+    private List<Point>? _currentStroke;
     private readonly List<Rectangle> _blurRects = new();
     private Point _blurStart;
     private bool _isBlurring;
+
+    // Undo stack: "draw" or "blur"
+    private readonly List<string> _undoStack = new();
 
     // ─── Events ────────────────────────────────────────────────────
     public event Action<Rectangle>? RegionSelected;
     public event Action<Rectangle>? OcrRegionSelected;
     public event Action<Bitmap>? FreeformSelected;
-#pragma warning disable CS0067
     public event Action<Bitmap>? OcrFreeformSelected;
-#pragma warning restore CS0067
     public event Action<string>? ColorPicked;
     public event Action? SelectionCancelled;
     public event Action? SettingsRequested;
@@ -216,12 +218,13 @@ public sealed class RegionOverlayForm : Form
         }
 
         // Draw annotations (always visible across modes)
-        if (_drawPoints.Count >= 2)
+        if (_drawStrokes.Count > 0)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             using var drawPen = new Pen(Color.Red, 3f) { LineJoin = LineJoin.Round };
-            var pts = _drawPoints.Select(p => p.pt).ToArray();
-            g.DrawLines(drawPen, pts);
+            foreach (var stroke in _drawStrokes)
+                if (stroke.Count >= 2)
+                    g.DrawLines(drawPen, stroke.ToArray());
             g.SmoothingMode = SmoothingMode.Default;
         }
 
@@ -547,7 +550,8 @@ public sealed class RegionOverlayForm : Form
                 break;
             case CaptureMode.Draw:
                 _isSelecting = true;
-                _drawPoints.Add((e.Location, Color.Red));
+                _currentStroke = new List<Point> { e.Location };
+                _drawStrokes.Add(_currentStroke);
                 break;
             case CaptureMode.Blur:
                 _isBlurring = true;
@@ -578,7 +582,7 @@ public sealed class RegionOverlayForm : Form
                 Invalidate();
                 break;
             case CaptureMode.Draw when _isSelecting:
-                _drawPoints.Add((e.Location, Color.Red));
+                _currentStroke?.Add(e.Location);
                 Invalidate();
                 break;
             case CaptureMode.Blur when _isBlurring:
@@ -594,11 +598,17 @@ public sealed class RegionOverlayForm : Form
         {
             case CaptureMode.Draw when _isSelecting:
                 _isSelecting = false;
+                _currentStroke = null;
+                _undoStack.Add("draw");
                 break;
             case CaptureMode.Blur when _isBlurring:
                 _isBlurring = false;
                 var blurRect = NormRect(_blurStart, e.Location);
-                if (blurRect.Width > 3 && blurRect.Height > 3) _blurRects.Add(blurRect);
+                if (blurRect.Width > 3 && blurRect.Height > 3)
+                {
+                    _blurRects.Add(blurRect);
+                    _undoStack.Add("blur");
+                }
                 Invalidate();
                 break;
             case CaptureMode.Rectangle when _isSelecting:
@@ -637,6 +647,18 @@ public sealed class RegionOverlayForm : Form
         if (e.KeyCode == Keys.D5) SetMode(CaptureMode.ColorPicker);
         if (e.KeyCode == Keys.D6) SetMode(CaptureMode.Draw);
         if (e.KeyCode == Keys.D7) SetMode(CaptureMode.Blur);
+
+        // Ctrl+Z: undo last draw stroke or blur rect
+        if (e.KeyCode == Keys.Z && e.Control && _undoStack.Count > 0)
+        {
+            var last = _undoStack[^1];
+            _undoStack.RemoveAt(_undoStack.Count - 1);
+            if (last == "draw" && _drawStrokes.Count > 0)
+                _drawStrokes.RemoveAt(_drawStrokes.Count - 1);
+            else if (last == "blur" && _blurRects.Count > 0)
+                _blurRects.RemoveAt(_blurRects.Count - 1);
+            Invalidate();
+        }
     }
 
     private int GetToolbarButtonAt(Point p)
@@ -667,14 +689,44 @@ public sealed class RegionOverlayForm : Form
         { minX = Math.Min(minX, p.X); minY = Math.Min(minY, p.Y); maxX = Math.Max(maxX, p.X); maxY = Math.Max(maxY, p.Y); }
         var bb = new Rectangle(minX, minY, maxX - minX, maxY - minY);
         if (bb.Width < 3 || bb.Height < 3) return;
+        var annotated = RenderAnnotatedBitmap();
         var r = new Bitmap(bb.Width, bb.Height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(r))
         {
             var pts = _freeformPoints.Select(p => new Point(p.X - minX, p.Y - minY)).ToArray();
             using var cp = new GraphicsPath(); cp.AddPolygon(pts); g.SetClip(cp);
-            g.DrawImage(_screenshot, new Rectangle(0, 0, bb.Width, bb.Height), bb, GraphicsUnit.Pixel);
+            g.DrawImage(annotated, new Rectangle(0, 0, bb.Width, bb.Height), bb, GraphicsUnit.Pixel);
         }
-        FreeformSelected?.Invoke(r);
+        annotated.Dispose();
+
+        if (_mode == CaptureMode.Ocr)
+            OcrFreeformSelected?.Invoke(r);
+        else
+            FreeformSelected?.Invoke(r);
+    }
+
+    /// <summary>Renders the screenshot with draw/blur annotations baked in.</summary>
+    public Bitmap RenderAnnotatedBitmap()
+    {
+        var result = new Bitmap(_screenshot);
+        using var g = Graphics.FromImage(result);
+
+        // Blur rects
+        foreach (var br in _blurRects)
+            PaintBlurRect(g, br);
+
+        // Draw strokes
+        if (_drawStrokes.Count > 0)
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var pen = new Pen(Color.Red, 3f) { LineJoin = LineJoin.Round };
+            foreach (var stroke in _drawStrokes)
+                if (stroke.Count >= 2)
+                    g.DrawLines(pen, stroke.ToArray());
+            g.SmoothingMode = SmoothingMode.Default;
+        }
+
+        return result;
     }
 
     private void Cancel() => SelectionCancelled?.Invoke();
