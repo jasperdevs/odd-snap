@@ -1,29 +1,32 @@
+using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using Yoink.Native;
 
 namespace Yoink.Services;
 
 /// <summary>
-/// Manages global hotkey registration using the Win32 RegisterHotKey API.
-/// Requires a WPF window handle to receive WM_HOTKEY messages.
+/// Global hotkey using ComponentDispatcher to tap into the WPF thread's
+/// Win32 message loop. This is the correct way to receive WM_HOTKEY
+/// in a WPF app that has no visible windows.
 /// </summary>
 public sealed class HotkeyService : IDisposable
 {
     private const int HOTKEY_ID = 9001;
-
-    private IntPtr _hwnd;
-    private HwndSource? _hwndSource;
     private bool _isRegistered;
 
     public event Action? HotkeyPressed;
 
-    public bool Register(IntPtr hwnd, uint modifiers, uint key)
+    public bool Register(uint modifiers, uint key)
     {
-        _hwnd = hwnd;
-        _hwndSource = HwndSource.FromHwnd(hwnd);
-        _hwndSource?.AddHook(WndProc);
+        // Hook into WPF's message loop to intercept Win32 messages
+        ComponentDispatcher.ThreadPreprocessMessage += OnThreadMessage;
 
-        _isRegistered = User32.RegisterHotKey(hwnd, HOTKEY_ID, modifiers | User32.MOD_NOREPEAT, key);
+        // RegisterHotKey with IntPtr.Zero = current thread receives WM_HOTKEY
+        // via its message queue (no specific window needed)
+        _isRegistered = User32.RegisterHotKey(
+            IntPtr.Zero, HOTKEY_ID,
+            modifiers | User32.MOD_NOREPEAT, key);
+
         return _isRegistered;
     }
 
@@ -31,26 +34,21 @@ public sealed class HotkeyService : IDisposable
     {
         if (_isRegistered)
         {
-            User32.UnregisterHotKey(_hwnd, HOTKEY_ID);
+            User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_ID);
             _isRegistered = false;
         }
 
-        _hwndSource?.RemoveHook(WndProc);
+        ComponentDispatcher.ThreadPreprocessMessage -= OnThreadMessage;
     }
 
-    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    private void OnThreadMessage(ref MSG msg, ref bool handled)
     {
-        if (msg == User32.WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+        if (msg.message == User32.WM_HOTKEY && (int)msg.wParam == HOTKEY_ID)
         {
             HotkeyPressed?.Invoke();
             handled = true;
         }
-
-        return IntPtr.Zero;
     }
 
-    public void Dispose()
-    {
-        Unregister();
-    }
+    public void Dispose() => Unregister();
 }

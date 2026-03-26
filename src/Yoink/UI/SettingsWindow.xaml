@@ -1,0 +1,71 @@
+<Window x:Class="Yoink.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Yoink Settings"
+        Height="420" Width="480"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        ThemeMode="System">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="24"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="16"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0" Text="Settings" FontSize="24" FontWeight="SemiBold"/>
+
+        <!-- Hotkey -->
+        <StackPanel Grid.Row="2">
+            <TextBlock Text="Hotkey" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <TextBox x:Name="HotkeyBox"
+                     IsReadOnly="True"
+                     FontSize="14"
+                     Padding="10,8"
+                     PreviewKeyDown="HotkeyBox_PreviewKeyDown"
+                     GotFocus="HotkeyBox_GotFocus"
+                     LostFocus="HotkeyBox_LostFocus"/>
+            <TextBlock x:Name="HotkeyHint" Text="Click and press a new key combination" 
+                       FontSize="12" Foreground="Gray" Margin="0,4,0,0" Visibility="Collapsed"/>
+        </StackPanel>
+
+        <!-- After Capture -->
+        <StackPanel Grid.Row="4">
+            <TextBlock Text="After capture" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+            <ComboBox x:Name="AfterCaptureCombo" FontSize="14" Padding="10,8"
+                      SelectionChanged="AfterCaptureCombo_SelectionChanged">
+                <ComboBoxItem Content="Copy to clipboard"/>
+                <ComboBoxItem Content="Show preview"/>
+            </ComboBox>
+        </StackPanel>
+
+        <!-- Save to file -->
+        <StackPanel Grid.Row="6">
+            <CheckBox x:Name="SaveToFileCheck" Content="Also save to file" FontSize="14"
+                      Checked="SaveToFileCheck_Changed" Unchecked="SaveToFileCheck_Changed"/>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" x:Name="SaveDirPanel" Visibility="Collapsed">
+                <TextBox x:Name="SaveDirBox" IsReadOnly="True" FontSize="13" Padding="10,8" Width="300"/>
+                <Button Content="Browse" FontSize="13" Padding="12,8" Margin="8,0,0,0"
+                        Click="BrowseButton_Click"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Start with Windows -->
+        <CheckBox Grid.Row="8" x:Name="StartWithWindowsCheck" Content="Start with Windows" FontSize="14"
+                  Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
+
+        <!-- Version -->
+        <TextBlock Grid.Row="10" Text="Yoink v0.1.0" FontSize="12" Foreground="Gray"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+    </Grid>
+</Window>
