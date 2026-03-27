@@ -35,3 +35,6 @@ publish/
 
 ## Temp icon build artifacts
 src/Yoink/yoink_*.png
+
+## Release zips
+*.zip
