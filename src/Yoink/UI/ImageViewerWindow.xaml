@@ -10,13 +10,15 @@
         ResizeMode="CanResize">
 
     <Grid>
-        <!-- Full-bleed image -->
-        <Border Margin="1" CornerRadius="0" ClipToBounds="True">
-            <Image x:Name="ViewerImage" Stretch="Uniform"
-                   RenderOptions.BitmapScalingMode="HighQuality"/>
-        </Border>
+        <!-- Blurred background fill (set in code-behind) -->
+        <Image x:Name="BlurredBg" Stretch="UniformToFill" Opacity="0.4"
+               RenderOptions.BitmapScalingMode="LowQuality"/>
 
-        <!-- Top bar overlay with gradient fade -->
+        <!-- Main image -->
+        <Image x:Name="ViewerImage" Stretch="Uniform" Margin="16"
+               RenderOptions.BitmapScalingMode="HighQuality"/>
+
+        <!-- Top bar overlay -->
         <Border VerticalAlignment="Top" Padding="14,8,14,8">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">

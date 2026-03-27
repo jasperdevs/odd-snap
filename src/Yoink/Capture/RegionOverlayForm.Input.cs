@@ -18,7 +18,7 @@ public sealed partial class RegionOverlayForm
             if (btn == BtnCount - 2) { SettingsRequested?.Invoke(); Cancel(); return; }
             var modeMap = new[] {
                 CaptureMode.Rectangle, CaptureMode.Freeform,
-                CaptureMode.Fullscreen, CaptureMode.Ocr, CaptureMode.ColorPicker,
+                CaptureMode.Ocr, CaptureMode.ColorPicker,
                 CaptureMode.Draw, CaptureMode.Arrow, CaptureMode.Blur, CaptureMode.Eraser };
             SetMode(modeMap[btn]);
             return;
@@ -49,14 +49,13 @@ public sealed partial class RegionOverlayForm
                 _isSelecting = true;
                 _selectionStart = _selectionEnd = e.Location;
                 _hasSelection = false;
+                _animTimer.Start(); // trigger dock hide animation
                 break;
             case CaptureMode.Freeform:
                 _isSelecting = true;
                 _freeformPoints.Clear();
                 _freeformPoints.Add(e.Location);
-                break;
-            case CaptureMode.Fullscreen:
-                RegionSelected?.Invoke(new Rectangle(0, 0, _screenshot.Width, _screenshot.Height));
+                _animTimer.Start();
                 break;
             case CaptureMode.Draw:
                 _isSelecting = true;
@@ -163,6 +162,7 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Rectangle when _isSelecting:
             case CaptureMode.Ocr when _isSelecting:
                 _isSelecting = false;
+                _animTimer.Start(); // animate dock back in
                 bool isOcr = _mode == CaptureMode.Ocr;
                 if (!_hasDragged)
                 {
@@ -191,13 +191,12 @@ public sealed partial class RegionOverlayForm
         if (e.KeyCode == Keys.Escape) Cancel();
         if (e.KeyCode == Keys.D1) SetMode(CaptureMode.Rectangle);
         if (e.KeyCode == Keys.D2) SetMode(CaptureMode.Freeform);
-        if (e.KeyCode == Keys.D3) SetMode(CaptureMode.Fullscreen);
-        if (e.KeyCode == Keys.D4) SetMode(CaptureMode.Ocr);
-        if (e.KeyCode == Keys.D5) SetMode(CaptureMode.ColorPicker);
-        if (e.KeyCode == Keys.D6) SetMode(CaptureMode.Draw);
-        if (e.KeyCode == Keys.D7) SetMode(CaptureMode.Arrow);
-        if (e.KeyCode == Keys.D8) SetMode(CaptureMode.Blur);
-        if (e.KeyCode == Keys.D9) SetMode(CaptureMode.Eraser);
+        if (e.KeyCode == Keys.D3) SetMode(CaptureMode.Ocr);
+        if (e.KeyCode == Keys.D4) SetMode(CaptureMode.ColorPicker);
+        if (e.KeyCode == Keys.D5) SetMode(CaptureMode.Draw);
+        if (e.KeyCode == Keys.D6) SetMode(CaptureMode.Arrow);
+        if (e.KeyCode == Keys.D7) SetMode(CaptureMode.Blur);
+        if (e.KeyCode == Keys.D8) SetMode(CaptureMode.Eraser);
 
         if (e.KeyCode == Keys.Z && e.Control && _undoStack.Count > 0)
         {

@@ -20,8 +20,9 @@ public sealed partial class RegionOverlayForm
         // Annotations render first (they get baked under the darkening overlay)
         PaintAnnotations(g);
 
-        // Frosted glass top bar
-        g.DrawImageUnscaled(_topBar, 0, 0);
+        // Frosted glass top bar (fades with dock)
+        if (_toolbarHide < 0.98f)
+            g.DrawImageUnscaled(_topBar, 0, 0);
 
         if (_mode == CaptureMode.ColorPicker)
         {
@@ -31,13 +32,6 @@ public sealed partial class RegionOverlayForm
         }
 
         bool isOcr = _mode == CaptureMode.Ocr;
-
-        // Fullscreen mode: show selection border around entire screen
-        if (_mode == CaptureMode.Fullscreen)
-        {
-            using var pen = new Pen(Color.White, 2f);
-            g.DrawRectangle(pen, 1, 1, ClientSize.Width - 3, ClientSize.Height - 3);
-        }
 
         // Darken outside selection (rect/OCR)
         if (_hasSelection && (_mode == CaptureMode.Rectangle || _mode == CaptureMode.Ocr))
@@ -140,7 +134,12 @@ public sealed partial class RegionOverlayForm
     private void PaintToolbar(Graphics g)
     {
         float t = 1f - MathF.Pow(1f - _toolbarAnim, 3f);
-        int oy = (int)((1f - t) * -30);
+        // Combine entrance animation with hide-during-selection
+        float hideOffset = _toolbarHide * -70; // slide 70px up
+        float hideAlpha = 1f - _toolbarHide;
+        int oy = (int)((1f - t) * -30 + hideOffset);
+        if (hideAlpha < 0.02f) return; // fully hidden, skip painting
+        t *= hideAlpha;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var r = new Rectangle(_toolbarRect.X, _toolbarRect.Y + oy,
@@ -162,14 +161,14 @@ public sealed partial class RegionOverlayForm
             g.DrawPath(bp, p);
         }
 
-        string[] icons = { "rect", "free", "full", "ocr", "picker",
+        string[] icons = { "rect", "free", "ocr", "picker",
             "draw", "arrow", "blur", "eraser", "gear", "close" };
-        string[] labels = { "Rectangle (1)", "Freeform (2)", "Fullscreen (3)",
-            "OCR (4)", "Color Picker (5)", "Draw (6)", "Arrow (7)", "Blur (8)", "Eraser (9)",
+        string[] labels = { "Rectangle (1)", "Freeform (2)",
+            "OCR (3)", "Color Picker (4)", "Draw (5)", "Arrow (6)", "Blur (7)", "Eraser (8)",
             "Settings", "Close (Esc)" };
         CaptureMode[] modes = { CaptureMode.Rectangle, CaptureMode.Freeform,
-            CaptureMode.Fullscreen, CaptureMode.Ocr,
-            CaptureMode.ColorPicker, CaptureMode.Draw, CaptureMode.Arrow,
+            CaptureMode.Ocr, CaptureMode.ColorPicker,
+            CaptureMode.Draw, CaptureMode.Arrow,
             CaptureMode.Blur, CaptureMode.Eraser };
 
         for (int i = 0; i < BtnCount; i++)
@@ -232,17 +231,7 @@ public sealed partial class RegionOverlayForm
                 g.DrawBezier(pen, cx - 7, cy + 4, cx - 3, cy - 7, cx + 3, cy + 6, cx + 7, cy - 4);
                 g.SmoothingMode = SmoothingMode.Default;
                 break;
-            case "full":
-                // Four corner brackets
-                g.DrawLine(pen, cx - 7, cy - 5, cx - 3, cy - 5);
-                g.DrawLine(pen, cx - 7, cy - 5, cx - 7, cy - 1);
-                g.DrawLine(pen, cx + 7, cy - 5, cx + 3, cy - 5);
-                g.DrawLine(pen, cx + 7, cy - 5, cx + 7, cy - 1);
-                g.DrawLine(pen, cx - 7, cy + 5, cx - 3, cy + 5);
-                g.DrawLine(pen, cx - 7, cy + 5, cx - 7, cy + 1);
-                g.DrawLine(pen, cx + 7, cy + 5, cx + 3, cy + 5);
-                g.DrawLine(pen, cx + 7, cy + 5, cx + 7, cy + 1);
-                break;
+
             case "ocr":
                 // Brackets with T
                 g.DrawLine(pen, cx - 5, cy - 5, cx + 5, cy - 5);

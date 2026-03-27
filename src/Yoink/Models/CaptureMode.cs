@@ -4,7 +4,6 @@ public enum CaptureMode
 {
     Rectangle,
     Freeform,
-    Fullscreen,
     ColorPicker,
     Ocr,
     Draw,

@@ -176,14 +176,24 @@ public partial class PreviewWindow : Window
             var tmpFile = Path.Combine(Path.GetTempPath(), $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.png");
             _screenshot.Save(tmpFile, ImageFormat.Png);
 
-            var dur = TimeSpan.FromMilliseconds(150);
+            var dur = TimeSpan.FromMilliseconds(180);
+            var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
             DragScale.CenterX = ActualWidth / 2;
             DragScale.CenterY = ActualHeight / 2;
             DragScale.BeginAnimation(ScaleTransform.ScaleXProperty,
-                new DoubleAnimation { To = 0.9, Duration = dur });
+                new DoubleAnimation { To = 0.92, Duration = dur, EasingFunction = ease });
             DragScale.BeginAnimation(ScaleTransform.ScaleYProperty,
-                new DoubleAnimation { To = 0.9, Duration = dur });
-            BeginAnimation(OpacityProperty, new DoubleAnimation { To = 0.6, Duration = dur });
+                new DoubleAnimation { To = 0.92, Duration = dur, EasingFunction = ease });
+            BeginAnimation(OpacityProperty, new DoubleAnimation { To = 0.7, Duration = dur, EasingFunction = ease });
+
+            // Slight shake vibration
+            var shake = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(200) };
+            shake.KeyFrames.Add(new LinearDoubleKeyFrame(-2, KeyTime.FromPercent(0.15)));
+            shake.KeyFrames.Add(new LinearDoubleKeyFrame(2, KeyTime.FromPercent(0.35)));
+            shake.KeyFrames.Add(new LinearDoubleKeyFrame(-1, KeyTime.FromPercent(0.55)));
+            shake.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.75)));
+            shake.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1.0)));
+            SlideX.BeginAnimation(TranslateTransform.XProperty, shake);
 
             var data = new DataObject();
             data.SetFileDropList(new System.Collections.Specialized.StringCollection { tmpFile });
