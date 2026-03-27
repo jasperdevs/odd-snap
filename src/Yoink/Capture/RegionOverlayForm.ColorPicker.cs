@@ -105,7 +105,8 @@ public sealed partial class RegionOverlayForm
         using (var magRegion = new Region(path))
         {
             g.Clip = magRegion;
-            g.DrawImage(_blurred, magRect, magRect, GraphicsUnit.Pixel);
+            if (_blurred != null)
+                g.DrawImage(_blurred, magRect, magRect, GraphicsUnit.Pixel);
         }
         g.Clip = oldClip;
 

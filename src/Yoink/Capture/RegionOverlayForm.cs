@@ -42,7 +42,7 @@ public sealed partial class RegionOverlayForm : Form
     private readonly DateTime _showTime;
 
     // Pre-rendered blurred screenshot used for all glass effects
-    private readonly Bitmap _blurred;
+    private Bitmap? _blurred;
     private const int TopBarHeight = 110;
 
     // Color picker state
@@ -289,20 +289,45 @@ public sealed partial class RegionOverlayForm : Form
 
         SetupForm();
         CalcToolbar();
-        _blurred = BuildBlurred(screenshot);
 
-        _animTimer = new System.Windows.Forms.Timer { Interval = 16 }; // ~60fps for smooth animation
+        _animTimer = new System.Windows.Forms.Timer { Interval = 32 }; // ~30fps for smooth animation
         _animTimer.Tick += (_, _) =>
         {
             float elapsed = (float)(DateTime.UtcNow - _showTime).TotalMilliseconds;
             _toolbarAnim = Math.Min(1f, elapsed / 120f);
-            // Steady accumulator for smooth dash crawl (no modulo discontinuity)
-            _dashOffset += 0.35f;
+            _dashOffset += 0.6f;
             if (_dashOffset > 1000f) _dashOffset -= 1000f;
-            if (_hasSelection || _autoDetectActive || ShowCrosshairGuides)
-                Invalidate();
-            else if (_toolbarAnim < 1f)
-                Invalidate(_toolbarRect);
+
+            if (_toolbarAnim < 1f)
+            {
+                // Toolbar still animating in - repaint toolbar area
+                Invalidate(new Rectangle(_toolbarRect.X - 10, _toolbarRect.Y - 40,
+                    _toolbarRect.Width + 20, _toolbarRect.Height + 80));
+            }
+            else if (_hasSelection)
+            {
+                // Only repaint selection border area (thin strip around selection)
+                int m = 6;
+                var s = _selectionRect;
+                Invalidate(new Rectangle(s.X - m, s.Y - m, s.Width + m * 2, m * 2)); // top
+                Invalidate(new Rectangle(s.X - m, s.Bottom - m, s.Width + m * 2, m * 2 + 30)); // bottom + label
+                Invalidate(new Rectangle(s.X - m, s.Y, m * 2, s.Height)); // left
+                Invalidate(new Rectangle(s.Right - m, s.Y, m * 2, s.Height)); // right
+            }
+            else if (_autoDetectActive)
+            {
+                int m = 4;
+                var s = _autoDetectRect;
+                Invalidate(new Rectangle(s.X - m, s.Y - m, s.Width + m * 2, m * 2));
+                Invalidate(new Rectangle(s.X - m, s.Bottom - m, s.Width + m * 2, m * 2));
+                Invalidate(new Rectangle(s.X - m, s.Y, m * 2, s.Height));
+                Invalidate(new Rectangle(s.Right - m, s.Y, m * 2, s.Height));
+            }
+            // Crosshair guides need cursor-area repaint but are lightweight
+            else if (ShowCrosshairGuides)
+            {
+                Invalidate(); // crosshairs span full screen, can't optimize easily
+            }
         };
         _animTimer.Start();
 
@@ -427,7 +452,7 @@ public sealed partial class RegionOverlayForm : Form
     {
         if (disposing)
         {
-            _blurred.Dispose();
+            _blurred?.Dispose();
             _animTimer.Dispose();
             _pickerTimer.Dispose();
             _magGfx.Dispose();

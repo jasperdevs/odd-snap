@@ -257,16 +257,27 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Rectangle when _isSelecting:
             case CaptureMode.Ocr when _isSelecting:
                 _autoDetectActive = false;
+                var prevRect = _selectionRect;
                 _selectionEnd = e.Location;
                 _selectionRect = NormRect(_selectionStart, _selectionEnd);
                 if (_selectionRect.Width > 3 || _selectionRect.Height > 3) _hasDragged = true;
                 _hasSelection = _selectionRect.Width > 2 && _selectionRect.Height > 2;
-                Invalidate();
+                // Invalidate union of old and new selection rect (not full screen)
+                var union = Rectangle.Union(prevRect, _selectionRect);
+                union.Inflate(10, 40); // extra for labels and border thickness
+                Invalidate(union);
                 break;
             case CaptureMode.Freeform when _isSelecting:
+                if (_freeformPoints.Count > 0)
+                {
+                    var prev = _freeformPoints[^1];
+                    var segRect = new Rectangle(
+                        Math.Min(prev.X, e.Location.X) - 4, Math.Min(prev.Y, e.Location.Y) - 4,
+                        Math.Abs(e.Location.X - prev.X) + 8, Math.Abs(e.Location.Y - prev.Y) + 8);
+                    Invalidate(segRect);
+                }
                 _freeformPoints.Add(e.Location);
                 _hasDragged = true;
-                Invalidate();
                 break;
             case CaptureMode.Highlight when _isHighlighting:
                 Invalidate();
@@ -423,55 +434,52 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // ESC always closes everything
+        if (e.KeyCode == Keys.Escape)
+        {
+            Cancel();
+            return;
+        }
+
         // Emoji picker search input
         if (_emojiPickerOpen)
         {
-            if (e.KeyCode == Keys.Escape) { _emojiPickerOpen = false; Invalidate(); return; }
             if (e.KeyCode == Keys.Back && _emojiSearch.Length > 0)
             {
-                _emojiSearch = _emojiSearch[..^1]; _emojiScrollOffset = 0; Invalidate(); return;
+                _emojiSearch = _emojiSearch[..^1]; _emojiScrollOffset = 0; Invalidate();
             }
-            return; // absorb all keys while picker is open
+            return;
         }
 
-        // Emoji placing: Escape cancels, re-open picker with Tab
+        // Emoji placing: Tab re-opens picker
         if (_mode == CaptureMode.Emoji && _isPlacingEmoji)
         {
-            if (e.KeyCode == Keys.Escape) { _isPlacingEmoji = false; _selectedEmoji = null; Invalidate(); return; }
-            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; Invalidate(); return; }
+            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; Invalidate(); }
             return;
         }
 
         // Font picker open
         if (_fontPickerOpen)
-        {
-            if (e.KeyCode == Keys.Escape) { _fontPickerOpen = false; Invalidate(); return; }
             return;
-        }
 
         // Text input mode
         if (_isTyping)
         {
-            if (e.KeyCode == Keys.Escape) { _isTyping = false; _textBuffer = ""; Invalidate(); return; }
             if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Return) { CommitText(); return; }
             if (e.KeyCode == Keys.Back && _textBuffer.Length > 0)
             {
                 _textBuffer = _textBuffer[..^1]; Invalidate(); return;
             }
-            // Ctrl+B toggles bold
             if (e.KeyCode == Keys.B && e.Control)
             {
                 _textBold = !_textBold; Invalidate(); return;
             }
-            // F key (no modifiers, no text buffer yet) toggles font picker
             if (e.KeyCode == Keys.F && e.Control)
             {
                 _fontPickerOpen = !_fontPickerOpen; _fontPickerScroll = 0; Invalidate(); return;
             }
             return;
         }
-
-        if (e.KeyCode == Keys.Escape) Cancel();
         if (e.KeyCode == Keys.D1) SetMode(CaptureMode.Rectangle);
         if (e.KeyCode == Keys.D2) SetMode(CaptureMode.Freeform);
         if (e.KeyCode == Keys.D3) SetMode(CaptureMode.Ocr);
@@ -703,17 +711,21 @@ public sealed partial class RegionOverlayForm
         _autoDetectActive = false;
 
         if (m == CaptureMode.ColorPicker)
+        {
+            _blurred ??= BuildBlurred(_screenshot);
             _pickerTimer.Start();
+        }
         else
             _pickerTimer.Stop();
 
-        // Emoji mode: open picker if no emoji selected yet
-        if (m == CaptureMode.Emoji && !_isPlacingEmoji)
+        // Emoji mode: always open picker
+        if (m == CaptureMode.Emoji)
         {
             _emojiPickerOpen = true;
+            _isPlacingEmoji = false;
+            _selectedEmoji = null;
             _emojiSearch = "";
             _emojiScrollOffset = 0;
-            // Pre-calculate picker rect so first click works
             int cols = 8, emojiSize = 32, pad = 6, visibleRows = 4;
             int searchBarH = 28;
             int pw = cols * (emojiSize + pad) + pad;
@@ -722,7 +734,7 @@ public sealed partial class RegionOverlayForm
             int py = _toolbarRect.Bottom + 8;
             _emojiPickerRect = new Rectangle(px, py, pw, ph);
         }
-        else if (m != CaptureMode.Emoji)
+        else
         {
             _emojiPickerOpen = false;
             _isPlacingEmoji = false;
