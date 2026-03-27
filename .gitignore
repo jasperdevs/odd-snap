@@ -32,3 +32,6 @@ nul
 
 ## Publish
 publish/
+
+## Temp icon build artifacts
+src/Yoink/yoink_*.png
