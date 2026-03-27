@@ -93,6 +93,7 @@
 
         <!-- Custom title bar -->
         <Border x:Name="TitleBarBorder" Grid.Row="0" Padding="14,8,8,8" Background="#161616"
+                CornerRadius="11,11,0,0"
                 MouseLeftButtonDown="TitleBar_MouseDown">
             <Grid>
                 <TextBlock x:Name="TitleText" Text="Yoink" FontSize="12" FontWeight="SemiBold" Foreground="White"

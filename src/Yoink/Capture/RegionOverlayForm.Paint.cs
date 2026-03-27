@@ -120,65 +120,7 @@ public sealed partial class RegionOverlayForm
     // All annotations rendered in creation order via undo stack (Excalidraw style)
     private void PaintAnnotations(Graphics g)
     {
-        int iDraw = 0, iBlur = 0, iArrow = 0, iCurved = 0;
-        int iEraser = 0, iText = 0, iStep = 0, iHighlight = 0, iMag = 0, iEmoji = 0;
-
-        foreach (var entry in _undoStack)
-        {
-            switch (entry)
-            {
-                case "eraser" when iEraser < _eraserFills.Count:
-                    var (er, ec) = _eraserFills[iEraser++];
-                    using (var brush = new SolidBrush(ec))
-                        g.FillRectangle(brush, er);
-                    break;
-
-                case "blur" when iBlur < _blurRects.Count:
-                    PaintBlurRect(g, _blurRects[iBlur++]);
-                    break;
-
-                case "draw" when iDraw < _drawStrokes.Count:
-                    // Excalidraw-style: variable-width filled outline
-                    SketchRenderer.DrawFreehandStroke(g, _drawStrokes[iDraw++], _toolColor, 6f);
-                    break;
-
-                case "highlight" when iHighlight < _highlightRects.Count:
-                    var (hr, hc) = _highlightRects[iHighlight++];
-                    SketchRenderer.DrawHighlightRect(g, hr, hc);
-                    break;
-
-                case "arrow" when iArrow < _arrows.Count:
-                    var a = _arrows[iArrow++];
-                    // Excalidraw-style: sketchy line with scaled arrowhead
-                    SketchRenderer.DrawArrow(g, a.from, a.to, _toolColor, a.from.GetHashCode());
-                    break;
-
-                case "curvedArrow" when iCurved < _curvedArrows.Count:
-                    // Excalidraw-style: variable-width path with arrowhead
-                    SketchRenderer.DrawCurvedArrow(g, _curvedArrows[iCurved++], _toolColor, iCurved * 7919);
-                    break;
-
-                case "step" when iStep < _stepNumbers.Count:
-                    var (sp, sn, sc) = _stepNumbers[iStep++];
-                    PaintStepNumber(g, sp, sn, sc);
-                    break;
-
-                case "text" when iText < _textAnnotations.Count:
-                    var (tp, tt, tf, tc, tb, tff) = _textAnnotations[iText++];
-                    PaintExcalidrawText(g, tp, tt, tf, tc, tb, tff);
-                    break;
-
-                case "magnifier" when iMag < _placedMagnifiers.Count:
-                    var (mp, ms) = _placedMagnifiers[iMag++];
-                    PaintPlacedMagnifier(g, mp, ms);
-                    break;
-
-                case "emoji" when iEmoji < _emojiAnnotations.Count:
-                    var (ep, ee, es) = _emojiAnnotations[iEmoji++];
-                    PaintEmojiAnnotation(g, ep, ee, es);
-                    break;
-            }
-        }
+        RenderAnnotationsTo(g);
 
         // Active tool previews
         if (_mode == CaptureMode.Eraser && _isEraserDragging)
@@ -298,11 +240,17 @@ public sealed partial class RegionOverlayForm
 
         var style = bold ? FontStyle.Bold : FontStyle.Regular;
         using var font = new Font(fontFamily, fontSize, style);
-        // Stroke outline for consistent readability on any background
+
+        // Soft drop shadow
+        using var shadowBrush = new SolidBrush(Color.FromArgb(80, 0, 0, 0));
+        g.DrawString(text, font, shadowBrush, pos.X + 2, pos.Y + 2);
+        g.DrawString(text, font, shadowBrush, pos.X + 1, pos.Y + 1);
+
+        // Thin stroke outline for readability on any background
         using var outlinePath = new GraphicsPath();
         outlinePath.AddString(text, font.FontFamily, (int)font.Style, g.DpiY * fontSize / 72f,
             new PointF(pos.X, pos.Y), StringFormat.GenericDefault);
-        using var outlinePen = new Pen(Color.FromArgb(100, 0, 0, 0), 4f) { LineJoin = LineJoin.Round };
+        using var outlinePen = new Pen(Color.FromArgb(60, 0, 0, 0), 2.5f) { LineJoin = LineJoin.Round };
         g.DrawPath(outlinePen, outlinePath);
 
         // Main text fill
@@ -317,9 +265,9 @@ public sealed partial class RegionOverlayForm
     {
         int radius = 16;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        // Dark outline for visibility on any background
-        using var outlinePen = new Pen(Color.FromArgb(90, 0, 0, 0), 4f);
-        g.DrawEllipse(outlinePen, pos.X - radius, pos.Y - radius, radius * 2, radius * 2);
+        // Drop shadow
+        using var shadowBrush = new SolidBrush(Color.FromArgb(80, 0, 0, 0));
+        g.FillEllipse(shadowBrush, pos.X - radius + 2, pos.Y - radius + 2, radius * 2, radius * 2);
         // Filled circle
         using var brush = new SolidBrush(color);
         g.FillEllipse(brush, pos.X - radius, pos.Y - radius, radius * 2, radius * 2);

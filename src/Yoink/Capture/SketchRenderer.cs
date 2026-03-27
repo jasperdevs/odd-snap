@@ -10,9 +10,9 @@ namespace Yoink.Capture;
 /// </summary>
 public static class SketchRenderer
 {
-    // Outline for consistent visibility on any background
-    private static readonly Color OutlineColor = Color.FromArgb(90, 0, 0, 0);
-    private const float OutlineExtra = 3f; // extra width for outline stroke
+    // Normal drop shadow: offset down-right, visible on any background
+    private const int ShadowOff = 2;
+    private static readonly Color ShadowColor = Color.FromArgb(80, 0, 0, 0);
 
     /// <summary>Draw a wobbly line between two points (like rough.js).</summary>
     public static void DrawSketchyLine(Graphics g, Pen pen, PointF p1, PointF p2, int seed, float roughness = 1f)
@@ -66,10 +66,11 @@ public static class SketchRenderer
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Outline pass (visible on both light and dark backgrounds)
-        using var outlinePen = new Pen(OutlineColor, thickness + OutlineExtra)
+        // Shadow pass
+        using var shadowPen = new Pen(ShadowColor, thickness + 1f)
             { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-        g.DrawLine(outlinePen, from, to);
+        g.DrawLine(shadowPen, from.X + ShadowOff, from.Y + ShadowOff,
+            to.X + ShadowOff, to.Y + ShadowOff);
 
         // Main pass
         using var pen = new Pen(color, thickness)
@@ -96,13 +97,14 @@ public static class SketchRenderer
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Outline pass (consistent visibility on any background)
-        using var outlinePen = new Pen(OutlineColor, thickness + OutlineExtra)
+        // Shadow pass
+        var shadowPts = points.Select(p => new Point(p.X + ShadowOff, p.Y + ShadowOff)).ToArray();
+        using var shadowPen = new Pen(ShadowColor, thickness + 1f)
             { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-        if (points.Count >= 4)
-            g.DrawCurve(outlinePen, points.ToArray(), 0.5f);
+        if (shadowPts.Length >= 4)
+            g.DrawCurve(shadowPen, shadowPts, 0.5f);
         else
-            g.DrawLines(outlinePen, points.ToArray());
+            g.DrawLines(shadowPen, shadowPts);
 
         // Main pass
         using var pen = new Pen(color, thickness)
@@ -133,16 +135,7 @@ public static class SketchRenderer
         var left = RotatePoint(new PointF(bx, by), tip, -angle);
         var right = RotatePoint(new PointF(bx, by), tip, angle);
 
-        // Outline pass for arrowhead
-        using var outPen = new Pen(OutlineColor, thickness + OutlineExtra)
-        {
-            StartCap = LineCap.Round,
-            EndCap = LineCap.Round
-        };
-        g.DrawLine(outPen, left, tip);
-        g.DrawLine(outPen, right, tip);
-
-        // Main arrowhead lines
+        // Draw as two lines (like Excalidraw's "arrow" type)
         using var pen = new Pen(color, thickness)
         {
             StartCap = LineCap.Round,
@@ -164,13 +157,15 @@ public static class SketchRenderer
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Outline pass (dark border around stroke for visibility on any background)
-        using var path = OutlineToPath(outline);
-        using var outlinePen = new Pen(OutlineColor, OutlineExtra) { LineJoin = LineJoin.Round };
-        g.DrawPath(outlinePen, path);
+        // Shadow pass
+        var shadowOutline = outline.Select(p => new PointF(p.X + ShadowOff, p.Y + ShadowOff)).ToArray();
+        using var shadowPath = OutlineToPath(shadowOutline);
+        using var shadowBrush = new SolidBrush(ShadowColor);
+        g.FillPath(shadowBrush, shadowPath);
 
         // Main pass
         using var brush = new SolidBrush(color);
+        using var path = OutlineToPath(outline);
         g.FillPath(brush, path);
         g.SmoothingMode = SmoothingMode.Default;
     }

@@ -61,8 +61,7 @@ public sealed partial class RegionOverlayForm
         if (_mode == CaptureMode.Emoji && _isPlacingEmoji && _selectedEmoji != null)
         {
             var pos = new Point(e.Location.X - (int)(_emojiPlaceSize / 2), e.Location.Y - (int)(_emojiPlaceSize / 2));
-            _emojiAnnotations.Add((pos, _selectedEmoji, _emojiPlaceSize));
-            _undoStack.Add("emoji");
+            _undoStack.Add(new EmojiAnnotation(pos, _selectedEmoji, _emojiPlaceSize));
             Invalidate();
             return;
         }
@@ -97,18 +96,15 @@ public sealed partial class RegionOverlayForm
             int hitIdx = HitTestText(e.Location);
             if (hitIdx >= 0)
             {
-                var (pos, text, fontSize, color, bold, fontFamily) = _textAnnotations[hitIdx];
-                _textAnnotations.RemoveAt(hitIdx);
-                // Remove last matching "text" undo entry
-                for (int u = _undoStack.Count - 1; u >= 0; u--)
-                    if (_undoStack[u] == "text") { _undoStack.RemoveAt(u); break; }
+                var ta = GetTextAnnotations()[hitIdx];
+                _undoStack.Remove(ta);
                 _isTyping = true;
-                _textPos = pos;
-                _textBuffer = text;
-                _textFontSize = fontSize;
-                _toolColor = color;
-                _textBold = bold;
-                _textFontFamily = fontFamily;
+                _textPos = ta.Pos;
+                _textBuffer = ta.Text;
+                _textFontSize = ta.FontSize;
+                _toolColor = ta.Color;
+                _textBold = ta.Bold;
+                _textFontFamily = ta.FontFamily;
                 Invalidate();
                 return;
             }
@@ -156,9 +152,8 @@ public sealed partial class RegionOverlayForm
                 _highlightStart = e.Location;
                 break;
             case CaptureMode.StepNumber:
-                _stepNumbers.Add((e.Location, _nextStepNumber, _toolColor));
+                _undoStack.Add(new StepNumberAnnotation(e.Location, _nextStepNumber, _toolColor));
                 _nextStepNumber++;
-                _undoStack.Add("step");
                 Invalidate();
                 break;
             case CaptureMode.Magnifier:
@@ -166,14 +161,12 @@ public sealed partial class RegionOverlayForm
                 int srcSz = 40;
                 int sx2 = Math.Clamp(e.Location.X - srcSz / 2, 0, _bmpW - srcSz);
                 int sy2 = Math.Clamp(e.Location.Y - srcSz / 2, 0, _bmpH - srcSz);
-                _placedMagnifiers.Add((e.Location, new Rectangle(sx2, sy2, srcSz, srcSz)));
-                _undoStack.Add("magnifier");
+                _undoStack.Add(new MagnifierAnnotation(e.Location, new Rectangle(sx2, sy2, srcSz, srcSz)));
                 Invalidate();
                 break;
             case CaptureMode.Draw:
                 _isSelecting = true;
                 _currentStroke = new List<Point> { e.Location };
-                _drawStrokes.Add(_currentStroke);
                 break;
             case CaptureMode.Arrow:
                 _isArrowDragging = true;
@@ -182,7 +175,6 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.CurvedArrow:
                 _isCurvedArrowDragging = true;
                 _currentCurvedArrow = new List<Point> { e.Location };
-                _curvedArrows.Add(_currentCurvedArrow);
                 break;
             case CaptureMode.Blur:
                 _isBlurring = true;
@@ -198,18 +190,16 @@ public sealed partial class RegionOverlayForm
         int hitIdx = HitTestText(e.Location);
         if (hitIdx >= 0)
         {
-            var (pos, text, fontSize, color, bold, fontFamily) = _textAnnotations[hitIdx];
-            _textAnnotations.RemoveAt(hitIdx);
-            for (int u = _undoStack.Count - 1; u >= 0; u--)
-                if (_undoStack[u] == "text") { _undoStack.RemoveAt(u); break; }
+            var ta = GetTextAnnotations()[hitIdx];
+            _undoStack.Remove(ta);
             _mode = CaptureMode.Text;
             _isTyping = true;
-            _textPos = pos;
-            _textBuffer = text;
-            _textFontSize = fontSize;
-            _toolColor = color;
-            _textBold = bold;
-            _textFontFamily = fontFamily;
+            _textPos = ta.Pos;
+            _textBuffer = ta.Text;
+            _textFontSize = ta.FontSize;
+            _toolColor = ta.Color;
+            _textBold = ta.Bold;
+            _textFontFamily = ta.FontFamily;
             Invalidate();
         }
     }
@@ -348,10 +338,7 @@ public sealed partial class RegionOverlayForm
                 _isHighlighting = false;
                 var hlRect = NormRect(_highlightStart, e.Location);
                 if (hlRect.Width > 2 && hlRect.Height > 2)
-                {
-                    _highlightRects.Add((hlRect, DefaultHighlightColor));
-                    _undoStack.Add("highlight");
-                }
+                    _undoStack.Add(new HighlightAnnotation(hlRect, DefaultHighlightColor));
                 Invalidate();
                 break;
             case CaptureMode.Magnifier:
@@ -359,8 +346,9 @@ public sealed partial class RegionOverlayForm
                 break;
             case CaptureMode.Draw when _isSelecting:
                 _isSelecting = false;
+                if (_currentStroke is { Count: >= 2 })
+                    _undoStack.Add(new DrawStroke(_currentStroke));
                 _currentStroke = null;
-                _undoStack.Add("draw");
                 break;
             case CaptureMode.Arrow when _isArrowDragging:
                 _isArrowDragging = false;
@@ -368,18 +356,13 @@ public sealed partial class RegionOverlayForm
                 float dx = end.X - _arrowStart.X;
                 float dy = end.Y - _arrowStart.Y;
                 if (MathF.Sqrt(dx * dx + dy * dy) > 5)
-                {
-                    _arrows.Add((_arrowStart, end));
-                    _undoStack.Add("arrow");
-                }
+                    _undoStack.Add(new ArrowAnnotation(_arrowStart, end));
                 Invalidate();
                 break;
             case CaptureMode.CurvedArrow when _isCurvedArrowDragging:
                 _isCurvedArrowDragging = false;
                 if (_currentCurvedArrow is { Count: >= 2 })
-                    _undoStack.Add("curvedArrow");
-                else if (_currentCurvedArrow != null)
-                    _curvedArrows.Remove(_currentCurvedArrow);
+                    _undoStack.Add(new CurvedArrowAnnotation(_currentCurvedArrow));
                 _currentCurvedArrow = null;
                 Invalidate();
                 break;
@@ -387,20 +370,14 @@ public sealed partial class RegionOverlayForm
                 _isBlurring = false;
                 var blurRect = NormRect(_blurStart, e.Location);
                 if (blurRect.Width > 3 && blurRect.Height > 3)
-                {
-                    _blurRects.Add(blurRect);
-                    _undoStack.Add("blur");
-                }
+                    _undoStack.Add(new BlurRect(blurRect));
                 Invalidate();
                 break;
             case CaptureMode.Eraser when _isEraserDragging:
                 _isEraserDragging = false;
                 var eraserRect = NormRect(_eraserStart, e.Location);
                 if (eraserRect.Width > 1 && eraserRect.Height > 1)
-                {
-                    _eraserFills.Add((eraserRect, _eraserColor));
-                    _undoStack.Add("eraser");
-                }
+                    _undoStack.Add(new EraserFill(eraserRect, _eraserColor));
                 Invalidate();
                 break;
             case CaptureMode.Rectangle when _isSelecting:
@@ -498,29 +475,12 @@ public sealed partial class RegionOverlayForm
         {
             var last = _undoStack[^1];
             _undoStack.RemoveAt(_undoStack.Count - 1);
-            if (last == "draw" && _drawStrokes.Count > 0)
-                _drawStrokes.RemoveAt(_drawStrokes.Count - 1);
-            else if (last == "blur" && _blurRects.Count > 0)
-                _blurRects.RemoveAt(_blurRects.Count - 1);
-            else if (last == "arrow" && _arrows.Count > 0)
-                _arrows.RemoveAt(_arrows.Count - 1);
-            else if (last == "highlight" && _highlightRects.Count > 0)
-                _highlightRects.RemoveAt(_highlightRects.Count - 1);
-            else if (last == "step" && _stepNumbers.Count > 0)
+            // Update step counter when undoing a step number
+            if (last is StepNumberAnnotation)
             {
-                _stepNumbers.RemoveAt(_stepNumbers.Count - 1);
-                _nextStepNumber = _stepNumbers.Count > 0 ? _stepNumbers[^1].number + 1 : 1;
+                var remaining = _undoStack.OfType<StepNumberAnnotation>().LastOrDefault();
+                _nextStepNumber = remaining != null ? remaining.Number + 1 : 1;
             }
-            else if (last == "curvedArrow" && _curvedArrows.Count > 0)
-                _curvedArrows.RemoveAt(_curvedArrows.Count - 1);
-            else if (last == "eraser" && _eraserFills.Count > 0)
-                _eraserFills.RemoveAt(_eraserFills.Count - 1);
-            else if (last == "text" && _textAnnotations.Count > 0)
-                _textAnnotations.RemoveAt(_textAnnotations.Count - 1);
-            else if (last == "magnifier" && _placedMagnifiers.Count > 0)
-                _placedMagnifiers.RemoveAt(_placedMagnifiers.Count - 1);
-            else if (last == "emoji" && _emojiAnnotations.Count > 0)
-                _emojiAnnotations.RemoveAt(_emojiAnnotations.Count - 1);
             Invalidate();
         }
     }
@@ -546,10 +506,7 @@ public sealed partial class RegionOverlayForm
     private void CommitText()
     {
         if (_isTyping && _textBuffer.Length > 0)
-        {
-            _textAnnotations.Add((_textPos, _textBuffer, _textFontSize, _toolColor, _textBold, _textFontFamily));
-            _undoStack.Add("text");
-        }
+            _undoStack.Add(new TextAnnotation(_textPos, _textBuffer, _textFontSize, _toolColor, _textBold, _textFontFamily));
         _isTyping = false;
         _textBuffer = "";
         _fontPickerOpen = false;
@@ -584,17 +541,21 @@ public sealed partial class RegionOverlayForm
         return -1;
     }
 
+    private List<TextAnnotation> GetTextAnnotations() =>
+        _undoStack.OfType<TextAnnotation>().ToList();
+
     private int HitTestText(Point p)
     {
-        for (int i = _textAnnotations.Count - 1; i >= 0; i--)
+        var texts = GetTextAnnotations();
+        for (int i = texts.Count - 1; i >= 0; i--)
         {
-            var (pos, text, fontSize, _, bold, fontFamily) = _textAnnotations[i];
-            var style = bold ? FontStyle.Bold : FontStyle.Regular;
-            using var font = new Font(fontFamily, fontSize, style);
+            var ta = texts[i];
+            var style = ta.Bold ? FontStyle.Bold : FontStyle.Regular;
+            using var font = new Font(ta.FontFamily, ta.FontSize, style);
             SizeF sz;
             using (var g = CreateGraphics())
-                sz = g.MeasureString(text, font);
-            var rect = new RectangleF(pos.X - 6, pos.Y - 4, sz.Width + 12, sz.Height + 8);
+                sz = g.MeasureString(ta.Text, font);
+            var rect = new RectangleF(ta.Pos.X - 6, ta.Pos.Y - 4, sz.Width + 12, sz.Height + 8);
             if (rect.Contains(p)) return i;
         }
         return -1;

@@ -64,34 +64,28 @@ public sealed partial class RegionOverlayForm : Form
     private const int PW = Mag + PPad * 2, PH = Mag + InfoH + PPad * 2;
     private const int MagOff = 12, MagMargin = 4;
 
+    // Typed undo stack: all annotations in creation order
+    private readonly List<Annotation> _undoStack = new();
+
     // Draw / Blur / Arrow state
-    private readonly List<List<Point>> _drawStrokes = new();
     private List<Point>? _currentStroke;
-    private readonly List<Rectangle> _blurRects = new();
     private Point _blurStart;
     private bool _isBlurring;
 
-    private readonly List<(Point from, Point to)> _arrows = new();
     private Point _arrowStart;
     private bool _isArrowDragging;
 
     // Curved arrows: freehand path with arrowhead at end
-    private readonly List<List<Point>> _curvedArrows = new();
     private List<Point>? _currentCurvedArrow;
     private bool _isCurvedArrowDragging;
 
     // Highlight rectangles (semi-transparent, yellow default)
-    private readonly List<(Rectangle rect, Color color)> _highlightRects = new();
     private Point _highlightStart;
     private bool _isHighlighting;
     private static readonly Color DefaultHighlightColor = Color.FromArgb(255, 255, 220, 0);
 
     // Step numbering
-    private readonly List<(Point pos, int number, Color color)> _stepNumbers = new();
     private int _nextStepNumber = 1;
-
-    // Magnifier: click to place persistent zoomed views
-    private readonly List<(Point pos, Rectangle srcRect)> _placedMagnifiers = new();
 
     // Region auto-detect
     private Rectangle _autoDetectRect;
@@ -101,14 +95,10 @@ public sealed partial class RegionOverlayForm : Form
     private bool _colorPickerOpen;
     private Rectangle _colorPickerRect;
 
-    // Smart eraser: filled rects sampled from the screenshot
-    private readonly List<(Rectangle rect, Color color)> _eraserFills = new();
+    // Smart eraser state
     private Point _eraserStart;
     private Color _eraserColor;
     private bool _isEraserDragging;
-
-    // Text annotations: position, text, fontSize, color, bold, fontFamily
-    private readonly List<(Point pos, string text, float fontSize, Color color, bool bold, string fontFamily)> _textAnnotations = new();
     private bool _isTyping;
     private Point _textPos;
     private string _textBuffer = "";
@@ -133,8 +123,7 @@ public sealed partial class RegionOverlayForm : Form
         "Cascadia Code", "Segoe UI Semibold"
     };
 
-    // Emoji annotations: position, emoji string, font size
-    private readonly List<(Point pos, string emoji, float size)> _emojiAnnotations = new();
+    // Emoji tool state
     private bool _emojiPickerOpen;
     private Rectangle _emojiPickerRect;
     private string _emojiSearch = "";
@@ -178,8 +167,7 @@ public sealed partial class RegionOverlayForm : Form
     };
     private int _toolColorIndex = 0;
 
-    // Undo stack: "draw", "blur", "arrow", "eraser", "text"
-    private readonly List<string> _undoStack = new();
+    // (typed _undoStack is defined above with annotation state)
 
     // Blank cursor for color picker (we draw our own crosshair)
     private static readonly Cursor _blankCursor = CreateBlankCursor();

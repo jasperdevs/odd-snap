@@ -35,59 +35,52 @@ public sealed partial class RegionOverlayForm
     {
         var result = new Bitmap(_screenshot);
         using var g = Graphics.FromImage(result);
+        RenderAnnotationsTo(g);
+        return result;
+    }
 
-        int iDraw = 0, iBlur = 0, iArrow = 0, iCurved = 0;
-        int iEraser = 0, iText = 0, iStep = 0, iHighlight = 0, iEmoji = 0;
-
+    /// <summary>
+    /// Shared annotation rendering: iterates the typed undo stack and draws each annotation.
+    /// Used by both on-screen paint and final bitmap rendering.
+    /// </summary>
+    private void RenderAnnotationsTo(Graphics g)
+    {
         foreach (var entry in _undoStack)
         {
             switch (entry)
             {
-                case "eraser" when iEraser < _eraserFills.Count:
-                    var (er, ec) = _eraserFills[iEraser++];
-                    using (var brush = new SolidBrush(ec))
-                        g.FillRectangle(brush, er);
+                case EraserFill ef:
+                    using (var brush = new SolidBrush(ef.Color))
+                        g.FillRectangle(brush, ef.Rect);
                     break;
-
-                case "blur" when iBlur < _blurRects.Count:
-                    PaintBlurRect(g, _blurRects[iBlur++]);
+                case BlurRect br:
+                    PaintBlurRect(g, br.Rect);
                     break;
-
-                case "draw" when iDraw < _drawStrokes.Count:
-                    SketchRenderer.DrawFreehandStroke(g, _drawStrokes[iDraw++], _toolColor, 6f);
+                case DrawStroke ds:
+                    SketchRenderer.DrawFreehandStroke(g, ds.Points, _toolColor, 6f);
                     break;
-
-                case "highlight" when iHighlight < _highlightRects.Count:
-                    var (hr, hc) = _highlightRects[iHighlight++];
-                    SketchRenderer.DrawHighlightRect(g, hr, hc);
+                case HighlightAnnotation h:
+                    SketchRenderer.DrawHighlightRect(g, h.Rect, h.Color);
                     break;
-
-                case "arrow" when iArrow < _arrows.Count:
-                    var a = _arrows[iArrow++];
-                    SketchRenderer.DrawArrow(g, a.from, a.to, _toolColor, a.from.GetHashCode());
+                case ArrowAnnotation a:
+                    SketchRenderer.DrawArrow(g, a.From, a.To, _toolColor, a.From.GetHashCode());
                     break;
-
-                case "curvedArrow" when iCurved < _curvedArrows.Count:
-                    SketchRenderer.DrawCurvedArrow(g, _curvedArrows[iCurved++], _toolColor, iCurved * 7919);
+                case CurvedArrowAnnotation ca:
+                    SketchRenderer.DrawCurvedArrow(g, ca.Points, _toolColor, ca.Points.Count * 7919);
                     break;
-
-                case "step" when iStep < _stepNumbers.Count:
-                    var (sp, sn, sc) = _stepNumbers[iStep++];
-                    PaintStepNumber(g, sp, sn, sc);
+                case StepNumberAnnotation sn:
+                    PaintStepNumber(g, sn.Pos, sn.Number, sn.Color);
                     break;
-
-                case "text" when iText < _textAnnotations.Count:
-                    var (tp, tt, tf, tc, tb, tff) = _textAnnotations[iText++];
-                    PaintExcalidrawText(g, tp, tt, tf, tc, tb, tff);
+                case TextAnnotation ta:
+                    PaintExcalidrawText(g, ta.Pos, ta.Text, ta.FontSize, ta.Color, ta.Bold, ta.FontFamily);
                     break;
-
-                case "emoji" when iEmoji < _emojiAnnotations.Count:
-                    var (ep, ee, es) = _emojiAnnotations[iEmoji++];
-                    PaintEmojiAnnotation(g, ep, ee, es);
+                case MagnifierAnnotation ma:
+                    PaintPlacedMagnifier(g, ma.Pos, ma.SrcRect);
+                    break;
+                case EmojiAnnotation ea:
+                    PaintEmojiAnnotation(g, ea.Pos, ea.Emoji, ea.Size);
                     break;
             }
         }
-
-        return result;
     }
 }
