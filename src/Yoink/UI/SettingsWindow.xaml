@@ -211,6 +211,15 @@
                                   Checked="SaveHistoryCheck_Changed" Unchecked="SaveHistoryCheck_Changed"/>
                     </Border>
 
+                    <TextBlock Text="Toolbar" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="Choose which tools appear in the capture toolbar" FontSize="12" Opacity="0.4" Margin="0,0,0,8"/>
+                            <WrapPanel x:Name="ToolTogglePanel" Orientation="Horizontal"/>
+                        </StackPanel>
+                    </Border>
+
                     <TextBlock Text="General" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
 
                     <Border Style="{StaticResource Card}">

@@ -25,9 +25,10 @@ public sealed partial class RegionOverlayForm : Form
 
     private readonly List<Point> _freeformPoints = new();
 
-    // Toolbar: rect, free, OCR, picker, draw, highlight, line, arrow, curvedArrow, text, step, blur, eraser, magnifier, emoji, [color], gear, close
-    private const int BtnCount = 18;
-    private readonly Rectangle[] _toolbarButtons = new Rectangle[BtnCount];
+    // Dynamic toolbar built from enabled tools + fixed buttons (color, gear, close)
+    private ToolDef[] _visibleTools = ToolDef.AllTools;
+    private int BtnCount => _visibleTools.Length + 3; // +3 for color, gear, close
+    private Rectangle[] _toolbarButtons = Array.Empty<Rectangle>();
     private int _hoveredButton = -1;
     private Rectangle _toolbarRect;
     private const int ToolbarHeight = 48;
@@ -246,6 +247,15 @@ public sealed partial class RegionOverlayForm : Form
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool ShowCrosshairGuides { get; set; }
 
+    public void SetEnabledTools(List<string>? enabledIds)
+    {
+        _visibleTools = enabledIds == null
+            ? ToolDef.AllTools
+            : ToolDef.AllTools.Where(t => enabledIds.Contains(t.Id)).ToArray();
+        _toolbarButtons = new Rectangle[BtnCount];
+        CalcToolbar();
+    }
+
     // Events
     public event Action<Rectangle>? RegionSelected;
     public event Action<Rectangle>? OcrRegionSelected;
@@ -327,15 +337,26 @@ public sealed partial class RegionOverlayForm : Form
         Invalidate();
     }
 
-    // Group separators: after index 3 (capture modes), after 14 (annotation tools incl emoji)
-    private static readonly int[] SepAfter = { 3, 14 };
     private const int SepWidth = 8;
+
+    // Separator indices (computed dynamically based on visible tools)
+    private int[] _sepAfter = Array.Empty<int>();
 
     private void CalcToolbar()
     {
+        _toolbarButtons = new Rectangle[BtnCount];
+
+        // Compute group separators: between last group-0 tool and first group-1 tool,
+        // and between last tool and the fixed buttons (color, gear, close)
+        var seps = new List<int>();
+        for (int i = 0; i < _visibleTools.Length - 1; i++)
+            if (_visibleTools[i].Group != _visibleTools[i + 1].Group)
+                seps.Add(i);
+        seps.Add(_visibleTools.Length - 1); // separator before color/gear/close
+        _sepAfter = seps.ToArray();
+
         int pad = 8;
-        int seps = SepAfter.Length;
-        int w = ButtonSize * BtnCount + ButtonSpacing * (BtnCount - 1) + pad * 2 + seps * SepWidth;
+        int w = ButtonSize * BtnCount + ButtonSpacing * (BtnCount - 1) + pad * 2 + _sepAfter.Length * SepWidth;
         int x = (ClientSize.Width - w) / 2;
         _toolbarRect = new Rectangle(x, ToolbarTopMargin, w, ToolbarHeight);
         int cx = _toolbarRect.X + pad;
@@ -345,7 +366,7 @@ public sealed partial class RegionOverlayForm : Form
                 cx, _toolbarRect.Y + (ToolbarHeight - ButtonSize) / 2,
                 ButtonSize, ButtonSize);
             cx += ButtonSize + ButtonSpacing;
-            if (Array.IndexOf(SepAfter, i) >= 0) cx += SepWidth;
+            if (Array.IndexOf(_sepAfter, i) >= 0) cx += SepWidth;
         }
     }
 

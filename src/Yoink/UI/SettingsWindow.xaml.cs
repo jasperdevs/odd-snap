@@ -100,6 +100,45 @@ public partial class SettingsWindow : Window
         MuteSoundsCheck.IsChecked = s.MuteSounds;
         CompressHistoryCheck.IsChecked = s.CompressHistory;
         CrosshairGuidesCheck.IsChecked = s.ShowCrosshairGuides;
+        PopulateToolToggles();
+    }
+
+    private void PopulateToolToggles()
+    {
+        ToolTogglePanel.Children.Clear();
+        var enabled = _settingsService.Settings.EnabledTools ?? ToolDef.DefaultEnabledIds();
+        foreach (var tool in ToolDef.AllTools)
+        {
+            var cb = new CheckBox
+            {
+                Content = tool.Label,
+                FontSize = 12,
+                IsChecked = enabled.Contains(tool.Id),
+                Tag = tool.Id,
+                Margin = new Thickness(0, 0, 14, 6),
+                Cursor = System.Windows.Input.Cursors.Hand,
+            };
+            cb.Checked += ToolToggle_Changed;
+            cb.Unchecked += ToolToggle_Changed;
+            ToolTogglePanel.Children.Add(cb);
+        }
+    }
+
+    private void ToolToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        var enabledIds = new List<string>();
+        foreach (CheckBox cb in ToolTogglePanel.Children)
+            if (cb.IsChecked == true)
+                enabledIds.Add((string)cb.Tag);
+        // Must have at least one capture tool
+        if (!enabledIds.Any(id => ToolDef.AllTools.Any(t => t.Id == id && t.Group == 0)))
+        {
+            ((CheckBox)sender).IsChecked = true;
+            return;
+        }
+        _settingsService.Settings.EnabledTools = enabledIds;
+        _settingsService.Save();
     }
 
     // ─── Tabs ──────────────────────────────────────────────────────

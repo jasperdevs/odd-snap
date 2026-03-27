@@ -571,23 +571,23 @@ public sealed partial class RegionOverlayForm
             g.DrawPath(bp, p);
         }
 
-        string[] icons = { "rect", "free", "ocr", "picker",
-            "draw", "highlight", "line", "arrow", "curvedArrow", "text", "step",
-            "blur", "eraser", "magnifier", "emoji", "color", "gear", "close" };
-        string[] labels = { "Rectangle", "Freeform",
-            "OCR", "Color Picker", "Draw", "Highlight",
-            "Line", "Arrow", "Curved Arrow", "Text", "Step Number",
-            "Blur", "Eraser", "Magnifier", "Emoji", "Color", "Settings", "Close (Esc)" };
-        CaptureMode[] modes = { CaptureMode.Rectangle, CaptureMode.Freeform,
-            CaptureMode.Ocr, CaptureMode.ColorPicker,
-            CaptureMode.Draw, CaptureMode.Highlight,
-            CaptureMode.Line, CaptureMode.Arrow, CaptureMode.CurvedArrow,
-            CaptureMode.Text, CaptureMode.StepNumber,
-            CaptureMode.Blur, CaptureMode.Eraser, CaptureMode.Magnifier,
-            CaptureMode.Emoji };
+        // Build dynamic arrays from visible tools + fixed buttons
+        int toolCount = _visibleTools.Length;
+        string[] icons = new string[BtnCount];
+        string[] labels = new string[BtnCount];
+        CaptureMode?[] modes = new CaptureMode?[BtnCount];
+        for (int i = 0; i < toolCount; i++)
+        {
+            icons[i] = _visibleTools[i].Id;
+            labels[i] = _visibleTools[i].Label;
+            modes[i] = _visibleTools[i].Mode;
+        }
+        icons[toolCount] = "color"; labels[toolCount] = "Color"; modes[toolCount] = null;
+        icons[toolCount + 1] = "gear"; labels[toolCount + 1] = "Settings"; modes[toolCount + 1] = null;
+        icons[toolCount + 2] = "close"; labels[toolCount + 2] = "Close (Esc)"; modes[toolCount + 2] = null;
 
         // Draw group separator lines
-        foreach (int sepIdx in SepAfter)
+        foreach (int sepIdx in _sepAfter)
         {
             if (sepIdx < BtnCount - 1)
             {
@@ -603,7 +603,7 @@ public sealed partial class RegionOverlayForm
         {
             var btn = new Rectangle(_toolbarButtons[i].X, _toolbarButtons[i].Y + oy,
                 ButtonSize, ButtonSize);
-            bool active = i < modes.Length && _mode == modes[i];
+            bool active = modes[i] is { } m && _mode == m;
             bool hover = _hoveredButton == i;
 
             // Color dot button: draw filled circle with current tool color
@@ -677,26 +677,11 @@ public sealed partial class RegionOverlayForm
         g.FillRectangle(gradBrush, topRect);
     }
 
-    // Phosphor Icons glyph map (regular weight)
-    private static readonly Dictionary<string, char> IconGlyphs = new()
+    // Fixed button glyphs (not in ToolDef)
+    private static readonly Dictionary<string, char> FixedGlyphs = new()
     {
-        ["rect"]        = '\uF551', // Rectangle
-        ["free"]        = '\uF564', // Scribble loop (freeform)
-        ["ocr"]         = '\uF561', // Scan
-        ["picker"]      = '\uF3C9', // Eyedropper
-        ["draw"]        = '\uF513', // Pencil
-        ["highlight"]   = '\uF466', // Highlighter circle
-        ["line"]        = '\uF48D', // Line segment
-        ["arrow"]       = '\uF2A0', // Arrow up-right
-        ["curvedArrow"] = '\uF2DB', // Bezier curve
-        ["text"]        = '\uF5E8', // Text T
-        ["step"]        = '\uF4DC', // Number circle one ①
-        ["blur"]        = '\uF44B', // Grid four
-        ["eraser"]      = '\uF3C3', // Eraser
-        ["magnifier"]   = '\uF4A8', // Magnifying glass
-        ["emoji"]       = '\uF58E', // Smiley
-        ["gear"]        = '\uF42B', // Gear six
-        ["close"]       = '\uF642', // X
+        ["gear"]  = '\uF42B',
+        ["close"] = '\uF642',
     };
 
     private static System.Drawing.Text.PrivateFontCollection? _phosphorFonts;
@@ -706,21 +691,27 @@ public sealed partial class RegionOverlayForm
     {
         if (_phosphorFamily != null) return _phosphorFamily;
         _phosphorFonts = new System.Drawing.Text.PrivateFontCollection();
-        // Look for Phosphor.ttf next to the exe
         string dir = AppContext.BaseDirectory;
         string path = System.IO.Path.Combine(dir, "Phosphor.ttf");
         if (System.IO.File.Exists(path))
             _phosphorFonts.AddFontFile(path);
         _phosphorFamily = _phosphorFonts.Families.Length > 0
             ? _phosphorFonts.Families[0]
-            : new FontFamily("Segoe UI"); // fallback
+            : new FontFamily("Segoe UI");
         return _phosphorFamily;
     }
 
     private static void DrawIcon(Graphics g, string icon, Rectangle b, Color c)
     {
-        if (icon == "color") return; // handled separately in PaintToolbar
-        if (!IconGlyphs.TryGetValue(icon, out char glyph)) return;
+        if (icon == "color") return;
+
+        // Look up glyph from ToolDef first, then fixed buttons
+        char glyph;
+        var toolDef = ToolDef.AllTools.FirstOrDefault(t => t.Id == icon);
+        if (toolDef != null)
+            glyph = toolDef.Icon;
+        else if (!FixedGlyphs.TryGetValue(icon, out glyph))
+            return;
 
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         using var font = new Font(GetPhosphorFamily(), 14f, FontStyle.Regular, GraphicsUnit.Point);

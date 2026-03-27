@@ -37,6 +37,13 @@ public partial class App : Application
         _historyService.CompressHistory = _settingsService.Settings.CompressHistory;
         _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
 
+        // Show setup wizard on first run
+        if (!_settingsService.Settings.HasCompletedSetup)
+        {
+            var wizard = new SetupWizard(_settingsService);
+            wizard.ShowDialog();
+        }
+
         _trayIcon = new TrayIcon();
         _trayIcon.OnCapture += () => OnHotkeyPressed();
         _trayIcon.OnOcr += () => OnOcrHotkeyPressed();
@@ -118,6 +125,7 @@ public partial class App : Application
                     {
                         ShowCrosshairGuides = _settingsService!.Settings.ShowCrosshairGuides
                     };
+                    overlay.SetEnabledTools(_settingsService.Settings.EnabledTools);
 
                     // Screenshot capture (rect / fullscreen)
                     overlay.RegionSelected += sel =>

@@ -14,18 +14,12 @@ public sealed partial class RegionOverlayForm
         int btn = GetToolbarButtonAt(e.Location);
         if (btn >= 0)
         {
+            int toolCount = _visibleTools.Length;
             if (btn == BtnCount - 1) { Cancel(); return; }     // close
             if (btn == BtnCount - 2) { SettingsRequested?.Invoke(); Cancel(); return; } // gear
             if (btn == BtnCount - 3) { ToggleColorPicker(); return; } // color dot
-            var modeMap = new[] {
-                CaptureMode.Rectangle, CaptureMode.Freeform,
-                CaptureMode.Ocr, CaptureMode.ColorPicker,
-                CaptureMode.Draw, CaptureMode.Highlight,
-                CaptureMode.Line, CaptureMode.Arrow, CaptureMode.CurvedArrow,
-                CaptureMode.Text, CaptureMode.StepNumber,
-                CaptureMode.Blur, CaptureMode.Eraser, CaptureMode.Magnifier,
-                CaptureMode.Emoji };
-            if (btn < modeMap.Length) SetMode(modeMap[btn]);
+            if (btn < toolCount && _visibleTools[btn].Mode.HasValue)
+                SetMode(_visibleTools[btn].Mode!.Value);
             return;
         }
 
