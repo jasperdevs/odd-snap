@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using Color = System.Windows.Media.Color;
 
 namespace Yoink.UI;
 
@@ -10,9 +11,12 @@ public partial class ToastWindow : Window
     private bool _isDismissing;
     private static ToastWindow? _current;
 
-    private ToastWindow(string title, string body, System.Windows.Media.Color? swatchColor)
+    private ToastWindow(string title, string body, Color? swatchColor)
     {
         InitializeComponent();
+
+        // Start fully invisible - no flash before animation
+        Opacity = 0;
 
         Theme.Refresh();
         Root.Background = Theme.Brush(Theme.BgCard);
@@ -40,25 +44,26 @@ public partial class ToastWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Position off-screen right, then slide in
         var wa = SystemParameters.WorkArea;
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            double targetLeft = wa.Right - ActualWidth - 16;
-            Top = wa.Bottom - ActualHeight - 16;
-            Left = targetLeft;
+        double targetLeft = wa.Right - ActualWidth - 16;
+        Top = wa.Bottom - ActualHeight - 16;
+        Left = wa.Right + 10; // start off-screen
 
-            SlideX.X = ActualWidth + 30;
-            var dur = TimeSpan.FromMilliseconds(280);
+        // Use Render priority so layout is fully done before animating
+        Dispatcher.BeginInvoke(() =>
+        {
+            Opacity = 1;
+            var dur = TimeSpan.FromMilliseconds(250);
             var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
-            SlideX.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty,
-                new DoubleAnimation { From = ActualWidth + 30, To = 0, Duration = dur, EasingFunction = ease });
-            BeginAnimation(OpacityProperty, new DoubleAnimation
+
+            BeginAnimation(LeftProperty, new DoubleAnimation
             {
-                From = 0.5, To = 1, Duration = TimeSpan.FromMilliseconds(150)
+                To = targetLeft, Duration = dur, EasingFunction = ease
             });
 
             _timer.Start();
-        }), DispatcherPriority.Render);
+        }, DispatcherPriority.Render);
     }
 
     private void SlideAway()
@@ -67,19 +72,25 @@ public partial class ToastWindow : Window
         _isDismissing = true;
         _timer.Stop();
 
-        var wa = SystemParameters.WorkArea;
-        double target = wa.Right + 20; // past the screen edge
+        // Cancel any entrance animation
+        BeginAnimation(LeftProperty, null);
 
-        var dur = TimeSpan.FromMilliseconds(250);
+        var wa = SystemParameters.WorkArea;
+        var dur = TimeSpan.FromMilliseconds(220);
         var ease = new QuarticEase { EasingMode = EasingMode.EaseIn };
 
-        var slide = new DoubleAnimation { To = target, Duration = dur, EasingFunction = ease };
+        var slide = new DoubleAnimation
+        {
+            To = wa.Right + 20,
+            Duration = dur,
+            EasingFunction = ease
+        };
         slide.Completed += (_, _) => ForceClose();
         BeginAnimation(LeftProperty, slide);
 
         BeginAnimation(OpacityProperty, new DoubleAnimation
         {
-            To = 0.3, Duration = dur, EasingFunction = ease
+            To = 0, Duration = dur, EasingFunction = ease
         });
     }
 
@@ -107,7 +118,7 @@ public partial class ToastWindow : Window
         toast.Show();
     }
 
-    public static void ShowWithColor(string title, string body, System.Windows.Media.Color color)
+    public static void ShowWithColor(string title, string body, Color color)
     {
         _current?.ForceClose();
         var toast = new ToastWindow(title, body, color);

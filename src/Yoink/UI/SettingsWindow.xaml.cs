@@ -371,10 +371,12 @@ public partial class SettingsWindow : Window
         {
             if (_selectMode) { vm.IsSelected = !vm.IsSelected; UpdateCardSelection(card, vm); return; }
             if (!File.Exists(vm.Entry.FilePath)) return;
-            var viewer = new ImageViewerWindow(vm.Entry.FilePath, _historyService, vm.Entry);
-            viewer.Owner = this;
-            viewer.ShowDialog();
-            LoadHistory();
+            // Open in default photo app
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = vm.Entry.FilePath,
+                UseShellExecute = true
+            });
         };
 
         card.MouseRightButtonDown += (s, e) =>
