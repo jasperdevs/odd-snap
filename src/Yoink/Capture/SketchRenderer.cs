@@ -58,7 +58,7 @@ public static class SketchRenderer
         float len = MathF.Sqrt(dx * dx + dy * dy);
         if (len < 3) return;
 
-        float thickness = Math.Clamp(1.5f + len / 150f, 1.5f, 3f);
+        float thickness = Math.Clamp(2f + len / 80f, 2f, 4.5f);
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using var pen = new Pen(color, thickness)
@@ -68,11 +68,9 @@ public static class SketchRenderer
             LineJoin = LineJoin.Round
         };
 
-        // Clean line (just a tiny bit of wobble)
         g.DrawLine(pen, from, to);
 
-        // Arrowhead
-        DrawArrowhead(g, new PointF(to.X, to.Y), dx / len, dy / len, len, color, thickness);
+        DrawArrowhead(g, new PointF(to.X, to.Y), dx / len, dy / len, len, color, thickness + 0.5f);
 
         g.SmoothingMode = SmoothingMode.Default;
     }
@@ -88,7 +86,7 @@ public static class SketchRenderer
             float ddx = points[i].X - points[i - 1].X, ddy = points[i].Y - points[i - 1].Y;
             len += MathF.Sqrt(ddx * ddx + ddy * ddy);
         }
-        float thickness = Math.Clamp(1.5f + len / 150f, 1.5f, 3f);
+        float thickness = Math.Clamp(2f + len / 80f, 2f, 4.5f);
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using var pen = new Pen(color, thickness)
@@ -98,24 +96,17 @@ public static class SketchRenderer
             LineJoin = LineJoin.Round
         };
 
-        // Draw smooth curve through points
         if (points.Count >= 4)
-        {
-            // Use cardinal spline for smooth curve
             g.DrawCurve(pen, points.ToArray(), 0.5f);
-        }
         else
-        {
             g.DrawLines(pen, points.ToArray());
-        }
 
-        // Arrowhead at end - look back enough points for smooth direction
         var last = points[^1];
         var prev = points[Math.Max(0, points.Count - Math.Min(12, points.Count / 3 + 1))];
         float dx = last.X - prev.X, dy = last.Y - prev.Y;
         float l = MathF.Sqrt(dx * dx + dy * dy);
         if (l > 2)
-            DrawArrowhead(g, new PointF(last.X, last.Y), dx / l, dy / l, len, color, thickness);
+            DrawArrowhead(g, new PointF(last.X, last.Y), dx / l, dy / l, len, color, thickness + 0.5f);
 
         g.SmoothingMode = SmoothingMode.Default;
     }
@@ -123,8 +114,8 @@ public static class SketchRenderer
     private static void DrawArrowhead(Graphics g, PointF tip, float nx, float ny,
         float shaftLen, Color color, float thickness)
     {
-        float headSize = Math.Clamp(10f + shaftLen / 18f, 10f, 22f);
-        headSize = Math.Min(headSize, shaftLen * 0.35f);
+        float headSize = Math.Clamp(12f + shaftLen / 15f, 12f, 28f);
+        headSize = Math.Min(headSize, shaftLen * 0.4f);
         float angle = 25f * MathF.PI / 180f;
 
         float bx = tip.X - nx * headSize, by = tip.Y - ny * headSize;
