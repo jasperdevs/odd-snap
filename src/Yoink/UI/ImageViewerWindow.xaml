@@ -6,35 +6,67 @@
         WindowStartupLocation="CenterOwner"
         ThemeMode="Dark"
         Background="#1C1C1C"
+        WindowStyle="None"
+        AllowsTransparency="True"
         KeyDown="OnKeyDown"
-        ResizeMode="CanResize">
+        ResizeMode="CanResizeWithGrip">
 
-    <Grid>
-        <!-- Blurred background fill (set in code-behind) -->
-        <Image x:Name="BlurredBg" Stretch="UniformToFill" Opacity="0.4"
-               RenderOptions.BitmapScalingMode="LowQuality"/>
+    <Border CornerRadius="10" ClipToBounds="True" Background="#1C1C1C"
+            BorderBrush="#40000000" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="4" Opacity="0.5" Color="Black"/>
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-        <!-- Main image -->
-        <Image x:Name="ViewerImage" Stretch="Uniform" Margin="16"
-               RenderOptions.BitmapScalingMode="HighQuality"/>
+            <!-- Custom title bar -->
+            <Border Grid.Row="0" Padding="14,8,8,8" Background="#161616"
+                    MouseLeftButtonDown="TitleBar_MouseDown">
+                <Grid>
+                    <TextBlock Text="Yoink" FontSize="12" FontWeight="SemiBold" Foreground="White"
+                               Opacity="0.8" VerticalAlignment="Center"/>
+                    <Border Width="32" Height="28" CornerRadius="6" Cursor="Hand" Background="Transparent"
+                            MouseLeftButtonDown="CloseBtn_Click" MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
+                            HorizontalAlignment="Right">
+                        <Canvas Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Line X1="0" Y1="0" X2="10" Y2="10" Stroke="#AAFFFFFF" StrokeThickness="1.5"/>
+                            <Line X1="10" Y1="0" X2="0" Y2="10" Stroke="#AAFFFFFF" StrokeThickness="1.5"/>
+                        </Canvas>
+                    </Border>
+                </Grid>
+            </Border>
 
-        <!-- Top bar overlay -->
-        <Border VerticalAlignment="Top" Padding="14,8,14,8">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Color="#B0000000" Offset="0"/>
-                    <GradientStop Color="#00000000" Offset="1"/>
-                </LinearGradientBrush>
-            </Border.Background>
-            <Grid>
-                <TextBlock x:Name="InfoText" FontSize="11" Opacity="0.6"
-                           Foreground="White" VerticalAlignment="Center"/>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
-                            VerticalAlignment="Center">
-                    <Button Content="Copy" FontSize="11" Padding="10,4" Margin="0,0,4,0" Click="CopyClick"/>
-                    <Button Content="Delete" FontSize="11" Padding="10,4" Click="DeleteClick"/>
-                </StackPanel>
+            <Grid Grid.Row="1">
+                <!-- Blurred background fill (set in code-behind) -->
+                <Image x:Name="BlurredBg" Stretch="UniformToFill" Opacity="0.4"
+                       RenderOptions.BitmapScalingMode="LowQuality"/>
+
+                <!-- Main image -->
+                <Image x:Name="ViewerImage" Stretch="Uniform" Margin="16"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                <!-- Top info/action bar -->
+                <Border VerticalAlignment="Top" Padding="14,8,14,8">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#B0000000" Offset="0"/>
+                            <GradientStop Color="#00000000" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <TextBlock x:Name="InfoText" FontSize="11" Opacity="0.6"
+                                   Foreground="White" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
+                                    VerticalAlignment="Center">
+                            <Button Content="Copy" FontSize="11" Padding="10,4" Margin="0,0,4,0" Click="CopyClick"/>
+                            <Button Content="Delete" FontSize="11" Padding="10,4" Click="DeleteClick"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
             </Grid>
-        </Border>
-    </Grid>
+        </Grid>
+    </Border>
 </Window>

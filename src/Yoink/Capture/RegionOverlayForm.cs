@@ -125,12 +125,12 @@ public sealed partial class RegionOverlayForm : Form
         _blurred = BuildBlurred(screenshot);
         _topBar = BuildTopBar();
 
-        _animTimer = new System.Windows.Forms.Timer { Interval = 12 };
+        _animTimer = new System.Windows.Forms.Timer { Interval = 16 };
         _animTimer.Tick += (_, _) =>
         {
             if (_toolbarAnim >= 1f) { _animTimer.Stop(); return; }
             _toolbarAnim = Math.Min(1f, (float)(DateTime.UtcNow - _showTime).TotalMilliseconds / 120f);
-            Invalidate();
+            Invalidate(_toolbarRect);
         };
         _animTimer.Start();
 

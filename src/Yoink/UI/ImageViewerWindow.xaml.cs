@@ -3,6 +3,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using Yoink.Services;
 
@@ -74,6 +75,24 @@ public partial class ImageViewerWindow : Window
     private void OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == Key.Escape) Close();
+    }
+
+    private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left) DragMove();
+    }
+
+    private void CloseBtn_Click(object sender, MouseButtonEventArgs e) => Close();
+
+    private void TitleBtn_Enter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (sender is Border b) b.Background = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromArgb(30, 255, 255, 255));
+    }
+
+    private void TitleBtn_Leave(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (sender is Border b) b.Background = System.Windows.Media.Brushes.Transparent;
     }
 
     private void CopyClick(object sender, RoutedEventArgs e)

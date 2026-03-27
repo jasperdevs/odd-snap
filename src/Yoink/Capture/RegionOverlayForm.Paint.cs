@@ -13,8 +13,9 @@ public sealed partial class RegionOverlayForm
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
 
         // Raw screenshot background
+        var clip = e.ClipRectangle;
         g.CompositingMode = CompositingMode.SourceCopy;
-        g.DrawImage(_screenshot, 0, 0);
+        g.DrawImage(_screenshot, clip, clip, GraphicsUnit.Pixel);
         g.CompositingMode = CompositingMode.SourceOver;
 
         // Annotations render first (they get baked under the darkening overlay)
