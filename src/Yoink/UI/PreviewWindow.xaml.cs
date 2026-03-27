@@ -96,7 +96,8 @@ public partial class PreviewWindow : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         var wa = SystemParameters.WorkArea;
-        // Match toast: slide in from the right after final layout settles.
+        // Place fully off-screen first to avoid the one-frame ghost on the left.
+        Left = wa.Right + 50;
         Dispatcher.BeginInvoke(new Action(() =>
         {
             double targetLeft = wa.Right - ActualWidth - 16;

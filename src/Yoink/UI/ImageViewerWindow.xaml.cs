@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Controls;
@@ -105,7 +106,12 @@ public partial class ImageViewerWindow : Window
             using var bmp = new Bitmap(_filePath);
             ClipboardService.CopyToClipboard(bmp);
         }
-        Close();
+    }
+
+    private void OpenClick(object sender, RoutedEventArgs e)
+    {
+        if (File.Exists(_filePath))
+            Process.Start("explorer.exe", $"/select,\"{_filePath}\"");
     }
 
     private void DeleteClick(object sender, RoutedEventArgs e)

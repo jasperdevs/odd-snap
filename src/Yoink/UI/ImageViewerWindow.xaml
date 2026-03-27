@@ -28,6 +28,10 @@
                 <Grid>
                     <TextBlock Text="Yoink" FontSize="12" FontWeight="SemiBold" Foreground="White"
                                Opacity="0.8" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Button Content="Open" FontSize="11" Padding="10,4" Margin="0,0,4,0" Click="OpenClick"/>
+                        <Button Content="Copy" FontSize="11" Padding="10,4" Margin="0,0,4,0" Click="CopyClick"/>
+                        <Button Content="Delete" FontSize="11" Padding="10,4" Margin="0,0,8,0" Click="DeleteClick"/>
                     <Border Width="32" Height="28" CornerRadius="6" Cursor="Hand" Background="Transparent"
                             MouseLeftButtonDown="CloseBtn_Click" MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
                             HorizontalAlignment="Right">
@@ -36,6 +40,7 @@
                             <Line X1="10" Y1="0" X2="0" Y2="10" Stroke="#AAFFFFFF" StrokeThickness="1.5"/>
                         </Canvas>
                     </Border>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -48,7 +53,7 @@
                 <Image x:Name="ViewerImage" Stretch="Uniform" Margin="16"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
 
-                <!-- Top info/action bar -->
+                <!-- Top info bar -->
                 <Border VerticalAlignment="Top" Padding="14,8,14,8">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -59,11 +64,6 @@
                     <Grid>
                         <TextBlock x:Name="InfoText" FontSize="11" Opacity="0.6"
                                    Foreground="White" VerticalAlignment="Center"/>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
-                                    VerticalAlignment="Center">
-                            <Button Content="Copy" FontSize="11" Padding="10,4" Margin="0,0,4,0" Click="CopyClick"/>
-                            <Button Content="Delete" FontSize="11" Padding="10,4" Click="DeleteClick"/>
-                        </StackPanel>
                     </Grid>
                 </Border>
             </Grid>
