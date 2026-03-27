@@ -422,27 +422,44 @@ public sealed partial class RegionOverlayForm
 
     private static Bitmap RenderEmojiViaWpf(string emoji, float size)
     {
-        double emSize = size * 1.1;
-        var typeface = new System.Windows.Media.Typeface("Segoe UI Emoji");
-        var formatted = new System.Windows.Media.FormattedText(
-            emoji, System.Globalization.CultureInfo.CurrentCulture,
-            System.Windows.FlowDirection.LeftToRight,
-            typeface, emSize, System.Windows.Media.Brushes.White,
-            96);
-
-        int w = (int)Math.Ceiling(formatted.Width) + 4;
-        int h = (int)Math.Ceiling(formatted.Height) + 4;
-        if (w < 4 || h < 4) { w = (int)emSize + 4; h = (int)emSize + 4; }
-
-        var visual = new System.Windows.Media.DrawingVisual();
-        using (var dc = visual.RenderOpen())
+        // Must run on the WPF dispatcher thread for full color emoji support
+        Bitmap? result = null;
+        var wpfDispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (wpfDispatcher != null && !wpfDispatcher.CheckAccess())
         {
-            dc.DrawText(formatted, new System.Windows.Point(2, 2));
+            wpfDispatcher.Invoke(() => result = RenderEmojiCore(emoji, size));
         }
+        else
+        {
+            result = RenderEmojiCore(emoji, size);
+        }
+        return result ?? new Bitmap(1, 1);
+    }
+
+    private static Bitmap RenderEmojiCore(string emoji, float size)
+    {
+        // Use a WPF TextBlock which goes through the full WPF rendering
+        // pipeline with DirectWrite color font support enabled
+        var tb = new System.Windows.Controls.TextBlock
+        {
+            Text = emoji,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Emoji"),
+            FontSize = size * 1.1,
+            Foreground = System.Windows.Media.Brushes.Black, // color emoji ignores foreground
+        };
+
+        tb.Measure(new System.Windows.Size(size * 3, size * 3));
+        tb.Arrange(new System.Windows.Rect(tb.DesiredSize));
+        tb.UpdateLayout();
+
+        int w = (int)Math.Ceiling(tb.ActualWidth) + 4;
+        int h = (int)Math.Ceiling(tb.ActualHeight) + 4;
+        if (w < 4) w = (int)size + 4;
+        if (h < 4) h = (int)size + 4;
 
         var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(
             w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-        rtb.Render(visual);
+        rtb.Render(tb);
 
         // Convert WPF bitmap to GDI+ Bitmap
         var result = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
