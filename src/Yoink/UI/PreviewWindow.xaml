@@ -8,6 +8,7 @@
         ResizeMode="NoResize"
         Background="Transparent"
         SizeToContent="WidthAndHeight"
+        Opacity="0"
         MouseEnter="OnMouseEnter"
         MouseLeave="OnMouseLeave">
 

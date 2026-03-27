@@ -46,6 +46,7 @@ public partial class ToastWindow : Window
             exStyle |= 0x80;       // WS_EX_TOOLWINDOW
             exStyle |= 0x08000000; // WS_EX_NOACTIVATE
             Native.User32.SetWindowLongA(hwnd, Native.User32.GWL_EXSTYLE, exStyle);
+            Native.Dwm.DisableBackdrop(hwnd);
         };
         Loaded += OnLoaded;
     }

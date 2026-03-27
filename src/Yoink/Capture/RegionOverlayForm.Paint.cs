@@ -100,6 +100,20 @@ public sealed partial class RegionOverlayForm
                 break;
         }
 
+        // Crosshair guidelines (full-screen dashed lines at cursor)
+        if (ShowCrosshairGuides && _mode != CaptureMode.ColorPicker)
+        {
+            var cur = PointToClient(System.Windows.Forms.Cursor.Position);
+            using var chPen = new Pen(Color.FromArgb(70, 255, 255, 255), 1f)
+            {
+                DashStyle = DashStyle.Dash,
+                DashPattern = new[] { 8f, 6f },
+                DashOffset = _dashOffset
+            };
+            g.DrawLine(chPen, cur.X, 0, cur.X, ClientSize.Height);
+            g.DrawLine(chPen, 0, cur.Y, ClientSize.Width, cur.Y);
+        }
+
         PaintToolbar(g);
     }
 
@@ -107,7 +121,7 @@ public sealed partial class RegionOverlayForm
     private void PaintAnnotations(Graphics g)
     {
         int iDraw = 0, iBlur = 0, iArrow = 0, iCurved = 0;
-        int iEraser = 0, iText = 0, iStep = 0, iHighlight = 0, iMag = 0;
+        int iEraser = 0, iText = 0, iStep = 0, iHighlight = 0, iMag = 0, iEmoji = 0;
 
         foreach (var entry in _undoStack)
         {
@@ -150,13 +164,18 @@ public sealed partial class RegionOverlayForm
                     break;
 
                 case "text" when iText < _textAnnotations.Count:
-                    var (tp, tt, tf, tc, tb) = _textAnnotations[iText++];
-                    PaintExcalidrawText(g, tp, tt, tf, tc, tb);
+                    var (tp, tt, tf, tc, tb, tff) = _textAnnotations[iText++];
+                    PaintExcalidrawText(g, tp, tt, tf, tc, tb, tff);
                     break;
 
                 case "magnifier" when iMag < _placedMagnifiers.Count:
                     var (mp, ms) = _placedMagnifiers[iMag++];
                     PaintPlacedMagnifier(g, mp, ms);
+                    break;
+
+                case "emoji" when iEmoji < _emojiAnnotations.Count:
+                    var (ep, ee, es) = _emojiAnnotations[iEmoji++];
+                    PaintEmojiAnnotation(g, ep, ee, es);
                     break;
             }
         }
@@ -206,7 +225,7 @@ public sealed partial class RegionOverlayForm
         if (_isTyping)
         {
             var fontStyle = _textBold ? FontStyle.Bold : FontStyle.Regular;
-            using var font = new Font("Segoe UI", _textFontSize, fontStyle);
+            using var font = new Font(_textFontFamily, _textFontSize, fontStyle);
             string display = _textBuffer.Length > 0 ? _textBuffer : "Type here...";
             string boldIndicator = _textBold ? "B" : "b";
             var textSize = g.MeasureString(display, font);
@@ -243,37 +262,47 @@ public sealed partial class RegionOverlayForm
                 g.DrawLine(cursorPen, cursorX, _textPos.Y + 2, cursorX, _textPos.Y + textSize.Height - 4);
             }
 
-            // Font size + bold indicator
+            // Font info + font picker button
             using var sizeFont = new Font("Segoe UI", 8f);
             using var sizeBrush = new SolidBrush(Color.FromArgb(120, 255, 255, 255));
-            g.DrawString($"{(int)_textFontSize}px {boldIndicator}  Ctrl+B", sizeFont, sizeBrush, textRect.Right + 4, textRect.Y);
+            string fontInfo = $"{_textFontFamily}  {(int)_textFontSize}px {boldIndicator}  Ctrl+B  F=Font";
+            g.DrawString(fontInfo, sizeFont, sizeBrush, textRect.Right + 4, textRect.Y);
+        }
+
+        // Emoji placing preview (follow cursor)
+        if (_mode == CaptureMode.Emoji && _isPlacingEmoji && _selectedEmoji != null)
+        {
+            var cur = PointToClient(System.Windows.Forms.Cursor.Position);
+            PaintEmojiAnnotation(g, new Point(cur.X - (int)(_emojiPlaceSize / 2), cur.Y - (int)(_emojiPlaceSize / 2)),
+                _selectedEmoji, _emojiPlaceSize, 0.6f);
         }
 
         // Color picker popup
         if (_colorPickerOpen)
             PaintColorPicker(g);
+
+        // Emoji picker popup
+        if (_emojiPickerOpen)
+            PaintEmojiPicker(g);
+
+        // Font picker popup
+        if (_fontPickerOpen)
+            PaintFontPicker(g);
     }
 
     /// <summary>Excalidraw-style text: clean font, soft shadow, subtle stroke outline.</summary>
-    private static void PaintExcalidrawText(Graphics g, Point pos, string text, float fontSize, Color color, bool bold = true)
+    private static void PaintExcalidrawText(Graphics g, Point pos, string text, float fontSize, Color color, bool bold = true, string fontFamily = "Segoe UI")
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
         var style = bold ? FontStyle.Bold : FontStyle.Regular;
-        using var font = new Font("Segoe UI", fontSize, style);
-        var sz = g.MeasureString(text, font);
-
-        // Soft shadow (offset 2px, blurred via multiple passes)
-        using var shadowBrush = new SolidBrush(Color.FromArgb(50, 0, 0, 0));
-        g.DrawString(text, font, shadowBrush, pos.X + 2, pos.Y + 2);
-        g.DrawString(text, font, shadowBrush, pos.X + 1, pos.Y + 1);
-
-        // Thin stroke outline for readability on any background
+        using var font = new Font(fontFamily, fontSize, style);
+        // Stroke outline for consistent readability on any background
         using var outlinePath = new GraphicsPath();
         outlinePath.AddString(text, font.FontFamily, (int)font.Style, g.DpiY * fontSize / 72f,
             new PointF(pos.X, pos.Y), StringFormat.GenericDefault);
-        using var outlinePen = new Pen(Color.FromArgb(60, 0, 0, 0), 2.5f) { LineJoin = LineJoin.Round };
+        using var outlinePen = new Pen(Color.FromArgb(100, 0, 0, 0), 4f) { LineJoin = LineJoin.Round };
         g.DrawPath(outlinePen, outlinePath);
 
         // Main text fill
@@ -288,6 +317,9 @@ public sealed partial class RegionOverlayForm
     {
         int radius = 16;
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        // Dark outline for visibility on any background
+        using var outlinePen = new Pen(Color.FromArgb(90, 0, 0, 0), 4f);
+        g.DrawEllipse(outlinePen, pos.X - radius, pos.Y - radius, radius * 2, radius * 2);
         // Filled circle
         using var brush = new SolidBrush(color);
         g.FillEllipse(brush, pos.X - radius, pos.Y - radius, radius * 2, radius * 2);
@@ -356,6 +388,176 @@ public sealed partial class RegionOverlayForm
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using var borderPen = new Pen(Color.FromArgb((int)(50 * opacity), 255, 255, 255), 1f);
         g.DrawPath(borderPen, clipPath);
+        g.SmoothingMode = SmoothingMode.Default;
+    }
+
+    private void PaintFontPicker(Graphics g)
+    {
+        int itemH = 28, pad = 6, visibleCount = 8;
+        int pw = 200, ph = visibleCount * itemH + pad * 2;
+
+        // Position near the text input area
+        int px, py;
+        if (_isTyping)
+        {
+            px = _textPos.X;
+            py = _textPos.Y - ph - 10;
+            if (py < 10) py = _textPos.Y + 40;
+        }
+        else
+        {
+            px = _toolbarRect.X + _toolbarRect.Width / 2 - pw / 2;
+            py = _toolbarRect.Bottom + 8;
+        }
+        _fontPickerRect = new Rectangle(px, py, pw, ph);
+
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using (var bgPath = RRect(_fontPickerRect, 10))
+        {
+            using var bg = new SolidBrush(Color.FromArgb(235, 18, 18, 18));
+            g.FillPath(bg, bgPath);
+            using var border = new Pen(Color.FromArgb(40, 255, 255, 255));
+            g.DrawPath(border, bgPath);
+        }
+
+        int maxScroll = Math.Max(0, FontChoices.Length - visibleCount);
+        for (int i = 0; i < visibleCount && (_fontPickerScroll + i) < FontChoices.Length; i++)
+        {
+            int idx = _fontPickerScroll + i;
+            string name = FontChoices[idx];
+            int iy = py + pad + i * itemH;
+            bool active = name == _textFontFamily;
+            bool hovered = idx == _fontPickerHovered;
+
+            if (active || hovered)
+            {
+                var itemRect = new Rectangle(px + pad, iy, pw - pad * 2, itemH);
+                using var itemPath = RRect(itemRect, 5);
+                int alpha = active ? 40 : 20;
+                using var itemBg = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255));
+                g.FillPath(itemBg, itemPath);
+            }
+
+            using var font = new Font(name, 11f);
+            using var brush = new SolidBrush(Color.FromArgb(active ? 255 : 180, 255, 255, 255));
+            g.DrawString(name, font, brush, px + pad + 6, iy + 4);
+        }
+
+        // Scroll indicator
+        if (FontChoices.Length > visibleCount)
+        {
+            int trackH = ph - pad * 2;
+            int trackX = px + pw - pad - 3;
+            int trackY = py + pad;
+            using var trackBrush = new SolidBrush(Color.FromArgb(20, 255, 255, 255));
+            g.FillRectangle(trackBrush, trackX, trackY, 3, trackH);
+            int thumbH = Math.Max(10, trackH * visibleCount / FontChoices.Length);
+            int thumbY = trackY + (int)((float)_fontPickerScroll / maxScroll * (trackH - thumbH));
+            using var thumbBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
+            g.FillRectangle(thumbBrush, trackX, thumbY, 3, thumbH);
+        }
+
+        g.SmoothingMode = SmoothingMode.Default;
+    }
+
+    private static void PaintEmojiAnnotation(Graphics g, Point pos, string emoji, float size, float opacity = 1f)
+    {
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        using var font = new Font("Segoe UI Emoji", size, FontStyle.Regular);
+        using var brush = new SolidBrush(Color.FromArgb((int)(255 * opacity), 0, 0, 0));
+
+        // Soft shadow
+        using var shadowBrush = new SolidBrush(Color.FromArgb((int)(40 * opacity), 0, 0, 0));
+        g.DrawString(emoji, font, shadowBrush, pos.X + 2, pos.Y + 2);
+
+        // Draw emoji (color emoji rendered natively by Segoe UI Emoji)
+        using var whiteBrush = new SolidBrush(Color.FromArgb((int)(255 * opacity), 255, 255, 255));
+        g.DrawString(emoji, font, whiteBrush, pos.X, pos.Y);
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
+    }
+
+    private void PaintEmojiPicker(Graphics g)
+    {
+        // Filter emojis by search
+        var filtered = string.IsNullOrEmpty(_emojiSearch)
+            ? EmojiPalette
+            : EmojiPalette.Where(e => e.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+        int cols = 8, emojiSize = 32, pad = 6;
+        int visibleRows = 4;
+        int totalRows = (filtered.Length + cols - 1) / cols;
+        int gridH = visibleRows * (emojiSize + pad);
+        int searchBarH = 28;
+        int pw = cols * (emojiSize + pad) + pad;
+        int ph = searchBarH + pad + gridH + pad;
+
+        // Center below toolbar
+        int px = _toolbarRect.X + _toolbarRect.Width / 2 - pw / 2;
+        int py = _toolbarRect.Bottom + 8;
+        _emojiPickerRect = new Rectangle(px, py, pw, ph);
+
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using (var bgPath = RRect(_emojiPickerRect, 10))
+        {
+            using var bg = new SolidBrush(Color.FromArgb(235, 18, 18, 18));
+            g.FillPath(bg, bgPath);
+            using var border = new Pen(Color.FromArgb(40, 255, 255, 255));
+            g.DrawPath(border, bgPath);
+        }
+
+        // Search bar
+        var searchRect = new Rectangle(px + pad, py + pad, pw - pad * 2, searchBarH);
+        using (var searchPath = RRect(searchRect, 6))
+        {
+            using var searchBg = new SolidBrush(Color.FromArgb(30, 255, 255, 255));
+            g.FillPath(searchBg, searchPath);
+        }
+        using var searchFont = new Font("Segoe UI", 10f);
+        string searchDisplay = _emojiSearch.Length > 0 ? _emojiSearch : "Search emoji...";
+        using var searchBrush = new SolidBrush(_emojiSearch.Length > 0
+            ? Color.FromArgb(220, 255, 255, 255)
+            : Color.FromArgb(80, 255, 255, 255));
+        g.DrawString(searchDisplay, searchFont, searchBrush, searchRect.X + 6, searchRect.Y + 5);
+
+        // Emoji grid
+        int gridY = py + pad + searchBarH + pad;
+        using var emojiFont = new Font("Segoe UI Emoji", 18f);
+        int scrollRow = _emojiScrollOffset;
+        int startIdx = scrollRow * cols;
+
+        for (int i = 0; i < visibleRows * cols && (startIdx + i) < filtered.Length; i++)
+        {
+            int idx = startIdx + i;
+            int col = i % cols, row = i / cols;
+            int ex = px + pad + col * (emojiSize + pad);
+            int ey = gridY + row * (emojiSize + pad);
+
+            bool hovered = _emojiHovered == idx;
+            if (hovered)
+            {
+                using var hoverPath = RRect(new RectangleF(ex - 2, ey - 2, emojiSize + 4, emojiSize + 4), 6);
+                using var hoverBg = new SolidBrush(Color.FromArgb(40, 255, 255, 255));
+                g.FillPath(hoverBg, hoverPath);
+            }
+
+            using var eb = new SolidBrush(Color.White);
+            g.DrawString(filtered[idx].emoji, emojiFont, eb, ex, ey);
+        }
+
+        // Scroll indicator
+        if (totalRows > visibleRows)
+        {
+            int trackH = gridH - 4;
+            int trackX = px + pw - pad - 3;
+            int trackY = gridY + 2;
+            using var trackBrush = new SolidBrush(Color.FromArgb(20, 255, 255, 255));
+            g.FillRectangle(trackBrush, trackX, trackY, 3, trackH);
+            int thumbH = Math.Max(10, trackH * visibleRows / totalRows);
+            int thumbY = trackY + (int)((float)scrollRow / (totalRows - visibleRows) * (trackH - thumbH));
+            using var thumbBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
+            g.FillRectangle(thumbBrush, trackX, thumbY, 3, thumbH);
+        }
+
         g.SmoothingMode = SmoothingMode.Default;
     }
 
@@ -434,20 +636,21 @@ public sealed partial class RegionOverlayForm
             g.DrawPath(bp, p);
         }
 
-        // Buttons: rect, free, ocr, picker, draw, arrow, text, blur, eraser, [color], gear, close
+        // Buttons: rect, free, ocr, picker, draw, arrow, text, blur, eraser, emoji, [color], gear, close
         string[] icons = { "rect", "free", "ocr", "picker",
             "draw", "highlight", "arrow", "curvedArrow", "text", "step",
-            "blur", "eraser", "magnifier", "color", "gear", "close" };
+            "blur", "eraser", "magnifier", "emoji", "color", "gear", "close" };
         string[] labels = { "Rectangle", "Freeform",
             "OCR", "Color Picker", "Draw", "Highlight",
             "Arrow", "Curved Arrow", "Text", "Step Number",
-            "Blur", "Eraser", "Magnifier", "Color", "Settings", "Close (Esc)" };
+            "Blur", "Eraser", "Magnifier", "Emoji", "Color", "Settings", "Close (Esc)" };
         CaptureMode[] modes = { CaptureMode.Rectangle, CaptureMode.Freeform,
             CaptureMode.Ocr, CaptureMode.ColorPicker,
             CaptureMode.Draw, CaptureMode.Highlight,
             CaptureMode.Arrow, CaptureMode.CurvedArrow,
             CaptureMode.Text, CaptureMode.StepNumber,
-            CaptureMode.Blur, CaptureMode.Eraser, CaptureMode.Magnifier };
+            CaptureMode.Blur, CaptureMode.Eraser, CaptureMode.Magnifier,
+            CaptureMode.Emoji };
 
         for (int i = 0; i < BtnCount; i++)
         {
@@ -656,6 +859,19 @@ public sealed partial class RegionOverlayForm
                 g.DrawLine(pen, cx + 3, cy + 3, cx + 7, cy + 7);
                 g.SmoothingMode = SmoothingMode.Default;
                 break;
+            case "emoji":
+            {
+                // Smiley face icon
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.DrawEllipse(pen, cx - 7, cy - 7, 14, 14);
+                // Eyes
+                g.FillEllipse(new SolidBrush(c), cx - 4, cy - 3, 2, 2);
+                g.FillEllipse(new SolidBrush(c), cx + 2, cy - 3, 2, 2);
+                // Smile arc
+                g.DrawArc(pen, cx - 4, cy - 1, 8, 6, 10, 160);
+                g.SmoothingMode = SmoothingMode.Default;
+                break;
+            }
             case "color":
                 // Handled in PaintToolbar directly
                 break;

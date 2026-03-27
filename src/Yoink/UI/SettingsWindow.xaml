@@ -8,7 +8,8 @@
         Foreground="White"
         Background="Transparent"
         WindowStyle="None"
-        AllowsTransparency="True">
+        AllowsTransparency="True"
+        Icon="pack://application:,,,/yoink.ico">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" GlassFrameThickness="0" CornerRadius="0"
@@ -78,7 +79,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Margin="16" CornerRadius="12" ClipToBounds="True" Background="#1C1C1C"
+    <Border x:Name="OuterBorder" Margin="16" CornerRadius="12" ClipToBounds="True" Background="#1C1C1C"
             BorderBrush="#30FFFFFF" BorderThickness="1">
         <Border.Effect>
             <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.5" Color="Black"/>
@@ -91,11 +92,10 @@
         </Grid.RowDefinitions>
 
         <!-- Custom title bar -->
-        <Border Grid.Row="0" Padding="14,8,8,8" Background="#161616"
-                CornerRadius="12,12,0,0"
+        <Border x:Name="TitleBarBorder" Grid.Row="0" Padding="14,8,8,8" Background="#161616"
                 MouseLeftButtonDown="TitleBar_MouseDown">
             <Grid>
-                <TextBlock Text="Yoink" FontSize="12" FontWeight="SemiBold" Foreground="White"
+                <TextBlock x:Name="TitleText" Text="Yoink" FontSize="12" FontWeight="SemiBold" Foreground="White"
                            Opacity="0.8" VerticalAlignment="Center"/>
                 <Border Width="32" Height="28" CornerRadius="6" Cursor="Hand" Background="Transparent"
                         MouseLeftButtonDown="CloseBtn_Click" MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
@@ -216,6 +216,11 @@
                     <Border Style="{StaticResource Card}">
                         <CheckBox x:Name="MuteSoundsCheck" Content="Mute capture sounds" FontSize="13"
                                   Checked="MuteSoundsCheck_Changed" Unchecked="MuteSoundsCheck_Changed"/>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <CheckBox x:Name="CrosshairGuidesCheck" Content="Show crosshair guides on capture" FontSize="13"
+                                  Checked="CrosshairGuidesCheck_Changed" Unchecked="CrosshairGuidesCheck_Changed"/>
                     </Border>
 
                     <Border Style="{StaticResource Card}">

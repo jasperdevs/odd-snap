@@ -23,7 +23,8 @@ public sealed partial class RegionOverlayForm
                 CaptureMode.Draw, CaptureMode.Highlight,
                 CaptureMode.Arrow, CaptureMode.CurvedArrow,
                 CaptureMode.Text, CaptureMode.StepNumber,
-                CaptureMode.Blur, CaptureMode.Eraser, CaptureMode.Magnifier };
+                CaptureMode.Blur, CaptureMode.Eraser, CaptureMode.Magnifier,
+                CaptureMode.Emoji };
             if (btn < modeMap.Length) SetMode(modeMap[btn]);
             return;
         }
@@ -35,6 +36,35 @@ public sealed partial class RegionOverlayForm
                 return;
             _colorPickerOpen = false;
             Invalidate();
+        }
+
+        // Font picker popup
+        if (_fontPickerOpen)
+        {
+            if (HandleFontPickerClick(e.Location))
+                return;
+            _fontPickerOpen = false;
+            Invalidate();
+        }
+
+        // Emoji picker popup: check if clicked an emoji
+        if (_emojiPickerOpen)
+        {
+            if (HandleEmojiPickerClick(e.Location))
+                return;
+            // Clicked outside picker
+            _emojiPickerOpen = false;
+            Invalidate();
+        }
+
+        // Emoji placing: click to stamp
+        if (_mode == CaptureMode.Emoji && _isPlacingEmoji && _selectedEmoji != null)
+        {
+            var pos = new Point(e.Location.X - (int)(_emojiPlaceSize / 2), e.Location.Y - (int)(_emojiPlaceSize / 2));
+            _emojiAnnotations.Add((pos, _selectedEmoji, _emojiPlaceSize));
+            _undoStack.Add("emoji");
+            Invalidate();
+            return;
         }
 
         // If typing text: check if clicking a resize handle first
@@ -67,7 +97,7 @@ public sealed partial class RegionOverlayForm
             int hitIdx = HitTestText(e.Location);
             if (hitIdx >= 0)
             {
-                var (pos, text, fontSize, color, bold) = _textAnnotations[hitIdx];
+                var (pos, text, fontSize, color, bold, fontFamily) = _textAnnotations[hitIdx];
                 _textAnnotations.RemoveAt(hitIdx);
                 // Remove last matching "text" undo entry
                 for (int u = _undoStack.Count - 1; u >= 0; u--)
@@ -78,6 +108,7 @@ public sealed partial class RegionOverlayForm
                 _textFontSize = fontSize;
                 _toolColor = color;
                 _textBold = bold;
+                _textFontFamily = fontFamily;
                 Invalidate();
                 return;
             }
@@ -167,7 +198,7 @@ public sealed partial class RegionOverlayForm
         int hitIdx = HitTestText(e.Location);
         if (hitIdx >= 0)
         {
-            var (pos, text, fontSize, color, bold) = _textAnnotations[hitIdx];
+            var (pos, text, fontSize, color, bold, fontFamily) = _textAnnotations[hitIdx];
             _textAnnotations.RemoveAt(hitIdx);
             for (int u = _undoStack.Count - 1; u >= 0; u--)
                 if (_undoStack[u] == "text") { _undoStack.RemoveAt(u); break; }
@@ -178,6 +209,7 @@ public sealed partial class RegionOverlayForm
             _textFontSize = fontSize;
             _toolColor = color;
             _textBold = bold;
+            _textFontFamily = fontFamily;
             Invalidate();
         }
     }
@@ -269,7 +301,37 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Eraser when _isEraserDragging:
                 Invalidate();
                 break;
+            case CaptureMode.Emoji when _isPlacingEmoji:
+                Invalidate(); // live preview follows cursor
+                break;
+        }
 
+        // Font picker hover
+        if (_fontPickerOpen)
+        {
+            int itemH = 28, pad = 6;
+            int relY = e.Location.Y - _fontPickerRect.Y - pad;
+            int idx = _fontPickerScroll + relY / itemH;
+            int newHover = (relY >= 0 && idx < FontChoices.Length) ? idx : -1;
+            if (newHover != _fontPickerHovered) { _fontPickerHovered = newHover; Invalidate(); }
+        }
+
+        // Emoji picker hover
+        if (_emojiPickerOpen)
+        {
+            var filtered = string.IsNullOrEmpty(_emojiSearch)
+                ? EmojiPalette
+                : EmojiPalette.Where(em => em.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+            int cols = 8, emojiSize = 32, pad = 6;
+            int searchBarH = 28;
+            int gridY = _emojiPickerRect.Y + pad + searchBarH + pad;
+            int relX = e.Location.X - _emojiPickerRect.X - pad;
+            int relY = e.Location.Y - gridY;
+            int col = relX / (emojiSize + pad);
+            int row = relY / (emojiSize + pad);
+            int idx = (_emojiScrollOffset + row) * cols + col;
+            int newHover = (col >= 0 && col < cols && relY >= 0 && idx < filtered.Length) ? idx : -1;
+            if (newHover != _emojiHovered) { _emojiHovered = newHover; Invalidate(); }
         }
     }
 
@@ -372,6 +434,32 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // Emoji picker search input
+        if (_emojiPickerOpen)
+        {
+            if (e.KeyCode == Keys.Escape) { _emojiPickerOpen = false; Invalidate(); return; }
+            if (e.KeyCode == Keys.Back && _emojiSearch.Length > 0)
+            {
+                _emojiSearch = _emojiSearch[..^1]; _emojiScrollOffset = 0; Invalidate(); return;
+            }
+            return; // absorb all keys while picker is open
+        }
+
+        // Emoji placing: Escape cancels, re-open picker with Tab
+        if (_mode == CaptureMode.Emoji && _isPlacingEmoji)
+        {
+            if (e.KeyCode == Keys.Escape) { _isPlacingEmoji = false; _selectedEmoji = null; Invalidate(); return; }
+            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; Invalidate(); return; }
+            return;
+        }
+
+        // Font picker open
+        if (_fontPickerOpen)
+        {
+            if (e.KeyCode == Keys.Escape) { _fontPickerOpen = false; Invalidate(); return; }
+            return;
+        }
+
         // Text input mode
         if (_isTyping)
         {
@@ -385,6 +473,11 @@ public sealed partial class RegionOverlayForm
             if (e.KeyCode == Keys.B && e.Control)
             {
                 _textBold = !_textBold; Invalidate(); return;
+            }
+            // F key (no modifiers, no text buffer yet) toggles font picker
+            if (e.KeyCode == Keys.F && e.Control)
+            {
+                _fontPickerOpen = !_fontPickerOpen; _fontPickerScroll = 0; Invalidate(); return;
             }
             return;
         }
@@ -426,13 +519,22 @@ public sealed partial class RegionOverlayForm
                 _textAnnotations.RemoveAt(_textAnnotations.Count - 1);
             else if (last == "magnifier" && _placedMagnifiers.Count > 0)
                 _placedMagnifiers.RemoveAt(_placedMagnifiers.Count - 1);
+            else if (last == "emoji" && _emojiAnnotations.Count > 0)
+                _emojiAnnotations.RemoveAt(_emojiAnnotations.Count - 1);
             Invalidate();
         }
     }
 
     protected override void OnKeyPress(KeyPressEventArgs e)
     {
-        if (_isTyping && !char.IsControl(e.KeyChar))
+        if (_emojiPickerOpen && !char.IsControl(e.KeyChar))
+        {
+            _emojiSearch += e.KeyChar;
+            _emojiScrollOffset = 0;
+            e.Handled = true;
+            Invalidate();
+        }
+        else if (_isTyping && !char.IsControl(e.KeyChar))
         {
             _textBuffer += e.KeyChar;
             e.Handled = true;
@@ -445,18 +547,19 @@ public sealed partial class RegionOverlayForm
     {
         if (_isTyping && _textBuffer.Length > 0)
         {
-            _textAnnotations.Add((_textPos, _textBuffer, _textFontSize, _toolColor, _textBold));
+            _textAnnotations.Add((_textPos, _textBuffer, _textFontSize, _toolColor, _textBold, _textFontFamily));
             _undoStack.Add("text");
         }
         _isTyping = false;
         _textBuffer = "";
+        _fontPickerOpen = false;
         Invalidate();
     }
 
     private RectangleF GetActiveTextRect()
     {
         if (!_isTyping) return RectangleF.Empty;
-        using var font = new Font("Segoe UI", _textFontSize, FontStyle.Bold);
+        using var font = new Font(_textFontFamily, _textFontSize, _textBold ? FontStyle.Bold : FontStyle.Regular);
         string display = _textBuffer.Length > 0 ? _textBuffer : "Type here...";
         SizeF sz;
         using (var g = CreateGraphics())
@@ -485,9 +588,9 @@ public sealed partial class RegionOverlayForm
     {
         for (int i = _textAnnotations.Count - 1; i >= 0; i--)
         {
-            var (pos, text, fontSize, _, bold) = _textAnnotations[i];
+            var (pos, text, fontSize, _, bold, fontFamily) = _textAnnotations[i];
             var style = bold ? FontStyle.Bold : FontStyle.Regular;
-            using var font = new Font("Segoe UI", fontSize, style);
+            using var font = new Font(fontFamily, fontSize, style);
             SizeF sz;
             using (var g = CreateGraphics())
                 sz = g.MeasureString(text, font);
@@ -507,7 +610,7 @@ public sealed partial class RegionOverlayForm
     {
         if (!_colorPickerRect.Contains(p)) return false;
 
-        int cols = 6, swatchSize = 28, pad = 4;
+        int swatchSize = 28, pad = 4;
         int relX = p.X - _colorPickerRect.X - pad;
         int relY = p.Y - _colorPickerRect.Y - pad;
         int col = relX / (swatchSize + pad);
@@ -522,6 +625,85 @@ public sealed partial class RegionOverlayForm
         return false;
     }
 
+    private bool HandleFontPickerClick(Point p)
+    {
+        if (!_fontPickerRect.Contains(p)) return false;
+
+        int itemH = 28, pad = 6;
+        int relY = p.Y - _fontPickerRect.Y - pad;
+        int idx = _fontPickerScroll + relY / itemH;
+
+        if (idx >= 0 && idx < FontChoices.Length)
+        {
+            _textFontFamily = FontChoices[idx];
+            _fontPickerOpen = false;
+            Invalidate();
+            return true;
+        }
+        return true; // absorb click inside picker
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        if (_fontPickerOpen)
+        {
+            int visibleCount = 8;
+            int maxScroll = Math.Max(0, FontChoices.Length - visibleCount);
+            _fontPickerScroll = Math.Clamp(_fontPickerScroll + (e.Delta > 0 ? -1 : 1), 0, maxScroll);
+            Invalidate();
+        }
+        else if (_emojiPickerOpen)
+        {
+            var filtered = string.IsNullOrEmpty(_emojiSearch)
+                ? EmojiPalette
+                : EmojiPalette.Where(em => em.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+            int cols = 8, visibleRows = 4;
+            int totalRows = (filtered.Length + cols - 1) / cols;
+            int maxScroll = Math.Max(0, totalRows - visibleRows);
+            _emojiScrollOffset = Math.Clamp(_emojiScrollOffset + (e.Delta > 0 ? -1 : 1), 0, maxScroll);
+            Invalidate();
+        }
+        else if (_mode == CaptureMode.Emoji && _isPlacingEmoji)
+        {
+            // Scroll wheel changes emoji size
+            _emojiPlaceSize = Math.Clamp(_emojiPlaceSize + (e.Delta > 0 ? 4f : -4f), 16f, 128f);
+            Invalidate();
+        }
+        base.OnMouseWheel(e);
+    }
+
+    private bool HandleEmojiPickerClick(Point p)
+    {
+        if (!_emojiPickerRect.Contains(p)) return false;
+
+        var filtered = string.IsNullOrEmpty(_emojiSearch)
+            ? EmojiPalette
+            : EmojiPalette.Where(e => e.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+        int cols = 8, emojiSize = 32, pad = 6;
+        int searchBarH = 28;
+        int gridY = _emojiPickerRect.Y + pad + searchBarH + pad;
+
+        // Check if clicking in search bar area (just keep focus, absorb click)
+        if (p.Y < gridY) return true;
+
+        int relX = p.X - _emojiPickerRect.X - pad;
+        int relY = p.Y - gridY;
+        int col = relX / (emojiSize + pad);
+        int row = relY / (emojiSize + pad);
+        int idx = (_emojiScrollOffset + row) * cols + col;
+
+        if (col >= 0 && col < cols && row >= 0 && idx < filtered.Length)
+        {
+            _selectedEmoji = filtered[idx].emoji;
+            _isPlacingEmoji = true;
+            _emojiPickerOpen = false;
+            Invalidate();
+            return true;
+        }
+        return true; // absorb click inside picker
+    }
+
     private int GetToolbarButtonAt(Point p)
     {
         for (int i = 0; i < _toolbarButtons.Length; i++)
@@ -533,6 +715,7 @@ public sealed partial class RegionOverlayForm
     {
         if (_isTyping) CommitText();
         _colorPickerOpen = false;
+        _fontPickerOpen = false;
         _mode = m;
         _hasSelection = false;
         _hasDragged = false;
@@ -549,6 +732,19 @@ public sealed partial class RegionOverlayForm
             _pickerTimer.Start();
         else
             _pickerTimer.Stop();
+
+        // Emoji mode: open picker if no emoji selected yet
+        if (m == CaptureMode.Emoji && !_isPlacingEmoji)
+        {
+            _emojiPickerOpen = true;
+            _emojiSearch = "";
+            _emojiScrollOffset = 0;
+        }
+        else if (m != CaptureMode.Emoji)
+        {
+            _emojiPickerOpen = false;
+            _isPlacingEmoji = false;
+        }
 
         Invalidate();
     }

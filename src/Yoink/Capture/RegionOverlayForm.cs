@@ -25,8 +25,8 @@ public sealed partial class RegionOverlayForm : Form
 
     private readonly List<Point> _freeformPoints = new();
 
-    // Toolbar: rect, free, OCR, picker, draw, highlight, arrow, curvedArrow, text, step, blur, eraser, magnifier, [color], gear, close
-    private const int BtnCount = 16;
+    // Toolbar: rect, free, OCR, picker, draw, highlight, arrow, curvedArrow, text, step, blur, eraser, magnifier, emoji, [color], gear, close
+    private const int BtnCount = 17;
     private readonly Rectangle[] _toolbarButtons = new Rectangle[BtnCount];
     private int _hoveredButton = -1;
     private Rectangle _toolbarRect;
@@ -107,18 +107,68 @@ public sealed partial class RegionOverlayForm : Form
     private Color _eraserColor;
     private bool _isEraserDragging;
 
-    // Text annotations: position, text, fontSize, color, bold
-    private readonly List<(Point pos, string text, float fontSize, Color color, bool bold)> _textAnnotations = new();
+    // Text annotations: position, text, fontSize, color, bold, fontFamily
+    private readonly List<(Point pos, string text, float fontSize, Color color, bool bold, string fontFamily)> _textAnnotations = new();
     private bool _isTyping;
     private Point _textPos;
     private string _textBuffer = "";
     private float _textFontSize = 24f;
     private bool _textBold = true; // default bold
+    private string _textFontFamily = "Segoe UI";
     private int _textResizeHandle = -1;
     private bool _textResizing;
     private Point _textResizeStart;
     private bool _textDragging;
     private Point _textDragOffset;
+
+    // Font picker popup
+    private bool _fontPickerOpen;
+    private Rectangle _fontPickerRect;
+    private int _fontPickerHovered = -1;
+    private int _fontPickerScroll;
+    private static readonly string[] FontChoices = {
+        "Segoe UI", "Arial", "Calibri", "Consolas", "Courier New",
+        "Comic Sans MS", "Georgia", "Impact", "Lucida Console",
+        "Tahoma", "Times New Roman", "Trebuchet MS", "Verdana",
+        "Cascadia Code", "Segoe UI Semibold"
+    };
+
+    // Emoji annotations: position, emoji string, font size
+    private readonly List<(Point pos, string emoji, float size)> _emojiAnnotations = new();
+    private bool _emojiPickerOpen;
+    private Rectangle _emojiPickerRect;
+    private string _emojiSearch = "";
+    private int _emojiHovered = -1;
+    private int _emojiScrollOffset;
+    private string? _selectedEmoji;
+    private bool _isPlacingEmoji;
+    private float _emojiPlaceSize = 32f;
+
+    // Common emoji palette (searchable)
+    private static readonly (string emoji, string name)[] EmojiPalette = {
+        ("\U0001F600", "grinning"), ("\U0001F602", "joy"), ("\U0001F605", "sweat smile"),
+        ("\U0001F609", "wink"), ("\U0001F60D", "heart eyes"), ("\U0001F618", "kiss"),
+        ("\U0001F60E", "sunglasses"), ("\U0001F914", "thinking"), ("\U0001F928", "raised eyebrow"),
+        ("\U0001F644", "rolling eyes"), ("\U0001F62D", "crying"), ("\U0001F621", "angry"),
+        ("\U0001F525", "fire"), ("\U00002764", "heart"), ("\U0001F44D", "thumbs up"),
+        ("\U0001F44E", "thumbs down"), ("\U0001F44F", "clap"), ("\U0001F4AF", "100"),
+        ("\U00002705", "check"), ("\U0000274C", "cross mark"), ("\U000026A0", "warning"),
+        ("\U0001F6A8", "alert"), ("\U0001F4A1", "light bulb"), ("\U0001F50D", "magnifying"),
+        ("\U0001F4CC", "pin"), ("\U0001F4CB", "clipboard"), ("\U0001F4DD", "memo"),
+        ("\U0001F3AF", "target"), ("\U0001F680", "rocket"), ("\U00002B50", "star"),
+        ("\U0001F389", "party"), ("\U0001F381", "gift"), ("\U0001F512", "lock"),
+        ("\U0001F513", "unlock"), ("\U0001F504", "arrows"), ("\U0001F4E2", "loudspeaker"),
+        ("\U0001F6AB", "prohibited"), ("\U000023F0", "alarm clock"), ("\U0001F4C8", "chart up"),
+        ("\U0001F4C9", "chart down"), ("\U0001F4E7", "email"), ("\U0001F4BB", "laptop"),
+        ("\U0001F5A5", "desktop"), ("\U0001F4F1", "phone"), ("\U0001F3A8", "palette"),
+        ("\U0001F3B5", "music note"), ("\U0001F4F7", "camera"), ("\U0001F4C1", "folder"),
+        ("\U0001F41B", "bug"), ("\U0001F527", "wrench"), ("\U00002699", "gear"),
+        ("\U0001F6E0", "tools"), ("\U0001F4A9", "poop"), ("\U0001F47B", "ghost"),
+        ("\U0001F916", "robot"), ("\U0001F47D", "alien"), ("\U0001F4A3", "bomb"),
+        ("\U0001F480", "skull"), ("\U0001F440", "eyes"), ("\U0001F4AC", "speech bubble"),
+        ("\U0001F4AD", "thought bubble"), ("\U0001F449", "point right"), ("\U0001F448", "point left"),
+        ("\U0001F446", "point up"), ("\U0001F447", "point down"), ("\U0000270B", "hand"),
+    };
 
     // Tool color (shared across draw, arrow, text)
     private Color _toolColor = Color.Red;
@@ -135,6 +185,8 @@ public sealed partial class RegionOverlayForm : Form
     private static readonly Cursor _blankCursor = CreateBlankCursor();
 
     public CaptureMode CurrentMode => _mode;
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool ShowCrosshairGuides { get; set; }
 
     // Events
     public event Action<Rectangle>? RegionSelected;
@@ -172,12 +224,14 @@ public sealed partial class RegionOverlayForm : Form
         CalcToolbar();
         _blurred = BuildBlurred(screenshot);
 
-        _animTimer = new System.Windows.Forms.Timer { Interval = 30 }; // ~33fps for smooth marching ants
+        _animTimer = new System.Windows.Forms.Timer { Interval = 16 }; // ~60fps for smooth animation
         _animTimer.Tick += (_, _) =>
         {
-            _toolbarAnim = Math.Min(1f, (float)(DateTime.UtcNow - _showTime).TotalMilliseconds / 120f);
-            _dashOffset = (_dashOffset + 0.5f) % 12f; // animate dash pattern
-            if (_hasSelection || _autoDetectActive)
+            float elapsed = (float)(DateTime.UtcNow - _showTime).TotalMilliseconds;
+            _toolbarAnim = Math.Min(1f, elapsed / 120f);
+            // Time-based smooth dash offset: 20 pixels/second
+            _dashOffset = (elapsed * 0.02f) % 10f;
+            if (_hasSelection || _autoDetectActive || ShowCrosshairGuides)
                 Invalidate(); // need full repaint for animated border
             else if (_toolbarAnim < 1f)
                 Invalidate(_toolbarRect);

@@ -11,10 +11,15 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>yoink.ico</ApplicationIcon>
     <Version>0.1.0</Version>
     <Authors>Yoink Contributors</Authors>
     <Description>Fast screenshot and color picker for Windows</Description>
     <RepositoryUrl>https://github.com/yoink-tool/yoink</RepositoryUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="yoink.ico" />
+  </ItemGroup>
 
 </Project>

@@ -14,5 +14,6 @@ public enum CaptureMode
     StepNumber,
     Blur,
     Eraser,
-    Magnifier
+    Magnifier,
+    Emoji
 }

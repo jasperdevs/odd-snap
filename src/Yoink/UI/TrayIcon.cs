@@ -94,6 +94,19 @@ public sealed class TrayIcon : IDisposable
 
     private static Icon CreateDefaultIcon()
     {
+        // Try to load the real icon from the exe's resources
+        try
+        {
+            var exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            if (!string.IsNullOrEmpty(exe) && System.IO.File.Exists(exe))
+            {
+                var icon = Icon.ExtractAssociatedIcon(exe);
+                if (icon != null) return icon;
+            }
+        }
+        catch { }
+
+        // Fallback: draw a simple Y
         var bmp = new Bitmap(32, 32);
         using var g = Graphics.FromImage(bmp);
         g.Clear(Color.FromArgb(0, 0, 0, 0));

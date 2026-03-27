@@ -114,7 +114,10 @@ public partial class App : Application
                 var thread = new Thread(() =>
                 {
                     System.Windows.Forms.Application.EnableVisualStyles();
-                    var overlay = new RegionOverlayForm(screenshot, bounds, initialMode);
+                    var overlay = new RegionOverlayForm(screenshot, bounds, initialMode)
+                    {
+                        ShowCrosshairGuides = _settingsService!.Settings.ShowCrosshairGuides
+                    };
 
                     // Screenshot capture (rect / fullscreen)
                     overlay.RegionSelected += sel =>

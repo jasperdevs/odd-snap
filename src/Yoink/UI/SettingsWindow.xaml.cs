@@ -55,8 +55,7 @@ public partial class SettingsWindow : Window
 
     private void TitleBtn_Enter(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        if (sender is Border b) b.Background = new SolidColorBrush(
-            System.Windows.Media.Color.FromArgb(30, 255, 255, 255));
+        if (sender is Border b) b.Background = Theme.Brush(Theme.AccentHover);
     }
 
     private void TitleBtn_Leave(object sender, System.Windows.Input.MouseEventArgs e)
@@ -73,6 +72,17 @@ public partial class SettingsWindow : Window
             Native.Dwm.DisableBackdrop(hwnd);
         }
         catch { }
+        ApplyThemeColors();
+    }
+
+    private void ApplyThemeColors()
+    {
+        Theme.Refresh();
+        OuterBorder.Background = Theme.Brush(Theme.BgPrimary);
+        OuterBorder.BorderBrush = Theme.Brush(Theme.WindowBorder);
+        TitleBarBorder.Background = Theme.Brush(Theme.TitleBar);
+        TitleText.Foreground = Theme.Brush(Theme.TextPrimary);
+        Foreground = Theme.Brush(Theme.TextPrimary);
     }
 
     private void LoadSettings()
@@ -89,6 +99,7 @@ public partial class SettingsWindow : Window
         SaveHistoryCheck.IsChecked = s.SaveHistory;
         MuteSoundsCheck.IsChecked = s.MuteSounds;
         CompressHistoryCheck.IsChecked = s.CompressHistory;
+        CrosshairGuidesCheck.IsChecked = s.ShowCrosshairGuides;
     }
 
     // ─── Tabs ──────────────────────────────────────────────────────
@@ -272,6 +283,13 @@ public partial class SettingsWindow : Window
         _settingsService.Settings.CompressHistory = CompressHistoryCheck.IsChecked == true;
         _settingsService.Save();
         _historyService.CompressHistory = _settingsService.Settings.CompressHistory;
+    }
+
+    private void CrosshairGuidesCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.ShowCrosshairGuides = CrosshairGuidesCheck.IsChecked == true;
+        _settingsService.Save();
     }
 
     // ─── Screenshot History (date-grouped) ─────────────────────────

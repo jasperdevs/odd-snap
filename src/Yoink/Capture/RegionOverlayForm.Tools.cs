@@ -37,7 +37,7 @@ public sealed partial class RegionOverlayForm
         using var g = Graphics.FromImage(result);
 
         int iDraw = 0, iBlur = 0, iArrow = 0, iCurved = 0;
-        int iEraser = 0, iText = 0, iStep = 0, iHighlight = 0;
+        int iEraser = 0, iText = 0, iStep = 0, iHighlight = 0, iEmoji = 0;
 
         foreach (var entry in _undoStack)
         {
@@ -77,8 +77,13 @@ public sealed partial class RegionOverlayForm
                     break;
 
                 case "text" when iText < _textAnnotations.Count:
-                    var (tp, tt, tf, tc, tb) = _textAnnotations[iText++];
-                    PaintExcalidrawText(g, tp, tt, tf, tc, tb);
+                    var (tp, tt, tf, tc, tb, tff) = _textAnnotations[iText++];
+                    PaintExcalidrawText(g, tp, tt, tf, tc, tb, tff);
+                    break;
+
+                case "emoji" when iEmoji < _emojiAnnotations.Count:
+                    var (ep, ee, es) = _emojiAnnotations[iEmoji++];
+                    PaintEmojiAnnotation(g, ep, ee, es);
                     break;
             }
         }

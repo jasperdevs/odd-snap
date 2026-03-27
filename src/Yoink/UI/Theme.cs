@@ -38,6 +38,14 @@ public static class Theme
     // Selection
     public static Color SelectionBg => IsDark ? CA(255, 255, 255, 20) : CA(0, 0, 0, 10);
 
+    // Window chrome
+    public static Color TitleBar => IsDark ? C(22, 22, 22) : C(235, 235, 235);
+    public static Color WindowBorder => IsDark ? CA(255, 255, 255, 48) : CA(0, 0, 0, 30);
+    public static Color CardBg => IsDark ? CA(255, 255, 255, 10) : CA(0, 0, 0, 6);
+    public static Color TabActiveBg => IsDark ? CA(255, 255, 255, 21) : CA(0, 0, 0, 10);
+    public static Color TabHoverBg => IsDark ? CA(255, 255, 255, 12) : CA(0, 0, 0, 6);
+    public static Color PreviewStroke => IsDark ? CA(0, 0, 0, 64) : CA(0, 0, 0, 25);
+
     public static SolidColorBrush Brush(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
 
     public static void Refresh()

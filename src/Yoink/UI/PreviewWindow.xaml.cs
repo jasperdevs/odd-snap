@@ -62,6 +62,7 @@ public partial class PreviewWindow : Window
             exStyle |= 0x80;     // WS_EX_TOOLWINDOW
             exStyle |= 0x08000000; // WS_EX_NOACTIVATE
             Native.User32.SetWindowLongA(hwnd, Native.User32.GWL_EXSTYLE, exStyle);
+            Native.Dwm.DisableBackdrop(hwnd);
         };
         Loaded += OnLoaded;
     }
@@ -69,6 +70,9 @@ public partial class PreviewWindow : Window
     private void ApplyTheme()
     {
         Theme.Refresh();
+        RootBorder.BorderBrush = Theme.StrokeBrush();
+        RootBorder.BorderThickness = new System.Windows.Thickness(Theme.StrokeThickness);
+        ImageBorder.Background = Theme.Brush(Theme.BgElevated);
     }
 
     private void FitToImage()
@@ -136,29 +140,26 @@ public partial class PreviewWindow : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         var wa = SystemParameters.WorkArea;
-        // Place fully off-screen first to avoid the one-frame ghost on the left.
-        Left = wa.Right + 50;
-        Dispatcher.BeginInvoke(new Action(() =>
-        {
-            double targetLeft = wa.Right - ActualWidth - 16;
-            Left = targetLeft;
-            SlideX.X = ActualWidth + 30;
-            SlideX.BeginAnimation(TranslateTransform.XProperty,
-                new DoubleAnimation
-                {
-                    From = ActualWidth + 30,
-                    To = 0,
-                    Duration = TimeSpan.FromMilliseconds(280),
-                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
-                });
-        }), DispatcherPriority.Loaded);
-        double targetTop = wa.Bottom - ActualHeight - 16;
-        Top = targetTop;
-        BeginAnimation(OpacityProperty, new DoubleAnimation
-        {
-            From = 0.5, To = 1, Duration = TimeSpan.FromMilliseconds(180),
-            EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
-        });
+
+        // Position at final location but offset via RenderTransform (no ghost frame)
+        Left = wa.Right - ActualWidth - 16;
+        Top = wa.Bottom - ActualHeight - 16;
+
+        // Start with translate pushed fully off-screen to the right
+        double slideFrom = ActualWidth + 30;
+        SlideX.X = slideFrom;
+
+        // Now make visible and animate in one pass
+        Opacity = 1;
+        SlideX.BeginAnimation(TranslateTransform.XProperty,
+            new DoubleAnimation
+            {
+                From = slideFrom,
+                To = 0,
+                Duration = TimeSpan.FromMilliseconds(280),
+                EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+            });
+
         _fadeTimer.Start();
     }
 
