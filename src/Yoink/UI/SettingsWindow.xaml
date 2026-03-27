@@ -79,11 +79,12 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="OuterBorder" Margin="16" CornerRadius="12" ClipToBounds="True" Background="#1C1C1C"
-            BorderBrush="#30FFFFFF" BorderThickness="1">
+    <Border Margin="16" CornerRadius="12">
         <Border.Effect>
             <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.5" Color="Black"/>
         </Border.Effect>
+    <Border x:Name="OuterBorder" CornerRadius="12" ClipToBounds="True" Background="#1C1C1C"
+            BorderBrush="#30FFFFFF" BorderThickness="1">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -228,6 +229,10 @@
                         <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
                                   Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
                     </Border>
+
+                    <!-- Version -->
+                    <TextBlock Text="Yoink v0.1.0" FontSize="10.5" Opacity="0.15"
+                               HorizontalAlignment="Center" Margin="0,16,0,4"/>
                 </StackPanel>
             </ScrollViewer>
 
@@ -279,9 +284,12 @@
                 </ScrollViewer>
 
                 <!-- Empty states -->
-                <TextBlock x:Name="HistoryEmptyText" Grid.Row="1" Text="No captures yet"
-                           FontSize="13" Opacity="0.2" HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Visibility="Collapsed"/>
+                <StackPanel x:Name="HistoryEmptyText" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                    <TextBlock Text="&#x1F4F7;" FontSize="32" HorizontalAlignment="Center" Opacity="0.15"/>
+                    <TextBlock x:Name="HistoryEmptyLabel" Text="No captures yet" FontSize="13" Opacity="0.2"
+                               HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                </StackPanel>
 
                 <!-- Bottom bar -->
                 <Border Grid.Row="2" Padding="14,4,14,8">
@@ -290,5 +298,6 @@
             </Grid>
         </Grid>
     </Grid>
+    </Border>
     </Border>
 </Window>

@@ -345,20 +345,55 @@ public partial class SettingsWindow : Window
 
     private Border CreateHistoryCard(HistoryItemVM vm)
     {
-        var img = new Image { Stretch = Stretch.UniformToFill };
+        var img = new Image { Stretch = Stretch.UniformToFill, Opacity = 0 };
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
 
-        // Lazy load: only decode when the card scrolls into view
-        img.Loaded += (_, _) => LoadThumbAsync(img, vm.ThumbPath);
+        // Lazy load with fade-in
+        img.Loaded += (_, _) =>
+        {
+            LoadThumbAsync(img, vm.ThumbPath);
+            img.BeginAnimation(OpacityProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(250)));
+        };
+
+        // Copy button overlay (visible on hover)
+        var copyBtn = new Border
+        {
+            Width = 26, Height = 26, CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 0, 0, 0)),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+            VerticalAlignment = System.Windows.VerticalAlignment.Top,
+            Margin = new Thickness(0, 6, 6, 0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Opacity = 0, IsHitTestVisible = true,
+            ToolTip = "Copy to clipboard",
+            Child = new TextBlock
+            {
+                Text = "\U0001F4CB", FontSize = 13,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center
+            }
+        };
+        copyBtn.MouseLeftButtonDown += (s, e) =>
+        {
+            e.Handled = true;
+            if (!File.Exists(vm.Entry.FilePath)) return;
+            using var bmp = new System.Drawing.Bitmap(vm.Entry.FilePath);
+            Services.ClipboardService.CopyToClipboard(bmp);
+            ToastWindow.Show("Copied", $"{vm.Dimensions} screenshot copied");
+        };
 
         var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(90) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(95) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        Grid.SetRow(img, 0);
-        grid.Children.Add(img);
+        var imgContainer = new Grid();
+        imgContainer.Children.Add(img);
+        imgContainer.Children.Add(copyBtn);
+        Grid.SetRow(imgContainer, 0);
+        grid.Children.Add(imgContainer);
 
-        var info = new StackPanel { Margin = new Thickness(7, 4, 7, 5) };
+        var info = new StackPanel { Margin = new Thickness(8, 5, 8, 6) };
         info.Children.Add(new TextBlock { Text = vm.Dimensions, FontSize = 10.5 });
         info.Children.Add(new TextBlock { Text = vm.TimeAgo, FontSize = 9.5, Opacity = 0.3 });
         Grid.SetRow(info, 1);
@@ -366,17 +401,18 @@ public partial class SettingsWindow : Window
 
         var card = new Border
         {
-            Width = 148, Margin = new Thickness(3),
+            Width = 152, Margin = new Thickness(4),
             CornerRadius = new CornerRadius(10),
             Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
+            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
             Child = grid, Tag = vm,
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                BlurRadius = 8, ShadowDepth = 2, Opacity = 0.3, Color = System.Windows.Media.Colors.Black
-            }
+            RenderTransform = new ScaleTransform(1, 1),
+            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
         };
-        // Clip to rounded rect (WPF Border.ClipToBounds doesn't respect CornerRadius)
+
+        // Clip to rounded rect
         card.SizeChanged += (s, _) =>
         {
             var b = (Border)s!;
@@ -384,11 +420,39 @@ public partial class SettingsWindow : Window
                 new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight), 10, 10);
         };
 
+        // Hover: scale up, show border, show copy button
+        card.MouseEnter += (s, _) =>
+        {
+            var b = (Border)s!;
+            b.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(35, 255, 255, 255));
+            var st = (ScaleTransform)b.RenderTransform;
+            st.BeginAnimation(ScaleTransform.ScaleXProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(1.03, TimeSpan.FromMilliseconds(120)));
+            st.BeginAnimation(ScaleTransform.ScaleYProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(1.03, TimeSpan.FromMilliseconds(120)));
+            copyBtn.BeginAnimation(OpacityProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
+        };
+        card.MouseLeave += (s, _) =>
+        {
+            var b = (Border)s!;
+            if (vm.IsSelected)
+                b.BorderBrush = Theme.StrokeBrush();
+            else
+                b.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 255, 255, 255));
+            var st = (ScaleTransform)b.RenderTransform;
+            st.BeginAnimation(ScaleTransform.ScaleXProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
+            st.BeginAnimation(ScaleTransform.ScaleYProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
+            copyBtn.BeginAnimation(OpacityProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
+        };
+
         card.MouseLeftButtonDown += (s, e) =>
         {
             if (_selectMode) { vm.IsSelected = !vm.IsSelected; UpdateCardSelection(card, vm); return; }
             if (!File.Exists(vm.Entry.FilePath)) return;
-            // Open in default photo app
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = vm.Entry.FilePath,
@@ -470,7 +534,7 @@ public partial class SettingsWindow : Window
         OcrStack.Children.Clear();
         var entries = _historyService.OcrEntries;
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyText.Text = "No text captures yet";
+        HistoryEmptyLabel.Text = "No text captures yet";
         HistoryCountText.Text = $"{entries.Count} text capture{(entries.Count == 1 ? "" : "s")}";
         DeleteSelectedBtn.Visibility = _selectMode && TextSubTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
 
@@ -548,7 +612,7 @@ public partial class SettingsWindow : Window
         ColorStack.Children.Clear();
         var entries = _historyService.ColorEntries;
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyText.Text = "No colors yet";
+        HistoryEmptyLabel.Text = "No colors yet";
         HistoryCountText.Text = $"{entries.Count} color{(entries.Count == 1 ? "" : "s")}";
         DeleteSelectedBtn.Visibility = _selectMode && ColorsSubTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
 
