@@ -145,6 +145,12 @@ public sealed partial class RegionOverlayForm
         var r = new Rectangle(_toolbarRect.X, _toolbarRect.Y + oy,
             _toolbarRect.Width, _toolbarRect.Height);
 
+        // Hard-clear any previous top-bar pixels before painting the dock.
+        g.CompositingMode = CompositingMode.SourceCopy;
+        g.FillRectangle(Brushes.Transparent, new Rectangle(0, 0, ClientSize.Width, r.Bottom + 20));
+        g.DrawImage(_screenshot, new Rectangle(0, 0, ClientSize.Width, r.Bottom + 20), new Rectangle(0, 0, ClientSize.Width, r.Bottom + 20), GraphicsUnit.Pixel);
+        g.CompositingMode = CompositingMode.SourceOver;
+
         using (var p = RRect(r, 14))
         {
             var oldClip = g.Clip;

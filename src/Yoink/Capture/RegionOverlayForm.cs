@@ -42,7 +42,6 @@ public sealed partial class RegionOverlayForm : Form
 
     // Pre-rendered blurred screenshot used for all glass effects
     private readonly Bitmap _blurred;
-    private readonly Bitmap _topBar;
     private const int TopBarHeight = 110;
 
     // Color picker state
@@ -123,7 +122,6 @@ public sealed partial class RegionOverlayForm : Form
         SetupForm();
         CalcToolbar();
         _blurred = BuildBlurred(screenshot);
-        _topBar = BuildTopBar();
 
         _animTimer = new System.Windows.Forms.Timer { Interval = 16 };
         _animTimer.Tick += (_, _) =>
@@ -208,43 +206,6 @@ public sealed partial class RegionOverlayForm : Form
         return cur;
     }
 
-    // Builds the faded top bar strip from the pre-blurred bitmap.
-    private Bitmap BuildTopBar()
-    {
-        int w = _bmpW, h = TopBarHeight;
-        var bar = new Bitmap(w, h, PixelFormat.Format32bppArgb);
-
-        using (var bg = Graphics.FromImage(bar))
-        {
-            bg.DrawImage(_blurred, new Rectangle(0, 0, w, h), new Rectangle(0, 0, w, h), GraphicsUnit.Pixel);
-            using var tint = new SolidBrush(Color.FromArgb(180, 0, 0, 0));
-            bg.FillRectangle(tint, 0, 0, w, h);
-        }
-
-        // Per-row alpha fade: opaque at top, transparent at bottom
-        var bits = bar.LockBits(new Rectangle(0, 0, w, h),
-            System.Drawing.Imaging.ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
-        unsafe
-        {
-            byte* scan0 = (byte*)bits.Scan0;
-            for (int y = 0; y < h; y++)
-            {
-                float t = 1f - (float)y / h;
-                t = t * t * t * t;
-                byte alpha = (byte)(t * 255);
-                byte* row = scan0 + y * bits.Stride;
-                for (int x = 0; x < w; x++)
-                {
-                    int off = x * 4;
-                    int a = row[off + 3];
-                    row[off + 3] = (byte)(a * alpha / 255);
-                }
-            }
-        }
-        bar.UnlockBits(bits);
-        return bar;
-    }
-
     private static Cursor CreateBlankCursor()
     {
         using var bmp = new Bitmap(1, 1, PixelFormat.Format32bppArgb);
@@ -273,7 +234,6 @@ public sealed partial class RegionOverlayForm : Form
         if (disposing)
         {
             _blurred.Dispose();
-            _topBar.Dispose();
             _animTimer.Dispose();
             _pickerTimer.Dispose();
             _magGfx.Dispose();
