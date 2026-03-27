@@ -404,66 +404,60 @@ public sealed partial class RegionOverlayForm
     }
 
     /// <summary>
-    /// Render emoji via a screen-compatible DC so Windows draws real color emoji
-    /// (GDI+ Graphics from bitmaps only renders monochrome glyph outlines).
+    /// Render emoji to a GDI+ Bitmap using WPF's DirectWrite pipeline,
+    /// which is the only way to get real color emoji on Windows.
     /// </summary>
-    private static Bitmap RenderEmojiToBitmap(string emoji, float size)
+    private static readonly Dictionary<(string emoji, int sizeKey), Bitmap> _emojiCache = new();
+
+    private static Bitmap GetEmojiBitmap(string emoji, float size)
     {
-        using var font = new Font("Segoe UI Emoji", size * 0.75f, FontStyle.Regular);
-        var textSize = TextRenderer.MeasureText(emoji, font);
-        int w = textSize.Width + 4, h = textSize.Height + 4;
+        int sizeKey = (int)(size * 10);
+        if (_emojiCache.TryGetValue((emoji, sizeKey), out var cached))
+            return cached;
 
-        // Get a real screen DC - this is what enables color emoji rendering
-        IntPtr screenDC = Native.User32.GetDC(IntPtr.Zero);
-        IntPtr memDC = Native.Gdi32.CreateCompatibleDC(screenDC);
-        IntPtr hBmp = Native.Gdi32.CreateCompatibleBitmap(screenDC, w, h);
-        IntPtr oldBmp = Native.Gdi32.SelectObject(memDC, hBmp);
+        var bmp = RenderEmojiViaWpf(emoji, size);
+        _emojiCache[(emoji, sizeKey)] = bmp;
+        return bmp;
+    }
 
-        // Draw onto the screen-compatible DC
-        using (var tmpG = Graphics.FromHdc(memDC))
+    private static Bitmap RenderEmojiViaWpf(string emoji, float size)
+    {
+        double emSize = size * 1.1;
+        var typeface = new System.Windows.Media.Typeface("Segoe UI Emoji");
+        var formatted = new System.Windows.Media.FormattedText(
+            emoji, System.Globalization.CultureInfo.CurrentCulture,
+            System.Windows.FlowDirection.LeftToRight,
+            typeface, emSize, System.Windows.Media.Brushes.White,
+            96);
+
+        int w = (int)Math.Ceiling(formatted.Width) + 4;
+        int h = (int)Math.Ceiling(formatted.Height) + 4;
+        if (w < 4 || h < 4) { w = (int)emSize + 4; h = (int)emSize + 4; }
+
+        var visual = new System.Windows.Media.DrawingVisual();
+        using (var dc = visual.RenderOpen())
         {
-            tmpG.Clear(Color.Black); // black background for alpha detection
-            TextRenderer.DrawText(tmpG, emoji, font, new Point(2, 2), Color.White,
-                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+            dc.DrawText(formatted, new System.Windows.Point(2, 2));
         }
 
-        // Copy pixels to a managed bitmap
+        var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(
+            w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        rtb.Render(visual);
+
+        // Convert WPF bitmap to GDI+ Bitmap
         var result = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using (var resultG = Graphics.FromImage(result))
-        {
-            IntPtr resultDC = resultG.GetHdc();
-            Native.Gdi32.BitBlt(resultDC, 0, 0, w, h, memDC, 0, 0, 0x00CC0020); // SRCCOPY
-            resultG.ReleaseHdc(resultDC);
-        }
-
-        // Clean up GDI objects
-        Native.Gdi32.SelectObject(memDC, oldBmp);
-        Native.Gdi32.DeleteObject(hBmp);
-        Native.Gdi32.DeleteDC(memDC);
-        Native.User32.ReleaseDC(IntPtr.Zero, screenDC);
-
-        // Fix alpha: screen-compatible bitmaps have no alpha, so set it from luminance
         var bits = result.LockBits(new Rectangle(0, 0, w, h),
-            System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        unsafe
-        {
-            byte* ptr = (byte*)bits.Scan0;
-            for (int i = 0; i < w * h; i++)
-            {
-                int idx = i * 4;
-                byte b = ptr[idx], gr = ptr[idx + 1], r = ptr[idx + 2];
-                // Use max channel as alpha (since we drew on black, any color = visible)
-                byte alpha = Math.Max(r, Math.Max(gr, b));
-                ptr[idx + 3] = alpha;
-            }
-        }
+            System.Drawing.Imaging.ImageLockMode.WriteOnly,
+            System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        rtb.CopyPixels(new System.Windows.Int32Rect(0, 0, w, h),
+            bits.Scan0, bits.Stride * h, bits.Stride);
         result.UnlockBits(bits);
         return result;
     }
 
     private static void PaintEmojiAnnotation(Graphics g, Point pos, string emoji, float size, float opacity = 1f)
     {
-        using var emojiBmp = RenderEmojiToBitmap(emoji, size);
+        var emojiBmp = GetEmojiBitmap(emoji, size);
 
         if (opacity < 1f)
         {
@@ -546,7 +540,7 @@ public sealed partial class RegionOverlayForm
                 g.FillPath(hoverBg, hoverPath);
             }
 
-            using var emojiBmp = RenderEmojiToBitmap(filtered[idx].emoji, 22f);
+            var emojiBmp = GetEmojiBitmap(filtered[idx].emoji, 22f);
             g.DrawImage(emojiBmp, ex + 2, ey + 2);
         }
 
