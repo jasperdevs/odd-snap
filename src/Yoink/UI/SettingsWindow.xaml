@@ -10,6 +10,11 @@
         WindowStyle="None"
         AllowsTransparency="True">
 
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" GlassFrameThickness="0" CornerRadius="0"
+                      ResizeBorderThickness="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
     <Window.Resources>
         <Style x:Key="TabPill" TargetType="RadioButton">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>

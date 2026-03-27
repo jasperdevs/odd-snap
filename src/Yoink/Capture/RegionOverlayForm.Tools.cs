@@ -53,8 +53,11 @@ public sealed partial class RegionOverlayForm
         // Highlight rectangles
         foreach (var (hr, hc) in _highlightRects)
         {
-            using var hBrush = new SolidBrush(Color.FromArgb(60, hc.R, hc.G, hc.B));
-            g.FillRectangle(hBrush, hr);
+            using var hBrush = new SolidBrush(Color.FromArgb(90, hc.R, hc.G, hc.B));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var path = RRect(hr, 3);
+            g.FillPath(hBrush, path);
+            g.SmoothingMode = SmoothingMode.Default;
         }
 
         if (_drawStrokes.Count > 0)

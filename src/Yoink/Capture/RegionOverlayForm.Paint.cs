@@ -148,19 +148,26 @@ public sealed partial class RegionOverlayForm
             g.SmoothingMode = SmoothingMode.Default;
         }
 
-        // Highlight rectangles (semi-transparent)
+        // Highlight rectangles (like a real highlighter marker)
         foreach (var (hr, hc) in _highlightRects)
         {
-            using var hBrush = new SolidBrush(Color.FromArgb(60, hc.R, hc.G, hc.B));
-            g.FillRectangle(hBrush, hr);
+            using var hBrush = new SolidBrush(Color.FromArgb(90, hc.R, hc.G, hc.B));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var path = RRect(hr, 3);
+            g.FillPath(hBrush, path);
+            g.SmoothingMode = SmoothingMode.Default;
         }
         if (_mode == CaptureMode.Highlight && _isHighlighting)
         {
             var pr = NormRect(_highlightStart, PointToClient(System.Windows.Forms.Cursor.Position));
             if (pr.Width > 1 && pr.Height > 1)
             {
-                using var hBrush = new SolidBrush(Color.FromArgb(60, _toolColor.R, _toolColor.G, _toolColor.B));
-                g.FillRectangle(hBrush, pr);
+                var hc = DefaultHighlightColor;
+                using var hBrush = new SolidBrush(Color.FromArgb(90, hc.R, hc.G, hc.B));
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using var path = RRect(pr, 3);
+                g.FillPath(hBrush, path);
+                g.SmoothingMode = SmoothingMode.Default;
             }
         }
 
@@ -238,7 +245,11 @@ public sealed partial class RegionOverlayForm
             g.DrawString($"{(int)_textFontSize}px", sizeFont, sizeBrush, textRect.Right + 4, textRect.Y);
         }
 
-        // Magnifier tool
+        // Placed magnifiers (always visible)
+        foreach (var (mpos, msrc) in _placedMagnifiers)
+            PaintPlacedMagnifier(g, mpos, msrc);
+
+        // Magnifier preview while in magnifier mode
         if (_mode == CaptureMode.Magnifier)
             PaintMagnifierTool(g);
 
@@ -309,35 +320,39 @@ public sealed partial class RegionOverlayForm
 
     private void PaintMagnifierTool(Graphics g)
     {
-        if (!_magnifierActive) return;
-        int zoomFactor = 3;
+        // Live preview following cursor
+        var cur = PointToClient(System.Windows.Forms.Cursor.Position);
         int srcSize = 40;
-        int dstSize = srcSize * zoomFactor;
-        int mx = _magnifierPos.X, my = _magnifierPos.Y;
+        int sx = Math.Clamp(cur.X - srcSize / 2, 0, _bmpW - srcSize);
+        int sy = Math.Clamp(cur.Y - srcSize / 2, 0, _bmpH - srcSize);
+        PaintMagnifierAt(g, cur, new Rectangle(sx, sy, srcSize, srcSize), 0.5f);
+    }
 
-        // Source region on the screenshot
-        int sx = Math.Clamp(mx - srcSize / 2, 0, _bmpW - srcSize);
-        int sy = Math.Clamp(my - srcSize / 2, 0, _bmpH - srcSize);
-        var srcRect = new Rectangle(sx, sy, srcSize, srcSize);
+    private void PaintPlacedMagnifier(Graphics g, Point pos, Rectangle srcRect)
+    {
+        PaintMagnifierAt(g, pos, srcRect, 1f);
+    }
 
-        // Draw position: offset from cursor
-        int px = mx + 24;
-        int py = my + 24;
-        if (px + dstSize + 10 > ClientSize.Width) px = mx - 24 - dstSize;
-        if (py + dstSize + 10 > ClientSize.Height) py = my - 24 - dstSize;
+    private void PaintMagnifierAt(Graphics g, Point pos, Rectangle srcRect, float opacity)
+    {
+        int zoom = 3;
+        int dstSize = srcRect.Width * zoom;
+
+        int px = pos.X + 20;
+        int py = pos.Y + 20;
+        if (px + dstSize + 6 > ClientSize.Width) px = pos.X - 20 - dstSize;
+        if (py + dstSize + 6 > ClientSize.Height) py = pos.Y - 20 - dstSize;
 
         var dstRect = new Rectangle(px, py, dstSize, dstSize);
 
-        // Background
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using (var bgPath = RRect(new RectangleF(px - 2, py - 2, dstSize + 4, dstSize + 4), 8))
         {
-            using var bg = new SolidBrush(Color.FromArgb(220, 20, 20, 20));
+            using var bg = new SolidBrush(Color.FromArgb((int)(200 * opacity), 15, 15, 15));
             g.FillPath(bg, bgPath);
         }
         g.SmoothingMode = SmoothingMode.Default;
 
-        // Clip to rounded rect
         using var clipPath = RRect(dstRect, 6);
         var oldClip = g.Clip;
         g.SetClip(clipPath);
@@ -348,15 +363,13 @@ public sealed partial class RegionOverlayForm
         g.InterpolationMode = InterpolationMode.Default;
         g.Clip = oldClip;
 
-        // Crosshair in center
         int ccx = px + dstSize / 2, ccy = py + dstSize / 2;
-        using var crossPen = new Pen(Color.FromArgb(180, 255, 255, 255), 1f);
+        using var crossPen = new Pen(Color.FromArgb((int)(180 * opacity), 255, 255, 255), 1f);
         g.DrawLine(crossPen, ccx - 8, ccy, ccx + 8, ccy);
         g.DrawLine(crossPen, ccx, ccy - 8, ccx, ccy + 8);
 
-        // Border
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var borderPen = new Pen(Color.FromArgb(50, 255, 255, 255), 1f);
+        using var borderPen = new Pen(Color.FromArgb((int)(50 * opacity), 255, 255, 255), 1f);
         g.DrawPath(borderPen, clipPath);
         g.SmoothingMode = SmoothingMode.Default;
     }

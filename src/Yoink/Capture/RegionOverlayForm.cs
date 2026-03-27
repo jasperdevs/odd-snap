@@ -80,18 +80,18 @@ public sealed partial class RegionOverlayForm : Form
     private List<Point>? _currentCurvedArrow;
     private bool _isCurvedArrowDragging;
 
-    // Highlight rectangles (semi-transparent)
+    // Highlight rectangles (semi-transparent, yellow default)
     private readonly List<(Rectangle rect, Color color)> _highlightRects = new();
     private Point _highlightStart;
     private bool _isHighlighting;
+    private static readonly Color DefaultHighlightColor = Color.FromArgb(255, 255, 220, 0);
 
     // Step numbering
     private readonly List<(Point pos, int number, Color color)> _stepNumbers = new();
     private int _nextStepNumber = 1;
 
-    // Magnifier state
-    private bool _magnifierActive;
-    private Point _magnifierPos;
+    // Magnifier: click to place persistent zoomed views
+    private readonly List<(Point pos, Rectangle srcRect)> _placedMagnifiers = new();
 
     // Region auto-detect
     private Rectangle _autoDetectRect;

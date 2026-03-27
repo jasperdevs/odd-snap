@@ -125,8 +125,12 @@ public sealed partial class RegionOverlayForm
                 Invalidate();
                 break;
             case CaptureMode.Magnifier:
-                _magnifierActive = true;
-                _magnifierPos = e.Location;
+                // Place a persistent magnifier at click point
+                int srcSz = 40;
+                int sx2 = Math.Clamp(e.Location.X - srcSz / 2, 0, _bmpW - srcSz);
+                int sy2 = Math.Clamp(e.Location.Y - srcSz / 2, 0, _bmpH - srcSz);
+                _placedMagnifiers.Add((e.Location, new Rectangle(sx2, sy2, srcSz, srcSz)));
+                _undoStack.Add("magnifier");
                 Invalidate();
                 break;
             case CaptureMode.Draw:
@@ -206,9 +210,7 @@ public sealed partial class RegionOverlayForm
                 Invalidate();
                 break;
             case CaptureMode.Magnifier:
-                _magnifierPos = e.Location;
-                _magnifierActive = true;
-                Invalidate();
+                Invalidate(); // live preview follows cursor
                 break;
             case CaptureMode.Draw when _isSelecting:
                 _currentStroke?.Add(e.Location);
@@ -249,14 +251,13 @@ public sealed partial class RegionOverlayForm
                 var hlRect = NormRect(_highlightStart, e.Location);
                 if (hlRect.Width > 2 && hlRect.Height > 2)
                 {
-                    _highlightRects.Add((hlRect, _toolColor));
+                    _highlightRects.Add((hlRect, DefaultHighlightColor));
                     _undoStack.Add("highlight");
                 }
                 Invalidate();
                 break;
             case CaptureMode.Magnifier:
-                _magnifierActive = false;
-                Invalidate();
+                // Click already placed it in OnMouseDown, nothing to do on up
                 break;
             case CaptureMode.Draw when _isSelecting:
                 _isSelecting = false;
@@ -382,6 +383,8 @@ public sealed partial class RegionOverlayForm
                 _eraserFills.RemoveAt(_eraserFills.Count - 1);
             else if (last == "text" && _textAnnotations.Count > 0)
                 _textAnnotations.RemoveAt(_textAnnotations.Count - 1);
+            else if (last == "magnifier" && _placedMagnifiers.Count > 0)
+                _placedMagnifiers.RemoveAt(_placedMagnifiers.Count - 1);
             Invalidate();
         }
     }
@@ -499,7 +502,6 @@ public sealed partial class RegionOverlayForm
         _isArrowDragging = false;
         _isCurvedArrowDragging = false;
         _isEraserDragging = false;
-        _magnifierActive = false;
         _autoDetectActive = false;
 
         if (m == CaptureMode.ColorPicker)
