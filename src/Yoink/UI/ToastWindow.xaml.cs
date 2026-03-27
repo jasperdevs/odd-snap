@@ -41,22 +41,24 @@ public partial class ToastWindow : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         var wa = SystemParameters.WorkArea;
-        double targetLeft = wa.Right - ActualWidth - 16;
-        Top = wa.Bottom - ActualHeight - 16;
-        Left = targetLeft; // set final position so WPF knows the target
-
-        // Slide in from right using SlideX transform
-        SlideX.X = ActualWidth + 30;
-        var dur = TimeSpan.FromMilliseconds(280);
-        var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
-        SlideX.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty,
-            new DoubleAnimation { From = ActualWidth + 30, To = 0, Duration = dur, EasingFunction = ease });
-        BeginAnimation(OpacityProperty, new DoubleAnimation
+        Dispatcher.BeginInvoke(new Action(() =>
         {
-            From = 0.5, To = 1, Duration = TimeSpan.FromMilliseconds(150)
-        });
+            double targetLeft = wa.Right - ActualWidth - 16;
+            Top = wa.Bottom - ActualHeight - 16;
+            Left = targetLeft;
 
-        _timer.Start();
+            SlideX.X = ActualWidth + 30;
+            var dur = TimeSpan.FromMilliseconds(280);
+            var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
+            SlideX.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty,
+                new DoubleAnimation { From = ActualWidth + 30, To = 0, Duration = dur, EasingFunction = ease });
+            BeginAnimation(OpacityProperty, new DoubleAnimation
+            {
+                From = 0.5, To = 1, Duration = TimeSpan.FromMilliseconds(150)
+            });
+
+            _timer.Start();
+        }), DispatcherPriority.Render);
     }
 
     private void SlideAway()

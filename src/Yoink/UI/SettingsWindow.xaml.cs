@@ -17,6 +17,8 @@ namespace Yoink.UI;
 
 public partial class SettingsWindow : Window
 {
+    private static readonly Dictionary<string, BitmapImage> ThumbCache = new();
+
     private readonly SettingsService _settingsService;
     private readonly HistoryService _historyService;
     public event Action? HotkeyChanged;
@@ -515,6 +517,15 @@ public partial class SettingsWindow : Window
         // Already loaded (e.g. re-layout)
         if (img.Source != null) return;
 
+        lock (ThumbCache)
+        {
+            if (ThumbCache.TryGetValue(path, out var cached))
+            {
+                img.Source = cached;
+                return;
+            }
+        }
+
         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
         {
             try
@@ -527,6 +538,7 @@ public partial class SettingsWindow : Window
                 bmp.EndInit();
                 bmp.Freeze();
 
+                lock (ThumbCache) ThumbCache[path] = bmp;
                 img.Dispatcher.BeginInvoke(() => img.Source = bmp);
             }
             catch { }

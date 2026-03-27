@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
+using System.Threading.Tasks;
 using Yoink.Services;
 
 namespace Yoink.UI;
@@ -31,42 +32,44 @@ public partial class ImageViewerWindow : Window
         ViewerImage.Source = bmp;
         InfoText.Text = $"{_entry.Width} x {_entry.Height}  |  {_entry.CapturedAt:MMM d, yyyy  h:mm tt}";
 
-        // Create heavily blurred version for background
-        BuildBlurredBackground(filePath);
+        _ = BuildBlurredBackgroundAsync(filePath);
     }
 
-    private void BuildBlurredBackground(string path)
+    private async Task BuildBlurredBackgroundAsync(string path)
     {
         try
         {
-            using var src = new Bitmap(path);
-            // Downsample to tiny then back up for extreme blur
-            int tw = Math.Max(2, src.Width / 24);
-            int th = Math.Max(2, src.Height / 24);
-            using var tiny = new Bitmap(tw, th, PixelFormat.Format32bppArgb);
-            using (var tg = System.Drawing.Graphics.FromImage(tiny))
+            var blur = await Task.Run(() =>
             {
-                tg.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
-                tg.DrawImage(src, new Rectangle(0, 0, tw, th));
-            }
-            // Back to medium for WPF
-            int mw = Math.Max(4, src.Width / 4);
-            int mh = Math.Max(4, src.Height / 4);
-            using var med = new Bitmap(mw, mh, PixelFormat.Format32bppArgb);
-            using (var mg = System.Drawing.Graphics.FromImage(med))
-            {
-                mg.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
-                mg.DrawImage(tiny, new Rectangle(0, 0, mw, mh));
-            }
-            using var ms = new MemoryStream();
-            med.Save(ms, ImageFormat.Png);
-            ms.Position = 0;
-            var blur = new BitmapImage();
-            blur.BeginInit();
-            blur.StreamSource = ms;
-            blur.CacheOption = BitmapCacheOption.OnLoad;
-            blur.EndInit();
-            blur.Freeze();
+                using var src = new Bitmap(path);
+                int tw = Math.Max(2, src.Width / 24);
+                int th = Math.Max(2, src.Height / 24);
+                using var tiny = new Bitmap(tw, th, PixelFormat.Format32bppArgb);
+                using (var tg = System.Drawing.Graphics.FromImage(tiny))
+                {
+                    tg.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                    tg.DrawImage(src, new Rectangle(0, 0, tw, th));
+                }
+                int mw = Math.Max(4, src.Width / 4);
+                int mh = Math.Max(4, src.Height / 4);
+                using var med = new Bitmap(mw, mh, PixelFormat.Format32bppArgb);
+                using (var mg = System.Drawing.Graphics.FromImage(med))
+                {
+                    mg.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                    mg.DrawImage(tiny, new Rectangle(0, 0, mw, mh));
+                }
+                using var ms = new MemoryStream();
+                med.Save(ms, ImageFormat.Png);
+                ms.Position = 0;
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.StreamSource = ms;
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.EndInit();
+                bi.Freeze();
+                return bi;
+            });
+
             BlurredBg.Source = blur;
         }
         catch { }

@@ -96,23 +96,26 @@ public partial class PreviewWindow : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         var wa = SystemParameters.WorkArea;
-        // Defer one tick so ActualWidth reflects the final sized image.
+        // Match toast: slide in from the right after final layout settles.
         Dispatcher.BeginInvoke(new Action(() =>
         {
-            Left = wa.Right - ActualWidth - 16;
+            double targetLeft = wa.Right - ActualWidth - 16;
+            Left = targetLeft;
+            SlideX.X = ActualWidth + 30;
+            SlideX.BeginAnimation(TranslateTransform.XProperty,
+                new DoubleAnimation
+                {
+                    From = ActualWidth + 30,
+                    To = 0,
+                    Duration = TimeSpan.FromMilliseconds(280),
+                    EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
+                });
         }), DispatcherPriority.Loaded);
         double targetTop = wa.Bottom - ActualHeight - 16;
-
-        // Smooth slide up from below
-        BeginAnimation(TopProperty, new DoubleAnimation
-        {
-            From = targetTop + 40, To = targetTop,
-            Duration = TimeSpan.FromMilliseconds(300),
-            EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
-        });
+        Top = targetTop;
         BeginAnimation(OpacityProperty, new DoubleAnimation
         {
-            From = 0, To = 1, Duration = TimeSpan.FromMilliseconds(250),
+            From = 0.5, To = 1, Duration = TimeSpan.FromMilliseconds(180),
             EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut }
         });
         _fadeTimer.Start();
@@ -175,8 +178,16 @@ public partial class PreviewWindow : Window
         if (Math.Abs(diff.X) > 6 || Math.Abs(diff.Y) > 6)
         {
             _mouseIsDown = false;
-            var tmpFile = Path.Combine(Path.GetTempPath(), $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-            _screenshot.Save(tmpFile, ImageFormat.Png);
+            string tmpFile;
+            if (_savedFilePath is not null && File.Exists(_savedFilePath))
+            {
+                tmpFile = _savedFilePath;
+            }
+            else
+            {
+                tmpFile = Path.Combine(Path.GetTempPath(), $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+                _screenshot.Save(tmpFile, ImageFormat.Png);
+            }
 
             var dur = TimeSpan.FromMilliseconds(180);
             var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
