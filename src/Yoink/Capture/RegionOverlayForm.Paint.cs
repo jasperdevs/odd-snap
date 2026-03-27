@@ -18,6 +18,9 @@ public sealed partial class RegionOverlayForm
         g.DrawImage(_screenshot, clip, clip, GraphicsUnit.Pixel);
         g.CompositingMode = CompositingMode.SourceOver;
 
+        // Top fade: blurred backdrop that fades out downward (behind dock area)
+        PaintTopFade(g);
+
         // Annotations render first (they get baked under the darkening overlay)
         PaintAnnotations(g);
 
@@ -237,6 +240,40 @@ public sealed partial class RegionOverlayForm
         }
 
         g.SmoothingMode = SmoothingMode.Default;
+    }
+
+    private void PaintTopFade(Graphics g)
+    {
+        // Height of the fade zone: from top of screen down past the toolbar
+        int fadeH = _toolbarRect.Bottom + 30;
+        if (fadeH <= 0) return;
+
+        // Draw the blurred image in the top strip
+        var topRect = new Rectangle(0, 0, ClientSize.Width, fadeH);
+
+        // Use a gradient brush to mask: fully opaque at top, transparent at bottom
+        // We can't directly alpha-mask a DrawImage in GDI+, so we draw the blur
+        // then overlay a gradient that fades FROM the screenshot (restoring it at bottom)
+        
+        // Step 1: Draw blurred version in the top strip at low opacity
+        using var blurAttr = new System.Drawing.Imaging.ImageAttributes();
+        float[][] m = {
+            new[] { 1f, 0, 0, 0, 0 },
+            new[] { 0, 1f, 0, 0, 0 },
+            new[] { 0, 0, 1f, 0, 0 },
+            new[] { 0, 0, 0, 0.35f, 0 },
+            new[] { 0, 0, 0, 0, 1f }
+        };
+        blurAttr.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix(m));
+        g.DrawImage(_blurred, topRect, 0, 0, ClientSize.Width, fadeH, GraphicsUnit.Pixel, blurAttr);
+
+        // Step 2: Dark gradient overlay that fades from dark at top to transparent at bottom
+        using var gradBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
+            topRect,
+            Color.FromArgb(90, 0, 0, 0),   // dark at top
+            Color.FromArgb(0, 0, 0, 0),     // transparent at bottom
+            System.Drawing.Drawing2D.LinearGradientMode.Vertical);
+        g.FillRectangle(gradBrush, topRect);
     }
 
     private static void DrawIcon(Graphics g, string icon, Rectangle b, Color c)
