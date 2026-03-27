@@ -403,19 +403,70 @@ public sealed partial class RegionOverlayForm
         g.SmoothingMode = SmoothingMode.Default;
     }
 
-    private static void PaintEmojiAnnotation(Graphics g, Point pos, string emoji, float size, float opacity = 1f)
+    /// <summary>
+    /// Render emoji via a screen-compatible DC so Windows draws real color emoji
+    /// (GDI+ Graphics from bitmaps only renders monochrome glyph outlines).
+    /// </summary>
+    private static Bitmap RenderEmojiToBitmap(string emoji, float size)
     {
-        // Use TextRenderer (GDI) which supports color emoji on Windows 10+
         using var font = new Font("Segoe UI Emoji", size * 0.75f, FontStyle.Regular);
         var textSize = TextRenderer.MeasureText(emoji, font);
+        int w = textSize.Width + 4, h = textSize.Height + 4;
+
+        // Get a real screen DC - this is what enables color emoji rendering
+        IntPtr screenDC = Native.User32.GetDC(IntPtr.Zero);
+        IntPtr memDC = Native.Gdi32.CreateCompatibleDC(screenDC);
+        IntPtr hBmp = Native.Gdi32.CreateCompatibleBitmap(screenDC, w, h);
+        IntPtr oldBmp = Native.Gdi32.SelectObject(memDC, hBmp);
+
+        // Draw onto the screen-compatible DC
+        using (var tmpG = Graphics.FromHdc(memDC))
+        {
+            tmpG.Clear(Color.Black); // black background for alpha detection
+            TextRenderer.DrawText(tmpG, emoji, font, new Point(2, 2), Color.White,
+                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+        }
+
+        // Copy pixels to a managed bitmap
+        var result = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using (var resultG = Graphics.FromImage(result))
+        {
+            IntPtr resultDC = resultG.GetHdc();
+            Native.Gdi32.BitBlt(resultDC, 0, 0, w, h, memDC, 0, 0, 0x00CC0020); // SRCCOPY
+            resultG.ReleaseHdc(resultDC);
+        }
+
+        // Clean up GDI objects
+        Native.Gdi32.SelectObject(memDC, oldBmp);
+        Native.Gdi32.DeleteObject(hBmp);
+        Native.Gdi32.DeleteDC(memDC);
+        Native.User32.ReleaseDC(IntPtr.Zero, screenDC);
+
+        // Fix alpha: screen-compatible bitmaps have no alpha, so set it from luminance
+        var bits = result.LockBits(new Rectangle(0, 0, w, h),
+            System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        unsafe
+        {
+            byte* ptr = (byte*)bits.Scan0;
+            for (int i = 0; i < w * h; i++)
+            {
+                int idx = i * 4;
+                byte b = ptr[idx], gr = ptr[idx + 1], r = ptr[idx + 2];
+                // Use max channel as alpha (since we drew on black, any color = visible)
+                byte alpha = Math.Max(r, Math.Max(gr, b));
+                ptr[idx + 3] = alpha;
+            }
+        }
+        result.UnlockBits(bits);
+        return result;
+    }
+
+    private static void PaintEmojiAnnotation(Graphics g, Point pos, string emoji, float size, float opacity = 1f)
+    {
+        using var emojiBmp = RenderEmojiToBitmap(emoji, size);
 
         if (opacity < 1f)
         {
-            // For preview opacity, draw to a temp bitmap then composite
-            using var tmp = new Bitmap(textSize.Width + 4, textSize.Height + 4, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            using var tg = Graphics.FromImage(tmp);
-            TextRenderer.DrawText(tg, emoji, font, new Point(2, 2), Color.White, Color.Empty,
-                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
             using var attr = new System.Drawing.Imaging.ImageAttributes();
             float[][] matrix = {
                 new[] { 1f, 0, 0, 0, 0 }, new[] { 0, 1f, 0, 0, 0 },
@@ -423,13 +474,12 @@ public sealed partial class RegionOverlayForm
                 new[] { 0, 0, 0, 0, 1f }
             };
             attr.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix(matrix));
-            g.DrawImage(tmp, new Rectangle(pos.X, pos.Y, tmp.Width, tmp.Height),
-                0, 0, tmp.Width, tmp.Height, GraphicsUnit.Pixel, attr);
+            g.DrawImage(emojiBmp, new Rectangle(pos.X, pos.Y, emojiBmp.Width, emojiBmp.Height),
+                0, 0, emojiBmp.Width, emojiBmp.Height, GraphicsUnit.Pixel, attr);
         }
         else
         {
-            TextRenderer.DrawText(g, emoji, font, pos, Color.White, Color.Empty,
-                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+            g.DrawImage(emojiBmp, pos.X, pos.Y);
         }
     }
 
@@ -476,9 +526,8 @@ public sealed partial class RegionOverlayForm
             : Color.FromArgb(80, 255, 255, 255));
         g.DrawString(searchDisplay, searchFont, searchBrush, searchRect.X + 6, searchRect.Y + 5);
 
-        // Emoji grid (use TextRenderer for real color emoji)
+        // Emoji grid (render via screen DC for real color emoji)
         int gridY = py + pad + searchBarH + pad;
-        using var emojiFont = new Font("Segoe UI Emoji", 16f);
         int scrollRow = _emojiScrollOffset;
         int startIdx = scrollRow * cols;
 
@@ -497,9 +546,8 @@ public sealed partial class RegionOverlayForm
                 g.FillPath(hoverBg, hoverPath);
             }
 
-            TextRenderer.DrawText(g, filtered[idx].emoji, emojiFont,
-                new Point(ex + 2, ey + 2), Color.White, Color.Empty,
-                TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+            using var emojiBmp = RenderEmojiToBitmap(filtered[idx].emoji, 22f);
+            g.DrawImage(emojiBmp, ex + 2, ey + 2);
         }
 
         // Scroll indicator
