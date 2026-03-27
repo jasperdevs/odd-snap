@@ -8,8 +8,8 @@
         <Style TargetType="Button">
             <Setter Property="Background" Value="#1AFFFFFF"/>
             <Setter Property="Foreground" Value="#E0E0E0"/>
-            <Setter Property="BorderBrush" Value="#30FFFFFF"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#CCFFFFFF"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">

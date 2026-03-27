@@ -11,7 +11,7 @@
         Focusable="False"
         ShowActivated="False">
 
-    <Border x:Name="Root" CornerRadius="12" Padding="12,8,12,8" BorderThickness="1.5"
+    <Border x:Name="Root" CornerRadius="12" Padding="12,8,12,8"
             MaxWidth="320" MinWidth="180">
         <Border.Effect>
             <DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.4" Color="Black"/>

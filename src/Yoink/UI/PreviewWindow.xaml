@@ -31,9 +31,9 @@
                    RenderOptions.BitmapScalingMode="HighQuality"/>
         </Border>
 
-        <!-- White stroke on top -->
-        <Border x:Name="RootBorder" CornerRadius="12" BorderThickness="1.5"
-                BorderBrush="#CCFFFFFF" Background="Transparent"
+        <!-- Stroke overlay -->
+        <Border x:Name="RootBorder" CornerRadius="12"
+                Background="Transparent"
                 MaxWidth="280" MaxHeight="180" MinWidth="100"
                 IsHitTestVisible="False"/>
 

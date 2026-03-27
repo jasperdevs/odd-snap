@@ -26,7 +26,8 @@
 
         <!-- Image -->
         <Border Grid.Row="1" Padding="20,0,20,20">
-            <Border CornerRadius="8" ClipToBounds="True">
+            <Border x:Name="ImageContainer" CornerRadius="12" ClipToBounds="True"
+                    BorderBrush="#CCFFFFFF" BorderThickness="1.5">
                 <Image x:Name="ViewerImage" Stretch="Uniform"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
             </Border>

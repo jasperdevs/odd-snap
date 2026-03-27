@@ -25,6 +25,11 @@ public static class Theme
     public static Color Border => IsDark ? C(60, 60, 60) : C(210, 210, 210);
     public static Color BorderSubtle => IsDark ? C(50, 50, 50) : C(225, 225, 225);
 
+    // Shared stroke: the one white outline used on preview, toast, buttons, cards
+    public static Color Stroke => IsDark ? CA(255, 255, 255, 0xCC) : CA(0, 0, 0, 0x40);
+    public const double StrokeThickness = 1.5;
+    public static SolidColorBrush StrokeBrush() => Brush(Stroke);
+
     // Accent (monochrome - white tint in dark, dark tint in light)
     public static Color Accent => IsDark ? C(255, 255, 255) : C(0, 0, 0);
     public static Color AccentSubtle => IsDark ? CA(255, 255, 255, 15) : CA(0, 0, 0, 8);

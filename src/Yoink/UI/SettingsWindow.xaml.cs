@@ -340,10 +340,8 @@ public partial class SettingsWindow : Window
 
     private static void UpdateCardSelection(Border card, HistoryItemVM vm)
     {
-        card.BorderThickness = new Thickness(vm.IsSelected ? 2 : 0);
-        card.BorderBrush = vm.IsSelected
-            ? new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 255, 255, 255))
-            : System.Windows.Media.Brushes.Transparent;
+        card.BorderThickness = new Thickness(vm.IsSelected ? Theme.StrokeThickness : 0);
+        card.BorderBrush = vm.IsSelected ? Theme.StrokeBrush() : System.Windows.Media.Brushes.Transparent;
     }
 
     private void ToggleSelectMode(object sender, RoutedEventArgs e)
