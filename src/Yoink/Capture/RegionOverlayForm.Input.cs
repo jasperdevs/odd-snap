@@ -35,11 +35,44 @@ public sealed partial class RegionOverlayForm
             Invalidate();
         }
 
-        // If typing text, commit current text on click elsewhere
+        // If typing text: check if clicking a resize handle first
         if (_isTyping)
         {
+            int handle = GetTextHandle(e.Location);
+            if (handle >= 0)
+            {
+                _textResizeHandle = handle;
+                _textResizing = true;
+                _textResizeStart = e.Location;
+                return;
+            }
+            // Check if clicking inside the text box (to reposition cursor -- just keep typing)
+            var textBox = GetActiveTextRect();
+            if (textBox.Contains(e.Location))
+                return;
+            // Clicked outside -- commit
             CommitText();
             return;
+        }
+
+        // In Text mode, check if clicking on an existing committed text to re-edit
+        if (_mode == CaptureMode.Text)
+        {
+            int hitIdx = HitTestText(e.Location);
+            if (hitIdx >= 0)
+            {
+                // Re-edit: move back to typing state
+                var (pos, text, fontSize, color) = _textAnnotations[hitIdx];
+                _textAnnotations.RemoveAt(hitIdx);
+                if (_undoStack.Contains("text")) _undoStack.Remove("text");
+                _isTyping = true;
+                _textPos = pos;
+                _textBuffer = text;
+                _textFontSize = fontSize;
+                _toolColor = color;
+                Invalidate();
+                return;
+            }
         }
 
         if (_mode == CaptureMode.ColorPicker)
@@ -102,10 +135,23 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
+        // Text resize drag
+        if (_textResizing && _isTyping)
+        {
+            float dy = e.Location.Y - _textResizeStart.Y;
+            _textFontSize = Math.Clamp(_textFontSize + dy * 0.3f, 10f, 120f);
+            _textResizeStart = e.Location;
+            Invalidate();
+            return;
+        }
+
         int btn = GetToolbarButtonAt(e.Location);
         if (btn != _hoveredButton) { _hoveredButton = btn; Invalidate(); }
 
-        if (btn >= 0)
+        // Cursor: show resize cursor when hovering text handles
+        if (_isTyping && GetTextHandle(e.Location) >= 0)
+            { if (!Cursor.Equals(Cursors.SizeNWSE)) Cursor = Cursors.SizeNWSE; }
+        else if (btn >= 0)
             { if (!Cursor.Equals(Cursors.Hand)) Cursor = Cursors.Hand; }
         else if (_mode == CaptureMode.ColorPicker)
             { if (Cursor != _blankCursor) Cursor = _blankCursor; }
@@ -151,6 +197,14 @@ public sealed partial class RegionOverlayForm
     protected override void OnMouseUp(MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
+
+        // End text resize
+        if (_textResizing)
+        {
+            _textResizing = false;
+            _textResizeHandle = -1;
+            return;
+        }
         switch (_mode)
         {
             case CaptureMode.Draw when _isSelecting:
@@ -292,6 +346,50 @@ public sealed partial class RegionOverlayForm
         _isTyping = false;
         _textBuffer = "";
         Invalidate();
+    }
+
+    private RectangleF GetActiveTextRect()
+    {
+        if (!_isTyping) return RectangleF.Empty;
+        using var font = new Font("Segoe UI", _textFontSize, FontStyle.Bold);
+        string display = _textBuffer.Length > 0 ? _textBuffer : "Type here...";
+        SizeF sz;
+        using (var g = CreateGraphics())
+            sz = g.MeasureString(display, font);
+        return new RectangleF(_textPos.X - 6, _textPos.Y - 4,
+            Math.Max(sz.Width + 12, 100), sz.Height + 8);
+    }
+
+    private int GetTextHandle(Point p)
+    {
+        if (!_isTyping) return -1;
+        var r = GetActiveTextRect();
+        int hs = 10; // hit area size (larger than visual 6px for easier grabbing)
+        var handles = new RectangleF[] {
+            new(r.X - hs/2, r.Y - hs/2, hs, hs),
+            new(r.Right - hs/2, r.Y - hs/2, hs, hs),
+            new(r.X - hs/2, r.Bottom - hs/2, hs, hs),
+            new(r.Right - hs/2, r.Bottom - hs/2, hs, hs),
+        };
+        for (int i = 0; i < handles.Length; i++)
+            if (handles[i].Contains(p)) return i;
+        return -1;
+    }
+
+    private int HitTestText(Point p)
+    {
+        // Check committed texts in reverse order (top-most first)
+        for (int i = _textAnnotations.Count - 1; i >= 0; i--)
+        {
+            var (pos, text, fontSize, _) = _textAnnotations[i];
+            using var font = new Font("Segoe UI", fontSize, FontStyle.Bold);
+            SizeF sz;
+            using (var g = CreateGraphics())
+                sz = g.MeasureString(text, font);
+            var rect = new RectangleF(pos.X - 6, pos.Y - 4, sz.Width + 12, sz.Height + 8);
+            if (rect.Contains(p)) return i;
+        }
+        return -1;
     }
 
     private void ToggleColorPicker()
