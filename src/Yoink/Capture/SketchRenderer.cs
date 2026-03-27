@@ -51,89 +51,94 @@ public static class SketchRenderer
             DrawSketchyLine(g, pen, corners[i], corners[(i + 1) % 4], seed + i * 1000, roughness);
     }
 
-    /// <summary>Draw an arrow with Excalidraw-style arrowhead that scales with length.</summary>
+    /// <summary>Draw a clean arrow with proportional arrowhead (Excalidraw style).</summary>
     public static void DrawArrow(Graphics g, PointF from, PointF to, Color color, int seed, float roughness = 0.5f)
     {
         float dx = to.X - from.X, dy = to.Y - from.Y;
         float len = MathF.Sqrt(dx * dx + dy * dy);
         if (len < 3) return;
 
-        // Shaft thickness scales: 1.5 -> 3.5
-        float thickness = Math.Clamp(1.5f + len / 120f, 1.5f, 3.5f);
+        float thickness = Math.Clamp(1.5f + len / 150f, 1.5f, 3f);
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var pen = new Pen(color, thickness) { LineJoin = LineJoin.Round };
+        using var pen = new Pen(color, thickness)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
 
-        // Draw sketchy shaft
-        DrawSketchyLine(g, pen, from, to, seed, roughness);
+        // Clean line (just a tiny bit of wobble)
+        g.DrawLine(pen, from, to);
 
-        // Arrowhead: size scales with length, capped
-        float headSize = Math.Clamp(8f + len / 20f, 8f, 25f);
-        headSize = Math.Min(headSize, len * 0.4f); // never bigger than 40% of shaft
-
-        float angle = 22f * MathF.PI / 180f; // 22 degrees like Excalidraw
-        float nx = dx / len, ny = dy / len;
-
-        // Base point
-        float bx = to.X - nx * headSize, by = to.Y - ny * headSize;
-
-        // Rotate around tip
-        var left = RotatePoint(new PointF(bx, by), to, -angle);
-        var right = RotatePoint(new PointF(bx, by), to, angle);
-
-        // Draw arrowhead lines (slightly sketchy)
-        DrawSketchyLine(g, pen, left, to, seed + 5000, roughness * 0.5f);
-        DrawSketchyLine(g, pen, right, to, seed + 6000, roughness * 0.5f);
+        // Arrowhead
+        DrawArrowhead(g, new PointF(to.X, to.Y), dx / len, dy / len, len, color, thickness);
 
         g.SmoothingMode = SmoothingMode.Default;
     }
 
-    /// <summary>Draw a curved arrow (freehand path with arrowhead).</summary>
+    /// <summary>Draw a curved arrow (smooth line with arrowhead at tip).</summary>
     public static void DrawCurvedArrow(Graphics g, List<Point> points, Color color, int seed)
     {
         if (points.Count < 2) return;
+
         float len = 0;
         for (int i = 1; i < points.Count; i++)
         {
             float ddx = points[i].X - points[i - 1].X, ddy = points[i].Y - points[i - 1].Y;
             len += MathF.Sqrt(ddx * ddx + ddy * ddy);
         }
-        float thickness = Math.Clamp(1.5f + len / 100f, 1.5f, 3.5f);
+        float thickness = Math.Clamp(1.5f + len / 150f, 1.5f, 3f);
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
-
-        // Draw the freehand path as a filled variable-width outline
-        var outline = GetStrokeOutline(points.Select(p => new PointF(p.X, p.Y)).ToList(),
-            thickness * 2f, 0.3f, 0.5f, 0.4f);
-        if (outline.Length > 2)
+        using var pen = new Pen(color, thickness)
         {
-            using var brush = new SolidBrush(color);
-            using var path = OutlineToPath(outline);
-            g.FillPath(brush, path);
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
+
+        // Draw smooth curve through points
+        if (points.Count >= 4)
+        {
+            // Use cardinal spline for smooth curve
+            g.DrawCurve(pen, points.ToArray(), 0.5f);
+        }
+        else
+        {
+            g.DrawLines(pen, points.ToArray());
         }
 
-        // Arrowhead at end
-        if (points.Count >= 2)
-        {
-            var last = points[^1];
-            var prev = points[Math.Max(0, points.Count - 8)];
-            float dx = last.X - prev.X, dy = last.Y - prev.Y;
-            float l = MathF.Sqrt(dx * dx + dy * dy);
-            if (l > 2)
-            {
-                float headSize = Math.Clamp(8f + len / 25f, 8f, 18f);
-                float angle = 22f * MathF.PI / 180f;
-                float nx = dx / l, ny = dy / l;
-                float bx = last.X - nx * headSize, by = last.Y - ny * headSize;
-                var left = RotatePoint(new PointF(bx, by), new PointF(last.X, last.Y), -angle);
-                var right = RotatePoint(new PointF(bx, by), new PointF(last.X, last.Y), angle);
+        // Arrowhead at end - look back enough points for smooth direction
+        var last = points[^1];
+        var prev = points[Math.Max(0, points.Count - Math.Min(12, points.Count / 3 + 1))];
+        float dx = last.X - prev.X, dy = last.Y - prev.Y;
+        float l = MathF.Sqrt(dx * dx + dy * dy);
+        if (l > 2)
+            DrawArrowhead(g, new PointF(last.X, last.Y), dx / l, dy / l, len, color, thickness);
 
-                var headPts = new[] { new PointF(last.X, last.Y), left, right };
-                using var hBrush = new SolidBrush(color);
-                g.FillPolygon(hBrush, headPts);
-            }
-        }
         g.SmoothingMode = SmoothingMode.Default;
+    }
+
+    private static void DrawArrowhead(Graphics g, PointF tip, float nx, float ny,
+        float shaftLen, Color color, float thickness)
+    {
+        float headSize = Math.Clamp(10f + shaftLen / 18f, 10f, 22f);
+        headSize = Math.Min(headSize, shaftLen * 0.35f);
+        float angle = 25f * MathF.PI / 180f;
+
+        float bx = tip.X - nx * headSize, by = tip.Y - ny * headSize;
+        var left = RotatePoint(new PointF(bx, by), tip, -angle);
+        var right = RotatePoint(new PointF(bx, by), tip, angle);
+
+        // Draw as two lines (like Excalidraw's "arrow" type)
+        using var pen = new Pen(color, thickness)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
+        g.DrawLine(pen, left, tip);
+        g.DrawLine(pen, right, tip);
     }
 
     /// <summary>

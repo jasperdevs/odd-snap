@@ -39,6 +39,14 @@ public partial class ToastWindow : Window
         _timer.Tick += (_, _) => { _timer.Stop(); SlideAway(); };
 
         MouseLeftButtonDown += (_, _) => SlideAway();
+        SourceInitialized += (_, _) =>
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            int exStyle = Native.User32.GetWindowLongA(hwnd, Native.User32.GWL_EXSTYLE);
+            exStyle |= 0x80;       // WS_EX_TOOLWINDOW
+            exStyle |= 0x08000000; // WS_EX_NOACTIVATE
+            Native.User32.SetWindowLongA(hwnd, Native.User32.GWL_EXSTYLE, exStyle);
+        };
         Loaded += OnLoaded;
     }
 

@@ -54,6 +54,15 @@ public partial class PreviewWindow : Window
         _fadeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _fadeTimer.Tick += (_, _) => { _fadeTimer.Stop(); if (!_isHovered) AnimateDismiss(); };
 
+        SourceInitialized += (_, _) =>
+        {
+            // Prevent this window from showing in alt-tab and stealing focus
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            int exStyle = Native.User32.GetWindowLongA(hwnd, Native.User32.GWL_EXSTYLE);
+            exStyle |= 0x80;     // WS_EX_TOOLWINDOW
+            exStyle |= 0x08000000; // WS_EX_NOACTIVATE
+            Native.User32.SetWindowLongA(hwnd, Native.User32.GWL_EXSTYLE, exStyle);
+        };
         Loaded += OnLoaded;
     }
 

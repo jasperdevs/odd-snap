@@ -62,6 +62,9 @@ internal static partial class User32
     public static partial int GetWindowLongA(IntPtr hWnd, int nIndex);
 
     [LibraryImport("user32.dll")]
+    public static partial int SetWindowLongA(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [LibraryImport("user32.dll")]
     public static partial IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 
     [LibraryImport("user32.dll")]
