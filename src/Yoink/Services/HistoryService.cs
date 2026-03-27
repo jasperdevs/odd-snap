@@ -81,13 +81,28 @@ public sealed class HistoryService
         }
     }
 
+    public bool CompressHistory { get; set; }
+    public int JpegQuality { get; set; } = 85;
+
     public HistoryEntry SaveCapture(Bitmap screenshot)
     {
         Directory.CreateDirectory(HistoryDir);
         var now = DateTime.Now;
-        var fileName = $"yoink_{now:yyyyMMdd_HHmmss_fff}.png";
+        string ext = CompressHistory ? "jpg" : "png";
+        var fileName = $"yoink_{now:yyyyMMdd_HHmmss_fff}.{ext}";
         var filePath = Path.Combine(HistoryDir, fileName);
-        screenshot.Save(filePath, ImageFormat.Png);
+
+        if (CompressHistory)
+        {
+            var encoder = ImageCodecInfo.GetImageEncoders().First(e => e.MimeType == "image/jpeg");
+            var param = new EncoderParameters(1);
+            param.Param[0] = new EncoderParameter(Encoder.Quality, (long)JpegQuality);
+            screenshot.Save(filePath, encoder, param);
+        }
+        else
+        {
+            screenshot.Save(filePath, ImageFormat.Png);
+        }
 
         var entry = new HistoryEntry
         {

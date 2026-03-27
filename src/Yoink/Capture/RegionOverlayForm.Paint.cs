@@ -33,11 +33,14 @@ public sealed partial class RegionOverlayForm
         {
             case CaptureMode.Rectangle when _hasSelection:
             case CaptureMode.Ocr when _hasSelection:
-                // Shadow behind selection
-                var shadow = _selectionRect;
-                shadow.Inflate(3, 3);
-                using (var shadowPen = new Pen(Color.FromArgb(80, 0, 0, 0), 6f))
-                    g.DrawRectangle(shadowPen, shadow);
+                // Soft layered shadow
+                for (int i = 3; i >= 1; i--)
+                {
+                    var s = _selectionRect;
+                    s.Inflate(i * 2, i * 2);
+                    using var sp = new Pen(Color.FromArgb(25, 0, 0, 0), 2f);
+                    g.DrawRectangle(sp, s);
+                }
                 using (var pen = new Pen(isOcr ? Color.FromArgb(100, 180, 255) : Color.White, 2f))
                     g.DrawRectangle(pen, _selectionRect);
                 DrawLabel(g, _selectionRect, isOcr);
@@ -57,10 +60,13 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Window:
                 if (!_hoveredWindowRect.IsEmpty)
                 {
-                    var ws = _hoveredWindowRect;
-                    ws.Inflate(3, 3);
-                    using (var sp = new Pen(Color.FromArgb(80, 0, 0, 0), 6f))
+                    for (int i = 3; i >= 1; i--)
+                    {
+                        var ws = _hoveredWindowRect;
+                        ws.Inflate(i * 2, i * 2);
+                        using var sp = new Pen(Color.FromArgb(25, 0, 0, 0), 2f);
                         g.DrawRectangle(sp, ws);
+                    }
                     using var pen = new Pen(Color.White, 2f);
                     g.DrawRectangle(pen, _hoveredWindowRect);
                 }

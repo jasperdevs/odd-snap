@@ -60,6 +60,7 @@ public partial class SettingsWindow : Window
         StartWithWindowsCheck.IsChecked = s.StartWithWindows;
         SaveHistoryCheck.IsChecked = s.SaveHistory;
         MuteSoundsCheck.IsChecked = s.MuteSounds;
+        CompressHistoryCheck.IsChecked = s.CompressHistory;
     }
 
     // ─── Tabs ──────────────────────────────────────────────────────
@@ -237,6 +238,14 @@ public partial class SettingsWindow : Window
         SoundService.Muted = _settingsService.Settings.MuteSounds;
     }
 
+    private void CompressHistoryCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.CompressHistory = CompressHistoryCheck.IsChecked == true;
+        _settingsService.Save();
+        _historyService.CompressHistory = _settingsService.Settings.CompressHistory;
+    }
+
     // ─── Screenshot History (date-grouped) ─────────────────────────
 
     private bool _selectMode;
@@ -312,10 +321,14 @@ public partial class SettingsWindow : Window
         var card = new Border
         {
             Width = 148, Margin = new Thickness(3),
-            CornerRadius = new CornerRadius(7), ClipToBounds = true,
+            CornerRadius = new CornerRadius(10), ClipToBounds = true,
             Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
             Cursor = System.Windows.Input.Cursors.Hand,
-            Child = grid, Tag = vm
+            Child = grid, Tag = vm,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                BlurRadius = 8, ShadowDepth = 2, Opacity = 0.3, Color = System.Windows.Media.Colors.Black
+            }
         };
 
         card.MouseLeftButtonDown += (s, e) =>
@@ -437,23 +450,26 @@ public partial class SettingsWindow : Window
 
             var swatch = new Border
             {
-                Width = 40, Height = 40,
-                CornerRadius = new CornerRadius(8),
+                Width = 56, Height = 56,
+                CornerRadius = new CornerRadius(12),
                 Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b)),
-                Margin = new Thickness(3),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                ToolTip = entry.Hex
+                ToolTip = entry.Hex,
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    BlurRadius = 8, ShadowDepth = 2, Opacity = 0.25, Color = System.Windows.Media.Colors.Black
+                }
             };
 
             var hexLabel = new TextBlock
             {
-                Text = entry.Hex, FontSize = 9.5,
+                Text = entry.Hex, FontSize = 9,
                 Foreground = new SolidColorBrush(System.Windows.Media.Colors.White),
-                Opacity = 0.6, HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                Margin = new Thickness(0, 2, 0, 0)
+                Opacity = 0.5, HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                Margin = new Thickness(0, 3, 0, 0)
             };
 
-            var stack = new StackPanel { Margin = new Thickness(3) };
+            var stack = new StackPanel { Margin = new Thickness(4) };
             stack.Children.Add(swatch);
             stack.Children.Add(hexLabel);
 

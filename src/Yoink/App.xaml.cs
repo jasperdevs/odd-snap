@@ -34,6 +34,8 @@ public partial class App : Application
 
         _historyService = new HistoryService();
         _historyService.Load();
+        _historyService.CompressHistory = _settingsService.Settings.CompressHistory;
+        _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
 
         _trayIcon = new TrayIcon();
         _trayIcon.OnCapture += () => OnHotkeyPressed();

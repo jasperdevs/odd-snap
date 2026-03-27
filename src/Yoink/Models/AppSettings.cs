@@ -27,4 +27,6 @@ public sealed class AppSettings
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }
+    public bool CompressHistory { get; set; }
+    public int JpegQuality { get; set; } = 85;
 }

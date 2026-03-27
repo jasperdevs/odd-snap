@@ -179,6 +179,11 @@
                     <TextBlock Text="General" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
 
                     <Border Style="{StaticResource Card}">
+                        <CheckBox x:Name="CompressHistoryCheck" Content="Compress history (JPEG, smaller files)" FontSize="13"
+                                  Checked="CompressHistoryCheck_Changed" Unchecked="CompressHistoryCheck_Changed"/>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
                         <CheckBox x:Name="MuteSoundsCheck" Content="Mute capture sounds" FontSize="13"
                                   Checked="MuteSoundsCheck_Changed" Unchecked="MuteSoundsCheck_Changed"/>
                     </Border>
