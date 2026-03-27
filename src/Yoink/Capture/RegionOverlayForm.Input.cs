@@ -115,9 +115,8 @@ public sealed partial class RegionOverlayForm
                 Invalidate();
                 break;
             case CaptureMode.Highlight:
-                _isSelecting = true;
-                _currentHighlight = new List<Point> { e.Location };
-                _highlightStrokes.Add(_currentHighlight);
+                _isHighlighting = true;
+                _highlightStart = e.Location;
                 break;
             case CaptureMode.StepNumber:
                 _stepNumbers.Add((e.Location, _nextStepNumber, _toolColor));
@@ -203,8 +202,7 @@ public sealed partial class RegionOverlayForm
                 _hasDragged = true;
                 Invalidate();
                 break;
-            case CaptureMode.Highlight when _isSelecting:
-                _currentHighlight?.Add(e.Location);
+            case CaptureMode.Highlight when _isHighlighting:
                 Invalidate();
                 break;
             case CaptureMode.Magnifier:
@@ -246,10 +244,15 @@ public sealed partial class RegionOverlayForm
         }
         switch (_mode)
         {
-            case CaptureMode.Highlight when _isSelecting:
-                _isSelecting = false;
-                _currentHighlight = null;
-                _undoStack.Add("highlight");
+            case CaptureMode.Highlight when _isHighlighting:
+                _isHighlighting = false;
+                var hlRect = NormRect(_highlightStart, e.Location);
+                if (hlRect.Width > 2 && hlRect.Height > 2)
+                {
+                    _highlightRects.Add((hlRect, _toolColor));
+                    _undoStack.Add("highlight");
+                }
+                Invalidate();
                 break;
             case CaptureMode.Magnifier:
                 _magnifierActive = false;
@@ -366,8 +369,8 @@ public sealed partial class RegionOverlayForm
                 _blurRects.RemoveAt(_blurRects.Count - 1);
             else if (last == "arrow" && _arrows.Count > 0)
                 _arrows.RemoveAt(_arrows.Count - 1);
-            else if (last == "highlight" && _highlightStrokes.Count > 0)
-                _highlightStrokes.RemoveAt(_highlightStrokes.Count - 1);
+            else if (last == "highlight" && _highlightRects.Count > 0)
+                _highlightRects.RemoveAt(_highlightRects.Count - 1);
             else if (last == "step" && _stepNumbers.Count > 0)
             {
                 _stepNumbers.RemoveAt(_stepNumbers.Count - 1);
@@ -492,9 +495,12 @@ public sealed partial class RegionOverlayForm
         _freeformPoints.Clear();
         _isSelecting = false;
         _isBlurring = false;
+        _isHighlighting = false;
         _isArrowDragging = false;
         _isCurvedArrowDragging = false;
         _isEraserDragging = false;
+        _magnifierActive = false;
+        _autoDetectActive = false;
 
         if (m == CaptureMode.ColorPicker)
             _pickerTimer.Start();

@@ -34,10 +34,15 @@ public sealed partial class RegionOverlayForm
         bool isOcr = _mode == CaptureMode.Ocr;
         bool isSelectionMode = _mode == CaptureMode.Rectangle || _mode == CaptureMode.Ocr;
 
-        // Auto-detect: show detected window border when hovering
+        // Auto-detect: show detected window border when hovering (white animated)
         if (isSelectionMode && !_isSelecting && _autoDetectActive && _autoDetectRect.Width > 0)
         {
-            using var adPen = new Pen(Color.FromArgb(100, 0, 150, 255), 2f) { DashStyle = DashStyle.Dash };
+            using var adPen = new Pen(Color.FromArgb(180, 255, 255, 255), 2f)
+            {
+                DashStyle = DashStyle.Dash,
+                DashPattern = new[] { 6f, 4f },
+                DashOffset = _dashOffset
+            };
             g.DrawRectangle(adPen, _autoDetectRect);
         }
         // Show fullscreen border when in selection mode but not yet dragging
@@ -63,15 +68,23 @@ public sealed partial class RegionOverlayForm
         {
             case CaptureMode.Rectangle when _hasSelection:
             case CaptureMode.Ocr when _hasSelection:
-                for (int i = 3; i >= 1; i--)
+                // Animated marching ants: white dashes moving right
+                using (var marchPen = new Pen(Color.White, 2f)
                 {
-                    var s = _selectionRect;
-                    s.Inflate(i * 2, i * 2);
-                    using var sp = new Pen(Color.FromArgb(25, 0, 0, 0), 2f);
-                    g.DrawRectangle(sp, s);
+                    DashStyle = DashStyle.Dash,
+                    DashPattern = new[] { 6f, 4f },
+                    DashOffset = _dashOffset
+                })
+                {
+                    g.DrawRectangle(marchPen, _selectionRect);
                 }
-                using (var pen = new Pen(isOcr ? Color.FromArgb(100, 180, 255) : Color.White, 2f))
-                    g.DrawRectangle(pen, _selectionRect);
+                // Subtle outer shadow
+                using (var shadowPen = new Pen(Color.FromArgb(40, 0, 0, 0), 4f))
+                {
+                    var sr = _selectionRect;
+                    sr.Inflate(1, 1);
+                    g.DrawRectangle(shadowPen, sr);
+                }
                 DrawLabel(g, _selectionRect, isOcr);
                 break;
 
@@ -135,21 +148,20 @@ public sealed partial class RegionOverlayForm
             g.SmoothingMode = SmoothingMode.Default;
         }
 
-        // Highlight strokes (semi-transparent thick brush)
-        if (_highlightStrokes.Count > 0 || (_mode == CaptureMode.Highlight && _currentHighlight is { Count: >= 2 }))
+        // Highlight rectangles (semi-transparent)
+        foreach (var (hr, hc) in _highlightRects)
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var hlPen = new Pen(Color.FromArgb(80, _toolColor.R, _toolColor.G, _toolColor.B), 18f)
+            using var hBrush = new SolidBrush(Color.FromArgb(60, hc.R, hc.G, hc.B));
+            g.FillRectangle(hBrush, hr);
+        }
+        if (_mode == CaptureMode.Highlight && _isHighlighting)
+        {
+            var pr = NormRect(_highlightStart, PointToClient(System.Windows.Forms.Cursor.Position));
+            if (pr.Width > 1 && pr.Height > 1)
             {
-                StartCap = System.Drawing.Drawing2D.LineCap.Round,
-                EndCap = System.Drawing.Drawing2D.LineCap.Round,
-                LineJoin = LineJoin.Round
-            };
-            foreach (var hl in _highlightStrokes)
-                if (hl.Count >= 2) g.DrawLines(hlPen, hl.ToArray());
-            if (_currentHighlight is { Count: >= 2 })
-                g.DrawLines(hlPen, _currentHighlight.ToArray());
-            g.SmoothingMode = SmoothingMode.Default;
+                using var hBrush = new SolidBrush(Color.FromArgb(60, _toolColor.R, _toolColor.G, _toolColor.B));
+                g.FillRectangle(hBrush, pr);
+            }
         }
 
         // Step numbers

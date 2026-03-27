@@ -50,19 +50,11 @@ public sealed partial class RegionOverlayForm
         foreach (var br in _blurRects)
             PaintBlurRect(g, br);
 
-        // Highlight strokes
-        if (_highlightStrokes.Count > 0)
+        // Highlight rectangles
+        foreach (var (hr, hc) in _highlightRects)
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var hlPen = new Pen(Color.FromArgb(80, _toolColor.R, _toolColor.G, _toolColor.B), 18f)
-            {
-                StartCap = System.Drawing.Drawing2D.LineCap.Round,
-                EndCap = System.Drawing.Drawing2D.LineCap.Round,
-                LineJoin = LineJoin.Round
-            };
-            foreach (var hl in _highlightStrokes)
-                if (hl.Count >= 2) g.DrawLines(hlPen, hl.ToArray());
-            g.SmoothingMode = SmoothingMode.Default;
+            using var hBrush = new SolidBrush(Color.FromArgb(60, hc.R, hc.G, hc.B));
+            g.FillRectangle(hBrush, hr);
         }
 
         if (_drawStrokes.Count > 0)

@@ -36,6 +36,7 @@ public sealed partial class RegionOverlayForm : Form
     private const int ToolbarTopMargin = 16;
 
     private float _toolbarAnim;
+    private float _dashOffset; // animated marching ants
     private readonly System.Windows.Forms.Timer _animTimer;
     private readonly DateTime _showTime;
 
@@ -79,9 +80,10 @@ public sealed partial class RegionOverlayForm : Form
     private List<Point>? _currentCurvedArrow;
     private bool _isCurvedArrowDragging;
 
-    // Highlight brush strokes (semi-transparent)
-    private readonly List<List<Point>> _highlightStrokes = new();
-    private List<Point>? _currentHighlight;
+    // Highlight rectangles (semi-transparent)
+    private readonly List<(Rectangle rect, Color color)> _highlightRects = new();
+    private Point _highlightStart;
+    private bool _isHighlighting;
 
     // Step numbering
     private readonly List<(Point pos, int number, Color color)> _stepNumbers = new();
@@ -167,12 +169,15 @@ public sealed partial class RegionOverlayForm : Form
         CalcToolbar();
         _blurred = BuildBlurred(screenshot);
 
-        _animTimer = new System.Windows.Forms.Timer { Interval = 16 };
+        _animTimer = new System.Windows.Forms.Timer { Interval = 30 }; // ~33fps for smooth marching ants
         _animTimer.Tick += (_, _) =>
         {
-            if (_toolbarAnim >= 1f) { _animTimer.Stop(); return; }
             _toolbarAnim = Math.Min(1f, (float)(DateTime.UtcNow - _showTime).TotalMilliseconds / 120f);
-            Invalidate(_toolbarRect);
+            _dashOffset = (_dashOffset + 0.5f) % 12f; // animate dash pattern
+            if (_hasSelection || _autoDetectActive)
+                Invalidate(); // need full repaint for animated border
+            else if (_toolbarAnim < 1f)
+                Invalidate(_toolbarRect);
         };
         _animTimer.Start();
 
