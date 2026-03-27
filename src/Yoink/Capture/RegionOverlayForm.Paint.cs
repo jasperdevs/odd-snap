@@ -103,10 +103,9 @@ public sealed partial class RegionOverlayForm
         PaintToolbar(g);
     }
 
-    // All annotations rendered in creation order (newest on top)
+    // All annotations rendered in creation order via undo stack (Excalidraw style)
     private void PaintAnnotations(Graphics g)
     {
-        // Use undo stack to determine paint order
         int iDraw = 0, iBlur = 0, iArrow = 0, iCurved = 0;
         int iEraser = 0, iText = 0, iStep = 0, iHighlight = 0, iMag = 0;
 
@@ -125,34 +124,24 @@ public sealed partial class RegionOverlayForm
                     break;
 
                 case "draw" when iDraw < _drawStrokes.Count:
-                    var stroke = _drawStrokes[iDraw++];
-                    if (stroke.Count >= 2)
-                    {
-                        g.SmoothingMode = SmoothingMode.AntiAlias;
-                        using var dp = new Pen(_toolColor, 3f) { LineJoin = LineJoin.Round };
-                        g.DrawLines(dp, stroke.ToArray());
-                        g.SmoothingMode = SmoothingMode.Default;
-                    }
+                    // Excalidraw-style: variable-width filled outline
+                    SketchRenderer.DrawFreehandStroke(g, _drawStrokes[iDraw++], _toolColor, 6f);
                     break;
 
                 case "highlight" when iHighlight < _highlightRects.Count:
                     var (hr, hc) = _highlightRects[iHighlight++];
-                    using (var hBrush = new SolidBrush(Color.FromArgb(90, hc.R, hc.G, hc.B)))
-                    {
-                        g.SmoothingMode = SmoothingMode.AntiAlias;
-                        using var hp = RRect(hr, 3);
-                        g.FillPath(hBrush, hp);
-                        g.SmoothingMode = SmoothingMode.Default;
-                    }
+                    SketchRenderer.DrawHighlightRect(g, hr, hc);
                     break;
 
                 case "arrow" when iArrow < _arrows.Count:
                     var a = _arrows[iArrow++];
-                    PaintArrow(g, a.from, a.to);
+                    // Excalidraw-style: sketchy line with scaled arrowhead
+                    SketchRenderer.DrawArrow(g, a.from, a.to, _toolColor, a.from.GetHashCode());
                     break;
 
                 case "curvedArrow" when iCurved < _curvedArrows.Count:
-                    PaintCurvedArrow(g, _curvedArrows[iCurved++]);
+                    // Excalidraw-style: variable-width path with arrowhead
+                    SketchRenderer.DrawCurvedArrow(g, _curvedArrows[iCurved++], _toolColor, iCurved * 7919);
                     break;
 
                 case "step" when iStep < _stepNumbers.Count:
@@ -162,13 +151,7 @@ public sealed partial class RegionOverlayForm
 
                 case "text" when iText < _textAnnotations.Count:
                     var (tp, tt, tf, tc) = _textAnnotations[iText++];
-                    using (var font = new Font("Segoe UI", tf, FontStyle.Bold))
-                    {
-                        using var shadow = new SolidBrush(Color.FromArgb(80, 0, 0, 0));
-                        g.DrawString(tt, font, shadow, tp.X + 1, tp.Y + 1);
-                        using var brush = new SolidBrush(tc);
-                        g.DrawString(tt, font, brush, tp.X, tp.Y);
-                    }
+                    PaintExcalidrawText(g, tp, tt, tf, tc);
                     break;
 
                 case "magnifier" when iMag < _placedMagnifiers.Count:
@@ -178,7 +161,7 @@ public sealed partial class RegionOverlayForm
             }
         }
 
-        // Active tool previews (always on top of committed annotations)
+        // Active tool previews
         if (_mode == CaptureMode.Eraser && _isEraserDragging)
         {
             var pr = NormRect(_eraserStart, PointToClient(System.Windows.Forms.Cursor.Position));
@@ -203,30 +186,17 @@ public sealed partial class RegionOverlayForm
         {
             var pr = NormRect(_highlightStart, PointToClient(System.Windows.Forms.Cursor.Position));
             if (pr.Width > 1 && pr.Height > 1)
-            {
-                var hcl = DefaultHighlightColor;
-                using var hBrush = new SolidBrush(Color.FromArgb(90, hcl.R, hcl.G, hcl.B));
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                using var path = RRect(pr, 3);
-                g.FillPath(hBrush, path);
-                g.SmoothingMode = SmoothingMode.Default;
-            }
+                SketchRenderer.DrawHighlightRect(g, pr, DefaultHighlightColor);
         }
         if (_mode == CaptureMode.Arrow && _isArrowDragging)
         {
             var cur = PointToClient(System.Windows.Forms.Cursor.Position);
-            PaintArrow(g, _arrowStart, cur);
+            SketchRenderer.DrawArrow(g, _arrowStart, cur, _toolColor, _arrowStart.GetHashCode());
         }
         if (_mode == CaptureMode.CurvedArrow && _isCurvedArrowDragging && _currentCurvedArrow is { Count: >= 2 })
-            PaintCurvedArrow(g, _currentCurvedArrow);
-        // Active draw stroke (not yet committed to undo stack)
+            SketchRenderer.DrawCurvedArrow(g, _currentCurvedArrow, _toolColor, 42);
         if (_mode == CaptureMode.Draw && _isSelecting && _currentStroke is { Count: >= 2 })
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using var dp = new Pen(_toolColor, 3f) { LineJoin = LineJoin.Round };
-            g.DrawLines(dp, _currentStroke.ToArray());
-            g.SmoothingMode = SmoothingMode.Default;
-        }
+            SketchRenderer.DrawFreehandStroke(g, _currentStroke, _toolColor, 6f);
 
         // Magnifier preview
         if (_mode == CaptureMode.Magnifier)
@@ -282,44 +252,32 @@ public sealed partial class RegionOverlayForm
             PaintColorPicker(g);
     }
 
-    private void PaintCurvedArrow(Graphics g, List<Point> points)
+    /// <summary>Excalidraw-style text: clean font, soft shadow, subtle stroke outline.</summary>
+    private static void PaintExcalidrawText(Graphics g, Point pos, string text, float fontSize, Color color)
     {
-        if (points.Count < 2) return;
-        float len = 0;
-        for (int i = 1; i < points.Count; i++)
-        {
-            float dx = points[i].X - points[i-1].X, dy = points[i].Y - points[i-1].Y;
-            len += MathF.Sqrt(dx * dx + dy * dy);
-        }
-        // Thickness grows from 1.5 to 4 based on length
-        float thickness = Math.Clamp(1.5f + len / 80f, 1.5f, 4f);
-
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var pen = new Pen(_toolColor, thickness) { LineJoin = LineJoin.Round };
-        g.DrawLines(pen, points.ToArray());
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
-        // Arrowhead at end
-        if (points.Count >= 2)
-        {
-            var last = points[^1];
-            var prev = points[Math.Max(0, points.Count - 6)]; // look back a few points for direction
-            float dx = last.X - prev.X, dy = last.Y - prev.Y;
-            float l = MathF.Sqrt(dx * dx + dy * dy);
-            if (l > 2)
-            {
-                float nx = dx / l, ny = dy / l;
-                float headLen = Math.Clamp(8 + len / 30f, 8, 16);
-                float bx = last.X - nx * headLen, by = last.Y - ny * headLen;
-                float spread = headLen * 0.5f;
-                var pts = new PointF[] {
-                    new(last.X, last.Y),
-                    new(bx - ny * spread, by + nx * spread),
-                    new(bx + ny * spread, by - nx * spread)
-                };
-                using var brush = new SolidBrush(_toolColor);
-                g.FillPolygon(brush, pts);
-            }
-        }
+        using var font = new Font("Segoe UI", fontSize, FontStyle.Regular);
+        var sz = g.MeasureString(text, font);
+
+        // Soft shadow (offset 2px, blurred via multiple passes)
+        using var shadowBrush = new SolidBrush(Color.FromArgb(50, 0, 0, 0));
+        g.DrawString(text, font, shadowBrush, pos.X + 2, pos.Y + 2);
+        g.DrawString(text, font, shadowBrush, pos.X + 1, pos.Y + 1);
+
+        // Thin stroke outline for readability on any background
+        using var outlinePath = new GraphicsPath();
+        outlinePath.AddString(text, font.FontFamily, (int)font.Style, g.DpiY * fontSize / 72f,
+            new PointF(pos.X, pos.Y), StringFormat.GenericDefault);
+        using var outlinePen = new Pen(Color.FromArgb(60, 0, 0, 0), 2.5f) { LineJoin = LineJoin.Round };
+        g.DrawPath(outlinePen, outlinePath);
+
+        // Main text fill
+        using var fillBrush = new SolidBrush(color);
+        g.FillPath(fillBrush, outlinePath);
+
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
         g.SmoothingMode = SmoothingMode.Default;
     }
 
@@ -790,29 +748,5 @@ public sealed partial class RegionOverlayForm
         g.PixelOffsetMode = PixelOffsetMode.Default;
     }
 
-    private void PaintArrow(Graphics g, Point from, Point to)
-    {
-        float dx = to.X - from.X, dy = to.Y - from.Y;
-        float len = MathF.Sqrt(dx * dx + dy * dy);
-        if (len < 3) return;
-        // Thickness grows with length: 1.5 -> 4
-        float thickness = Math.Clamp(1.5f + len / 100f, 1.5f, 4f);
-        float headLen = Math.Clamp(8 + len / 25f, 8, 18);
-        float headSpread = headLen * 0.5f;
 
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var pen = new Pen(_toolColor, thickness);
-        g.DrawLine(pen, from, to);
-        float nx = dx / len, ny = dy / len;
-        float bx = to.X - nx * headLen, by = to.Y - ny * headLen;
-        var pts = new PointF[]
-        {
-            new(to.X, to.Y),
-            new(bx - ny * headSpread, by + nx * headSpread),
-            new(bx + ny * headSpread, by - nx * headSpread)
-        };
-        using var brush = new SolidBrush(_toolColor);
-        g.FillPolygon(brush, pts);
-        g.SmoothingMode = SmoothingMode.Default;
-    }
 }

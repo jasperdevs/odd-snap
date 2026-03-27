@@ -16,7 +16,6 @@ public sealed partial class RegionOverlayForm
         var bb = new Rectangle(minX, minY, maxX - minX, maxY - minY);
         if (bb.Width < 3 || bb.Height < 3) return;
 
-        // Render annotated screenshot, then crop freeform
         var annotated = RenderAnnotatedBitmap();
         var r = new Bitmap(bb.Width, bb.Height, PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(r))
@@ -30,7 +29,7 @@ public sealed partial class RegionOverlayForm
     }
 
     /// <summary>
-    /// Renders the screenshot with all committed annotations in creation order.
+    /// Renders the screenshot with all annotations in creation order (Excalidraw style).
     /// </summary>
     public Bitmap RenderAnnotatedBitmap()
     {
@@ -55,33 +54,21 @@ public sealed partial class RegionOverlayForm
                     break;
 
                 case "draw" when iDraw < _drawStrokes.Count:
-                    var stroke = _drawStrokes[iDraw++];
-                    if (stroke.Count >= 2)
-                    {
-                        g.SmoothingMode = SmoothingMode.AntiAlias;
-                        using var dp = new Pen(_toolColor, 3f) { LineJoin = LineJoin.Round };
-                        g.DrawLines(dp, stroke.ToArray());
-                        g.SmoothingMode = SmoothingMode.Default;
-                    }
+                    SketchRenderer.DrawFreehandStroke(g, _drawStrokes[iDraw++], _toolColor, 6f);
                     break;
 
                 case "highlight" when iHighlight < _highlightRects.Count:
                     var (hr, hc) = _highlightRects[iHighlight++];
-                    using (var hBrush = new SolidBrush(Color.FromArgb(90, hc.R, hc.G, hc.B)))
-                    {
-                        g.SmoothingMode = SmoothingMode.AntiAlias;
-                        using var hp = RRect(hr, 3);
-                        g.FillPath(hBrush, hp);
-                        g.SmoothingMode = SmoothingMode.Default;
-                    }
+                    SketchRenderer.DrawHighlightRect(g, hr, hc);
                     break;
 
                 case "arrow" when iArrow < _arrows.Count:
-                    PaintArrow(g, _arrows[iArrow++].from, _arrows[iArrow - 1].to);
+                    var a = _arrows[iArrow++];
+                    SketchRenderer.DrawArrow(g, a.from, a.to, _toolColor, a.from.GetHashCode());
                     break;
 
                 case "curvedArrow" when iCurved < _curvedArrows.Count:
-                    PaintCurvedArrow(g, _curvedArrows[iCurved++]);
+                    SketchRenderer.DrawCurvedArrow(g, _curvedArrows[iCurved++], _toolColor, iCurved * 7919);
                     break;
 
                 case "step" when iStep < _stepNumbers.Count:
@@ -91,15 +78,8 @@ public sealed partial class RegionOverlayForm
 
                 case "text" when iText < _textAnnotations.Count:
                     var (tp, tt, tf, tc) = _textAnnotations[iText++];
-                    using (var font = new Font("Segoe UI", tf, FontStyle.Bold))
-                    {
-                        using var shadow = new SolidBrush(Color.FromArgb(80, 0, 0, 0));
-                        g.DrawString(tt, font, shadow, tp.X + 1, tp.Y + 1);
-                        using var brush = new SolidBrush(tc);
-                        g.DrawString(tt, font, brush, tp.X, tp.Y);
-                    }
+                    PaintExcalidrawText(g, tp, tt, tf, tc);
                     break;
-                // Magnifiers are not rendered into the final image (they're a viewing aid)
             }
         }
 
