@@ -156,6 +156,26 @@ public sealed class HistoryService
         SaveColorIndex();
     }
 
+    public void ClearImages()
+    {
+        foreach (var e in _entries)
+            try { File.Delete(e.FilePath); } catch { }
+        _entries.Clear();
+        SaveIndex();
+    }
+
+    public void ClearOcr()
+    {
+        _ocrEntries.Clear();
+        SaveOcrIndex();
+    }
+
+    public void ClearColors()
+    {
+        _colorEntries.Clear();
+        SaveColorIndex();
+    }
+
     public void ClearAll()
     {
         foreach (var e in _entries)

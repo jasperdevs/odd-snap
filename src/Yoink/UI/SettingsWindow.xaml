@@ -241,9 +241,11 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button x:Name="SelectBtn" Content="Select" FontSize="10" Padding="8,3"
-                                    Margin="0,0,3,0" Click="ToggleSelectMode"/>
+                                     Margin="0,0,3,0" Click="ToggleSelectMode"/>
+                            <Button x:Name="DeleteAllBtn" Content="Delete All" FontSize="10" Padding="8,3"
+                                    Margin="0,0,3,0" Click="DeleteAllClick"/>
                             <Button x:Name="DeleteSelectedBtn" Content="Delete" FontSize="10"
-                                    Padding="8,3" Visibility="Collapsed" Click="DeleteSelectedClick"/>
+                                     Padding="8,3" Visibility="Collapsed" Click="DeleteSelectedClick"/>
                         </StackPanel>
                     </Grid>
                 </Border>

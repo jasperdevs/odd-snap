@@ -401,6 +401,20 @@ public partial class SettingsWindow : Window
         if (!_selectMode) LoadHistory();
     }
 
+    private void DeleteAllClick(object sender, RoutedEventArgs e)
+    {
+        string tab = ImagesSubTab.IsChecked == true ? "images" : TextSubTab.IsChecked == true ? "text history" : "colors";
+        if (MessageBox.Show($"Delete all {tab}?", "Confirm 1/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show($"Really delete all {tab}?", "Confirm 2/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        if (MessageBox.Show($"This cannot be undone. Delete all {tab}?", "Confirm 3/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+
+        if (ImagesSubTab.IsChecked == true) _historyService.ClearImages();
+        else if (TextSubTab.IsChecked == true) _historyService.ClearOcr();
+        else _historyService.ClearColors();
+
+        LoadCurrentHistoryTab();
+    }
+
     private void DeleteSelectedClick(object sender, RoutedEventArgs e)
     {
         var toDelete = _historyItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
