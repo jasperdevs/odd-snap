@@ -67,6 +67,7 @@ public sealed partial class RegionOverlayForm
             if (HandleFontPickerClick(e.Location))
                 return;
             _fontPickerOpen = false;
+            HideFontSearchBox();
             Invalidate();
         }
 
@@ -77,6 +78,7 @@ public sealed partial class RegionOverlayForm
                 return;
             // Clicked outside picker
             _emojiPickerOpen = false;
+            HideEmojiSearchBox();
             Invalidate();
         }
 
@@ -123,6 +125,7 @@ public sealed partial class RegionOverlayForm
             {
                 _fontPickerOpen = !_fontPickerOpen;
                 _fontPickerScroll = 0; _fontSearch = ""; _filteredFonts = null;
+                if (_fontPickerOpen) ShowFontSearchBox(); else HideFontSearchBox();
                 Invalidate();
                 RefreshToolbar();
                 return;
@@ -633,8 +636,8 @@ public sealed partial class RegionOverlayForm
             // Close all popups and transient state in one pass
             bool anyClosed = false;
             if (_mode == CaptureMode.ColorPicker) { CloseMagWindow(); anyClosed = true; }
-            if (_emojiPickerOpen) { _emojiPickerOpen = false; anyClosed = true; }
-            if (_fontPickerOpen) { _fontPickerOpen = false; _fontSearch = ""; _filteredFonts = null; anyClosed = true; }
+            if (_emojiPickerOpen) { _emojiPickerOpen = false; HideEmojiSearchBox(); anyClosed = true; }
+            if (_fontPickerOpen) { _fontPickerOpen = false; _fontSearch = ""; _filteredFonts = null; HideFontSearchBox(); anyClosed = true; }
             if (_colorPickerOpen) { _colorPickerOpen = false; anyClosed = true; }
             if (_isPlacingEmoji) { _isPlacingEmoji = false; _selectedEmoji = null; anyClosed = true; }
             if (_isRulerDragging) { _isRulerDragging = false; anyClosed = true; }
@@ -663,45 +666,18 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        // Emoji picker search input - handle backspace only, let printable chars go to OnKeyPress
-        if (_emojiPickerOpen)
-        {
-            if (e.KeyCode == Keys.Back && _emojiSearch.Length > 0)
-            {
-                _emojiSearch = _emojiSearch[..^1]; _emojiScrollOffset = 0;
-                RefreshToolbar();
-                e.SuppressKeyPress = true;
-                e.Handled = true;
-            }
-            else
-            {
-                e.Handled = true;
-            }
-            return;
-        }
+        // All search/text input is handled by off-screen TextBoxes
+        if (_emojiPickerOpen) return;
 
         // Emoji placing: Tab re-opens picker
         if (_mode == CaptureMode.Emoji && _isPlacingEmoji)
         {
-            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; RefreshToolbar(); }
+            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; ShowEmojiSearchBox(); RefreshToolbar(); }
             return;
         }
 
-        // Font picker search input
-        if (_fontPickerOpen)
-        {
-            if (e.KeyCode == Keys.Back && _fontSearch.Length > 0)
-            {
-                _fontSearch = _fontSearch[..^1];
-                _filteredFonts = null; _fontPickerScroll = 0;
-                RefreshToolbar();
-            }
-            return;
-        }
-
-        // Text input mode - TextBox handles all input
-        if (_isTyping)
-            return;
+        if (_fontPickerOpen) return;
+        if (_isTyping) return;
         if (TryHandleAnnotationToolNumber(e.KeyCode))
         {
             e.SuppressKeyPress = true;
@@ -725,26 +701,7 @@ public sealed partial class RegionOverlayForm
         }
     }
 
-    protected override void OnKeyPress(KeyPressEventArgs e)
-    {
-        if (_fontPickerOpen && !char.IsControl(e.KeyChar))
-        {
-            _fontSearch += e.KeyChar;
-            _filteredFonts = null; _fontPickerScroll = 0;
-            e.Handled = true;
-            RefreshToolbar();
-            return;
-        }
-        if (_emojiPickerOpen && !char.IsControl(e.KeyChar))
-        {
-            _emojiSearch += e.KeyChar;
-            _emojiScrollOffset = 0;
-            e.Handled = true;
-            RefreshToolbar();
-            return;
-        }
-        // Text input is handled by the real TextBox control
-    }
+    // All text input is handled by off-screen TextBox controls
 
     private void CommitText()
     {
@@ -911,6 +868,7 @@ public sealed partial class RegionOverlayForm
             _isPlacingEmoji = true;
             _emojiPickerOpen = false;
             _fontPickerOpen = false;
+            HideEmojiSearchBox();
             Invalidate();
             RefreshToolbar();
             return true;
@@ -973,11 +931,13 @@ public sealed partial class RegionOverlayForm
             int px = _toolbarRect.X + _toolbarRect.Width / 2 - pw / 2;
             int py = _toolbarRect.Bottom + 8;
             _emojiPickerRect = new Rectangle(px, py, pw, ph);
+            ShowEmojiSearchBox();
         }
         else
         {
             _emojiPickerOpen = false;
             _isPlacingEmoji = false;
+            HideEmojiSearchBox();
         }
 
         Invalidate();

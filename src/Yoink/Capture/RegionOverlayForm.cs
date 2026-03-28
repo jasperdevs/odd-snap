@@ -148,6 +148,7 @@ public sealed partial class RegionOverlayForm : Form
     private int _fontPickerScroll;
     private string _fontSearch = "";
     private string[]? _filteredFonts;
+    private TextBox? _fontSearchBox;
 
     // All system fonts, cached once
     private static string[]? _allSystemFonts;
@@ -194,6 +195,7 @@ public sealed partial class RegionOverlayForm : Form
     private Rectangle _emojiPickerRect;
     private string _emojiSearch = "";
     private int _emojiHovered = -1;
+    private TextBox? _emojiSearchBox;
     private int _emojiScrollOffset;
     private string? _selectedEmoji;
     private bool _isPlacingEmoji;
@@ -427,9 +429,9 @@ public sealed partial class RegionOverlayForm : Form
             {
                 BorderStyle = BorderStyle.None,
                 Multiline = false,
-                BackColor = Color.FromArgb(20, 20, 20),
-                ForeColor = _toolColor,
                 ScrollBars = ScrollBars.None,
+                // Hidden off-screen - we only use it for input handling, not display
+                Size = new Size(1, 1),
             };
             _textBox.KeyDown += (_, e) =>
             {
@@ -440,17 +442,14 @@ public sealed partial class RegionOverlayForm : Form
             {
                 if (_textBox == null) return;
                 _textBuffer = _textBox.Text;
-                SyncTextBoxSize();
                 Invalidate();
             };
             Controls.Add(_textBox);
         }
-        UpdateTextBoxStyle();
         _textBox.Text = _textBuffer;
-        _textBox.Location = _textPos;
-        SyncTextBoxSize();
+        // Place off-screen so it's invisible but still receives keyboard input
+        _textBox.Location = new Point(-100, -100);
         _textBox.Visible = true;
-        _textBox.BringToFront();
         _textBox.Focus();
         if (_textBuffer.Length > 0) _textBox.SelectAll();
     }
@@ -460,30 +459,90 @@ public sealed partial class RegionOverlayForm : Form
         if (_textBox != null)
         {
             _textBox.Visible = false;
-            Focus(); // Return focus to overlay for hotkeys
+            Focus();
         }
     }
 
-    private void UpdateTextBoxStyle()
+    private void UpdateTextBoxStyle() { }
+    private void SyncTextBoxSize() { }
+
+    private void ShowEmojiSearchBox()
     {
-        if (_textBox == null) return;
-        var style = FontStyle.Regular;
-        if (_textBold) style |= FontStyle.Bold;
-        if (_textItalic) style |= FontStyle.Italic;
-        try { _textBox.Font = new Font(_textFontFamily, _textFontSize, style); }
-        catch { _textBox.Font = new Font("Segoe UI", _textFontSize, style); }
-        _textBox.ForeColor = _toolColor;
-        _textBox.BackColor = Color.FromArgb(20, 20, 20);
+        if (_emojiSearchBox == null)
+        {
+            _emojiSearchBox = new TextBox
+            {
+                BorderStyle = BorderStyle.None,
+                Size = new Size(1, 1),
+            };
+            _emojiSearchBox.TextChanged += (_, _) =>
+            {
+                if (_emojiSearchBox == null) return;
+                _emojiSearch = _emojiSearchBox.Text;
+                _emojiScrollOffset = 0;
+                RefreshToolbar();
+            };
+            _emojiSearchBox.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode == Keys.Escape)
+                {
+                    e.SuppressKeyPress = true;
+                    _emojiPickerOpen = false;
+                    HideEmojiSearchBox();
+                    Invalidate(); RefreshToolbar();
+                }
+            };
+            Controls.Add(_emojiSearchBox);
+        }
+        _emojiSearchBox.Text = _emojiSearch;
+        _emojiSearchBox.Location = new Point(-100, -100);
+        _emojiSearchBox.Visible = true;
+        _emojiSearchBox.Focus();
     }
 
-    private void SyncTextBoxSize()
+    private void HideEmojiSearchBox()
     {
-        if (_textBox == null) return;
-        using var g = CreateGraphics();
-        string measure = _textBox.Text.Length > 0 ? _textBox.Text : "W";
-        var sz = g.MeasureString(measure, _textBox.Font);
-        _textBox.Size = new Size(Math.Max((int)sz.Width + 30, 120), (int)sz.Height + 6);
-        _textBox.Location = _textPos;
+        if (_emojiSearchBox != null) { _emojiSearchBox.Visible = false; Focus(); }
+    }
+
+    private void ShowFontSearchBox()
+    {
+        if (_fontSearchBox == null)
+        {
+            _fontSearchBox = new TextBox
+            {
+                BorderStyle = BorderStyle.None,
+                Size = new Size(1, 1),
+            };
+            _fontSearchBox.TextChanged += (_, _) =>
+            {
+                if (_fontSearchBox == null) return;
+                _fontSearch = _fontSearchBox.Text;
+                _filteredFonts = null; _fontPickerScroll = 0;
+                RefreshToolbar();
+            };
+            _fontSearchBox.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode == Keys.Escape)
+                {
+                    e.SuppressKeyPress = true;
+                    _fontPickerOpen = false;
+                    _fontSearch = ""; _filteredFonts = null;
+                    HideFontSearchBox();
+                    Invalidate(); RefreshToolbar();
+                }
+            };
+            Controls.Add(_fontSearchBox);
+        }
+        _fontSearchBox.Text = _fontSearch;
+        _fontSearchBox.Location = new Point(-100, -100);
+        _fontSearchBox.Visible = true;
+        _fontSearchBox.Focus();
+    }
+
+    private void HideFontSearchBox()
+    {
+        if (_fontSearchBox != null) { _fontSearchBox.Visible = false; Focus(); }
     }
 
     internal void RefreshToolbar()

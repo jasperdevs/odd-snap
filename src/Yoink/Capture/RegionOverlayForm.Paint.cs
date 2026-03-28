@@ -362,19 +362,19 @@ public sealed partial class RegionOverlayForm
         if (_mode == CaptureMode.Magnifier)
             PaintMagnifierTool(g);
 
-        // Active text input with selection box (TextBox control handles actual text rendering)
+        // Active text input (TextBox is off-screen for input, we paint visually here)
         if (_isTyping)
         {
             var fontStyle = FontStyle.Regular;
             if (_textBold) fontStyle |= FontStyle.Bold;
             if (_textItalic) fontStyle |= FontStyle.Italic;
             using var font = new Font(_textFontFamily, _textFontSize, fontStyle);
-            string measure = _textBuffer.Length > 0 ? _textBuffer : "W";
-            var textSize = g.MeasureString(measure, font);
+            string display = _textBuffer.Length > 0 ? _textBuffer : "Type here...";
+            var textSize = g.MeasureString(display, font);
 
-            // Dashed selection border around the TextBox
+            // Dashed selection border
             var textRect = new RectangleF(_textPos.X - 6, _textPos.Y - 4,
-                Math.Max(textSize.Width + 30, 120), textSize.Height + 12);
+                Math.Max(textSize.Width + 12, 100), textSize.Height + 8);
             using var dashPen = new Pen(Color.FromArgb(140, 255, 255, 255), 1f) { DashStyle = DashStyle.Dash };
             g.DrawRectangle(dashPen, textRect.X, textRect.Y, textRect.Width, textRect.Height);
 
@@ -389,6 +389,26 @@ public sealed partial class RegionOverlayForm
             using var handleBrush = new SolidBrush(Color.White);
             foreach (var h in handles)
                 g.FillRectangle(handleBrush, h);
+
+            // Render text with stroke/shadow
+            if (_textBuffer.Length > 0)
+            {
+                PaintExcalidrawText(g, _textPos, _textBuffer, _textFontSize, _toolColor,
+                    _textBold, _textItalic, _textStroke, _textShadow, _textFontFamily);
+            }
+            else
+            {
+                using var placeholderBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
+                g.DrawString(display, font, placeholderBrush, _textPos.X, _textPos.Y);
+            }
+
+            // Blinking cursor
+            if (_textBuffer.Length > 0)
+            {
+                var cursorX = _textPos.X + g.MeasureString(_textBuffer, font).Width - 2;
+                using var cursorPen = new Pen(_toolColor, 2f);
+                g.DrawLine(cursorPen, cursorX, _textPos.Y + 2, cursorX, _textPos.Y + textSize.Height - 4);
+            }
 
             // Inline text formatting toolbar above text
             PaintTextToolbar(g, textRect);
