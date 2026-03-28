@@ -190,6 +190,7 @@ public partial class App : Application
                     overlay.ScanRegionSelected += sel =>
                     {
                         overlay.Hide();
+                        SoundService.PlayScanSound();
                         using var annotated = overlay.RenderAnnotatedBitmap();
                         using var cropped = ScreenCapture.CropRegion(annotated, sel);
                         var clone = new Bitmap(cropped);
@@ -200,7 +201,6 @@ public partial class App : Application
                                 var text = BarcodeService.Decode(clone);
                                 if (!string.IsNullOrWhiteSpace(text))
                                 {
-                                    SoundService.PlayScanSound();
                                     System.Windows.Clipboard.SetText(text);
                                     var prev = text.Length > 100 ? text[..100] + "..." : text;
                                     ToastWindow.Show("Code copied", prev);

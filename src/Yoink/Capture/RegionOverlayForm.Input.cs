@@ -615,6 +615,8 @@ public sealed partial class RegionOverlayForm
         }
         if (TryHandleAnnotationToolNumber(e.KeyCode))
         {
+            e.SuppressKeyPress = true;
+            e.Handled = true;
             RefreshToolbar();
             Invalidate();
             return;

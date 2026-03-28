@@ -22,19 +22,19 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Bd" Padding="12,5" CornerRadius="5" Cursor="Hand" Background="Transparent">
+                        <Border x:Name="Bd" Padding="14,6" CornerRadius="6" Cursor="Hand" Background="Transparent">
                             <TextBlock x:Name="Tb" Text="{TemplateBinding Content}" FontSize="12"
                                        Foreground="White" Opacity="0.4"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#282828"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#2A2A2A"/>
                                 <Setter TargetName="Tb" Property="Opacity" Value="1"/>
                                 <Setter TargetName="Tb" Property="FontWeight" Value="SemiBold"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#0AFFFFFF"/>
-                                <Setter TargetName="Tb" Property="Opacity" Value="0.6"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#0CFFFFFF"/>
+                                <Setter TargetName="Tb" Property="Opacity" Value="0.7"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -65,17 +65,69 @@
         </Style>
 
         <Style x:Key="SectionLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Opacity" Value="0.55"/>
-            <Setter Property="Margin" Value="2,0,0,6"/>
+            <Setter Property="Opacity" Value="0.35"/>
+            <Setter Property="Margin" Value="4,0,0,6"/>
+
         </Style>
 
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="14,11"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="14,12"/>
             <Setter Property="Margin" Value="0,0,0,2"/>
-            <Setter Property="Background" Value="#282828"/>
+            <Setter Property="Background" Value="#252525"/>
+        </Style>
+
+        <!-- Dark theme textbox for hotkeys -->
+        <Style x:Key="HotkeyBox" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="MinWidth" Value="115"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="Background" Value="#1A1A1A"/>
+            <Setter Property="Foreground" Value="#CCFFFFFF"/>
+            <Setter Property="BorderBrush" Value="#18FFFFFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CaretBrush" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Small clear button -->
+        <Style x:Key="ClearBtn" TargetType="Button">
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Margin" Value="5,0,0,0"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="#60FFFFFF"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="5" Background="#10FFFFFF">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#20FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -83,8 +135,8 @@
         <Border.Effect>
             <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.5" Color="Black"/>
         </Border.Effect>
-    <Border x:Name="OuterBorder" CornerRadius="12" ClipToBounds="True" Background="#202020"
-            BorderBrush="#18FFFFFF" BorderThickness="1">
+    <Border x:Name="OuterBorder" CornerRadius="12" ClipToBounds="True" Background="#1C1C1C"
+            BorderBrush="#15FFFFFF" BorderThickness="1">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -93,7 +145,7 @@
         </Grid.RowDefinitions>
 
         <!-- Custom title bar -->
-        <Border x:Name="TitleBarBorder" Grid.Row="0" Padding="14,10,8,10" Background="#1A1A1A"
+        <Border x:Name="TitleBarBorder" Grid.Row="0" Padding="14,10,8,10" Background="#161616"
                 CornerRadius="11,11,0,0"
                 MouseLeftButtonDown="TitleBar_MouseDown">
             <Grid>
@@ -111,84 +163,122 @@
         </Border>
 
         <!-- Main tabs -->
-        <StackPanel Grid.Row="1">
-            <Border Padding="16,6,16,6">
-                <StackPanel Orientation="Horizontal">
-                    <RadioButton x:Name="SettingsTab" Content="Settings" GroupName="Main"
-                                 IsChecked="True" Click="TabChanged" Style="{StaticResource TabPill}"/>
-                    <RadioButton x:Name="HistoryTab" Content="History" GroupName="Main"
-                                 Click="TabChanged" Margin="2,0,0,0" Style="{StaticResource TabPill}"/>
-                </StackPanel>
-            </Border>
-            <Border Height="1" Background="#10FFFFFF"/>
-        </StackPanel>
+        <Border Grid.Row="1" Padding="16,6,16,6">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="SettingsTab" Content="Settings" GroupName="Main"
+                             IsChecked="True" Click="TabChanged" Style="{StaticResource TabPill}"/>
+                <RadioButton x:Name="HistoryTab" Content="History" GroupName="Main"
+                             Click="TabChanged" Margin="2,0,0,0" Style="{StaticResource TabPill}"/>
+            </StackPanel>
+        </Border>
 
         <Grid Grid.Row="2">
 
             <!-- Settings -->
-            <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" Padding="18,6,18,18">
+            <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
-                    <TextBlock Text="Capture" Style="{StaticResource SectionLabel}"/>
+                    <TextBlock Text="HOTKEYS" Style="{StaticResource SectionLabel}"/>
 
                     <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Screenshot" FontSize="13" VerticalAlignment="Center"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBox x:Name="HotkeyBox" IsReadOnly="True"
-                                         FontSize="12" Padding="10,5" MinWidth="115" TextAlignment="Center"
-                                         PreviewKeyDown="HotkeyBox_PreviewKeyDown"
-                                         GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus"/>
-                                <Button Content="X" Width="28" Height="28" Margin="6,0,0,0"
-                                        FontSize="11" Click="ClearCaptureHotkey_Click"/>
-                            </StackPanel>
-                        </Grid>
+                        <StackPanel>
+                            <!-- Screenshot hotkey -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Screenshot" FontSize="13" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="HotkeyBox" Style="{StaticResource HotkeyBox}"
+                                             PreviewKeyDown="HotkeyBox_PreviewKeyDown"
+                                             GotFocus="HotkeyBox_GotFocus" LostFocus="HotkeyBox_LostFocus"/>
+                                    <Button Content="X" Style="{StaticResource ClearBtn}" Click="ClearCaptureHotkey_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                            <!-- OCR hotkey -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Text capture (OCR)" FontSize="13"/>
+                                    <TextBlock Text="Copies text from screen" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="OcrHotkeyBox" Style="{StaticResource HotkeyBox}"
+                                             PreviewKeyDown="OcrHotkeyBox_PreviewKeyDown"
+                                             GotFocus="OcrHotkeyBox_GotFocus" LostFocus="OcrHotkeyBox_LostFocus"/>
+                                    <Button Content="X" Style="{StaticResource ClearBtn}" Click="ClearOcrHotkey_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                            <!-- Color picker hotkey -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Color picker" FontSize="13"/>
+                                    <TextBlock Text="Pick color, copies hex" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="PickerHotkeyBox" Style="{StaticResource HotkeyBox}"
+                                             PreviewKeyDown="PickerHotkeyBox_PreviewKeyDown"
+                                             GotFocus="PickerHotkeyBox_GotFocus" LostFocus="PickerHotkeyBox_LostFocus"/>
+                                    <Button Content="X" Style="{StaticResource ClearBtn}" Click="ClearPickerHotkey_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                            <!-- Scanner hotkey -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="QR/barcode scanner" FontSize="13"/>
+                                    <TextBlock Text="Optional" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="ScanHotkeyBox" Style="{StaticResource HotkeyBox}"
+                                             PreviewKeyDown="ScanHotkeyBox_PreviewKeyDown"
+                                             GotFocus="ScanHotkeyBox_GotFocus" LostFocus="ScanHotkeyBox_LostFocus"/>
+                                    <Button Content="X" Style="{StaticResource ClearBtn}" Click="ClearScanHotkey_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                            <!-- Ruler hotkey -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Ruler" FontSize="13"/>
+                                    <TextBlock Text="Optional" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="RulerHotkeyBox" Style="{StaticResource HotkeyBox}"
+                                             PreviewKeyDown="RulerHotkeyBox_PreviewKeyDown"
+                                             GotFocus="RulerHotkeyBox_GotFocus" LostFocus="RulerHotkeyBox_LostFocus"/>
+                                    <Button Content="X" Style="{StaticResource ClearBtn}" Click="ClearRulerHotkey_Click"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Text capture (OCR)" FontSize="13"/>
-                                <TextBlock Text="Copies text from screen" FontSize="11" Opacity="0.3"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBox x:Name="OcrHotkeyBox" IsReadOnly="True"
-                                         FontSize="12" Padding="10,5" MinWidth="115" TextAlignment="Center"
-                                         PreviewKeyDown="OcrHotkeyBox_PreviewKeyDown"
-                                         GotFocus="OcrHotkeyBox_GotFocus" LostFocus="OcrHotkeyBox_LostFocus"/>
-                                <Button Content="X" Width="28" Height="28" Margin="6,0,0,0"
-                                        FontSize="11" Click="ClearOcrHotkey_Click"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Color picker" FontSize="13"/>
-                                <TextBlock Text="Pick color, copies hex" FontSize="11" Opacity="0.3"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBox x:Name="PickerHotkeyBox" IsReadOnly="True"
-                                         FontSize="12" Padding="10,5" MinWidth="115" TextAlignment="Center"
-                                         PreviewKeyDown="PickerHotkeyBox_PreviewKeyDown"
-                                         GotFocus="PickerHotkeyBox_GotFocus" LostFocus="PickerHotkeyBox_LostFocus"/>
-                                <Button Content="X" Width="28" Height="28" Margin="6,0,0,0"
-                                        FontSize="11" Click="ClearPickerHotkey_Click"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                    <TextBlock Text="CAPTURE" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
 
                     <Border Style="{StaticResource Card}">
                         <Grid>
@@ -198,7 +288,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Default capture tool" FontSize="13"/>
-                                <TextBlock Text="What the main screenshot hotkey opens" FontSize="11" Opacity="0.3"/>
+                                <TextBlock Text="What the main screenshot hotkey opens" FontSize="11" Opacity="0.25"/>
                             </StackPanel>
                             <ComboBox x:Name="DefaultCaptureModeCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
                                       SelectionChanged="DefaultCaptureModeCombo_SelectionChanged">
@@ -223,144 +313,100 @@
                         </Grid>
                     </Border>
 
-                    <TextBlock Text="Saving" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
+                    <TextBlock Text="SAVING" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="SaveToFileCheck" Content="Save screenshots to file" FontSize="13"
                                       Checked="SaveToFileCheck_Changed" Unchecked="SaveToFileCheck_Changed"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" x:Name="SaveDirPanel" Visibility="Collapsed">
-                                <TextBox x:Name="SaveDirBox" IsReadOnly="True" FontSize="11" Padding="7,4" Width="280"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" x:Name="SaveDirPanel" Visibility="Collapsed">
+                                <TextBox x:Name="SaveDirBox" IsReadOnly="True" FontSize="11" Padding="7,4" Width="280"
+                                         Background="#1A1A1A" Foreground="#99FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1"/>
                                 <Button Content="Browse" FontSize="11" Padding="8,4" Margin="5,0,0,0" Click="BrowseButton_Click"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Card}">
-                        <CheckBox x:Name="SaveHistoryCheck" Content="Save capture history" FontSize="13"
-                                  Checked="SaveHistoryCheck_Changed" Unchecked="SaveHistoryCheck_Changed"/>
+                        <StackPanel>
+                            <CheckBox x:Name="SaveHistoryCheck" Content="Save capture history" FontSize="13"
+                                      Checked="SaveHistoryCheck_Changed" Unchecked="SaveHistoryCheck_Changed"/>
+
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Auto-clear" FontSize="12" Opacity="0.6"/>
+                                </StackPanel>
+                                <ComboBox x:Name="HistoryRetentionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
+                                          SelectionChanged="HistoryRetentionCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Never"/>
+                                    <ComboBoxItem Content="1 day"/>
+                                    <ComboBoxItem Content="7 days"/>
+                                    <ComboBoxItem Content="30 days"/>
+                                    <ComboBoxItem Content="3 months"/>
+                                </ComboBox>
+                            </Grid>
+
+                            <CheckBox x:Name="CompressHistoryCheck" Content="Compress history (JPEG)" FontSize="12" Margin="0,8,0,0"
+                                      Checked="CompressHistoryCheck_Changed" Unchecked="CompressHistoryCheck_Changed"/>
+                        </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Auto-clear history" FontSize="13"/>
-                                <TextBlock Text="Automatically remove old captures, OCR, and colors" FontSize="11" Opacity="0.3"/>
-                            </StackPanel>
-                            <ComboBox x:Name="HistoryRetentionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
-                                      SelectionChanged="HistoryRetentionCombo_SelectionChanged">
-                                <ComboBoxItem Content="Never"/>
-                                <ComboBoxItem Content="1 day"/>
-                                <ComboBoxItem Content="7 days"/>
-                                <ComboBoxItem Content="30 days"/>
-                                <ComboBoxItem Content="3 months"/>
-                            </ComboBox>
-                        </Grid>
-                    </Border>
-
-                    <TextBlock Text="Toolbar" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
-
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="QR/barcode scanner hotkey" FontSize="13"/>
-                                <TextBlock Text="Optional, disabled by default" FontSize="11" Opacity="0.3"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBox x:Name="ScanHotkeyBox" IsReadOnly="True"
-                                         FontSize="12" Padding="10,5" MinWidth="115" TextAlignment="Center"
-                                         PreviewKeyDown="ScanHotkeyBox_PreviewKeyDown"
-                                         GotFocus="ScanHotkeyBox_GotFocus" LostFocus="ScanHotkeyBox_LostFocus"/>
-                                <Button Content="X" Width="28" Height="28" Margin="6,0,0,0"
-                                        FontSize="11" Click="ClearScanHotkey_Click"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Ruler hotkey" FontSize="13"/>
-                                <TextBlock Text="Optional, disabled by default" FontSize="11" Opacity="0.3"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBox x:Name="RulerHotkeyBox" IsReadOnly="True"
-                                         FontSize="12" Padding="10,5" MinWidth="115" TextAlignment="Center"
-                                         PreviewKeyDown="RulerHotkeyBox_PreviewKeyDown"
-                                         GotFocus="RulerHotkeyBox_GotFocus" LostFocus="RulerHotkeyBox_LostFocus"/>
-                                <Button Content="X" Width="28" Height="28" Margin="6,0,0,0"
-                                        FontSize="11" Click="ClearRulerHotkey_Click"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-
+                    <TextBlock Text="TOOLBAR" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <TextBlock Text="Choose which tools appear in the capture toolbar" FontSize="12" Opacity="0.4" Margin="0,0,0,8"/>
+                            <TextBlock Text="Choose which tools appear in the capture toolbar" FontSize="12" Opacity="0.35" Margin="0,0,0,8"/>
                             <CheckBox x:Name="ShowToolNumberBadgesCheck" Content="Show numbered tool badges on hover" FontSize="12"
                                       Margin="0,0,0,8" Checked="ShowToolNumberBadgesCheck_Changed" Unchecked="ShowToolNumberBadgesCheck_Changed"/>
                             <WrapPanel x:Name="ToolTogglePanel" Orientation="Horizontal"/>
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Text="General" Style="{StaticResource SectionLabel}" Margin="0,14,0,6"/>
+                    <TextBlock Text="GENERAL" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
 
                     <Border Style="{StaticResource Card}">
-                        <CheckBox x:Name="CompressHistoryCheck" Content="Compress history (JPEG, smaller files)" FontSize="13"
-                                  Checked="CompressHistoryCheck_Changed" Unchecked="CompressHistoryCheck_Changed"/>
-                    </Border>
+                        <StackPanel>
+                            <CheckBox x:Name="MuteSoundsCheck" Content="Mute capture sounds" FontSize="13"
+                                      Checked="MuteSoundsCheck_Changed" Unchecked="MuteSoundsCheck_Changed"/>
 
-                    <Border Style="{StaticResource Card}">
-                        <CheckBox x:Name="MuteSoundsCheck" Content="Mute capture sounds" FontSize="13"
-                                  Checked="MuteSoundsCheck_Changed" Unchecked="MuteSoundsCheck_Changed"/>
-                    </Border>
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
 
-                    <Border Style="{StaticResource Card}">
-                        <CheckBox x:Name="CrosshairGuidesCheck" Content="Show crosshair guides on capture" FontSize="13"
-                                  Checked="CrosshairGuidesCheck_Changed" Unchecked="CrosshairGuidesCheck_Changed"/>
-                    </Border>
+                            <CheckBox x:Name="CrosshairGuidesCheck" Content="Show crosshair guides" FontSize="13"
+                                      Checked="CrosshairGuidesCheck_Changed" Unchecked="CrosshairGuidesCheck_Changed"/>
 
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Toast position" FontSize="13"/>
-                                <TextBlock Text="Where notifications appear" FontSize="11" Opacity="0.3"/>
-                            </StackPanel>
-                            <ComboBox x:Name="ToastPositionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
-                                      SelectionChanged="ToastPositionCombo_SelectionChanged">
-                                <ComboBoxItem Content="Right"/>
-                                <ComboBoxItem Content="Left"/>
-                                <ComboBoxItem Content="Top Left"/>
-                                <ComboBoxItem Content="Top Right"/>
-                            </ComboBox>
-                        </Grid>
-                    </Border>
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
 
-                    <Border Style="{StaticResource Card}">
-                        <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
-                                  Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Toast position" FontSize="13"/>
+                                    <TextBlock Text="Where notifications appear" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <ComboBox x:Name="ToastPositionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="ToastPositionCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Right"/>
+                                    <ComboBoxItem Content="Left"/>
+                                    <ComboBoxItem Content="Top Left"/>
+                                    <ComboBoxItem Content="Top Right"/>
+                                </ComboBox>
+                            </Grid>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                            <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
+                                      Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
+                        </StackPanel>
                     </Border>
 
                     <!-- About -->
-                    <TextBlock FontSize="10.5" Opacity="0.2" HorizontalAlignment="Center" Margin="0,16,0,2">
+                    <TextBlock FontSize="10.5" Opacity="0.15" HorizontalAlignment="Center" Margin="0,18,0,2">
                         <Run Text="Yoink v0.1.0"/>
                     </TextBlock>
                     <TextBlock HorizontalAlignment="Center" Margin="0,0,0,4">
