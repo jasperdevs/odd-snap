@@ -31,6 +31,9 @@ public sealed partial class RegionOverlayForm
         var g = e.Graphics;
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
 
+        g.PixelOffsetMode = PixelOffsetMode.None;
+        g.SmoothingMode = SmoothingMode.None;
+
         // Cached screenshot + annotations (fast blit)
         var clip = e.ClipRectangle;
         g.CompositingMode = CompositingMode.SourceCopy;
@@ -58,6 +61,8 @@ public sealed partial class RegionOverlayForm
             g.FillRectangle(dimOverlay, clip);
         }
 
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
         // Live tool previews (active drawing in progress)
         PaintAnnotations(g);
 
@@ -75,11 +80,13 @@ public sealed partial class RegionOverlayForm
             g.DrawRectangle(adShadow, _autoDetectRect.X + 1, _autoDetectRect.Y + 1, _autoDetectRect.Width, _autoDetectRect.Height);
             using var adPen = DashedPen(180);
             g.DrawRectangle(adPen, _autoDetectRect);
+            _lastAutoDetectRect = _autoDetectRect;
         }
         else if (isSelectionMode && !_hasSelection && !_isSelecting)
         {
             using var pen = new Pen(Color.FromArgb(60, 255, 255, 255), 2f);
             g.DrawRectangle(pen, 1, 1, ClientSize.Width - 3, ClientSize.Height - 3);
+            _lastAutoDetectRect = Rectangle.Empty;
         }
 
         // Selection borders (on top of everything)
@@ -100,6 +107,7 @@ public sealed partial class RegionOverlayForm
                     g.DrawRectangle(marchPen, _selectionRect);
                 }
                 DrawLabel(g, _selectionRect, isOcr);
+                _lastSelectionRect = _selectionRect;
                 break;
 
             case CaptureMode.Freeform when _freeformPoints.Count >= 2:
@@ -113,6 +121,9 @@ public sealed partial class RegionOverlayForm
                 }
                 break;
         }
+
+        if (!_hasSelection)
+            _lastSelectionRect = Rectangle.Empty;
 
         // Crosshair guidelines
         if (ShowCrosshairGuides && _mode != CaptureMode.ColorPicker)
@@ -128,6 +139,8 @@ public sealed partial class RegionOverlayForm
         }
 
         PaintToolbar(g);
+
+        g.SmoothingMode = SmoothingMode.Default;
     }
 
     /// <summary>Static dashed pen for all selection borders.</summary>
@@ -504,6 +517,10 @@ public sealed partial class RegionOverlayForm
             using var cursorPen = new Pen(Color.FromArgb(200, 255, 255, 255), 1.5f);
             g.DrawLine(cursorPen, cursorX, searchRect.Y + 7, cursorX, searchRect.Bottom - 7);
         }
+
+        using var searchHintFont = new Font("Segoe UI", 8f);
+        using var searchHintBrush = new SolidBrush(Color.FromArgb(70, 255, 255, 255));
+        g.DrawString("Type to search", searchHintFont, searchHintBrush, searchRect.Right - 78, searchRect.Y + 7);
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
 
         // Emoji grid (render via screen DC for real color emoji)

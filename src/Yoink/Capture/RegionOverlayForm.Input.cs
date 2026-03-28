@@ -8,6 +8,7 @@ public sealed partial class RegionOverlayForm
 {
     protected override void OnMouseDown(MouseEventArgs e)
     {
+        Focus();
         if (e.Button == MouseButtons.Right) { Cancel(); return; }
         if (e.Button != MouseButtons.Left) return;
 
@@ -16,7 +17,16 @@ public sealed partial class RegionOverlayForm
         {
             int toolCount = _visibleTools.Length;
             if (btn == BtnCount - 1) { Cancel(); return; }     // close
-            if (btn == BtnCount - 2) { SettingsRequested?.Invoke(); Cancel(); return; } // gear
+            if (btn == BtnCount - 2)
+            {
+                _emojiPickerOpen = false;
+                _fontPickerOpen = false;
+                _colorPickerOpen = false;
+                _isPlacingEmoji = false;
+                SettingsRequested?.Invoke();
+                Cancel();
+                return;
+            } // gear
             if (btn == BtnCount - 3) { ToggleColorPicker(); return; } // color dot
             if (btn < toolCount && _visibleTools[btn].Mode.HasValue)
                 SetMode(_visibleTools[btn].Mode!.Value);
@@ -223,7 +233,13 @@ public sealed partial class RegionOverlayForm
         }
 
         int btn = GetToolbarButtonAt(e.Location);
-        if (btn != _hoveredButton) { _hoveredButton = btn; Invalidate(); }
+        if (btn != _hoveredButton)
+        {
+            var oldHover = _hoveredButton;
+            _hoveredButton = btn;
+            if (oldHover >= 0) Invalidate(_toolbarButtons[oldHover]);
+            if (btn >= 0) Invalidate(_toolbarButtons[btn]);
+        }
 
         // Cursor: show appropriate cursor for context
         if (_isTyping && GetTextHandle(e.Location) >= 0)
@@ -273,6 +289,12 @@ public sealed partial class RegionOverlayForm
                 var detected = WindowDetector.GetWindowRectAtPoint(e.Location, _virtualBounds);
                 if (detected != _autoDetectRect)
                 {
+                    if (_lastAutoDetectRect.Width > 0)
+                    {
+                        var old = _lastAutoDetectRect;
+                        old.Inflate(8, 8);
+                        Invalidate(old);
+                    }
                     _autoDetectRect = detected;
                     _autoDetectActive = detected.Width > 0;
                     Invalidate();
@@ -445,6 +467,33 @@ public sealed partial class RegionOverlayForm
         }
     }
 
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        // Force clear hover/crosshair when cursor leaves overlay so nothing sticks
+        if (_hoveredButton >= 0)
+        {
+            int old = _hoveredButton;
+            _hoveredButton = -1;
+            Invalidate(_toolbarButtons[old]);
+        }
+        if (ShowCrosshairGuides && _lastCursorPos.X > 0)
+        {
+            Invalidate(new Rectangle(_lastCursorPos.X - 3, 0, 8, ClientSize.Height));
+            Invalidate(new Rectangle(0, _lastCursorPos.Y - 3, ClientSize.Width, 8));
+            _lastCursorPos = Point.Empty;
+        }
+        if (_lastAutoDetectRect.Width > 0)
+        {
+            var old = _lastAutoDetectRect;
+            old.Inflate(8, 8);
+            Invalidate(old);
+            _lastAutoDetectRect = Rectangle.Empty;
+            _autoDetectRect = Rectangle.Empty;
+            _autoDetectActive = false;
+        }
+    }
+
     // ProcessCmdKey always receives ESC (OnKeyDown sometimes doesn't)
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
@@ -466,6 +515,8 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (_emojiPickerOpen) e.SuppressKeyPress = true;
+
 
         // Emoji picker search input
         if (_emojiPickerOpen)
@@ -539,14 +590,15 @@ public sealed partial class RegionOverlayForm
             _emojiScrollOffset = 0;
             e.Handled = true;
             Invalidate();
+            return;
         }
         else if (_isTyping && !char.IsControl(e.KeyChar))
         {
             _textBuffer += e.KeyChar;
             e.Handled = true;
             Invalidate();
+            return;
         }
-        base.OnKeyPress(e);
     }
 
     private void CommitText()
@@ -609,6 +661,9 @@ public sealed partial class RegionOverlayForm
 
     private void ToggleColorPicker()
     {
+        _emojiPickerOpen = false;
+        _fontPickerOpen = false;
+        _isPlacingEmoji = false;
         _colorPickerOpen = !_colorPickerOpen;
         Invalidate();
     }
@@ -723,6 +778,7 @@ public sealed partial class RegionOverlayForm
         if (_isTyping) CommitText();
         _colorPickerOpen = false;
         _fontPickerOpen = false;
+        _emojiHovered = -1;
         _mode = m;
         _hasSelection = false;
         _hasDragged = false;

@@ -38,6 +38,8 @@ public sealed partial class RegionOverlayForm : Form
 
     private float _toolbarAnim;
     private Point _lastCursorPos;
+    private Rectangle _lastSelectionRect;
+    private Rectangle _lastAutoDetectRect;
     private readonly System.Windows.Forms.Timer _animTimer;
     private DateTime _showTime;
 
@@ -319,7 +321,8 @@ public sealed partial class RegionOverlayForm : Form
         BackColor = Color.Black;
         SetStyle(ControlStyles.AllPaintingInWmPaint |
                  ControlStyles.UserPaint |
-                 ControlStyles.OptimizedDoubleBuffer, true);
+                 ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.Opaque, true);
         KeyPreview = true;
     }
 
