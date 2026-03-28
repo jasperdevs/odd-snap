@@ -464,7 +464,7 @@ public partial class SettingsWindow : Window
         _historyItems = entries.Select(e => new HistoryItemVM
         {
             Entry = e, ThumbPath = e.FilePath,
-            Dimensions = $"{e.Width} x {e.Height}",
+            Dimensions = e.Width > 0 ? $"{e.Width} x {e.Height}" : "",
             TimeAgo = FormatTimeAgo(e.CapturedAt)
         }).ToList();
 

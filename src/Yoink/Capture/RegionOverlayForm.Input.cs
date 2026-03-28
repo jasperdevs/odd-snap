@@ -346,10 +346,11 @@ public sealed partial class RegionOverlayForm
         // Font picker hover
         if (_fontPickerOpen)
         {
-            int itemH = 28, pad = 6;
-            int relY = e.Location.Y - _fontPickerRect.Y - pad;
+            int itemH = 28, pad = 6, searchBarH = 28;
+            int listY = _fontPickerRect.Y + pad + searchBarH + pad;
+            int relY = e.Location.Y - listY;
             int idx = _fontPickerScroll + relY / itemH;
-            int newHover = (relY >= 0 && idx < FontChoices.Length) ? idx : -1;
+            int newHover = (relY >= 0 && idx < GetFilteredFonts().Length) ? idx : -1;
             if (newHover != _fontPickerHovered) { _fontPickerHovered = newHover; toolbarDirty = true; }
         }
 
@@ -524,20 +525,13 @@ public sealed partial class RegionOverlayForm
     // ProcessCmdKey always receives ESC (OnKeyDown sometimes doesn't)
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (TryHandleAnnotationToolNumber(keyData))
-        {
-            RefreshToolbar();
-            Invalidate();
-            return true;
-        }
-
         if (keyData == Keys.Escape)
         {
             // Close all popups and transient state in one pass
             bool anyClosed = false;
             if (_mode == CaptureMode.ColorPicker) { CloseMagWindow(); anyClosed = true; }
             if (_emojiPickerOpen) { _emojiPickerOpen = false; anyClosed = true; }
-            if (_fontPickerOpen) { _fontPickerOpen = false; anyClosed = true; }
+            if (_fontPickerOpen) { _fontPickerOpen = false; _fontSearch = ""; _filteredFonts = null; anyClosed = true; }
             if (_colorPickerOpen) { _colorPickerOpen = false; anyClosed = true; }
             if (_isPlacingEmoji) { _isPlacingEmoji = false; _selectedEmoji = null; anyClosed = true; }
             if (_isRulerDragging) { _isRulerDragging = false; anyClosed = true; }
@@ -558,9 +552,6 @@ public sealed partial class RegionOverlayForm
                 anyClosed = true;
             }
             if (anyClosed) { Invalidate(); return true; }
-            if (_mode != CaptureMode.Rectangle && _mode != CaptureMode.Freeform
-                && _mode != CaptureMode.Ocr && _mode != CaptureMode.Scan)
-            { SetMode(CaptureMode.Rectangle); return true; }
             Cancel();
             return true;
         }
@@ -592,9 +583,17 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
-        // Font picker open
+        // Font picker search input
         if (_fontPickerOpen)
+        {
+            if (e.KeyCode == Keys.Back && _fontSearch.Length > 0)
+            {
+                _fontSearch = _fontSearch[..^1];
+                _filteredFonts = null; _fontPickerScroll = 0;
+                Invalidate();
+            }
             return;
+        }
 
         // Text input mode
         if (_isTyping)
@@ -610,17 +609,16 @@ public sealed partial class RegionOverlayForm
             }
             if (e.KeyCode == Keys.F && e.Control)
             {
-                _fontPickerOpen = !_fontPickerOpen; _fontPickerScroll = 0; Invalidate(); return;
+                _fontPickerOpen = !_fontPickerOpen; _fontPickerScroll = 0; _fontSearch = ""; _filteredFonts = null; Invalidate(); return;
             }
             return;
         }
-        if (e.KeyCode == Keys.D1) SetMode(CaptureMode.Rectangle);
-        if (e.KeyCode == Keys.D2) SetMode(CaptureMode.Freeform);
-        if (e.KeyCode == Keys.D3) SetMode(CaptureMode.Ocr);
-        if (e.KeyCode == Keys.D4) SetMode(CaptureMode.ColorPicker);
-        if (e.KeyCode == Keys.D5) SetMode(CaptureMode.Scan);
-
-        if (e.KeyCode == Keys.D0) SetMode(CaptureMode.Blur);
+        if (TryHandleAnnotationToolNumber(e.KeyCode))
+        {
+            RefreshToolbar();
+            Invalidate();
+            return;
+        }
 
         if (e.KeyCode == Keys.Z && e.Control && _undoStack.Count > 0)
         {
@@ -638,6 +636,14 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnKeyPress(KeyPressEventArgs e)
     {
+        if (_fontPickerOpen && !char.IsControl(e.KeyChar))
+        {
+            _fontSearch += e.KeyChar;
+            _filteredFonts = null; _fontPickerScroll = 0;
+            e.Handled = true;
+            Invalidate();
+            return;
+        }
         if (_emojiPickerOpen && !char.IsControl(e.KeyChar))
         {
             _emojiSearch += e.KeyChar;
@@ -745,14 +751,17 @@ public sealed partial class RegionOverlayForm
     {
         if (!_fontPickerRect.Contains(p)) return false;
 
-        int itemH = 28, pad = 6;
-        int relY = p.Y - _fontPickerRect.Y - pad;
+        int itemH = 28, pad = 6, searchBarH = 28;
+        int listY = _fontPickerRect.Y + pad + searchBarH + pad;
+        int relY = p.Y - listY;
         int idx = _fontPickerScroll + relY / itemH;
+        var fonts = GetFilteredFonts();
 
-        if (idx >= 0 && idx < FontChoices.Length)
+        if (relY >= 0 && idx >= 0 && idx < fonts.Length)
         {
-            _textFontFamily = FontChoices[idx];
+            _textFontFamily = fonts[idx];
             _fontPickerOpen = false;
+            _fontSearch = ""; _filteredFonts = null;
             Invalidate();
             return true;
         }
@@ -764,7 +773,7 @@ public sealed partial class RegionOverlayForm
         if (_fontPickerOpen)
         {
             int visibleCount = 8;
-            int maxScroll = Math.Max(0, FontChoices.Length - visibleCount);
+            int maxScroll = Math.Max(0, GetFilteredFonts().Length - visibleCount);
             _fontPickerScroll = Math.Clamp(_fontPickerScroll + (e.Delta > 0 ? -1 : 1), 0, maxScroll);
             Invalidate();
         }

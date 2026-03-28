@@ -71,11 +71,11 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
     /// <summary>All available tools in display order. Group 0=capture, 1=annotation.</summary>
     public static readonly ToolDef[] AllTools =
     {
-        new("rect",        "Rectangle",    '\uE257', CaptureMode.Rectangle,   0), // scan-line
-        new("free",        "Freeform",     '\uE1CE', CaptureMode.Freeform,    0), // lasso-select
+        new("rect",        "Rectangle Select", '\uE257', CaptureMode.Rectangle, 0), // scan-line
+        new("free",        "Freeform Select",  '\uE1CE', CaptureMode.Freeform,  0), // lasso-select
         new("picker",      "Color Picker", '\uE13E', CaptureMode.ColorPicker, 0), // pipette
         new("ocr",         "OCR",          '\uE53C', CaptureMode.Ocr,         0), // scan-text
-        new("scan",        "QR/Barcode",   '\uE537', CaptureMode.Scan,        0), // barcode
+        new("scan",        "QR/Barcode",   '\uE1DE', CaptureMode.Scan,        0), // qr-code
         new("ruler",       "Ruler",        '\uE14E', CaptureMode.Ruler,       1), // ruler
         new("highlight",   "Highlight",    '\uE0F7', CaptureMode.Highlight,   1), // highlighter
         new("rectShape",   "Rectangle",    '\uE16A', CaptureMode.RectShape,   1), // square

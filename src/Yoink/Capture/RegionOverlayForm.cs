@@ -132,12 +132,45 @@ public sealed partial class RegionOverlayForm : Form
     private Rectangle _fontPickerRect;
     private int _fontPickerHovered = -1;
     private int _fontPickerScroll;
-    private static readonly string[] FontChoices = {
-        "Segoe UI", "Arial", "Calibri", "Consolas", "Courier New",
-        "Comic Sans MS", "Georgia", "Impact", "Lucida Console",
-        "Tahoma", "Times New Roman", "Trebuchet MS", "Verdana",
-        "Cascadia Code", "Segoe UI Semibold"
-    };
+    private string _fontSearch = "";
+    private string[]? _filteredFonts;
+
+    // All system fonts, cached once
+    private static string[]? _allSystemFonts;
+    private static string[] GetSystemFonts()
+    {
+        if (_allSystemFonts != null) return _allSystemFonts;
+        using var fonts = new System.Drawing.Text.InstalledFontCollection();
+        _allSystemFonts = fonts.Families
+            .Select(f => f.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return _allSystemFonts;
+    }
+
+    private string[] GetFilteredFonts()
+    {
+        if (_filteredFonts != null) return _filteredFonts;
+        var all = GetSystemFonts();
+        if (string.IsNullOrEmpty(_fontSearch))
+        {
+            _filteredFonts = all;
+            return _filteredFonts;
+        }
+        var terms = _fontSearch.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        _filteredFonts = all.Where(f =>
+        {
+            foreach (var term in terms)
+                if (f.IndexOf(term, StringComparison.OrdinalIgnoreCase) < 0)
+                    return false;
+            return true;
+        }).ToArray();
+        return _filteredFonts;
+    }
+
+    // Font cache for picker rendering (avoid creating Font objects every paint)
+    private static readonly Dictionary<string, Font> _fontCache = new();
 
     // Emoji rendering (Direct2D for color emoji)
     private readonly EmojiRenderer _emojiRenderer = new();

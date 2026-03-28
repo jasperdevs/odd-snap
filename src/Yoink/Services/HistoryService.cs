@@ -84,6 +84,49 @@ public sealed class HistoryService
         PruneByRetention(HistoryRetentionPeriod.Never);
     }
 
+    /// <summary>
+    /// Scans one or more directories for image files not tracked in the index
+    /// and adds them so the history is complete. Call after Load().
+    /// </summary>
+    public void RecoverFromDirectories(params string[] dirs)
+    {
+        var tracked = new HashSet<string>(_entries.Select(e => e.FilePath), StringComparer.OrdinalIgnoreCase);
+        bool changed = false;
+
+        foreach (var dir in dirs)
+        {
+            if (!Directory.Exists(dir)) continue;
+            foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories))
+            {
+                var ext = Path.GetExtension(file).ToLowerInvariant();
+                if (ext is not (".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp")) continue;
+                if (tracked.Contains(file)) continue;
+
+                try
+                {
+                    var fi = new FileInfo(file);
+                    _entries.Add(new HistoryEntry
+                    {
+                        FileName = fi.Name,
+                        FilePath = file,
+                        CapturedAt = fi.CreationTime,
+                        Width = 0,
+                        Height = 0
+                    });
+                    tracked.Add(file);
+                    changed = true;
+                }
+                catch { }
+            }
+        }
+
+        if (changed)
+        {
+            _entries = _entries.OrderByDescending(e => e.CapturedAt).ToList();
+            SaveIndex();
+        }
+    }
+
     public bool CompressHistory { get; set; }
     public int JpegQuality { get; set; } = 85;
     public HistoryRetentionPeriod RetentionPeriod { get; set; } = HistoryRetentionPeriod.Never;
@@ -114,13 +157,6 @@ public sealed class HistoryService
             Width = screenshot.Width, Height = screenshot.Height
         };
         _entries.Insert(0, entry);
-
-        while (_entries.Count > 200)
-        {
-            var old = _entries[^1];
-            _entries.RemoveAt(_entries.Count - 1);
-            try { File.Delete(old.FilePath); } catch { }
-        }
         SaveIndex();
         return entry;
     }

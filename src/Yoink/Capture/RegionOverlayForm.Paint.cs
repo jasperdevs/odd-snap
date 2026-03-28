@@ -406,7 +406,7 @@ public sealed partial class RegionOverlayForm
             // Font info + font picker button
             using var sizeFont = new Font("Segoe UI", 8f);
             using var sizeBrush = new SolidBrush(Color.FromArgb(120, 255, 255, 255));
-            string fontInfo = $"{_textFontFamily}  {(int)_textFontSize}px {boldIndicator}  Ctrl+B  F=Font";
+            string fontInfo = $"{_textFontFamily}  {(int)_textFontSize}px {boldIndicator}  Ctrl+B  Ctrl+F=Font";
             g.DrawString(fontInfo, sizeFont, sizeBrush, textRect.Right + 4, textRect.Y);
         }
 
@@ -525,8 +525,10 @@ public sealed partial class RegionOverlayForm
 
     private void PaintFontPicker(Graphics g)
     {
+        var fonts = GetFilteredFonts();
         int itemH = 28, pad = 6, visibleCount = 8;
-        int pw = 200, ph = visibleCount * itemH + pad * 2;
+        int searchBarH = 28;
+        int pw = 240, ph = searchBarH + pad + visibleCount * itemH + pad * 2;
 
         // Position near the text input area
         int px, py;
@@ -553,12 +555,37 @@ public sealed partial class RegionOverlayForm
             g.DrawPath(border, bgPath);
         }
 
-        int maxScroll = Math.Max(0, FontChoices.Length - visibleCount);
-        for (int i = 0; i < visibleCount && (_fontPickerScroll + i) < FontChoices.Length; i++)
+        // Search bar
+        var searchRect = new Rectangle(px + pad, py + pad, pw - pad * 2, searchBarH);
+        using (var searchPath = RRect(searchRect, 6))
+        {
+            using var searchBg = new SolidBrush(Color.FromArgb(40, 255, 255, 255));
+            g.FillPath(searchBg, searchPath);
+            using var focusBorder = new Pen(Color.FromArgb(100, 255, 255, 255), 1f);
+            g.DrawPath(focusBorder, searchPath);
+        }
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        string searchDisplay = _fontSearch.Length > 0 ? _fontSearch : "Search fonts...";
+        using var searchBrush = new SolidBrush(_fontSearch.Length > 0
+            ? Color.FromArgb(230, 255, 255, 255) : Color.FromArgb(70, 255, 255, 255));
+        using var searchFont = new Font("Segoe UI", 10f);
+        g.DrawString(searchDisplay, searchFont, searchBrush, searchRect.X + 8, searchRect.Y + 5);
+        if (_fontSearch.Length > 0)
+        {
+            float cursorX = searchRect.X + 8 + g.MeasureString(_fontSearch, searchFont).Width - 2;
+            using var cursorPen = new Pen(Color.FromArgb(200, 255, 255, 255), 1.5f);
+            g.DrawLine(cursorPen, cursorX, searchRect.Y + 7, cursorX, searchRect.Bottom - 7);
+        }
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
+
+        // Font list
+        int listY = py + pad + searchBarH + pad;
+        int maxScroll = Math.Max(0, fonts.Length - visibleCount);
+        for (int i = 0; i < visibleCount && (_fontPickerScroll + i) < fonts.Length; i++)
         {
             int idx = _fontPickerScroll + i;
-            string name = FontChoices[idx];
-            int iy = py + pad + i * itemH;
+            string name = fonts[idx];
+            int iy = listY + i * itemH;
             bool active = name == _textFontFamily;
             bool hovered = idx == _fontPickerHovered;
 
@@ -571,21 +598,27 @@ public sealed partial class RegionOverlayForm
                 g.FillPath(itemBg, itemPath);
             }
 
-            using var font = new Font(name, 11f);
+            // Cache font objects for perf
+            if (!_fontCache.TryGetValue(name, out var font))
+            {
+                try { font = new Font(name, 11f); }
+                catch { font = new Font("Segoe UI", 11f); }
+                _fontCache[name] = font;
+            }
             using var brush = new SolidBrush(Color.FromArgb(active ? 255 : 180, 255, 255, 255));
             g.DrawString(name, font, brush, px + pad + 6, iy + 4);
         }
 
         // Scroll indicator
-        if (FontChoices.Length > visibleCount)
+        if (fonts.Length > visibleCount)
         {
-            int trackH = ph - pad * 2;
+            int trackH = visibleCount * itemH - 4;
             int trackX = px + pw - pad - 3;
-            int trackY = py + pad;
+            int trackY = listY + 2;
             using var trackBrush = new SolidBrush(Color.FromArgb(20, 255, 255, 255));
             g.FillRectangle(trackBrush, trackX, trackY, 3, trackH);
-            int thumbH = Math.Max(10, trackH * visibleCount / FontChoices.Length);
-            int thumbY = trackY + (int)((float)_fontPickerScroll / maxScroll * (trackH - thumbH));
+            int thumbH = Math.Max(10, trackH * visibleCount / fonts.Length);
+            int thumbY = maxScroll > 0 ? trackY + (int)((float)_fontPickerScroll / maxScroll * (trackH - thumbH)) : trackY;
             using var thumbBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
             g.FillRectangle(thumbBrush, trackX, thumbY, 3, thumbH);
         }

@@ -38,6 +38,10 @@ public partial class App : Application
 
         _historyService = new HistoryService();
         _historyService.Load();
+        // Recover captures from save directory + history dir that aren't in the index
+        _historyService.RecoverFromDirectories(
+            _settingsService.Settings.SaveDirectory,
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history"));
         _historyService.CompressHistory = _settingsService.Settings.CompressHistory;
         _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
         _historyService.PruneByRetention(_settingsService.Settings.HistoryRetention);
@@ -196,7 +200,7 @@ public partial class App : Application
                                 var text = BarcodeService.Decode(clone);
                                 if (!string.IsNullOrWhiteSpace(text))
                                 {
-                                    SoundService.PlayTextSound();
+                                    SoundService.PlayScanSound();
                                     System.Windows.Clipboard.SetText(text);
                                     var prev = text.Length > 100 ? text[..100] + "..." : text;
                                     ToastWindow.Show("Code copied", prev);

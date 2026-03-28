@@ -8,13 +8,14 @@ public static class SoundService
     private static byte[]? _captureWav;
     private static byte[]? _colorWav;
     private static byte[]? _textWav;
+    private static byte[]? _scanWav;
 
     public static bool Muted { get; set; }
 
     public static void PlayCaptureSound()
     {
         if (Muted) return;
-        _captureWav ??= GenerateClickWav();
+        _captureWav ??= GenerateCaptureWav();
         PlayAsync(_captureWav);
     }
 
@@ -32,7 +33,13 @@ public static class SoundService
         PlayAsync(_textWav);
     }
 
-    // Play on a background thread so it doesn't get killed with the caller.
+    public static void PlayScanSound()
+    {
+        if (Muted) return;
+        _scanWav ??= GenerateScanWav();
+        PlayAsync(_scanWav);
+    }
+
     private static void PlayAsync(byte[] wav)
     {
         var thread = new Thread(() =>
@@ -49,74 +56,118 @@ public static class SoundService
         thread.Start();
     }
 
-    private static byte[] GenerateClickWav()
+    /// <summary>Capture: crisp camera-shutter click (short noise burst + resonant tap)</summary>
+    private static byte[] GenerateCaptureWav()
     {
         const int sampleRate = 44100;
-        const int durationMs = 50;
+        const int durationMs = 80;
         int numSamples = sampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
         WriteWavHeader(bw, numSamples, sampleRate);
 
+        var rng = new Random(42);
         for (int i = 0; i < numSamples; i++)
         {
             double t = (double)i / sampleRate;
-            double envelope = Math.Exp(-t * 80);
-            double sample = Math.Sin(2 * Math.PI * 800 * t) * envelope * 0.5;
+            // Short noise burst (mechanical click)
+            double noise = (rng.NextDouble() * 2 - 1) * Math.Exp(-t * 200) * 0.25;
+            // Resonant body tap
+            double tone = Math.Sin(2 * Math.PI * 1200 * t) * Math.Exp(-t * 100) * 0.4;
+            // Sub-thump for weight
+            double sub = Math.Sin(2 * Math.PI * 300 * t) * Math.Exp(-t * 60) * 0.2;
+            double sample = Math.Clamp(noise + tone + sub, -1.0, 1.0);
             bw.Write((short)(sample * short.MaxValue));
         }
-
         return ms.ToArray();
     }
 
+    /// <summary>Color pick: gentle two-note pip (ascending, glassy)</summary>
     private static byte[] GenerateColorWav()
     {
         const int sampleRate = 44100;
-        const int durationMs = 120;
+        const int durationMs = 140;
         int numSamples = sampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
         WriteWavHeader(bw, numSamples, sampleRate);
 
-        double totalDuration = durationMs / 1000.0;
+        double dur = durationMs / 1000.0;
         for (int i = 0; i < numSamples; i++)
         {
             double t = (double)i / sampleRate;
-            double envelope = Math.Exp(-t * 25);
-            // Two quick ascending tones
-            double freq = t < (totalDuration * 0.4) ? 1100 : 1500;
-            double sample = Math.Sin(2 * Math.PI * freq * t) * envelope * 0.5;
-            bw.Write((short)(sample * short.MaxValue));
+            // Two notes: E6 then A6 with soft crossfade
+            double split = dur * 0.4;
+            double freq = t < split ? 1319 : 1760;
+            double env = t < split
+                ? Math.Exp(-(t) * 20)
+                : Math.Exp(-(t - split) * 25);
+            // Pure sine + soft harmonic for glassy quality
+            double sample = (Math.Sin(2 * Math.PI * freq * t) * 0.6
+                           + Math.Sin(2 * Math.PI * freq * 2 * t) * 0.15) * env * 0.4;
+            bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
         }
-
         return ms.ToArray();
     }
 
+    /// <summary>Text/OCR copy: soft descending chime</summary>
     private static byte[] GenerateTextWav()
     {
         const int sampleRate = 44100;
-        const int durationMs = 100;
+        const int durationMs = 110;
         int numSamples = sampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
         WriteWavHeader(bw, numSamples, sampleRate);
 
-        double totalDuration = durationMs / 1000.0;
+        double dur = durationMs / 1000.0;
         for (int i = 0; i < numSamples; i++)
         {
             double t = (double)i / sampleRate;
-            double envelope = Math.Exp(-t * 30);
-            // Descending sweep from 900Hz to 500Hz
-            double freq = 900 - (400 * t / totalDuration);
-            double sample = (Math.Sin(2 * Math.PI * freq * t) * 0.7
-                           + Math.Sin(2 * Math.PI * freq * 1.5 * t) * 0.3)
-                           * envelope * 0.5;
-            bw.Write((short)(sample * short.MaxValue));
+            double env = Math.Exp(-t * 35);
+            // Gentle descending sweep (B5 to G5)
+            double freq = 988 - (396 * t / dur);
+            double sample = (Math.Sin(2 * Math.PI * freq * t) * 0.55
+                           + Math.Sin(2 * Math.PI * freq * 1.5 * t) * 0.2) * env * 0.4;
+            bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
         }
+        return ms.ToArray();
+    }
 
+    /// <summary>QR/Barcode scan: quick triple-beep like a barcode scanner</summary>
+    private static byte[] GenerateScanWav()
+    {
+        const int sampleRate = 44100;
+        const int durationMs = 180;
+        int numSamples = sampleRate * durationMs / 1000;
+
+        using var ms = new MemoryStream();
+        using var bw = new BinaryWriter(ms);
+        WriteWavHeader(bw, numSamples, sampleRate);
+
+        double dur = durationMs / 1000.0;
+        double beepLen = dur / 4.0;
+        for (int i = 0; i < numSamples; i++)
+        {
+            double t = (double)i / sampleRate;
+            // Three short beeps at ascending pitches
+            double sample = 0;
+            for (int b = 0; b < 3; b++)
+            {
+                double start = b * beepLen * 1.2;
+                double local = t - start;
+                if (local >= 0 && local < beepLen)
+                {
+                    double freq = 1400 + b * 200; // 1400, 1600, 1800 Hz
+                    double env = Math.Sin(Math.PI * local / beepLen); // smooth on/off
+                    sample += Math.Sin(2 * Math.PI * freq * local) * env * 0.3;
+                }
+            }
+            bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
+        }
         return ms.ToArray();
     }
 
