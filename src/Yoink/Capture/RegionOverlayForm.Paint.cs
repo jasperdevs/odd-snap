@@ -466,9 +466,7 @@ public sealed partial class RegionOverlayForm
     private void PaintEmojiPicker(Graphics g)
     {
         // Filter emojis by search
-        var filtered = string.IsNullOrEmpty(_emojiSearch)
-            ? EmojiPalette
-            : EmojiPalette.Where(e => e.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var filtered = GetFilteredEmojiPalette();
 
         int cols = 8, emojiSize = 32, pad = 6;
         int visibleRows = 4;

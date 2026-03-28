@@ -6,6 +6,11 @@ namespace Yoink.Capture;
 
 public sealed partial class RegionOverlayForm
 {
+    private (string emoji, string name)[] GetFilteredEmojiPalette() =>
+        string.IsNullOrEmpty(_emojiSearch)
+            ? EmojiPalette
+            : EmojiPalette.Where(em => em.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         Focus();
@@ -215,6 +220,7 @@ public sealed partial class RegionOverlayForm
     protected override void OnMouseMove(MouseEventArgs e)
     {
         bool needsRepaint = false;
+        bool crosshairOnly = false;
 
         // Text move drag
         if (_textDragging && _isTyping)
@@ -267,7 +273,10 @@ public sealed partial class RegionOverlayForm
             { if (!Cursor.Equals(Cursors.Cross)) Cursor = Cursors.Cross; }
 
         if (ShowCrosshairGuides)
+        {
             needsRepaint = true;
+            crosshairOnly = true;
+        }
         _lastCursorPos = e.Location;
 
         switch (_mode)
@@ -281,6 +290,7 @@ public sealed partial class RegionOverlayForm
                     _autoDetectRect = detected;
                     _autoDetectActive = detected.Width > 0;
                     needsRepaint = true;
+                    crosshairOnly = false;
                 }
                 break;
             case CaptureMode.Rectangle when _isSelecting:
@@ -291,40 +301,51 @@ public sealed partial class RegionOverlayForm
                 if (_selectionRect.Width > 3 || _selectionRect.Height > 3) _hasDragged = true;
                 _hasSelection = _selectionRect.Width > 2 && _selectionRect.Height > 2;
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Freeform when _isSelecting:
                 _freeformPoints.Add(e.Location);
                 _hasDragged = true;
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Highlight when _isHighlighting:
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Magnifier:
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Draw when _isSelecting:
                 _currentStroke?.Add(e.Location);
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Line when _isLineDragging:
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Arrow when _isArrowDragging:
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.CurvedArrow when _isCurvedArrowDragging:
                 _currentCurvedArrow?.Add(e.Location);
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Blur when _isBlurring:
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Eraser when _isEraserDragging:
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
             case CaptureMode.Emoji when _isPlacingEmoji:
                 needsRepaint = true;
+                crosshairOnly = false;
                 break;
         }
 
@@ -335,15 +356,13 @@ public sealed partial class RegionOverlayForm
             int relY = e.Location.Y - _fontPickerRect.Y - pad;
             int idx = _fontPickerScroll + relY / itemH;
             int newHover = (relY >= 0 && idx < FontChoices.Length) ? idx : -1;
-            if (newHover != _fontPickerHovered) { _fontPickerHovered = newHover; needsRepaint = true; }
+            if (newHover != _fontPickerHovered) { _fontPickerHovered = newHover; needsRepaint = true; crosshairOnly = false; }
         }
 
         // Emoji picker hover
         if (_emojiPickerOpen)
         {
-            var filtered = string.IsNullOrEmpty(_emojiSearch)
-                ? EmojiPalette
-                : EmojiPalette.Where(em => em.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var filtered = GetFilteredEmojiPalette();
             int cols = 8, emojiSize = 32, pad = 6;
             int searchBarH = 28;
             int gridY = _emojiPickerRect.Y + pad + searchBarH + pad;
@@ -353,11 +372,21 @@ public sealed partial class RegionOverlayForm
             int row = relY / (emojiSize + pad);
             int idx = (_emojiScrollOffset + row) * cols + col;
             int newHover = (col >= 0 && col < cols && relY >= 0 && idx < filtered.Length) ? idx : -1;
-            if (newHover != _emojiHovered) { _emojiHovered = newHover; needsRepaint = true; }
+            if (newHover != _emojiHovered) { _emojiHovered = newHover; needsRepaint = true; crosshairOnly = false; }
         }
 
         if (needsRepaint)
-            Invalidate();
+        {
+            if (crosshairOnly && _lastCursorPos != Point.Empty)
+            {
+                Invalidate(new Rectangle(_lastCursorPos.X - 3, 0, 7, ClientSize.Height));
+                Invalidate(new Rectangle(0, _lastCursorPos.Y - 3, ClientSize.Width, 7));
+            }
+            else
+            {
+                Invalidate();
+            }
+        }
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -708,9 +737,7 @@ public sealed partial class RegionOverlayForm
     {
         if (!_emojiPickerRect.Contains(p)) return false;
 
-        var filtered = string.IsNullOrEmpty(_emojiSearch)
-            ? EmojiPalette
-            : EmojiPalette.Where(e => e.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var filtered = GetFilteredEmojiPalette();
 
         int cols = 8, emojiSize = 32, pad = 6;
         int searchBarH = 28;
