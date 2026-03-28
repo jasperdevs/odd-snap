@@ -30,8 +30,7 @@ public sealed partial class RegionOverlayForm
 
         bool isOcr = _mode == CaptureMode.Ocr;
         bool isScan = _mode == CaptureMode.Scan;
-        bool isLens = _mode == CaptureMode.GoogleLens;
-        bool isSelectionMode = _mode == CaptureMode.Rectangle || _mode == CaptureMode.Ocr || _mode == CaptureMode.Scan || _mode == CaptureMode.GoogleLens;
+        bool isSelectionMode = _mode == CaptureMode.Rectangle || _mode == CaptureMode.Ocr || _mode == CaptureMode.Scan;
 
         // Screen dim: dark outside selection, clear inside, light dim when no selection
         if (_hasSelection && isSelectionMode)
@@ -81,7 +80,6 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Rectangle when _hasSelection:
             case CaptureMode.Ocr when _hasSelection:
             case CaptureMode.Scan when _hasSelection:
-            case CaptureMode.GoogleLens when _hasSelection:
                 // Subtle outer shadow
                 using (var shadowPen = new Pen(Color.FromArgb(40, 0, 0, 0), 4f))
                 {
@@ -94,7 +92,7 @@ public sealed partial class RegionOverlayForm
                 {
                     g.DrawRectangle(marchPen, _selectionRect);
                 }
-                DrawLabel(g, _selectionRect, isOcr, isScan, isLens);
+                DrawLabel(g, _selectionRect, isOcr, isScan);
                 _lastSelectionRect = _selectionRect;
                 break;
 
@@ -856,14 +854,16 @@ public sealed partial class RegionOverlayForm
 
         if (_showToolNumberBadges && _hoveredButton >= 0)
         {
-            // Annotation tool hotkey badges: Ruler through Emoji
-            int badgeIndex = 1;
+            // Annotation tool hotkey badges using key labels from AnnotationKeyMap
+            int badgeIndex = 0;
             for (int i = 0; i < toolCount; i++)
             {
                 var mode = modes[i];
                 if (mode is null) continue;
                 if (!IsAnnotationNumberBadgeMode(mode.Value)) continue;
+                if (badgeIndex >= AnnotationKeyMap.Length) break;
 
+                string label = AnnotationKeyMap[badgeIndex].label;
                 var btn = _toolbarButtons[i];
                 var badgeRect = new RectangleF(btn.Right - 9, btn.Bottom - 9, 12, 12);
                 using var badgeBg = new SolidBrush(Color.FromArgb(235, 24, 24, 24));
@@ -873,7 +873,7 @@ public sealed partial class RegionOverlayForm
                 g.FillEllipse(badgeBg, badgeRect);
                 g.DrawEllipse(badgeBorder, badgeRect);
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                g.DrawString(badgeIndex.ToString(), badgeFont, badgeText, badgeRect, _iconFmt);
+                g.DrawString(label, badgeFont, badgeText, badgeRect, _iconFmt);
                 g.TextRenderingHint = TextRenderingHint.SystemDefault;
                 badgeIndex++;
             }
@@ -899,25 +899,26 @@ public sealed partial class RegionOverlayForm
     // Fixed button glyphs (not in ToolDef)
     private static readonly Dictionary<string, char> FixedGlyphs = new()
     {
-        ["gear"]  = '\uF42B',
-        ["close"] = '\uF642',
+        ["gear"]  = '\uE157', // lucide settings
+        ["close"] = '\uE1B1', // lucide x
     };
 
-    private static System.Drawing.Text.PrivateFontCollection? _phosphorFonts;
-    private static FontFamily? _phosphorFamily;
+    private static System.Drawing.Text.PrivateFontCollection? _iconFontCollection;
+    private static Font? _iconFontCached;
 
-    private static FontFamily GetPhosphorFamily()
+    private static Font GetIconFont()
     {
-        if (_phosphorFamily != null) return _phosphorFamily;
-        _phosphorFonts = new System.Drawing.Text.PrivateFontCollection();
+        if (_iconFontCached != null) return _iconFontCached;
+        _iconFontCollection = new System.Drawing.Text.PrivateFontCollection();
         string dir = AppContext.BaseDirectory;
-        string path = System.IO.Path.Combine(dir, "Phosphor.ttf");
+        string path = System.IO.Path.Combine(dir, "lucide.ttf");
         if (System.IO.File.Exists(path))
-            _phosphorFonts.AddFontFile(path);
-        _phosphorFamily = _phosphorFonts.Families.Length > 0
-            ? _phosphorFonts.Families[0]
+            _iconFontCollection.AddFontFile(path);
+        var family = _iconFontCollection.Families.Length > 0
+            ? _iconFontCollection.Families[0]
             : new FontFamily("Segoe UI");
-        return _phosphorFamily;
+        _iconFontCached = new Font(family, 14f, FontStyle.Regular, GraphicsUnit.Point);
+        return _iconFontCached;
     }
 
     private static readonly StringFormat _iconFmt = new(StringFormat.GenericTypographic)
@@ -927,33 +928,36 @@ public sealed partial class RegionOverlayForm
         FormatFlags = StringFormatFlags.NoClip
     };
 
+    // Cached lookup for icon id -> glyph char (avoids LINQ FirstOrDefault per paint)
+    private static Dictionary<string, char>? _iconGlyphCache;
+    private static Dictionary<string, char> GetIconGlyphMap()
+    {
+        if (_iconGlyphCache != null) return _iconGlyphCache;
+        _iconGlyphCache = new Dictionary<string, char>(ToolDef.AllTools.Length + FixedGlyphs.Count);
+        foreach (var t in ToolDef.AllTools)
+            _iconGlyphCache[t.Id] = t.Icon;
+        foreach (var kv in FixedGlyphs)
+            _iconGlyphCache[kv.Key] = kv.Value;
+        return _iconGlyphCache;
+    }
+
     private static void DrawIcon(Graphics g, string icon, Rectangle b, Color c)
     {
         if (icon == "color") return;
-
-        // Look up glyph from ToolDef first, then fixed buttons
-        char glyph;
-        var toolDef = ToolDef.AllTools.FirstOrDefault(t => t.Id == icon);
-        if (toolDef != null)
-            glyph = toolDef.Icon;
-        else if (!FixedGlyphs.TryGetValue(icon, out glyph))
-            return;
+        if (!GetIconGlyphMap().TryGetValue(icon, out char glyph)) return;
 
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        using var font = new Font(GetPhosphorFamily(), 14f, FontStyle.Regular, GraphicsUnit.Point);
+        var font = GetIconFont();
         using var brush = new SolidBrush(c);
-
-        // Use GenericTypographic + center alignment for pixel-accurate centering
         var rect = new RectangleF(b.X, b.Y, b.Width, b.Height);
         g.DrawString(glyph.ToString(), font, brush, rect, _iconFmt);
         g.TextRenderingHint = TextRenderingHint.SystemDefault;
     }
 
-    private void DrawLabel(Graphics g, Rectangle rect, bool isOcr, bool isScan = false, bool isLens = false)
+    private void DrawLabel(Graphics g, Rectangle rect, bool isOcr, bool isScan = false)
     {
         string text = isOcr ? $"OCR  {rect.Width} x {rect.Height}"
             : isScan ? $"SCAN  {rect.Width} x {rect.Height}"
-            : isLens ? $"LENS  {rect.Width} x {rect.Height}"
             : $"{rect.Width} x {rect.Height}";
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         using var font = new Font("Segoe UI", 10f);

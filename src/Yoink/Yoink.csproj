@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <Resource Include="yoink.ico" />
-    <Content Include="Phosphor.ttf">
+    <Content Include="lucide.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

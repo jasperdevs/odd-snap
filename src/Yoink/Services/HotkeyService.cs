@@ -10,20 +10,17 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_PICKER = 9003;
     private const int HOTKEY_SCAN = 9004;
     private const int HOTKEY_RULER = 9005;
-    private const int HOTKEY_LENS = 9006;
     private bool _captureRegistered;
     private bool _ocrRegistered;
     private bool _pickerRegistered;
     private bool _scanRegistered;
     private bool _rulerRegistered;
-    private bool _lensRegistered;
 
     public event Action? HotkeyPressed;
     public event Action? OcrHotkeyPressed;
     public event Action? PickerHotkeyPressed;
     public event Action? ScanHotkeyPressed;
     public event Action? RulerHotkeyPressed;
-    public event Action? LensHotkeyPressed;
 
     public bool Register(uint modifiers, uint key)
     {
@@ -66,14 +63,6 @@ public sealed class HotkeyService : IDisposable
         return _rulerRegistered;
     }
 
-    public bool RegisterLens(uint modifiers, uint key)
-    {
-        if (modifiers == 0 || key == 0) { _lensRegistered = false; return true; }
-        _lensRegistered = User32.RegisterHotKey(
-            IntPtr.Zero, HOTKEY_LENS, modifiers | User32.MOD_NOREPEAT, key);
-        return _lensRegistered;
-    }
-
     public void Unregister()
     {
         if (_captureRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_CAPTURE); _captureRegistered = false; }
@@ -81,7 +70,6 @@ public sealed class HotkeyService : IDisposable
         if (_pickerRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_PICKER); _pickerRegistered = false; }
         if (_scanRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCAN); _scanRegistered = false; }
         if (_rulerRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_RULER); _rulerRegistered = false; }
-        if (_lensRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_LENS); _lensRegistered = false; }
         ComponentDispatcher.ThreadPreprocessMessage -= OnMsg;
     }
 
@@ -94,7 +82,7 @@ public sealed class HotkeyService : IDisposable
         else if (id == HOTKEY_PICKER) { PickerHotkeyPressed?.Invoke(); handled = true; }
         else if (id == HOTKEY_SCAN) { ScanHotkeyPressed?.Invoke(); handled = true; }
         else if (id == HOTKEY_RULER) { RulerHotkeyPressed?.Invoke(); handled = true; }
-        else if (id == HOTKEY_LENS) { LensHotkeyPressed?.Invoke(); handled = true; }
+
     }
 
     public void Dispose() => Unregister();

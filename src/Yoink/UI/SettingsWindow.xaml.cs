@@ -93,7 +93,7 @@ public partial class SettingsWindow : Window
         PickerHotkeyBox.Text = HotkeyFormatter.Format(s.PickerHotkeyModifiers, s.PickerHotkeyKey);
         ScanHotkeyBox.Text = HotkeyFormatter.Format(s.ScanHotkeyModifiers, s.ScanHotkeyKey);
         RulerHotkeyBox.Text = HotkeyFormatter.Format(s.RulerHotkeyModifiers, s.RulerHotkeyKey);
-        LensHotkeyBox.Text = HotkeyFormatter.Format(s.LensHotkeyModifiers, s.LensHotkeyKey);
+
         DefaultCaptureModeCombo.SelectedIndex = s.DefaultCaptureMode == Yoink.Models.CaptureMode.Freeform ? 1 : 0;
         AfterCaptureCombo.SelectedIndex = (int)s.AfterCapture;
         SaveToFileCheck.IsChecked = s.SaveToFile;
@@ -214,9 +214,7 @@ public partial class SettingsWindow : Window
         RecordHotkey(RulerHotkeyBox,
             s => s.RulerHotkeyModifiers, s => s.RulerHotkeyKey,
             (s, m, k) => { s.RulerHotkeyModifiers = m; s.RulerHotkeyKey = k; });
-        RecordHotkey(LensHotkeyBox,
-            s => s.LensHotkeyModifiers, s => s.LensHotkeyKey,
-            (s, m, k) => { s.LensHotkeyModifiers = m; s.LensHotkeyKey = k; });
+
     }
 
     private void RecordHotkey(
@@ -269,9 +267,7 @@ public partial class SettingsWindow : Window
     private void RulerHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
     private void RulerHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
     private void RulerHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
-    private void LensHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
-    private void LensHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
-    private void LensHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
+
 
     private void ClearCaptureHotkey_Click(object sender, RoutedEventArgs e)
     {
@@ -315,15 +311,6 @@ public partial class SettingsWindow : Window
         _settingsService.Settings.RulerHotkeyKey = 0;
         _settingsService.Save();
         RulerHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
-        HotkeyChanged?.Invoke();
-    }
-
-    private void ClearLensHotkey_Click(object sender, RoutedEventArgs e)
-    {
-        _settingsService.Settings.LensHotkeyModifiers = 0;
-        _settingsService.Settings.LensHotkeyKey = 0;
-        _settingsService.Save();
-        LensHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
         HotkeyChanged?.Invoke();
     }
 

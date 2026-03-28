@@ -306,26 +306,7 @@
                         </Grid>
                     </Border>
 
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Google Lens hotkey" FontSize="13"/>
-                                <TextBlock Text="Optional, disabled by default" FontSize="11" Opacity="0.3"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <TextBox x:Name="LensHotkeyBox" IsReadOnly="True"
-                                         FontSize="12" Padding="10,5" MinWidth="115" TextAlignment="Center"
-                                         PreviewKeyDown="LensHotkeyBox_PreviewKeyDown"
-                                         GotFocus="LensHotkeyBox_GotFocus" LostFocus="LensHotkeyBox_LostFocus"/>
-                                <Button Content="X" Width="28" Height="28" Margin="6,0,0,0"
-                                        FontSize="11" Click="ClearLensHotkey_Click"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel>

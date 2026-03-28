@@ -69,7 +69,7 @@ public partial class App : Application
         _hotkeyService.PickerHotkeyPressed += OnPickerHotkeyPressed;
         _hotkeyService.ScanHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Scan);
         _hotkeyService.RulerHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Ruler);
-        _hotkeyService.LensHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.GoogleLens);
+
 
         var s = _settingsService!.Settings;
         bool ok = _hotkeyService.Register(s.HotkeyModifiers, s.HotkeyKey);
@@ -77,7 +77,7 @@ public partial class App : Application
         _hotkeyService.RegisterPicker(s.PickerHotkeyModifiers, s.PickerHotkeyKey);
         _hotkeyService.RegisterScan(s.ScanHotkeyModifiers, s.ScanHotkeyKey);
         _hotkeyService.RegisterRuler(s.RulerHotkeyModifiers, s.RulerHotkeyKey);
-        _hotkeyService.RegisterLens(s.LensHotkeyModifiers, s.LensHotkeyKey);
+
 
         var name = HotkeyFormatter.Format(s.HotkeyModifiers, s.HotkeyKey);
         if (!ok)
@@ -189,36 +189,21 @@ public partial class App : Application
                         using var annotated = overlay.RenderAnnotatedBitmap();
                         using var cropped = ScreenCapture.CropRegion(annotated, sel);
                         var clone = new Bitmap(cropped);
-                        bool useLens = overlay.CurrentMode == CaptureMode.GoogleLens;
                         Dispatcher.BeginInvoke(() =>
                         {
                             try
                             {
-                                if (useLens)
+                                var text = BarcodeService.Decode(clone);
+                                if (!string.IsNullOrWhiteSpace(text))
                                 {
-                                    var tempPath = Path.Combine(Path.GetTempPath(), $"yoink_lens_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-                                    clone.Save(tempPath, ImageFormat.Png);
-                                    Process.Start(new ProcessStartInfo
-                                    {
-                                        FileName = tempPath,
-                                        UseShellExecute = true
-                                    });
-                                    ToastWindow.Show("Google Lens", "Saved temp image; upload it in browser");
+                                    SoundService.PlayTextSound();
+                                    System.Windows.Clipboard.SetText(text);
+                                    var prev = text.Length > 100 ? text[..100] + "..." : text;
+                                    ToastWindow.Show("Code copied", prev);
                                 }
                                 else
                                 {
-                                    var text = BarcodeService.Decode(clone);
-                                    if (!string.IsNullOrWhiteSpace(text))
-                                    {
-                                        SoundService.PlayTextSound();
-                                        System.Windows.Clipboard.SetText(text);
-                                        var prev = text.Length > 100 ? text[..100] + "..." : text;
-                                        ToastWindow.Show("Code copied", prev);
-                                    }
-                                    else
-                                    {
-                                        ToastWindow.Show("Scan", "No QR/barcode found");
-                                    }
+                                    ToastWindow.Show("Scan", "No QR/barcode found");
                                 }
                             }
                             finally

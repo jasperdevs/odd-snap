@@ -41,8 +41,7 @@ public sealed class AppSettings
     public uint ScanHotkeyKey { get; set; }
     public uint RulerHotkeyModifiers { get; set; }
     public uint RulerHotkeyKey { get; set; }
-    public uint LensHotkeyModifiers { get; set; }
-    public uint LensHotkeyKey { get; set; }
+
 
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.ShowPreview;
     public bool SaveToFile { get; set; } = true;
@@ -72,26 +71,25 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
     /// <summary>All available tools in display order. Group 0=capture, 1=annotation.</summary>
     public static readonly ToolDef[] AllTools =
     {
-        new("rect",        "Rectangle",    '\uF551', CaptureMode.Rectangle,   0),
-        new("free",        "Freeform",     '\uF564', CaptureMode.Freeform,    0),
-        new("picker",      "Color Picker", '\uF3C9', CaptureMode.ColorPicker, 0),
-        new("ocr",         "OCR",          '\uF561', CaptureMode.Ocr,         0),
-        new("scan",        "QR Code/Barcode Scanner", '\uF8C5', CaptureMode.Scan, 0),
-        new("lens",        "Google Lens",  '\uF4AC', CaptureMode.GoogleLens,  0),
-        new("ruler",       "Ruler",        '\uE6B8', CaptureMode.Ruler,       1),
-        new("highlight",   "Highlight",    '\uF466', CaptureMode.Highlight,   1),
-        new("rectShape",   "Rectangle Shape", '\uE3F0', CaptureMode.RectShape, 1),
-        new("circleShape", "Circle Shape", '\uE18A', CaptureMode.CircleShape, 1),
-        new("draw",        "Draw",         '\uF513', CaptureMode.Draw,        1),
-        new("line",        "Line",         '\uF48D', CaptureMode.Line,        1),
-        new("arrow",       "Arrow",        '\uF2A0', CaptureMode.Arrow,       1),
-        new("curvedArrow", "Curved Arrow", '\uF2DB', CaptureMode.CurvedArrow, 1),
-        new("text",        "Text",         '\uF5E8', CaptureMode.Text,        1),
-        new("step",        "Step Number",  '\uF4DC', CaptureMode.StepNumber,  1),
-        new("blur",        "Blur",         '\uF44B', CaptureMode.Blur,        1),
-        new("eraser",      "Eraser",       '\uF3C3', CaptureMode.Eraser,      1),
-        new("magnifier",   "Magnifier",    '\uF4A8', CaptureMode.Magnifier,   1),
-        new("emoji",       "Emoji",        '\uF58E', CaptureMode.Emoji,       1),
+        new("rect",        "Rectangle",    '\uE257', CaptureMode.Rectangle,   0), // scan-line
+        new("free",        "Freeform",     '\uE1CE', CaptureMode.Freeform,    0), // lasso-select
+        new("picker",      "Color Picker", '\uE13E', CaptureMode.ColorPicker, 0), // pipette
+        new("ocr",         "OCR",          '\uE53C', CaptureMode.Ocr,         0), // scan-text
+        new("scan",        "QR/Barcode",   '\uE537', CaptureMode.Scan,        0), // barcode
+        new("ruler",       "Ruler",        '\uE14E', CaptureMode.Ruler,       1), // ruler
+        new("highlight",   "Highlight",    '\uE0F7', CaptureMode.Highlight,   1), // highlighter
+        new("rectShape",   "Rectangle",    '\uE16A', CaptureMode.RectShape,   1), // square
+        new("circleShape", "Circle",       '\uE07A', CaptureMode.CircleShape, 1), // circle
+        new("draw",        "Draw",         '\uE1F8', CaptureMode.Draw,        1), // pencil
+        new("line",        "Line",         '\uE11F', CaptureMode.Line,        1), // minus
+        new("arrow",       "Arrow",        '\uE051', CaptureMode.Arrow,       1), // arrow-up-right
+        new("curvedArrow", "Curved Arrow", '\uE146', CaptureMode.CurvedArrow, 1), // redo
+        new("text",        "Text",         '\uE197', CaptureMode.Text,        1), // type
+        new("step",        "Step Number",  '\uE1D0', CaptureMode.StepNumber,  1), // list-ordered
+        new("blur",        "Blur",         '\uE5A0', CaptureMode.Blur,        1), // blend
+        new("eraser",      "Eraser",       '\uE28E', CaptureMode.Eraser,      1), // eraser
+        new("magnifier",   "Magnifier",    '\uE154', CaptureMode.Magnifier,   1), // search
+        new("emoji",       "Emoji",        '\uE167', CaptureMode.Emoji,       1), // smile
     };
 
     public static List<string> DefaultEnabledIds() =>

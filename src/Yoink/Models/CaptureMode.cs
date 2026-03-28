@@ -7,7 +7,7 @@ public enum CaptureMode
     ColorPicker,
     Ocr,
     Scan,
-    GoogleLens,
+
     Ruler,
     Draw,
     Highlight,

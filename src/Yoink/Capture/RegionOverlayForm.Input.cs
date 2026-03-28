@@ -142,7 +142,6 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Rectangle:
             case CaptureMode.Ocr:
             case CaptureMode.Scan:
-            case CaptureMode.GoogleLens:
                 _isSelecting = true;
                 _selectionStart = _selectionEnd = e.Location;
                 _hasSelection = false;
@@ -299,7 +298,6 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Rectangle when !_isSelecting:
             case CaptureMode.Ocr when !_isSelecting:
             case CaptureMode.Scan when !_isSelecting:
-            case CaptureMode.GoogleLens when !_isSelecting:
                 var detected = WindowDetector.GetWindowRectAtPoint(e.Location, _virtualBounds);
                 if (detected != _autoDetectRect)
                 {
@@ -311,7 +309,6 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Rectangle when _isSelecting:
             case CaptureMode.Ocr when _isSelecting:
             case CaptureMode.Scan when _isSelecting:
-            case CaptureMode.GoogleLens when _isSelecting:
                 _autoDetectActive = false;
                 _selectionEnd = e.Location;
                 _selectionRect = NormRect(_selectionStart, _selectionEnd);
@@ -481,11 +478,9 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Rectangle when _isSelecting:
             case CaptureMode.Ocr when _isSelecting:
             case CaptureMode.Scan when _isSelecting:
-            case CaptureMode.GoogleLens when _isSelecting:
                 _isSelecting = false;
                 bool isOcr = _mode == CaptureMode.Ocr;
                 bool isScan = _mode == CaptureMode.Scan;
-                bool isLens = _mode == CaptureMode.GoogleLens;
                 if (!_hasDragged)
                 {
                     // Use auto-detected window region if available, else fullscreen
@@ -494,14 +489,12 @@ public sealed partial class RegionOverlayForm
                         : new Rectangle(0, 0, _screenshot.Width, _screenshot.Height);
                     if (isOcr) OcrRegionSelected?.Invoke(clickRect);
                     else if (isScan) ScanRegionSelected?.Invoke(clickRect);
-                    else if (isLens) ScanRegionSelected?.Invoke(clickRect);
                     else RegionSelected?.Invoke(clickRect);
                 }
                 else if (_selectionRect.Width > 2 && _selectionRect.Height > 2)
                 {
                     if (isOcr) OcrRegionSelected?.Invoke(_selectionRect);
                     else if (isScan) ScanRegionSelected?.Invoke(_selectionRect);
-                    else if (isLens) ScanRegionSelected?.Invoke(_selectionRect);
                     else RegionSelected?.Invoke(_selectionRect);
                 }
                 else { _hasSelection = false; Invalidate(); }
@@ -566,7 +559,7 @@ public sealed partial class RegionOverlayForm
             }
             if (anyClosed) { Invalidate(); return true; }
             if (_mode != CaptureMode.Rectangle && _mode != CaptureMode.Freeform
-                && _mode != CaptureMode.Ocr && _mode != CaptureMode.Scan && _mode != CaptureMode.GoogleLens)
+                && _mode != CaptureMode.Ocr && _mode != CaptureMode.Scan)
             { SetMode(CaptureMode.Rectangle); return true; }
             Cancel();
             return true;
@@ -626,7 +619,7 @@ public sealed partial class RegionOverlayForm
         if (e.KeyCode == Keys.D3) SetMode(CaptureMode.Ocr);
         if (e.KeyCode == Keys.D4) SetMode(CaptureMode.ColorPicker);
         if (e.KeyCode == Keys.D5) SetMode(CaptureMode.Scan);
-        if (e.KeyCode == Keys.D6) SetMode(CaptureMode.GoogleLens);
+
         if (e.KeyCode == Keys.D0) SetMode(CaptureMode.Blur);
 
         if (e.KeyCode == Keys.Z && e.Control && _undoStack.Count > 0)
@@ -915,21 +908,22 @@ public sealed partial class RegionOverlayForm
         return NormRect(_shapeStart, new Point(x2, y2));
     }
 
+    // Maps keyboard keys to badge labels for annotation tool shortcuts
+    internal static readonly (Keys key, string label)[] AnnotationKeyMap = {
+        (Keys.D1, "1"), (Keys.D2, "2"), (Keys.D3, "3"),
+        (Keys.D4, "4"), (Keys.D5, "5"), (Keys.D6, "6"),
+        (Keys.D7, "7"), (Keys.D8, "8"), (Keys.D9, "9"),
+        (Keys.D0, "0"), (Keys.OemMinus, "-"), (Keys.Oemplus, "="),
+        (Keys.OemOpenBrackets, "["), (Keys.OemCloseBrackets, "]"),
+    };
+
     private bool TryHandleAnnotationToolNumber(Keys keyCode)
     {
-        int index = keyCode switch
+        int index = -1;
+        for (int i = 0; i < AnnotationKeyMap.Length; i++)
         {
-            Keys.D1 => 0,
-            Keys.D2 => 1,
-            Keys.D3 => 2,
-            Keys.D4 => 3,
-            Keys.D5 => 4,
-            Keys.D6 => 5,
-            Keys.D7 => 6,
-            Keys.D8 => 7,
-            Keys.D9 => 8,
-            _ => -1
-        };
+            if (AnnotationKeyMap[i].key == keyCode) { index = i; break; }
+        }
         if (index < 0) return false;
 
         var annotationModes = ToolDef.AllTools
