@@ -31,14 +31,14 @@ public sealed partial class RegionOverlayForm : Form
     private Rectangle[] _toolbarButtons = Array.Empty<Rectangle>();
     private int _hoveredButton = -1;
     private Rectangle _toolbarRect;
-    private const int ToolbarHeight = 48;
-    private const int ButtonSize = 34;
-    private const int ButtonSpacing = 2;
+    private const int ToolbarHeight = 44;
+    private const int ButtonSize = 32;
+    private const int ButtonSpacing = 4;
     private const int ToolbarTopMargin = 16;
 
     private float _toolbarAnim;
     private readonly System.Windows.Forms.Timer _animTimer;
-    private readonly DateTime _showTime;
+    private DateTime _showTime;
 
     // Pre-rendered blurred screenshot used for all glass effects
     private Bitmap? _blurred;
@@ -289,18 +289,17 @@ public sealed partial class RegionOverlayForm : Form
         SetupForm();
         CalcToolbar();
 
-        // Timer only for toolbar slide-in animation, then stops
+        // Timer only for toolbar slide-in animation (~100ms), then stops
         _animTimer = new System.Windows.Forms.Timer { Interval = 16 };
         _animTimer.Tick += (_, _) =>
         {
             float elapsed = (float)(DateTime.UtcNow - _showTime).TotalMilliseconds;
-            _toolbarAnim = Math.Min(1f, elapsed / 120f);
+            _toolbarAnim = Math.Min(1f, elapsed / 100f);
             Invalidate(new Rectangle(_toolbarRect.X - 10, _toolbarRect.Y - 40,
                 _toolbarRect.Width + 20, _toolbarRect.Height + 80));
             if (_toolbarAnim >= 1f)
-                _animTimer.Stop(); // done animating, stop timer completely
+                _animTimer.Stop();
         };
-        _animTimer.Start();
 
         _pickerTimer = new System.Windows.Forms.Timer { Interval = 16 };
         _pickerTimer.Tick += OnPickerTick;
@@ -326,6 +325,8 @@ public sealed partial class RegionOverlayForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        _showTime = DateTime.UtcNow;
+        _animTimer.Start();
         Native.User32.SetWindowPos(Handle, Native.User32.HWND_TOPMOST,
             0, 0, 0, 0,
             Native.User32.SWP_NOMOVE | Native.User32.SWP_NOSIZE | Native.User32.SWP_SHOWWINDOW);
@@ -333,7 +334,7 @@ public sealed partial class RegionOverlayForm : Form
         Invalidate();
     }
 
-    private const int SepWidth = 8;
+    private const int GroupGap = 12; // spacing between tool groups (no line, just space)
 
     // Separator indices (computed dynamically based on visible tools)
     private int[] _sepAfter = Array.Empty<int>();
@@ -342,17 +343,16 @@ public sealed partial class RegionOverlayForm : Form
     {
         _toolbarButtons = new Rectangle[BtnCount];
 
-        // Compute group separators: between last group-0 tool and first group-1 tool,
-        // and between last tool and the fixed buttons (color, gear, close)
-        var seps = new List<int>();
+        // Compute group gaps: between tool groups
+        var gaps = new List<int>();
         for (int i = 0; i < _visibleTools.Length - 1; i++)
             if (_visibleTools[i].Group != _visibleTools[i + 1].Group)
-                seps.Add(i);
-        seps.Add(_visibleTools.Length - 1); // separator before color/gear/close
-        _sepAfter = seps.ToArray();
+                gaps.Add(i);
+        gaps.Add(_visibleTools.Length - 1); // gap before color/gear/close
+        _sepAfter = gaps.ToArray();
 
-        int pad = 8;
-        int w = ButtonSize * BtnCount + ButtonSpacing * (BtnCount - 1) + pad * 2 + _sepAfter.Length * SepWidth;
+        int pad = 10;
+        int w = ButtonSize * BtnCount + ButtonSpacing * (BtnCount - 1) + pad * 2 + _sepAfter.Length * GroupGap;
         int x = (ClientSize.Width - w) / 2;
         _toolbarRect = new Rectangle(x, ToolbarTopMargin, w, ToolbarHeight);
         int cx = _toolbarRect.X + pad;
@@ -362,7 +362,7 @@ public sealed partial class RegionOverlayForm : Form
                 cx, _toolbarRect.Y + (ToolbarHeight - ButtonSize) / 2,
                 ButtonSize, ButtonSize);
             cx += ButtonSize + ButtonSpacing;
-            if (Array.IndexOf(_sepAfter, i) >= 0) cx += SepWidth;
+            if (Array.IndexOf(_sepAfter, i) >= 0) cx += GroupGap;
         }
     }
 

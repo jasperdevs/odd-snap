@@ -472,12 +472,13 @@ public sealed partial class RegionOverlayForm
             ? Color.FromArgb(230, 255, 255, 255)
             : Color.FromArgb(70, 255, 255, 255));
         g.DrawString(searchDisplay, searchFont, searchBrush, searchRect.X + 8, searchRect.Y + 5);
-        // Blinking text cursor
-        if (_emojiSearch.Length > 0)
+        // Text cursor (always visible when picker is open)
         {
-            var cursorX = searchRect.X + 8 + g.MeasureString(_emojiSearch, searchFont).Width - 2;
-            using var cursorPen = new Pen(Color.FromArgb(180, 255, 255, 255), 1.5f);
-            g.DrawLine(cursorPen, cursorX, searchRect.Y + 6, cursorX, searchRect.Bottom - 6);
+            float cursorX = _emojiSearch.Length > 0
+                ? searchRect.X + 8 + g.MeasureString(_emojiSearch, searchFont).Width - 2
+                : searchRect.X + 8;
+            using var cursorPen = new Pen(Color.FromArgb(200, 255, 255, 255), 1.5f);
+            g.DrawLine(cursorPen, cursorX, searchRect.Y + 7, cursorX, searchRect.Bottom - 7);
         }
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
 
@@ -571,14 +572,11 @@ public sealed partial class RegionOverlayForm
         var r = new Rectangle(_toolbarRect.X, _toolbarRect.Y + oy,
             _toolbarRect.Width, _toolbarRect.Height);
 
-        using (var p = RRect(r, 12))
+        using (var p = RRect(r, 22))
         {
-            // Solid dark fill
-            using var baseFill = new SolidBrush(Color.FromArgb((int)(t * 230), 32, 32, 32));
+            using var baseFill = new SolidBrush(Color.FromArgb((int)(t * 240), 28, 28, 28));
             g.FillPath(baseFill, p);
-
-            // Subtle border
-            using var bp = new Pen(Color.FromArgb((int)(t * 35), 255, 255, 255), 1f);
+            using var bp = new Pen(Color.FromArgb((int)(t * 25), 255, 255, 255), 1f);
             g.DrawPath(bp, p);
         }
 
@@ -596,19 +594,6 @@ public sealed partial class RegionOverlayForm
         icons[toolCount] = "color"; labels[toolCount] = "Color"; modes[toolCount] = null;
         icons[toolCount + 1] = "gear"; labels[toolCount + 1] = "Settings"; modes[toolCount + 1] = null;
         icons[toolCount + 2] = "close"; labels[toolCount + 2] = "Close (Esc)"; modes[toolCount + 2] = null;
-
-        // Draw group separator lines
-        foreach (int sepIdx in _sepAfter)
-        {
-            if (sepIdx < BtnCount - 1)
-            {
-                int sx = (_toolbarButtons[sepIdx].Right + _toolbarButtons[sepIdx + 1].X) / 2;
-                int sy1 = r.Y + 12;
-                int sy2 = r.Bottom - 12;
-                using var sepPen = new Pen(Color.FromArgb((int)(t * 30), 255, 255, 255), 1f);
-                g.DrawLine(sepPen, sx, sy1 + oy, sx, sy2 + oy);
-            }
-        }
 
         for (int i = 0; i < BtnCount; i++)
         {
@@ -633,19 +618,19 @@ public sealed partial class RegionOverlayForm
                 continue;
             }
 
-            if (active || hover)
+            if (active)
             {
-                using var p = RRect(btn, 8);
-                int alpha = (int)(t * (active ? 60 : 30));
-                using var bfill = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255));
+                using var p = RRect(btn, 7);
+                using var bfill = new SolidBrush(Color.FromArgb((int)(t * 50), 255, 255, 255));
                 g.FillPath(bfill, p);
-                if (active)
-                {
-                    using var border = new Pen(Color.FromArgb((int)(t * 50), 255, 255, 255), 0.5f);
-                    g.DrawPath(border, p);
-                }
             }
-            int ia = (int)(t * (i >= BtnCount - 2 ? 200 : 255));
+            else if (hover)
+            {
+                using var p = RRect(btn, 7);
+                using var bfill = new SolidBrush(Color.FromArgb((int)(t * 25), 255, 255, 255));
+                g.FillPath(bfill, p);
+            }
+            int ia = (int)(t * (active ? 255 : hover ? 230 : i >= BtnCount - 2 ? 160 : 200));
             DrawIcon(g, icons[i], btn, Color.FromArgb(ia, 255, 255, 255));
         }
 

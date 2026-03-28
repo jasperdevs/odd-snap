@@ -232,7 +232,16 @@ public sealed partial class RegionOverlayForm
             { if (!Cursor.Equals(Cursors.SizeAll)) Cursor = Cursors.SizeAll; }
         else if (_mode == CaptureMode.Text && !_isTyping)
             { if (!Cursor.Equals(Cursors.IBeam)) Cursor = Cursors.IBeam; }
-        else if (_emojiPickerOpen || _fontPickerOpen || _colorPickerOpen)
+        else if (_emojiPickerOpen)
+        {
+            // IBeam on search bar, arrow on rest of picker
+            int searchBottom = _emojiPickerRect.Y + 6 + 28 + 6;
+            if (_emojiPickerRect.Contains(e.Location) && e.Location.Y < searchBottom)
+                { if (!Cursor.Equals(Cursors.IBeam)) Cursor = Cursors.IBeam; }
+            else
+                { if (!Cursor.Equals(Cursors.Default)) Cursor = Cursors.Default; }
+        }
+        else if (_fontPickerOpen || _colorPickerOpen)
             { if (!Cursor.Equals(Cursors.Default)) Cursor = Cursors.Default; }
         else if (btn >= 0)
             { if (!Cursor.Equals(Cursors.Hand)) Cursor = Cursors.Hand; }
