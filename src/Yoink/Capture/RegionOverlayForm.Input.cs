@@ -551,7 +551,7 @@ public sealed partial class RegionOverlayForm
                 _textBuffer = "";
                 anyClosed = true;
             }
-            if (anyClosed) { Invalidate(); return true; }
+            if (anyClosed) { Invalidate(); RefreshToolbar(); return true; }
             Cancel();
             return true;
         }
@@ -565,13 +565,14 @@ public sealed partial class RegionOverlayForm
         {
             if (e.KeyCode == Keys.Back && _emojiSearch.Length > 0)
             {
-                _emojiSearch = _emojiSearch[..^1]; _emojiScrollOffset = 0; Invalidate();
+                _emojiSearch = _emojiSearch[..^1]; _emojiScrollOffset = 0;
+                RefreshToolbar();
                 e.SuppressKeyPress = true;
                 e.Handled = true;
             }
             else
             {
-                e.Handled = true; // Mark as handled but don't suppress KeyPress for printable chars
+                e.Handled = true;
             }
             return;
         }
@@ -579,7 +580,7 @@ public sealed partial class RegionOverlayForm
         // Emoji placing: Tab re-opens picker
         if (_mode == CaptureMode.Emoji && _isPlacingEmoji)
         {
-            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; Invalidate(); }
+            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; RefreshToolbar(); }
             return;
         }
 
@@ -590,7 +591,7 @@ public sealed partial class RegionOverlayForm
             {
                 _fontSearch = _fontSearch[..^1];
                 _filteredFonts = null; _fontPickerScroll = 0;
-                Invalidate();
+                RefreshToolbar();
             }
             return;
         }
@@ -643,7 +644,7 @@ public sealed partial class RegionOverlayForm
             _fontSearch += e.KeyChar;
             _filteredFonts = null; _fontPickerScroll = 0;
             e.Handled = true;
-            Invalidate();
+            RefreshToolbar();
             return;
         }
         if (_emojiPickerOpen && !char.IsControl(e.KeyChar))
@@ -651,7 +652,7 @@ public sealed partial class RegionOverlayForm
             _emojiSearch += e.KeyChar;
             _emojiScrollOffset = 0;
             e.Handled = true;
-            Invalidate();
+            RefreshToolbar();
             return;
         }
         else if (_isTyping && !char.IsControl(e.KeyChar))
@@ -765,6 +766,7 @@ public sealed partial class RegionOverlayForm
             _fontPickerOpen = false;
             _fontSearch = ""; _filteredFonts = null;
             Invalidate();
+            RefreshToolbar();
             return true;
         }
         return true; // absorb click inside picker
@@ -777,18 +779,16 @@ public sealed partial class RegionOverlayForm
             int visibleCount = 8;
             int maxScroll = Math.Max(0, GetFilteredFonts().Length - visibleCount);
             _fontPickerScroll = Math.Clamp(_fontPickerScroll + (e.Delta > 0 ? -1 : 1), 0, maxScroll);
-            Invalidate();
+            RefreshToolbar();
         }
         else if (_emojiPickerOpen)
         {
-            var filtered = string.IsNullOrEmpty(_emojiSearch)
-                ? EmojiPalette
-                : EmojiPalette.Where(em => em.name.Contains(_emojiSearch, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var filtered = GetFilteredEmojiPalette();
             int cols = 8, visibleRows = 4;
             int totalRows = (filtered.Length + cols - 1) / cols;
             int maxScroll = Math.Max(0, totalRows - visibleRows);
             _emojiScrollOffset = Math.Clamp(_emojiScrollOffset + (e.Delta > 0 ? -1 : 1), 0, maxScroll);
-            Invalidate();
+            RefreshToolbar();
         }
         else if (_mode == CaptureMode.Emoji && _isPlacingEmoji)
         {
@@ -825,6 +825,7 @@ public sealed partial class RegionOverlayForm
             _emojiPickerOpen = false;
             _fontPickerOpen = false;
             Invalidate();
+            RefreshToolbar();
             return true;
         }
         return true; // absorb click inside picker
@@ -893,6 +894,7 @@ public sealed partial class RegionOverlayForm
         }
 
         Invalidate();
+        RefreshToolbar();
     }
 
     private Point GetRulerEnd(Point current)
