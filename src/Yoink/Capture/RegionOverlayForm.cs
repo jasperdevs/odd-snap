@@ -124,6 +124,7 @@ public sealed partial class RegionOverlayForm : Form
     private bool _textStroke = true; // outline stroke enabled by default
     private bool _textShadow = true; // shadow enabled by default
     private string _textFontFamily = "Segoe UI";
+    private TextBox? _textBox; // real textbox for native text editing
 
     // Inline text formatting toolbar hit rects (computed during paint)
     private RectangleF _textToolbarRect;
@@ -416,6 +417,73 @@ public sealed partial class RegionOverlayForm : Form
             _toolbarRect.Width + margin * 2,
             _toolbarRect.Height + popupH + margin * 2);
         _toolbarForm.Bounds = bounds;
+    }
+
+    private void ShowTextBox()
+    {
+        if (_textBox == null)
+        {
+            _textBox = new TextBox
+            {
+                BorderStyle = BorderStyle.None,
+                Multiline = false,
+                BackColor = Color.FromArgb(20, 20, 20),
+                ForeColor = _toolColor,
+                ScrollBars = ScrollBars.None,
+            };
+            _textBox.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; CommitText(); }
+                if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; _textBuffer = ""; _isTyping = false; HideTextBox(); Invalidate(); }
+            };
+            _textBox.TextChanged += (_, _) =>
+            {
+                if (_textBox == null) return;
+                _textBuffer = _textBox.Text;
+                SyncTextBoxSize();
+                Invalidate();
+            };
+            Controls.Add(_textBox);
+        }
+        UpdateTextBoxStyle();
+        _textBox.Text = _textBuffer;
+        _textBox.Location = _textPos;
+        SyncTextBoxSize();
+        _textBox.Visible = true;
+        _textBox.BringToFront();
+        _textBox.Focus();
+        if (_textBuffer.Length > 0) _textBox.SelectAll();
+    }
+
+    private void HideTextBox()
+    {
+        if (_textBox != null)
+        {
+            _textBox.Visible = false;
+            Focus(); // Return focus to overlay for hotkeys
+        }
+    }
+
+    private void UpdateTextBoxStyle()
+    {
+        if (_textBox == null) return;
+        var style = FontStyle.Regular;
+        if (_textBold) style |= FontStyle.Bold;
+        if (_textItalic) style |= FontStyle.Italic;
+        try { _textBox.Font = new Font(_textFontFamily, _textFontSize, style); }
+        catch { _textBox.Font = new Font("Segoe UI", _textFontSize, style); }
+        _textBox.ForeColor = _toolColor;
+        _textBox.BackColor = Color.FromArgb(20, 20, 20);
+    }
+
+    private void SyncTextBoxSize()
+    {
+        if (_textBox == null) return;
+        using var g = CreateGraphics();
+        string measure = _textBox.Text.Length > 0 ? _textBox.Text : "W";
+        var sz = g.MeasureString(measure, _textBox.Font);
+        _textBox.Size = new Size(Math.Max((int)sz.Width + 30, 120), (int)sz.Height + 6);
+        _textBox.Location = _textPos;
     }
 
     internal void RefreshToolbar()

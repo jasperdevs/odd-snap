@@ -96,12 +96,14 @@ public sealed partial class RegionOverlayForm
             if (_textBoldBtnRect.Contains(e.Location))
             {
                 _textBold = !_textBold;
+                UpdateTextBoxStyle(); SyncTextBoxSize();
                 Invalidate();
                 return;
             }
             if (_textItalicBtnRect.Contains(e.Location))
             {
                 _textItalic = !_textItalic;
+                UpdateTextBoxStyle(); SyncTextBoxSize();
                 Invalidate();
                 return;
             }
@@ -168,6 +170,7 @@ public sealed partial class RegionOverlayForm
                 _textStroke = ta.Stroke;
                 _textShadow = ta.Shadow;
                 _textFontFamily = ta.FontFamily;
+                ShowTextBox();
                 Invalidate();
                 return;
             }
@@ -209,6 +212,7 @@ public sealed partial class RegionOverlayForm
                 _isTyping = true;
                 _textPos = e.Location;
                 _textBuffer = "";
+                ShowTextBox();
                 Invalidate();
                 break;
             case CaptureMode.Highlight:
@@ -283,6 +287,7 @@ public sealed partial class RegionOverlayForm
             _textStroke = ta.Stroke;
             _textShadow = ta.Shadow;
             _textFontFamily = ta.FontFamily;
+            ShowTextBox();
             Invalidate();
         }
     }
@@ -644,9 +649,9 @@ public sealed partial class RegionOverlayForm
             if (_isCircleShapeDragging) { _isCircleShapeDragging = false; anyClosed = true; }
             if (_isTyping)
             {
-                // ESC = discard (Enter = commit)
                 _isTyping = false;
                 _textBuffer = "";
+                HideTextBox();
                 anyClosed = true;
             }
             if (anyClosed) { Invalidate(); RefreshToolbar(); return true; }
@@ -694,16 +699,9 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
-        // Text input mode
+        // Text input mode - TextBox handles all input
         if (_isTyping)
-        {
-            if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Return) { CommitText(); return; }
-            if (e.KeyCode == Keys.Back && _textBuffer.Length > 0)
-            {
-                _textBuffer = _textBuffer[..^1]; Invalidate(); return;
-            }
             return;
-        }
         if (TryHandleAnnotationToolNumber(e.KeyCode))
         {
             e.SuppressKeyPress = true;
@@ -745,22 +743,20 @@ public sealed partial class RegionOverlayForm
             RefreshToolbar();
             return;
         }
-        else if (_isTyping && !char.IsControl(e.KeyChar))
-        {
-            _textBuffer += e.KeyChar;
-            e.Handled = true;
-            Invalidate();
-            return;
-        }
+        // Text input is handled by the real TextBox control
     }
 
     private void CommitText()
     {
+        // Sync from TextBox before committing
+        if (_textBox != null && _textBox.Visible)
+            _textBuffer = _textBox.Text;
         if (_isTyping && _textBuffer.Length > 0)
             _undoStack.Add(new TextAnnotation(_textPos, _textBuffer, _textFontSize, _toolColor, _textBold, _textItalic, _textStroke, _textShadow, _textFontFamily));
         _isTyping = false;
         _textBuffer = "";
         _fontPickerOpen = false;
+        HideTextBox();
         Invalidate();
     }
 
@@ -855,6 +851,7 @@ public sealed partial class RegionOverlayForm
             _textFontFamily = fonts[idx];
             _fontPickerOpen = false;
             _fontSearch = ""; _filteredFonts = null;
+            UpdateTextBoxStyle(); SyncTextBoxSize();
             Invalidate();
             RefreshToolbar();
             return true;

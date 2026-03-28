@@ -362,23 +362,23 @@ public sealed partial class RegionOverlayForm
         if (_mode == CaptureMode.Magnifier)
             PaintMagnifierTool(g);
 
-        // Active text input with selection box
+        // Active text input with selection box (TextBox control handles actual text rendering)
         if (_isTyping)
         {
             var fontStyle = FontStyle.Regular;
             if (_textBold) fontStyle |= FontStyle.Bold;
             if (_textItalic) fontStyle |= FontStyle.Italic;
             using var font = new Font(_textFontFamily, _textFontSize, fontStyle);
-            string display = _textBuffer.Length > 0 ? _textBuffer : "Type here...";
-            var textSize = g.MeasureString(display, font);
+            string measure = _textBuffer.Length > 0 ? _textBuffer : "W";
+            var textSize = g.MeasureString(measure, font);
 
-            // Dashed selection border
+            // Dashed selection border around the TextBox
             var textRect = new RectangleF(_textPos.X - 6, _textPos.Y - 4,
-                Math.Max(textSize.Width + 12, 100), textSize.Height + 8);
-            using var dashPen = new Pen(Color.FromArgb(180, 255, 255, 255), 1.2f) { DashStyle = DashStyle.Dash };
+                Math.Max(textSize.Width + 30, 120), textSize.Height + 12);
+            using var dashPen = new Pen(Color.FromArgb(140, 255, 255, 255), 1f) { DashStyle = DashStyle.Dash };
             g.DrawRectangle(dashPen, textRect.X, textRect.Y, textRect.Width, textRect.Height);
 
-            // Corner resize handles (small white squares)
+            // Corner resize handles
             int hs = 6;
             var handles = new RectangleF[] {
                 new(textRect.X - hs/2, textRect.Y - hs/2, hs, hs),
@@ -389,26 +389,6 @@ public sealed partial class RegionOverlayForm
             using var handleBrush = new SolidBrush(Color.White);
             foreach (var h in handles)
                 g.FillRectangle(handleBrush, h);
-
-            // Text (using same rendering as committed text)
-            if (_textBuffer.Length > 0)
-            {
-                PaintExcalidrawText(g, _textPos, _textBuffer, _textFontSize, _toolColor,
-                    _textBold, _textItalic, _textStroke, _textShadow, _textFontFamily);
-            }
-            else
-            {
-                using var placeholderBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
-                g.DrawString(display, font, placeholderBrush, _textPos.X, _textPos.Y);
-            }
-
-            // Blinking cursor after text
-            if (_textBuffer.Length > 0)
-            {
-                var cursorX = _textPos.X + g.MeasureString(_textBuffer, font).Width - 2;
-                using var cursorPen = new Pen(_toolColor, 2f);
-                g.DrawLine(cursorPen, cursorX, _textPos.Y + 2, cursorX, _textPos.Y + textSize.Height - 4);
-            }
 
             // Inline text formatting toolbar above text
             PaintTextToolbar(g, textRect);
@@ -425,40 +405,46 @@ public sealed partial class RegionOverlayForm
         // Color/emoji/font picker popups are painted on the separate ToolbarForm
     }
 
-    /// <summary>Excalidraw-style text: clean font, optional shadow and stroke.</summary>
+    /// <summary>Text annotation: uses DrawString for correct kerning. Shadow and stroke via offset draws.</summary>
     private static void PaintExcalidrawText(Graphics g, Point pos, string text, float fontSize, Color color,
         bool bold = true, bool italic = false, bool stroke = true, bool shadow = true, string fontFamily = "Segoe UI")
     {
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
         var style = FontStyle.Regular;
         if (bold) style |= FontStyle.Bold;
         if (italic) style |= FontStyle.Italic;
-        using var font = new Font(fontFamily, fontSize, style);
+        Font font;
+        try { font = new Font(fontFamily, fontSize, style); }
+        catch { font = new Font("Segoe UI", fontSize, style); }
 
-        // Build text path for shadow + fill
-        using var textPath = new GraphicsPath();
-        textPath.AddString(text, font.FontFamily, (int)font.Style, g.DpiY * fontSize / 72f,
-            new PointF(pos.X, pos.Y), StringFormat.GenericDefault);
-
-        // Soft blurred shadow
-        if (shadow)
-            SketchRenderer.DrawSoftPathShadow(g, textPath, 1f);
-
-        // Stroke outline
-        if (stroke)
+        using (font)
         {
-            using var strokePen = new Pen(Color.FromArgb(80, 0, 0, 0), 2f);
-            g.DrawPath(strokePen, textPath);
+            // Shadow: draw text offset in dark color at multiple offsets for soft effect
+            if (shadow)
+            {
+                using var shadowBrush = new SolidBrush(Color.FromArgb(50, 0, 0, 0));
+                g.DrawString(text, font, shadowBrush, pos.X + 2, pos.Y + 2);
+                using var shadowBrush2 = new SolidBrush(Color.FromArgb(25, 0, 0, 0));
+                g.DrawString(text, font, shadowBrush2, pos.X + 3, pos.Y + 3);
+            }
+
+            // Stroke: draw text at small offsets in dark color to simulate outline
+            if (stroke)
+            {
+                using var strokeBrush = new SolidBrush(Color.FromArgb(60, 0, 0, 0));
+                for (int ox = -1; ox <= 1; ox++)
+                    for (int oy = -1; oy <= 1; oy++)
+                        if (ox != 0 || oy != 0)
+                            g.DrawString(text, font, strokeBrush, pos.X + ox, pos.Y + oy);
+            }
+
+            // Main text
+            using var fillBrush = new SolidBrush(color);
+            g.DrawString(text, font, fillBrush, pos.X, pos.Y);
         }
 
-        // Main text fill
-        using var fillBrush = new SolidBrush(color);
-        g.FillPath(fillBrush, textPath);
-
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
-        g.SmoothingMode = SmoothingMode.Default;
+        g.TextRenderingHint = TextRenderingHint.SystemDefault;
     }
 
     private static void PaintStepNumber(Graphics g, Point pos, int num, Color color)
