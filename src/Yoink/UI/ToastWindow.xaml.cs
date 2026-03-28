@@ -10,6 +10,7 @@ public partial class ToastWindow : Window
     private readonly DispatcherTimer _timer;
     private bool _isDismissing;
     private static ToastWindow? _current;
+    private static Yoink.Models.ToastPosition _position = Yoink.Models.ToastPosition.Right;
 
     private ToastWindow(string title, string body, Color? swatchColor)
     {
@@ -53,11 +54,10 @@ public partial class ToastWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Position off-screen right, then slide in
         var wa = SystemParameters.WorkArea;
-        double targetLeft = wa.Right - ActualWidth - 16;
-        Top = wa.Bottom - ActualHeight - 16;
-        Left = wa.Right + 10; // start off-screen
+        var (targetLeft, targetTop, startLeft, startTop, animateLeft) = GetPlacement(wa);
+        Left = startLeft;
+        Top = startTop;
 
         // Use Render priority so layout is fully done before animating
         Dispatcher.BeginInvoke(() =>
@@ -66,10 +66,20 @@ public partial class ToastWindow : Window
             var dur = TimeSpan.FromMilliseconds(250);
             var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
 
-            BeginAnimation(LeftProperty, new DoubleAnimation
+            if (animateLeft)
             {
-                To = targetLeft, Duration = dur, EasingFunction = ease
-            });
+                BeginAnimation(LeftProperty, new DoubleAnimation
+                {
+                    To = targetLeft, Duration = dur, EasingFunction = ease
+                });
+            }
+            else
+            {
+                BeginAnimation(TopProperty, new DoubleAnimation
+                {
+                    To = targetTop, Duration = dur, EasingFunction = ease
+                });
+            }
 
             _timer.Start();
         }, DispatcherPriority.Render);
@@ -88,14 +98,30 @@ public partial class ToastWindow : Window
         var dur = TimeSpan.FromMilliseconds(220);
         var ease = new QuarticEase { EasingMode = EasingMode.EaseIn };
 
-        var slide = new DoubleAnimation
+        var (_, _, exitLeft, exitTop, animateLeft) = GetDismissPlacement(wa);
+        Timeline slide;
+        if (animateLeft)
         {
-            To = wa.Right + 20,
-            Duration = dur,
-            EasingFunction = ease
-        };
-        slide.Completed += (_, _) => ForceClose();
-        BeginAnimation(LeftProperty, slide);
+            slide = new DoubleAnimation
+            {
+                To = exitLeft,
+                Duration = dur,
+                EasingFunction = ease
+            };
+            slide.Completed += (_, _) => ForceClose();
+            BeginAnimation(LeftProperty, (DoubleAnimation)slide);
+        }
+        else
+        {
+            slide = new DoubleAnimation
+            {
+                To = exitTop,
+                Duration = dur,
+                EasingFunction = ease
+            };
+            slide.Completed += (_, _) => ForceClose();
+            BeginAnimation(TopProperty, (DoubleAnimation)slide);
+        }
 
         BeginAnimation(OpacityProperty, new DoubleAnimation
         {
@@ -119,6 +145,8 @@ public partial class ToastWindow : Window
 
     public static void DismissCurrent() => _current?.ForceClose();
 
+    public static void SetPosition(Yoink.Models.ToastPosition position) => _position = position;
+
     public static void Show(string title, string body = "")
     {
         _current?.ForceClose();
@@ -133,5 +161,35 @@ public partial class ToastWindow : Window
         var toast = new ToastWindow(title, body, color);
         _current = toast;
         toast.Show();
+    }
+
+    private (double targetLeft, double targetTop, double startLeft, double startTop, bool animateLeft) GetPlacement(Rect wa)
+    {
+        return _position switch
+        {
+            Yoink.Models.ToastPosition.Left =>
+                (16, wa.Bottom - ActualHeight - 16, -ActualWidth - 10, wa.Bottom - ActualHeight - 16, true),
+            Yoink.Models.ToastPosition.TopLeft =>
+                (16, 16, 16, -ActualHeight - 10, false),
+            Yoink.Models.ToastPosition.TopRight =>
+                (wa.Right - ActualWidth - 16, 16, wa.Right - ActualWidth - 16, -ActualHeight - 10, false),
+            _ =>
+                (wa.Right - ActualWidth - 16, wa.Bottom - ActualHeight - 16, wa.Right + 10, wa.Bottom - ActualHeight - 16, true),
+        };
+    }
+
+    private (double targetLeft, double targetTop, double exitLeft, double exitTop, bool animateLeft) GetDismissPlacement(Rect wa)
+    {
+        return _position switch
+        {
+            Yoink.Models.ToastPosition.Left =>
+                (16, wa.Bottom - ActualHeight - 16, -ActualWidth - 20, wa.Bottom - ActualHeight - 16, true),
+            Yoink.Models.ToastPosition.TopLeft =>
+                (16, 16, 16, -ActualHeight - 20, false),
+            Yoink.Models.ToastPosition.TopRight =>
+                (wa.Right - ActualWidth - 16, 16, wa.Right - ActualWidth - 16, -ActualHeight - 20, false),
+            _ =>
+                (wa.Right - ActualWidth - 16, wa.Bottom - ActualHeight - 16, wa.Right + 20, wa.Bottom - ActualHeight - 16, true),
+        };
     }
 }

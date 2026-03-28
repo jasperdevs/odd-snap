@@ -100,6 +100,7 @@ public partial class SettingsWindow : Window
         MuteSoundsCheck.IsChecked = s.MuteSounds;
         CompressHistoryCheck.IsChecked = s.CompressHistory;
         CrosshairGuidesCheck.IsChecked = s.ShowCrosshairGuides;
+        ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
         PopulateToolToggles();
     }
 
@@ -339,6 +340,14 @@ public partial class SettingsWindow : Window
         if (!IsLoaded) return;
         _settingsService.Settings.ShowCrosshairGuides = CrosshairGuidesCheck.IsChecked == true;
         _settingsService.Save();
+    }
+
+    private void ToastPositionCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.ToastPosition = (ToastPosition)ToastPositionCombo.SelectedIndex;
+        _settingsService.Save();
+        ToastWindow.SetPosition(_settingsService.Settings.ToastPosition);
     }
 
     // ─── Screenshot History (date-grouped) ─────────────────────────

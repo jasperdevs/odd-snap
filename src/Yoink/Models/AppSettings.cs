@@ -6,6 +6,14 @@ public enum AfterCaptureAction
     ShowPreview
 }
 
+public enum ToastPosition
+{
+    Right,
+    Left,
+    TopLeft,
+    TopRight
+}
+
 public sealed class AppSettings
 {
     public uint HotkeyModifiers { get; set; } = Native.User32.MOD_ALT;
@@ -31,6 +39,7 @@ public sealed class AppSettings
     public bool CompressHistory { get; set; }
     public int JpegQuality { get; set; } = 85;
     public bool HasCompletedSetup { get; set; }
+    public ToastPosition ToastPosition { get; set; } = ToastPosition.Right;
 
     // Toolbar customization: which tools appear in the dock
     // null = all tools enabled (default). List of tool IDs from ToolDef.AllTools.

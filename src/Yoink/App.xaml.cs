@@ -31,6 +31,7 @@ public partial class App : Application
         _settingsService = new SettingsService();
         _settingsService.Load();
         SoundService.Muted = _settingsService.Settings.MuteSounds;
+        ToastWindow.SetPosition(_settingsService.Settings.ToastPosition);
 
         _historyService = new HistoryService();
         _historyService.Load();

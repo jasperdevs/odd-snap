@@ -238,6 +238,26 @@
                     </Border>
 
                     <Border Style="{StaticResource Card}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Toast position" FontSize="13"/>
+                                <TextBlock Text="Where notifications appear" FontSize="11" Opacity="0.3"/>
+                            </StackPanel>
+                            <ComboBox x:Name="ToastPositionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                      SelectionChanged="ToastPositionCombo_SelectionChanged">
+                                <ComboBoxItem Content="Right"/>
+                                <ComboBoxItem Content="Left"/>
+                                <ComboBoxItem Content="Top Left"/>
+                                <ComboBoxItem Content="Top Right"/>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
                         <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
                                   Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
                     </Border>
