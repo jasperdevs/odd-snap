@@ -1,0 +1,30 @@
+<svg width="1200" height="280" viewBox="0 0 1200 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="280" rx="24" fill="#111216"/>
+  <rect x="1" y="1" width="1198" height="278" rx="23" stroke="white" stroke-opacity="0.06"/>
+
+  <g transform="translate(84, 72) scale(0.135)">
+    <path d="M560.093,588.375C547.264,622.902 496.887,765.095 491.437,780.478C486.432,794.604 485.615,794.661 483.506,794.672C388.954,795.16 389.035,794.312 294.5,794.573C290.323,794.585 287.747,795.335 289.254,791.436C302.523,757.112 362.815,596.064 373.768,567.605C378.989,554.039 378.846,553.698 377.518,551.49C362.024,525.73 333.694,478.629 185.195,228.686C183.087,225.138 183.108,225.23 158.76,184.386C158.494,183.938 157.35,181.427 160.497,181.467C213.207,182.144 333.522,180.72 336.585,182.358C338.133,183.186 394.06,272.699 408.329,294.605C410.018,297.197 570.972,551.133 571.452,552.521C572.435,555.364 572.194,555.595 560.093,588.375ZM853.874,304.564C847.045,331.051 826.581,427.783 699.732,493.978C696.181,495.831 686.559,502.237 688.876,497.639C690.428,494.559 715.865,469.117 725.449,427.488C734.968,386.14 713.145,360.318 714.302,357.369C715.117,355.291 751.561,358.804 753.233,355.403C754.409,353.011 752.121,329.122 739.12,311.787C711.932,275.533 648.05,268.174 617.874,317.736C617.073,319.052 587.736,370.41 587.316,372.461C586.513,376.383 619.348,421.117 619.183,425.476C619.032,429.464 618.305,429.316 602.434,472.475C596.387,488.919 591.155,503.68 590.191,506.399C588.472,511.249 587.135,516.135 584.728,512.336C576.842,499.892 490.112,363.028 486.845,356.36C485.884,354.397 486.935,354.342 499.086,332.275C544.119,250.491 553.494,231.405 587.193,209.031C663.917,158.09 769.822,180.394 806.178,250.665C818.29,274.075 818.98,295.646 821.547,296.339C824.442,297.121 853.728,295.449 854.561,297.457C854.779,297.984 854.905,298.286 853.874,304.564Z" fill="#1962F4"/>
+  </g>
+
+  <text x="236" y="120" font-family="Segoe UI, system-ui, sans-serif" font-size="64" font-weight="700" fill="white" letter-spacing="-1.6">Yoink</text>
+  <text x="238" y="156" font-family="Segoe UI, system-ui, sans-serif" font-size="24" fill="white" fill-opacity="0.54">All-in-one open-source screenshot tool for Windows.</text>
+  <text x="238" y="188" font-family="Segoe UI, system-ui, sans-serif" font-size="18" fill="white" fill-opacity="0.34">Capture, annotate, OCR, drag out, save locally, and move on.</text>
+
+  <rect x="238" y="214" width="88" height="30" rx="10" fill="#1C2028"/>
+  <text x="282" y="234" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#4D90FF" text-anchor="middle">capture</text>
+
+  <rect x="338" y="214" width="96" height="30" rx="10" fill="#1C2028"/>
+  <text x="386" y="234" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#4D90FF" text-anchor="middle">annotate</text>
+
+  <rect x="446" y="214" width="58" height="30" rx="10" fill="#1C2028"/>
+  <text x="475" y="234" font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" fill="#4D90FF" text-anchor="middle">OCR</text>
+
+  <rect x="816" y="58" width="250" height="150" rx="10" stroke="#3F87FF" stroke-width="2.5" stroke-dasharray="9 6" fill="white" fill-opacity="0.02"/>
+  <circle cx="816" cy="58" r="4" fill="white" fill-opacity="0.82"/>
+  <circle cx="1066" cy="58" r="4" fill="white" fill-opacity="0.82"/>
+  <circle cx="816" cy="208" r="4" fill="white" fill-opacity="0.82"/>
+  <circle cx="1066" cy="208" r="4" fill="white" fill-opacity="0.82"/>
+
+  <rect x="816" y="220" width="92" height="24" rx="8" fill="#1B1D23"/>
+  <text x="862" y="236" font-family="Segoe UI, system-ui, sans-serif" font-size="12" fill="white" fill-opacity="0.5" text-anchor="middle">250 x 150</text>
+</svg>

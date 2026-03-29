@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>yoink.ico</ApplicationIcon>
+    <Version>0.1.1</Version>
+    <Authors>Yoink Contributors</Authors>
+    <Description>Fast screenshot and color picker for Windows</Description>
+    <RepositoryUrl>https://github.com/yoink-tool/yoink</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="yoink.ico" />
+    <Resource Include="Assets\amazon.png" />
+    <Resource Include="Assets\aws_sq.png" />
+    <Resource Include="Assets\aws_official.svg" />
+    <Resource Include="Assets\catbox.png" />
+    <Resource Include="Assets\catbox_sq.png" />
+    <Resource Include="Assets\dropbox_sq.png" />
+    <Resource Include="Assets\catbox_official.png" />
+    <Resource Include="Assets\fileio.png" />
+    <Resource Include="Assets\fileio_sq.png" />
+    <Resource Include="Assets\gdrive_sq.png" />
+    <Resource Include="Assets\gyazo.png" />
+    <Resource Include="Assets\gyazo_sq.png" />
+    <Resource Include="Assets\gyazo_official.png" />
+    <Resource Include="Assets\github_sq.png" />
+    <Resource Include="Assets\imgbb.png" />
+    <Resource Include="Assets\imgbb_sq.png" />
+    <Resource Include="Assets\imgbb_official.png" />
+    <Resource Include="Assets\imgur.png" />
+    <Resource Include="Assets\imgur_sq.png" />
+    <Resource Include="Assets\imgur_official.png" />
+    <Resource Include="Assets\immich_sq.png" />
+    <Resource Include="Assets\litterbox_sq.png" />
+    <Resource Include="Assets\litterbox_official.png" />
+    <Resource Include="Assets\onedrive_sq.png" />
+    <Resource Include="Assets\transfer.png" />
+    <Resource Include="Assets\transfer_sq.png" />
+    <Resource Include="Assets\uguu.png" />
+    <Resource Include="Assets\uguu_sq.png" />
+    <Content Include="lucide.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AnimatedGif" Version="1.0.5" />
+    <PackageReference Include="SSH.NET" Version="2024.2.0" />
+    <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
+    <PackageReference Include="ZXing.Net" Version="0.16.10" />
+    <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.10" />
+  </ItemGroup>
+
+</Project>

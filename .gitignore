@@ -1,0 +1,40 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.vs/
+.vs/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+bld/
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## IDE
+.idea/
+*.sln.iml
+.vscode/
+
+## OS
+Thumbs.db
+.DS_Store
+nul
+
+## Publish
+publish/
+
+## Temp icon build artifacts
+src/Yoink/yoink_*.png
+
+## Release zips
+*.zip
