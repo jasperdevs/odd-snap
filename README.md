@@ -33,16 +33,7 @@ Grab the latest release from the [**Releases page**](https://github.com/jasperde
 - OCR, color picking, QR scanning, and local GIF recording
 - Drag-and-drop preview plus local history that stays easy to browse
 - Optional screenshot uploads to public hosts, cloud storage, or self-hosted targets
-
-## Features
-
-- **Capture modes** — region capture with window detection, freeform lasso, fullscreen, OCR text extraction, color picker, QR/barcode scanning, and GIF recording
-
-- **Annotation tools** — draw, lines, arrows, curved arrows, text with inline formatting, highlight, rectangle and circle shapes, step numbers, blur, eraser, magnifier, emoji stamps, and system font search
-
-- **Workflow** — auto-copy to clipboard, floating drag-and-drop preview, local history, quick save, customizable toolbar and hotkeys, and tray-first behavior
-
-- **Uploads** — optional upload support for screenshots with public hosts, cloud storage, and self-hosted targets
+- More to come (and more i didnt mention lol)
 
 ## Default hotkeys
 
@@ -51,6 +42,7 @@ Grab the latest release from the [**Releases page**](https://github.com/jasperde
 | Screenshot | `Alt + `` ` |
 | OCR | `Alt + Shift + `` ` |
 | Color picker | `Alt + C` |
+*(More hotkeys you can change/add)*
 
 Hotkeys can be changed in settings.
 
