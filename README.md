@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Yoink: All-in-one open-source fast, clean ShareX alternative for Windows</strong>
+  <strong>Yoink: All-in-one open-source fast, clean ShareX alternative</strong>
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@
 <img width="947" height="490" alt="image" src="https://github.com/user-attachments/assets/9609fa02-b030-46ed-8f20-cf0b116bd9e0" />
 
 
-Yoink is a free, open-source screenshot tool for Windows that stays out of the way until you need it. Capture part of the screen, mark it up, copy it, save it, drag it out, or upload it without breaking your flow.
+Yoink is a free, open-source screenshot tool that stays out of the way until you need it. Capture part of the screen, mark it up, copy it, save it, drag it out, or upload it without breaking your flow.
 
 ## Download
 
