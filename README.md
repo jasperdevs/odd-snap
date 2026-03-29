@@ -17,14 +17,18 @@
   <a href="https://github.com/jasperdevs/yoink/releases">
     <img src="https://img.shields.io/github/downloads/jasperdevs/yoink/latest/total?style=flat-square&cacheSeconds=300" alt="Downloads" />
   </a>
+  <a href="https://github.com/jasperdevs/yoink/stargazers">
+  <img src="https://img.shields.io/github/stars/jasperdevs/yoink?style=flat-square" alt="Stars" />
+</a>
   <a href="https://github.com/jasperdevs/yoink/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/jasperdevs/yoink?style=flat-square" alt="License" />
   </a>
 </p>
 
+
 <p align="center">
   <a href="https://github.com/jasperdevs/yoink/releases/latest">
-    <img src="https://img.shields.io/github/v/release/jasperdevs/yoink?style=for-the-badge&label=windows" alt="Latest Release" />
+    <img src="https://img.shields.io/badge/windows-download-1962F4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" />
   </a>
   <img src="https://img.shields.io/badge/macos-planned-6b7280?style=for-the-badge&logo=apple&logoColor=white" alt="macOS Planned" />
   <img src="https://img.shields.io/badge/linux-planned-6b7280?style=for-the-badge&logo=linux&logoColor=white" alt="Linux Planned" />
