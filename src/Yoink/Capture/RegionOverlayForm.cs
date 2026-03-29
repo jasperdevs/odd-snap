@@ -424,6 +424,9 @@ public sealed partial class RegionOverlayForm : Form
         PositionToolbarForm();
         _toolbarForm.Show(this);
         _toolbarForm.UpdateSurface();
+
+        // Ensure overlay keeps keyboard focus after showing toolbar
+        Focus();
         Invalidate();
     }
 

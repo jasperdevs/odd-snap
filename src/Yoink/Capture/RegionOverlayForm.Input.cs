@@ -640,31 +640,6 @@ public sealed partial class RegionOverlayForm
     {
         if (keyData == Keys.Escape)
         {
-            // Close all popups and transient state in one pass
-            bool anyClosed = false;
-            if (_mode == CaptureMode.ColorPicker) { CloseMagWindow(); anyClosed = true; }
-            if (_emojiPickerOpen) { _emojiPickerOpen = false; HideEmojiSearchBox(); anyClosed = true; }
-            if (_fontPickerOpen) { _fontPickerOpen = false; _fontSearch = ""; _filteredFonts = null; HideFontSearchBox(); anyClosed = true; }
-            if (_colorPickerOpen) { _colorPickerOpen = false; anyClosed = true; }
-            if (_isPlacingEmoji) { _isPlacingEmoji = false; _selectedEmoji = null; anyClosed = true; }
-            if (_isRulerDragging) { _isRulerDragging = false; anyClosed = true; }
-            if (_isSelecting) { _isSelecting = false; _hasSelection = false; anyClosed = true; }
-            if (_isArrowDragging) { _isArrowDragging = false; anyClosed = true; }
-            if (_isLineDragging) { _isLineDragging = false; anyClosed = true; }
-            if (_isCurvedArrowDragging) { _isCurvedArrowDragging = false; anyClosed = true; }
-            if (_isBlurring) { _isBlurring = false; anyClosed = true; }
-            if (_isEraserDragging) { _isEraserDragging = false; anyClosed = true; }
-            if (_isHighlighting) { _isHighlighting = false; anyClosed = true; }
-            if (_isRectShapeDragging) { _isRectShapeDragging = false; anyClosed = true; }
-            if (_isCircleShapeDragging) { _isCircleShapeDragging = false; anyClosed = true; }
-            if (_isTyping)
-            {
-                _isTyping = false;
-                _textBuffer = "";
-                HideTextBox();
-                anyClosed = true;
-            }
-            if (anyClosed) { Invalidate(); RefreshToolbar(); return true; }
             Cancel();
             return true;
         }
@@ -993,34 +968,15 @@ public sealed partial class RegionOverlayForm
         }
         if (index < 0) return false;
 
-        var annotationModes = ToolDef.AllTools
-            .Where(t => t.Mode is { } mode && IsAnnotationNumberBadgeMode(mode))
+        // Map to visible annotation tools only (Group 1: Ruler through Emoji)
+        var modes = _visibleTools
+            .Where(t => t.Mode.HasValue && t.Group == 1)
             .Select(t => t.Mode!.Value)
-            .Distinct()
             .ToList();
 
-        if (index >= annotationModes.Count) return false;
-        SetMode(annotationModes[index]);
+        if (index >= modes.Count) return false;
+        SetMode(modes[index]);
         return true;
     }
-
-    private static bool IsAnnotationNumberBadgeMode(CaptureMode mode)
-    {
-        return mode == CaptureMode.Ruler
-            || mode == CaptureMode.Highlight
-            || mode == CaptureMode.RectShape
-            || mode == CaptureMode.CircleShape
-            || mode == CaptureMode.Draw
-            || mode == CaptureMode.Line
-            || mode == CaptureMode.Arrow
-            || mode == CaptureMode.CurvedArrow
-            || mode == CaptureMode.Text
-            || mode == CaptureMode.StepNumber
-            || mode == CaptureMode.Blur
-            || mode == CaptureMode.Eraser
-            || mode == CaptureMode.Magnifier
-            || mode == CaptureMode.Emoji;
-    }
-
 
 }

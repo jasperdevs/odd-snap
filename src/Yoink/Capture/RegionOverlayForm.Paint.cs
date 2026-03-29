@@ -908,13 +908,12 @@ public sealed partial class RegionOverlayForm
 
         if (_showToolNumberBadges && _hoveredButton >= 0)
         {
-            // Annotation tool hotkey badges using key labels from AnnotationKeyMap
+            // Hotkey badges for visible annotation tools only (Group 1)
             int badgeIndex = 0;
             for (int i = 0; i < toolCount; i++)
             {
-                var mode = modes[i];
-                if (mode is null) continue;
-                if (!IsAnnotationNumberBadgeMode(mode.Value)) continue;
+                if (modes[i] is null) continue;
+                if (_visibleTools[i].Group != 1) continue;
                 if (badgeIndex >= AnnotationKeyMap.Length) break;
 
                 string label = AnnotationKeyMap[badgeIndex].label;
