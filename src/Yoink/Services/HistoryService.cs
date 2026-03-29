@@ -136,6 +136,7 @@ public sealed class HistoryService
 
     public bool CompressHistory { get; set; }
     public int JpegQuality { get; set; } = 85;
+    public CaptureImageFormat CaptureImageFormat { get; set; } = CaptureImageFormat.Png;
     public HistoryRetentionPeriod RetentionPeriod { get; set; } = HistoryRetentionPeriod.Never;
 
     public HistoryEntry SaveGifEntry(string gifPath)
@@ -158,21 +159,11 @@ public sealed class HistoryService
     {
         Directory.CreateDirectory(HistoryDir);
         var now = DateTime.Now;
-        string ext = CompressHistory ? "jpg" : "png";
+        string ext = CaptureOutputService.GetExtension(CaptureImageFormat);
         var fileName = $"yoink_{now:yyyyMMdd_HHmmss_fff}.{ext}";
         var filePath = Path.Combine(HistoryDir, fileName);
 
-        if (CompressHistory)
-        {
-            var encoder = ImageCodecInfo.GetImageEncoders().First(e => e.MimeType == "image/jpeg");
-            var param = new EncoderParameters(1);
-            param.Param[0] = new EncoderParameter(Encoder.Quality, (long)JpegQuality);
-            screenshot.Save(filePath, encoder, param);
-        }
-        else
-        {
-            screenshot.Save(filePath, ImageFormat.Png);
-        }
+        CaptureOutputService.SaveBitmap(screenshot, filePath, CaptureImageFormat, JpegQuality);
 
         var entry = new HistoryEntry
         {

@@ -31,6 +31,9 @@ public sealed class SettingsService
             {
                 Settings = loaded;
 
+                if (Settings.CompressHistory && Settings.CaptureImageFormat == CaptureImageFormat.Png)
+                    Settings.CaptureImageFormat = CaptureImageFormat.Jpeg;
+
                 // Migrate older settings to include newly added default tools.
                 if (Settings.EnabledTools is { Count: > 0 })
                 {

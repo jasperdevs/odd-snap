@@ -17,6 +17,17 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
+        <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#FFF0F0F0"/>
+        <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#FFA0A0A0"/>
+        <SolidColorBrush x:Key="ThemeMutedBrush" Color="#FF7A7A7A"/>
+        <SolidColorBrush x:Key="ThemeCardBrush" Color="#FF252525"/>
+        <SolidColorBrush x:Key="ThemeTabActiveBrush" Color="#FF2A2A2A"/>
+        <SolidColorBrush x:Key="ThemeTabHoverBrush" Color="#14000000"/>
+        <SolidColorBrush x:Key="ThemeInputBackgroundBrush" Color="#FF1A1A1A"/>
+        <SolidColorBrush x:Key="ThemeInputBorderBrush" Color="#28FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#15FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FF1962F4"/>
+
         <Style x:Key="TabPill" TargetType="RadioButton">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -24,16 +35,16 @@
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Bd" Padding="14,6" CornerRadius="6" Cursor="Hand" Background="Transparent">
                             <TextBlock x:Name="Tb" Text="{TemplateBinding Content}" FontSize="12"
-                                       Foreground="White" Opacity="0.4"/>
+                                       Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.4"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#2A2A2A"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabActiveBrush}"/>
                                 <Setter TargetName="Tb" Property="Opacity" Value="1"/>
                                 <Setter TargetName="Tb" Property="FontWeight" Value="SemiBold"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#0CFFFFFF"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabHoverBrush}"/>
                                 <Setter TargetName="Tb" Property="Opacity" Value="0.7"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -48,11 +59,11 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Bd" Padding="10,4" CornerRadius="5" Cursor="Hand" Background="Transparent">
-                            <TextBlock x:Name="Tb" Text="{TemplateBinding Content}" FontSize="11" Foreground="White" Opacity="0.35"/>
+                            <TextBlock x:Name="Tb" Text="{TemplateBinding Content}" FontSize="11" Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.35"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#10FFFFFF"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabHoverBrush}"/>
                                 <Setter TargetName="Tb" Property="Opacity" Value="0.9"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -69,6 +80,7 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Opacity" Value="0.35"/>
             <Setter Property="Margin" Value="4,0,0,6"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
 
         </Style>
 
@@ -76,7 +88,9 @@
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="Padding" Value="14,12"/>
             <Setter Property="Margin" Value="0,0,0,2"/>
-            <Setter Property="Background" Value="#252525"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeCardBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeWindowBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
         <!-- Dark theme textbox for hotkeys -->
@@ -87,11 +101,11 @@
             <Setter Property="Padding" Value="10,5"/>
             <Setter Property="MinWidth" Value="115"/>
             <Setter Property="TextAlignment" Value="Center"/>
-            <Setter Property="Background" Value="#1A1A1A"/>
-            <Setter Property="Foreground" Value="#CCFFFFFF"/>
-            <Setter Property="BorderBrush" Value="#18FFFFFF"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CaretBrush" Value="White"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
@@ -112,17 +126,17 @@
             <Setter Property="Height" Value="26"/>
             <Setter Property="Margin" Value="5,0,0,0"/>
             <Setter Property="FontSize" Value="10"/>
-            <Setter Property="Foreground" Value="#60FFFFFF"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" CornerRadius="5" Background="#10FFFFFF">
+                        <Border x:Name="Bd" CornerRadius="5" Background="{DynamicResource ThemeTabHoverBrush}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#20FFFFFF"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabActiveBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -189,7 +203,10 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Screenshot" FontSize="13" VerticalAlignment="Center"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Screenshot" FontSize="13"/>
+                                    <TextBlock Text="You can use PrintScreen or try Win+Shift+S here too" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                     <TextBox x:Name="HotkeyBox" Style="{StaticResource HotkeyBox}"
                                              PreviewKeyDown="HotkeyBox_PreviewKeyDown"
@@ -321,9 +338,62 @@
                         <StackPanel>
                             <CheckBox x:Name="SaveToFileCheck" Content="Save screenshots to file" FontSize="13"
                                       Checked="SaveToFileCheck_Changed" Unchecked="SaveToFileCheck_Changed"/>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Default format" FontSize="12" Opacity="0.6"/>
+                                    <TextBlock Text="PNG keeps detail, JPG is smaller, BMP is fastest" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <ComboBox x:Name="CaptureFormatCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
+                                          SelectionChanged="CaptureFormatCombo_SelectionChanged">
+                                    <ComboBoxItem Content="PNG"/>
+                                    <ComboBoxItem Content="JPG"/>
+                                    <ComboBoxItem Content="BMP"/>
+                                </ComboBox>
+                            </Grid>
+                            <Grid x:Name="JpegQualityPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="JPG quality" FontSize="12" Opacity="0.6"/>
+                                    <TextBlock Text="Higher quality keeps more detail but makes bigger files" FontSize="11" Opacity="0.25" TextWrapping="Wrap" Width="250"/>
+                                </StackPanel>
+                                <ComboBox x:Name="JpegQualityCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
+                                          SelectionChanged="JpegQualityCombo_SelectionChanged">
+                                    <ComboBoxItem Content="100 - Best" Tag="100"/>
+                                    <ComboBoxItem Content="90 - High" Tag="90"/>
+                                    <ComboBoxItem Content="85 - Balanced" Tag="85"/>
+                                    <ComboBoxItem Content="75 - Smaller" Tag="75"/>
+                                    <ComboBoxItem Content="60 - Tiny" Tag="60"/>
+                                </ComboBox>
+                            </Grid>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Max image size" FontSize="12" Opacity="0.6"/>
+                                    <TextBlock Text="Scales the longest edge before saving, previewing, copying, and uploading" FontSize="11" Opacity="0.25" TextWrapping="Wrap" Width="250"/>
+                                </StackPanel>
+                                <ComboBox x:Name="CaptureSizeCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
+                                          SelectionChanged="CaptureSizeCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Original" Tag="0"/>
+                                    <ComboBoxItem Content="2160p" Tag="2160"/>
+                                    <ComboBoxItem Content="1440p" Tag="1440"/>
+                                    <ComboBoxItem Content="1080p" Tag="1080"/>
+                                    <ComboBoxItem Content="720p" Tag="720"/>
+                                    <ComboBoxItem Content="480p" Tag="480"/>
+                                </ComboBox>
+                            </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0" x:Name="SaveDirPanel" Visibility="Collapsed">
                                 <TextBox x:Name="SaveDirBox" IsReadOnly="True" FontSize="11" Padding="7,4" Width="280"
-                                         Background="#1A1A1A" Foreground="#99FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1"/>
+                                          Background="#1A1A1A" Foreground="#99FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1"/>
                                 <Button Content="Browse" FontSize="11" Padding="8,4" Margin="5,0,0,0" Click="BrowseButton_Click"/>
                             </StackPanel>
                         </StackPanel>
@@ -352,8 +422,7 @@
                                 </ComboBox>
                             </Grid>
 
-                            <CheckBox x:Name="CompressHistoryCheck" Content="Compress history (JPEG)" FontSize="12" Margin="0,8,0,0"
-                                      Checked="CompressHistoryCheck_Changed" Unchecked="CompressHistoryCheck_Changed"/>
+                            <TextBlock Text="History now follows the same image format, size, and JPG quality settings above." FontSize="11" Opacity="0.25" Margin="0,8,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
 
@@ -407,13 +476,36 @@
                         </StackPanel>
                     </Border>
 
+                    <TextBlock Text="UPDATES" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="AutoUpdateCheck" Content="Automatically check GitHub releases on startup" FontSize="13"
+                                      Checked="AutoUpdateCheck_Changed" Unchecked="AutoUpdateCheck_Changed"/>
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="UpdateStatusText" Text="Checking for updates..." FontSize="12.5" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="UpdateDetailText" Text="GitHub releases power update checks and downloads." FontSize="11" Opacity="0.35" TextWrapping="Wrap" Margin="0,2,8,0"/>
+                                </StackPanel>
+                                <Button x:Name="CheckUpdatesButton" Grid.Column="1" Content="Check now" FontSize="11" Padding="10,5" Margin="8,0,0,0" Click="CheckUpdatesButton_Click"/>
+                                <Button x:Name="DownloadUpdateButton" Grid.Column="2" Content="Open release" FontSize="11" Padding="10,5" Margin="6,0,0,0" Visibility="Collapsed" Click="DownloadUpdateButton_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <!-- About -->
-                    <TextBlock FontSize="10.5" Opacity="0.15" HorizontalAlignment="Center" Margin="0,18,0,2">
-                        <Run Text="Yoink v0.1.0"/>
+                    <TextBlock x:Name="VersionText" FontSize="10.5" Opacity="0.22" HorizontalAlignment="Center" Margin="0,18,0,2">
+                        <Run Text="Yoink"/>
                     </TextBlock>
                     <TextBlock HorizontalAlignment="Center" Margin="0,0,0,4">
                         <Hyperlink NavigateUri="https://github.com/jasperdevs/yoink" RequestNavigate="Hyperlink_Navigate"
-                                   Foreground="#1962F4" FontSize="10.5">GitHub</Hyperlink>
+                                   Foreground="{DynamicResource ThemeAccentBrush}" FontSize="10.5">GitHub</Hyperlink>
                     </TextBlock>
                 </StackPanel>
             </ScrollViewer>

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using FluentFTP;
 using Renci.SshNet;
 
 namespace Yoink.Services;
@@ -652,17 +653,28 @@ public static class UploadService
         if (string.IsNullOrWhiteSpace(s.FtpUrl) || string.IsNullOrWhiteSpace(s.FtpUsername))
             return new UploadResult { Error = "FTP URL or username not configured" };
 
-        string url = s.FtpUrl.TrimEnd('/') + "/" + Path.GetFileName(filePath);
-        var req = (FtpWebRequest)WebRequest.Create(url);
-        req.Method = WebRequestMethods.Ftp.UploadFile;
-        req.Credentials = new NetworkCredential(s.FtpUsername, s.FtpPassword ?? string.Empty);
-        req.UseBinary = true;
-        req.UsePassive = true;
-        var bytes = await File.ReadAllBytesAsync(filePath);
-        using (var stream = await req.GetRequestStreamAsync())
-            await stream.WriteAsync(bytes);
-        using var resp = (FtpWebResponse)await req.GetResponseAsync();
-        return new UploadResult { Success = true, Url = string.IsNullOrWhiteSpace(s.FtpPublicUrl) ? url : s.FtpPublicUrl.TrimEnd('/') + "/" + Path.GetFileName(filePath) };
+        var baseUri = new Uri(s.FtpUrl.EndsWith('/') ? s.FtpUrl : s.FtpUrl + "/");
+        string fileName = Path.GetFileName(filePath);
+        string remotePath = baseUri.AbsolutePath.TrimEnd('/') + "/" + fileName;
+        string url = new Uri(baseUri, Uri.EscapeDataString(fileName)).ToString();
+
+        var config = new FtpConfig
+        {
+            EncryptionMode = FtpEncryptionMode.None,
+            DataConnectionType = FtpDataConnectionType.AutoPassive,
+            ValidateAnyCertificate = true
+        };
+
+        using var client = new AsyncFtpClient(baseUri.Host, s.FtpUsername, s.FtpPassword ?? string.Empty, baseUri.Port > 0 ? baseUri.Port : 21, config);
+        await client.Connect();
+        await client.UploadFile(filePath, remotePath, FtpRemoteExists.Overwrite, createRemoteDir: true);
+        await client.Disconnect();
+
+        return new UploadResult
+        {
+            Success = true,
+            Url = string.IsNullOrWhiteSpace(s.FtpPublicUrl) ? url : s.FtpPublicUrl.TrimEnd('/') + "/" + fileName
+        };
     }
 
     private static Task<UploadResult> UploadSftp(string filePath, UploadSettings s)

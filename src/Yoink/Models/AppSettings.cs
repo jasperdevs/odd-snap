@@ -23,6 +23,13 @@ public enum HistoryRetentionPeriod
     NinetyDays
 }
 
+public enum CaptureImageFormat
+{
+    Png,
+    Jpeg,
+    Bmp
+}
+
 public sealed class AppSettings
 {
     public uint HotkeyModifiers { get; set; } = Native.User32.MOD_ALT;
@@ -50,9 +57,12 @@ public sealed class AppSettings
 
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.ShowPreview;
     public bool SaveToFile { get; set; } = true;
+    public CaptureImageFormat CaptureImageFormat { get; set; } = CaptureImageFormat.Png;
+    public int CaptureMaxLongEdge { get; set; }
     public string SaveDirectory { get; set; } = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Yoink");
     public bool StartWithWindows { get; set; } = true;
+    public bool AutoCheckForUpdates { get; set; } = true;
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }

@@ -8,6 +8,40 @@ public static class ScreenCapture
 {
     public static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreens()
     {
+        try
+        {
+            var capture = DxgiScreenCapture.CaptureAllScreens();
+            if (!IsLikelyInvalidCapture(capture.Bitmap))
+                return capture;
+
+            capture.Bitmap.Dispose();
+        }
+        catch
+        {
+        }
+
+        return CaptureAllScreensLegacy();
+    }
+
+    public static Bitmap CaptureRegion(Rectangle region)
+    {
+        try
+        {
+            var capture = DxgiScreenCapture.CaptureRegion(region);
+            if (!IsLikelyInvalidCapture(capture))
+                return capture;
+
+            capture.Dispose();
+        }
+        catch
+        {
+        }
+
+        return CaptureRegionLegacy(region);
+    }
+
+    private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensLegacy()
+    {
         // Use GetSystemMetrics for physical pixel bounds (DPI-unaware coordinates)
         int left = User32.GetSystemMetrics(User32.SM_XVIRTUALSCREEN);
         int top = User32.GetSystemMetrics(User32.SM_YVIRTUALSCREEN);
@@ -30,7 +64,7 @@ public static class ScreenCapture
     }
 
     /// <summary>Captures a specific screen region directly via BitBlt. Used by GIF recorder.</summary>
-    public static Bitmap CaptureRegion(Rectangle region)
+    private static Bitmap CaptureRegionLegacy(Rectangle region)
     {
         var bmp = new Bitmap(region.Width, region.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bmp);
@@ -55,5 +89,29 @@ public static class ScreenCapture
 
         var cropRect = new Rectangle(x, y, w, h);
         return fullScreenshot.Clone(cropRect, fullScreenshot.PixelFormat);
+    }
+
+    private static bool IsLikelyInvalidCapture(Bitmap bitmap)
+    {
+        if (bitmap.Width <= 0 || bitmap.Height <= 0)
+            return true;
+
+        int samples = 0;
+        int darkSamples = 0;
+        int stepX = Math.Max(1, bitmap.Width / 12);
+        int stepY = Math.Max(1, bitmap.Height / 12);
+
+        for (int y = 0; y < bitmap.Height; y += stepY)
+        {
+            for (int x = 0; x < bitmap.Width; x += stepX)
+            {
+                var pixel = bitmap.GetPixel(x, y);
+                samples++;
+                if (pixel.A <= 4 || (pixel.R <= 6 && pixel.G <= 6 && pixel.B <= 6))
+                    darkSamples++;
+            }
+        }
+
+        return samples > 0 && darkSamples >= (int)(samples * 0.9);
     }
 }

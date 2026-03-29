@@ -44,6 +44,7 @@ public partial class App : Application
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history"));
         _historyService.CompressHistory = _settingsService.Settings.CompressHistory;
         _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
+        _historyService.CaptureImageFormat = _settingsService.Settings.CaptureImageFormat;
         _historyService.PruneByRetention(_settingsService.Settings.HistoryRetention);
 
         // Show setup wizard on first run
@@ -63,6 +64,9 @@ public partial class App : Application
         _trayIcon.OnQuit += () => Shutdown();
 
         RegisterHotkeys();
+
+        if (_settingsService.Settings.AutoCheckForUpdates)
+            _ = CheckForUpdatesOnStartupAsync();
     }
 
     public void RegisterHotkeys()
@@ -379,28 +383,30 @@ public partial class App : Application
 
         Dispatcher.BeginInvoke(() =>
         {
+            var output = CaptureOutputService.PrepareBitmap(result, _settingsService!.Settings.CaptureMaxLongEdge);
+            result.Dispose();
             string? filePath = null;
             Services.HistoryEntry? historyEntry = null;
 
             if (_settingsService!.Settings.SaveHistory)
             {
-                historyEntry = _historyService!.SaveCapture(result);
+                historyEntry = _historyService!.SaveCapture(output);
                 filePath = historyEntry.FilePath;
             }
 
             if (_settingsService.Settings.SaveToFile)
-                filePath = SaveToFile(result) ?? filePath;
+                filePath = SaveToFile(output) ?? filePath;
 
             var action = _settingsService.Settings.AfterCapture;
             if (action == AfterCaptureAction.ShowPreview)
             {
-                var preview = new PreviewWindow(result, filePath);
+                var preview = new PreviewWindow(output, filePath);
                 preview.Show();
             }
             else
             {
-                ClipboardService.CopyToClipboard(result);
-                result.Dispose();
+                ClipboardService.CopyToClipboard(output);
+                output.Dispose();
             }
 
             // Auto-upload screenshot
@@ -490,8 +496,9 @@ public partial class App : Application
     {
         var dir = _settingsService!.Settings.SaveDirectory;
         Directory.CreateDirectory(dir);
-        var path = Path.Combine(dir, $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-        bmp.Save(path, ImageFormat.Png);
+        var ext = CaptureOutputService.GetExtension(_settingsService.Settings.CaptureImageFormat);
+        var path = Path.Combine(dir, $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}");
+        CaptureOutputService.SaveBitmap(bmp, path, _settingsService.Settings.CaptureImageFormat, _settingsService.Settings.JpegQuality);
         return path;
     }
 
@@ -518,6 +525,26 @@ public partial class App : Application
                     System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             }
         }, DispatcherPriority.Loaded);
+    }
+
+    private async Task CheckForUpdatesOnStartupAsync()
+    {
+        try
+        {
+            var result = await UpdateService.CheckForUpdatesAsync();
+            if (!result.IsUpdateAvailable)
+                return;
+
+            var detail = string.IsNullOrWhiteSpace(result.AssetName)
+                ? $"{result.LatestVersionLabel} is available on GitHub Releases."
+                : $"{result.LatestVersionLabel} is ready: {result.AssetName}";
+
+            _ = Dispatcher.BeginInvoke(() => ToastWindow.Show("Update available", detail));
+        }
+        catch
+        {
+            // Ignore background update check failures.
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

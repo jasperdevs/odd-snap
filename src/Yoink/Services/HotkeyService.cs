@@ -28,7 +28,7 @@ public sealed class HotkeyService : IDisposable
     public bool Register(uint modifiers, uint key)
     {
         ComponentDispatcher.ThreadPreprocessMessage += OnMsg;
-        if (modifiers == 0 || key == 0) { _captureRegistered = false; return true; }
+        if (key == 0) { _captureRegistered = false; return true; }
         _captureRegistered = User32.RegisterHotKey(
             IntPtr.Zero, HOTKEY_CAPTURE, modifiers | User32.MOD_NOREPEAT, key);
         return _captureRegistered;
@@ -36,7 +36,7 @@ public sealed class HotkeyService : IDisposable
 
     public bool RegisterOcr(uint modifiers, uint key)
     {
-        if (modifiers == 0 || key == 0) { _ocrRegistered = false; return true; }
+        if (key == 0) { _ocrRegistered = false; return true; }
         _ocrRegistered = User32.RegisterHotKey(
             IntPtr.Zero, HOTKEY_OCR, modifiers | User32.MOD_NOREPEAT, key);
         return _ocrRegistered;
@@ -44,7 +44,7 @@ public sealed class HotkeyService : IDisposable
 
     public bool RegisterPicker(uint modifiers, uint key)
     {
-        if (modifiers == 0 || key == 0) { _pickerRegistered = false; return true; }
+        if (key == 0) { _pickerRegistered = false; return true; }
         _pickerRegistered = User32.RegisterHotKey(
             IntPtr.Zero, HOTKEY_PICKER, modifiers | User32.MOD_NOREPEAT, key);
         return _pickerRegistered;
@@ -52,7 +52,7 @@ public sealed class HotkeyService : IDisposable
 
     public bool RegisterScan(uint modifiers, uint key)
     {
-        if (modifiers == 0 || key == 0) { _scanRegistered = false; return true; }
+        if (key == 0) { _scanRegistered = false; return true; }
         _scanRegistered = User32.RegisterHotKey(
             IntPtr.Zero, HOTKEY_SCAN, modifiers | User32.MOD_NOREPEAT, key);
         return _scanRegistered;
@@ -60,7 +60,7 @@ public sealed class HotkeyService : IDisposable
 
     public bool RegisterRuler(uint modifiers, uint key)
     {
-        if (modifiers == 0 || key == 0) { _rulerRegistered = false; return true; }
+        if (key == 0) { _rulerRegistered = false; return true; }
         _rulerRegistered = User32.RegisterHotKey(
             IntPtr.Zero, HOTKEY_RULER, modifiers | User32.MOD_NOREPEAT, key);
         return _rulerRegistered;
@@ -68,7 +68,7 @@ public sealed class HotkeyService : IDisposable
 
     public bool RegisterGif(uint modifiers, uint key)
     {
-        if (modifiers == 0 || key == 0) { _gifRegistered = false; return true; }
+        if (key == 0) { _gifRegistered = false; return true; }
         _gifRegistered = User32.RegisterHotKey(
             IntPtr.Zero, HOTKEY_GIF, modifiers | User32.MOD_NOREPEAT, key);
         return _gifRegistered;

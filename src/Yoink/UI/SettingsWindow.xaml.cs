@@ -23,6 +23,8 @@ public partial class SettingsWindow : Window
 
     private readonly SettingsService _settingsService;
     private readonly HistoryService _historyService;
+    private UpdateCheckResult? _latestUpdate;
+    private bool _updateCheckInFlight;
     public event Action? HotkeyChanged;
 
     public SettingsWindow(SettingsService settingsService, HistoryService historyService)
@@ -41,8 +43,10 @@ public partial class SettingsWindow : Window
         WireHotkeyBoxes();
         LoadSettings();
         Loaded += (_, _) => ApplyMicaBackdrop();
+        Loaded += async (_, _) => await RefreshUpdateStatusAsync(false);
         Activated += (_, _) =>
         {
+            ApplyThemeColors();
             if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
         };
     }
@@ -79,11 +83,55 @@ public partial class SettingsWindow : Window
     private void ApplyThemeColors()
     {
         Theme.Refresh();
+        Resources["ThemeTextPrimaryBrush"] = Theme.Brush(Theme.TextPrimary);
+        Resources["ThemeTextSecondaryBrush"] = Theme.Brush(Theme.TextSecondary);
+        Resources["ThemeMutedBrush"] = Theme.Brush(Theme.TextMuted);
+        Resources["ThemeCardBrush"] = Theme.Brush(Theme.BgCard);
+        Resources["ThemeTabActiveBrush"] = Theme.Brush(Theme.TabActiveBg);
+        Resources["ThemeTabHoverBrush"] = Theme.Brush(Theme.TabHoverBg);
+        Resources["ThemeInputBackgroundBrush"] = Theme.Brush(Theme.BgSecondary);
+        Resources["ThemeInputBorderBrush"] = Theme.Brush(Theme.BorderSubtle);
+        Resources["ThemeWindowBorderBrush"] = Theme.Brush(Theme.WindowBorder);
+        Resources["ThemeAccentBrush"] = new SolidColorBrush(System.Windows.Media.Color.FromRgb(25, 98, 244));
         OuterBorder.Background = Theme.Brush(Theme.BgPrimary);
         OuterBorder.BorderBrush = Theme.Brush(Theme.WindowBorder);
         TitleBarBorder.Background = Theme.Brush(Theme.TitleBar);
         TitleText.Foreground = Theme.Brush(Theme.TextPrimary);
         Foreground = Theme.Brush(Theme.TextPrimary);
+        ApplyThemeToVisualTree(OuterBorder);
+    }
+
+    private void ApplyThemeToVisualTree(DependencyObject root)
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+
+            switch (child)
+            {
+                case System.Windows.Controls.TextBox textBox:
+                    textBox.Background = Theme.Brush(Theme.BgSecondary);
+                    textBox.Foreground = Theme.Brush(Theme.TextPrimary);
+                    textBox.BorderBrush = Theme.Brush(Theme.BorderSubtle);
+                    textBox.CaretBrush = Theme.Brush(Theme.TextPrimary);
+                    break;
+                case System.Windows.Controls.ComboBox comboBox:
+                    comboBox.Background = Theme.Brush(Theme.BgSecondary);
+                    comboBox.Foreground = Theme.Brush(Theme.TextPrimary);
+                    comboBox.BorderBrush = Theme.Brush(Theme.BorderSubtle);
+                    break;
+                case Button button when button.Style == null:
+                    button.Background = Theme.Brush(Theme.AccentSubtle);
+                    button.Foreground = Theme.Brush(Theme.TextPrimary);
+                    button.BorderBrush = Theme.Brush(Theme.BorderSubtle);
+                    break;
+                case CheckBox checkBox:
+                    checkBox.Foreground = Theme.Brush(Theme.TextPrimary);
+                    break;
+            }
+
+            ApplyThemeToVisualTree(child);
+        }
     }
 
     private void LoadSettings()
@@ -98,13 +146,31 @@ public partial class SettingsWindow : Window
         DefaultCaptureModeCombo.SelectedIndex = s.DefaultCaptureMode == Yoink.Models.CaptureMode.Freeform ? 1 : 0;
         AfterCaptureCombo.SelectedIndex = (int)s.AfterCapture;
         SaveToFileCheck.IsChecked = s.SaveToFile;
+        CaptureFormatCombo.SelectedIndex = (int)s.CaptureImageFormat;
+        JpegQualityCombo.SelectedIndex = s.JpegQuality switch
+        {
+            >= 95 => 0,
+            >= 90 => 1,
+            >= 85 => 2,
+            >= 75 => 3,
+            _ => 4
+        };
+        CaptureSizeCombo.SelectedIndex = s.CaptureMaxLongEdge switch
+        {
+            2160 => 1,
+            1440 => 2,
+            1080 => 3,
+            720 => 4,
+            480 => 5,
+            _ => 0
+        };
         SaveDirBox.Text = s.SaveDirectory;
         SaveDirPanel.Visibility = s.SaveToFile ? Visibility.Visible : Visibility.Collapsed;
         StartWithWindowsCheck.IsChecked = s.StartWithWindows;
+        AutoUpdateCheck.IsChecked = s.AutoCheckForUpdates;
         SaveHistoryCheck.IsChecked = s.SaveHistory;
         HistoryRetentionCombo.SelectedIndex = (int)s.HistoryRetention;
         MuteSoundsCheck.IsChecked = s.MuteSounds;
-        CompressHistoryCheck.IsChecked = s.CompressHistory;
         CrosshairGuidesCheck.IsChecked = s.ShowCrosshairGuides;
         ShowToolNumberBadgesCheck.IsChecked = s.ShowToolNumberBadges;
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
@@ -114,8 +180,10 @@ public partial class SettingsWindow : Window
         AutoUploadScreenshotsCheck.IsChecked = s.AutoUploadScreenshots;
         LoadUploadSettingsIntoUi(s.ImageUploadSettings);
         UpdateUploadSettingsVisibility();
+        VersionText.Text = $"Yoink {UpdateService.GetCurrentVersionLabel()}";
 
         PopulateToolToggles();
+        UpdateCaptureFormatControls();
     }
 
     private UploadSettings ActiveUploadSettings => _settingsService.Settings.ImageUploadSettings;
@@ -301,9 +369,9 @@ public partial class SettingsWindow : Window
             if (IsModifierOnly(key)) return;
 
             uint mod = GetModifiers();
-            if (mod == 0) return;
-
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
+            if (mod == 0 && vk != Native.User32.VK_SNAPSHOT) return;
+
             setModKey(_settingsService.Settings, mod, vk);
             _settingsService.Save();
             box.Text = HotkeyFormatter.Format(mod, vk);
@@ -381,6 +449,7 @@ public partial class SettingsWindow : Window
     private static uint GetModifiers()
     {
         uint m = 0;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Windows)) m |= Native.User32.MOD_WIN;
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) m |= Native.User32.MOD_ALT;
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) m |= Native.User32.MOD_CONTROL;
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) m |= Native.User32.MOD_SHIFT;
@@ -444,6 +513,125 @@ public partial class SettingsWindow : Window
         else key.DeleteValue("Yoink", false);
     }
 
+    private void AutoUpdateCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.AutoCheckForUpdates = AutoUpdateCheck.IsChecked == true;
+        _settingsService.Save();
+    }
+
+    private void CaptureFormatCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.CaptureImageFormat = (CaptureImageFormat)CaptureFormatCombo.SelectedIndex;
+        _settingsService.Save();
+        _historyService.CaptureImageFormat = _settingsService.Settings.CaptureImageFormat;
+        UpdateCaptureFormatControls();
+    }
+
+    private void JpegQualityCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        var selected = JpegQualityCombo.SelectedItem as ComboBoxItem;
+        var tag = selected?.Tag?.ToString();
+        _settingsService.Settings.JpegQuality = int.TryParse(tag, out var value) ? value : 85;
+        _settingsService.Save();
+        _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
+    }
+
+    private void CaptureSizeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        var selected = CaptureSizeCombo.SelectedItem as ComboBoxItem;
+        var tag = selected?.Tag?.ToString();
+        _settingsService.Settings.CaptureMaxLongEdge = int.TryParse(tag, out var value) ? value : 0;
+        _settingsService.Save();
+    }
+
+    private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RefreshUpdateStatusAsync(true);
+    }
+
+    private void DownloadUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_latestUpdate is null)
+            return;
+
+        OpenExternalUrl(string.IsNullOrWhiteSpace(_latestUpdate.DownloadUrl)
+            ? _latestUpdate.ReleaseUrl
+            : _latestUpdate.DownloadUrl);
+    }
+
+    private async Task RefreshUpdateStatusAsync(bool isManualCheck)
+    {
+        if (_updateCheckInFlight)
+            return;
+
+        _updateCheckInFlight = true;
+        CheckUpdatesButton.IsEnabled = false;
+        CheckUpdatesButton.Content = "Checking...";
+        DownloadUpdateButton.Visibility = Visibility.Collapsed;
+        UpdateStatusText.Text = "Checking GitHub releases...";
+        UpdateDetailText.Text = "Looking for the newest production build.";
+
+        try
+        {
+            _latestUpdate = await UpdateService.CheckForUpdatesAsync();
+            UpdateStatusText.Text = _latestUpdate.StatusMessage;
+
+            if (_latestUpdate.IsUpdateAvailable)
+            {
+                var published = _latestUpdate.PublishedAt.HasValue
+                    ? $"Published {FormatTimeAgo(_latestUpdate.PublishedAt.Value.LocalDateTime)}"
+                    : "Published recently";
+                var asset = string.IsNullOrWhiteSpace(_latestUpdate.AssetName)
+                    ? "Open the release page to download it."
+                    : $"Suggested download: {_latestUpdate.AssetName}";
+                UpdateDetailText.Text = $"{published}. {asset}";
+                DownloadUpdateButton.Content = string.IsNullOrWhiteSpace(_latestUpdate.AssetName)
+                    ? "Open release"
+                    : "Download update";
+                DownloadUpdateButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                UpdateDetailText.Text = $"Current build: {UpdateService.GetCurrentVersionLabel()}";
+                if (isManualCheck)
+                    ToastWindow.Show("Yoink is up to date", UpdateService.GetCurrentVersionLabel());
+            }
+        }
+        catch (Exception ex)
+        {
+            _latestUpdate = null;
+            UpdateStatusText.Text = "Update check failed";
+            UpdateDetailText.Text = ex.Message;
+            if (isManualCheck)
+                ToastWindow.Show("Update check failed", ex.Message);
+        }
+        finally
+        {
+            _updateCheckInFlight = false;
+            CheckUpdatesButton.IsEnabled = true;
+            CheckUpdatesButton.Content = "Check now";
+        }
+    }
+
+    private static void OpenExternalUrl(string url)
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true
+        });
+    }
+
+    private void UpdateCaptureFormatControls()
+    {
+        var isJpeg = (CaptureImageFormat)CaptureFormatCombo.SelectedIndex == CaptureImageFormat.Jpeg;
+        JpegQualityPanel.Visibility = isJpeg ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void SaveHistoryCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded) return;
@@ -465,14 +653,6 @@ public partial class SettingsWindow : Window
         _settingsService.Settings.MuteSounds = MuteSoundsCheck.IsChecked == true;
         _settingsService.Save();
         SoundService.Muted = _settingsService.Settings.MuteSounds;
-    }
-
-    private void CompressHistoryCheck_Changed(object sender, RoutedEventArgs e)
-    {
-        if (!IsLoaded) return;
-        _settingsService.Settings.CompressHistory = CompressHistoryCheck.IsChecked == true;
-        _settingsService.Save();
-        _historyService.CompressHistory = _settingsService.Settings.CompressHistory;
     }
 
     private void Hyperlink_Navigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)

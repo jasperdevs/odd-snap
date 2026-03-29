@@ -101,7 +101,7 @@ public sealed class TrayIcon : IDisposable
         // Try to load the real icon from the exe's resources
         try
         {
-            var exe = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            var exe = Environment.ProcessPath;
             if (!string.IsNullOrEmpty(exe) && System.IO.File.Exists(exe))
             {
                 var icon = Icon.ExtractAssociatedIcon(exe);
