@@ -6,6 +6,13 @@ using Yoink.Models;
 
 namespace Yoink.Services;
 
+public enum HistoryKind
+{
+    Image,
+    Gif,
+    Sticker
+}
+
 public sealed class HistoryEntry
 {
     public string FileName { get; set; } = "";
@@ -13,6 +20,7 @@ public sealed class HistoryEntry
     public DateTime CapturedAt { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
+    public HistoryKind Kind { get; set; } = HistoryKind.Image;
     public string? UploadUrl { get; set; }
     public string? UploadProvider { get; set; }
 }
@@ -34,6 +42,8 @@ public sealed class HistoryService
     private static readonly string HistoryDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history");
 
+    private static readonly string StickerDir = Path.Combine(HistoryDir, "stickers");
+
     private static readonly string IndexPath = Path.Combine(HistoryDir, "index.json");
     private static readonly string OcrIndexPath = Path.Combine(HistoryDir, "ocr_index.json");
     private static readonly string ColorIndexPath = Path.Combine(HistoryDir, "color_index.json");
@@ -45,17 +55,16 @@ public sealed class HistoryService
     private List<ColorHistoryEntry> _colorEntries = new();
 
     public IReadOnlyList<HistoryEntry> Entries => _entries;
-    public IReadOnlyList<HistoryEntry> ImageEntries => _entries.Where(e => !IsGif(e)).ToList();
-    public IReadOnlyList<HistoryEntry> GifEntries => _entries.Where(e => IsGif(e)).ToList();
+    public IReadOnlyList<HistoryEntry> ImageEntries => _entries.Where(e => e.Kind == HistoryKind.Image).ToList();
+    public IReadOnlyList<HistoryEntry> GifEntries => _entries.Where(e => e.Kind == HistoryKind.Gif).ToList();
+    public IReadOnlyList<HistoryEntry> StickerEntries => _entries.Where(e => e.Kind == HistoryKind.Sticker).ToList();
     public IReadOnlyList<OcrHistoryEntry> OcrEntries => _ocrEntries;
     public IReadOnlyList<ColorHistoryEntry> ColorEntries => _colorEntries;
-
-    private static bool IsGif(HistoryEntry e) =>
-        Path.GetExtension(e.FilePath).Equals(".gif", StringComparison.OrdinalIgnoreCase);
 
     public void Load()
     {
         Directory.CreateDirectory(HistoryDir);
+        Directory.CreateDirectory(StickerDir);
 
         if (File.Exists(IndexPath))
         {
@@ -64,6 +73,15 @@ public sealed class HistoryService
                 _entries = JsonSerializer.Deserialize<List<HistoryEntry>>(
                     File.ReadAllText(IndexPath), JsonOpts) ?? new();
                 _entries.RemoveAll(e => !File.Exists(e.FilePath));
+                foreach (var entry in _entries)
+                {
+                    if (entry.FilePath.StartsWith(StickerDir, StringComparison.OrdinalIgnoreCase))
+                        entry.Kind = HistoryKind.Sticker;
+                    else if (Path.GetExtension(entry.FilePath).Equals(".gif", StringComparison.OrdinalIgnoreCase))
+                        entry.Kind = HistoryKind.Gif;
+                    else if (entry.Kind != HistoryKind.Sticker)
+                        entry.Kind = HistoryKind.Image;
+                }
             }
             catch { _entries = new(); }
         }
@@ -105,6 +123,8 @@ public sealed class HistoryService
             if (!Directory.Exists(dir)) continue;
             foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories))
             {
+                if (file.StartsWith(StickerDir, StringComparison.OrdinalIgnoreCase))
+                    continue;
                 var ext = Path.GetExtension(file).ToLowerInvariant();
                 if (ext is not (".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp")) continue;
                 if (tracked.Contains(file)) continue;
@@ -118,7 +138,8 @@ public sealed class HistoryService
                         FilePath = file,
                         CapturedAt = fi.CreationTime,
                         Width = 0,
-                        Height = 0
+                        Height = 0,
+                        Kind = ext == ".gif" ? HistoryKind.Gif : HistoryKind.Image
                     });
                     tracked.Add(file);
                     changed = true;
@@ -148,7 +169,32 @@ public sealed class HistoryService
             FilePath = gifPath,
             CapturedAt = DateTime.Now,
             Width = 0,
-            Height = 0
+            Height = 0,
+            Kind = HistoryKind.Gif
+        };
+        _entries.Insert(0, entry);
+        SaveIndex();
+        return entry;
+    }
+
+    public HistoryEntry SaveStickerEntry(Bitmap sticker, string? providerName = null)
+    {
+        Directory.CreateDirectory(StickerDir);
+        var now = DateTime.Now;
+        var fileName = $"yoink_sticker_{now:yyyyMMdd_HHmmss_fff}.png";
+        var filePath = Path.Combine(StickerDir, fileName);
+
+        sticker.Save(filePath, ImageFormat.Png);
+
+        var entry = new HistoryEntry
+        {
+            FileName = fileName,
+            FilePath = filePath,
+            CapturedAt = now,
+            Width = sticker.Width,
+            Height = sticker.Height,
+            Kind = HistoryKind.Sticker,
+            UploadProvider = providerName
         };
         _entries.Insert(0, entry);
         SaveIndex();
@@ -168,7 +214,8 @@ public sealed class HistoryService
         var entry = new HistoryEntry
         {
             FileName = fileName, FilePath = filePath, CapturedAt = now,
-            Width = screenshot.Width, Height = screenshot.Height
+            Width = screenshot.Width, Height = screenshot.Height,
+            Kind = HistoryKind.Image
         };
         _entries.Insert(0, entry);
         SaveIndex();
@@ -212,7 +259,7 @@ public sealed class HistoryService
 
     public void ClearImages()
     {
-        var images = _entries.Where(e => !IsGif(e)).ToList();
+        var images = _entries.Where(e => e.Kind == HistoryKind.Image).ToList();
         foreach (var e in images)
         {
             try { File.Delete(e.FilePath); } catch { }
@@ -223,7 +270,7 @@ public sealed class HistoryService
 
     public void ClearGifs()
     {
-        var gifs = _entries.Where(e => IsGif(e)).ToList();
+        var gifs = _entries.Where(e => e.Kind == HistoryKind.Gif).ToList();
         foreach (var e in gifs)
         {
             try { File.Delete(e.FilePath); } catch { }
@@ -249,6 +296,17 @@ public sealed class HistoryService
         foreach (var e in _entries)
             try { File.Delete(e.FilePath); } catch { }
         _entries.Clear();
+        SaveIndex();
+    }
+
+    public void ClearStickers()
+    {
+        var stickers = _entries.Where(e => e.Kind == HistoryKind.Sticker).ToList();
+        foreach (var e in stickers)
+        {
+            try { File.Delete(e.FilePath); } catch { }
+            _entries.Remove(e);
+        }
         SaveIndex();
     }
 

@@ -26,7 +26,7 @@
         <SolidColorBrush x:Key="ThemeInputBackgroundBrush" Color="#FF1A1A1A"/>
         <SolidColorBrush x:Key="ThemeInputBorderBrush" Color="#28FFFFFF"/>
         <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#15FFFFFF"/>
-        <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FF1962F4"/>
+        <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FFFFFFFF"/>
 
         <Style x:Key="TabPill" TargetType="RadioButton">
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -143,9 +143,10 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
     </Window.Resources>
 
-    <Border Margin="16" CornerRadius="12">
+        <Border Margin="16" CornerRadius="12">
         <Border.Effect>
             <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.5" Color="Black"/>
         </Border.Effect>
@@ -277,6 +278,64 @@
 
                             <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
 
+                            <!-- Sticker hotkey -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Sticker" FontSize="13"/>
+                                    <TextBlock Text="Optional" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="StickerHotkeyBox" Style="{StaticResource HotkeyBox}"
+                                             PreviewKeyDown="StickerHotkeyBox_PreviewKeyDown"
+                                             GotFocus="StickerHotkeyBox_GotFocus" LostFocus="StickerHotkeyBox_LostFocus"/>
+                                    <Button Content="X" Style="{StaticResource ClearBtn}" Click="ClearStickerHotkey_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Fullscreen capture" FontSize="13"/>
+                                    <TextBlock Text="Captures the whole virtual screen immediately" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="FullscreenHotkeyBox" Style="{StaticResource HotkeyBox}"
+                                             PreviewKeyDown="FullscreenHotkeyBox_PreviewKeyDown"
+                                             GotFocus="FullscreenHotkeyBox_GotFocus" LostFocus="FullscreenHotkeyBox_LostFocus"/>
+                                    <Button Content="X" Style="{StaticResource ClearBtn}" Click="ClearFullscreenHotkey_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Active window capture" FontSize="13"/>
+                                    <TextBlock Text="Captures the focused window immediately" FontSize="11" Opacity="0.25"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="ActiveWindowHotkeyBox" Style="{StaticResource HotkeyBox}"
+                                             PreviewKeyDown="ActiveWindowHotkeyBox_PreviewKeyDown"
+                                             GotFocus="ActiveWindowHotkeyBox_GotFocus" LostFocus="ActiveWindowHotkeyBox_LostFocus"/>
+                                    <Button Content="X" Style="{StaticResource ClearBtn}" Click="ClearActiveWindowHotkey_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
                             <!-- GIF recording hotkey -->
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -323,6 +382,24 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Window detection" FontSize="13"/>
+                                <TextBlock Text="Snaps to windows when you hover the capture area" FontSize="11" Opacity="0.25" TextWrapping="Wrap" Width="250"/>
+                            </StackPanel>
+                            <ComboBox x:Name="WindowDetectionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                      SelectionChanged="WindowDetectionCombo_SelectionChanged">
+                                <ComboBoxItem Content="Off"/>
+                                <ComboBoxItem Content="Windows only"/>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
                             <TextBlock Text="After capture" FontSize="13" VerticalAlignment="Center"/>
                             <ComboBox x:Name="AfterCaptureCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
                                       SelectionChanged="AfterCaptureCombo_SelectionChanged">
@@ -338,6 +415,8 @@
                         <StackPanel>
                             <CheckBox x:Name="SaveToFileCheck" Content="Save screenshots to file" FontSize="13"
                                       Checked="SaveToFileCheck_Changed" Unchecked="SaveToFileCheck_Changed"/>
+                            <CheckBox x:Name="AskFileNameCheck" Content="Ask for file name every time" FontSize="13" Margin="0,8,0,0"
+                                      Checked="AskFileNameCheck_Changed" Unchecked="AskFileNameCheck_Changed"/>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -421,7 +500,6 @@
                                     <ComboBoxItem Content="3 months"/>
                                 </ComboBox>
                             </Grid>
-
                             <TextBlock Text="History now follows the same image format, size, and JPG quality settings above." FontSize="11" Opacity="0.25" Margin="0,8,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
@@ -483,6 +561,11 @@
 
                             <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
                                       Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
+
+                            <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                            <Button Content="Uninstall Yoink" FontSize="12" Padding="10,6"
+                                    HorizontalAlignment="Left" Click="UninstallButton_Click"/>
                         </StackPanel>
                     </Border>
 
@@ -540,6 +623,8 @@
                                          Click="HistorySubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
                             <RadioButton x:Name="ColorsSubTab" Content="Colors" GroupName="HistSub"
                                          Click="HistorySubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
+                            <RadioButton x:Name="StickersSubTab" Content="Stickers" GroupName="HistSub"
+                                         Click="HistorySubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button x:Name="SelectBtn" Content="Select" FontSize="10" Padding="8,3"
@@ -577,6 +662,13 @@
                     <WrapPanel x:Name="ColorStack"/>
                 </ScrollViewer>
 
+                <!-- Sticker history -->
+                <ScrollViewer x:Name="StickersPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              Padding="10,2,10,4" Visibility="Collapsed"
+                              ScrollChanged="StickerPanel_ScrollChanged">
+                    <StackPanel x:Name="StickerStack"/>
+                </ScrollViewer>
+
                 <!-- Empty states -->
                 <StackPanel x:Name="HistoryEmptyText" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
                             Visibility="Collapsed">
@@ -594,6 +686,16 @@
             <!-- Uploads -->
             <ScrollViewer x:Name="UploadsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
+                    <Border Padding="0,0,0,10">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="UploadImagesSubTab" Content="Images" GroupName="UploadSub"
+                                         IsChecked="True" Click="UploadSubTabChanged" Style="{StaticResource SubTab}"/>
+                            <RadioButton x:Name="UploadStickersSubTab" Content="Stickers" GroupName="UploadSub"
+                                         Click="UploadSubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel x:Name="ImageUploadsPanel">
                     <TextBlock Text="DESTINATION" Style="{StaticResource SectionLabel}"/>
 
                     <Border Style="{StaticResource Card}">
@@ -1156,6 +1258,80 @@
                                     HorizontalAlignment="Left" Click="TestUpload_Click" Cursor="Hand"/>
                         </StackPanel>
                     </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="StickerUploadsPanel" Visibility="Collapsed">
+                        <TextBlock Text="STICKER" Style="{StaticResource SectionLabel}"/>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Sticker provider" FontSize="13"/>
+                                        <TextBlock Text="Removes the background before saving, previewing, and copying" FontSize="11" Opacity="0.25" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="StickerProviderCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                              SelectionChanged="StickerProviderCombo_Changed">
+                                        <ComboBoxItem Content="None"/>
+                                        <ComboBoxItem Content="Remove.bg"/>
+                                        <ComboBoxItem Content="Photoroom"/>
+                                        <ComboBoxItem Content="Local CPU"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                                <StackPanel x:Name="StickerRemoveBgPanel" Visibility="Collapsed">
+                                    <TextBlock Text="remove.bg API key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="StickerRemoveBgKeyBox" FontSize="11" Padding="7,4"
+                                             Background="#1A1A1A" Foreground="#99FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1"
+                                             TextChanged="StickerRemoveBgKeyBox_Changed"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="StickerPhotoroomPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Photoroom API key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="StickerPhotoroomKeyBox" FontSize="11" Padding="7,4"
+                                             Background="#1A1A1A" Foreground="#99FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1"
+                                             TextChanged="StickerPhotoroomKeyBox_Changed"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="StickerLocalCpuPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Local engine" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                    <TextBlock Text="This runs on your PC only. Yoink downloads an open-source model and removes the background in-app, so nothing leaves your machine." FontSize="11" Opacity="0.25" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                                    <ComboBox x:Name="StickerLocalEngineCombo" FontSize="12" Padding="8,5" MinWidth="180"
+                                              SelectionChanged="StickerLocalEngineCombo_Changed">
+                                        <ComboBoxItem Content="BRIA RMBG"/>
+                                        <ComboBoxItem Content="U2Netp"/>
+                                    </ComboBox>
+
+                                    <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                                    <TextBlock x:Name="StickerLocalEngineStatusText" Text="Pick a local engine." FontSize="11" Opacity="0.35" TextWrapping="Wrap"/>
+                                    <ProgressBar x:Name="StickerLocalEngineProgress" Height="6" Margin="0,8,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="StickerLocalEngineProgressText" FontSize="10" Opacity="0.25" Margin="0,4,0,0" Visibility="Collapsed"/>
+
+                                    <Border Height="1" Background="#0AFFFFFF" Margin="0,10,0,10"/>
+
+                                    <CheckBox x:Name="StickerShadowCheck" Content="Add drop shadow" FontSize="13"
+                                              Checked="StickerShadowCheck_Changed" Unchecked="StickerShadowCheck_Changed"/>
+                                    <CheckBox x:Name="StickerStrokeCheck" Content="Add white stroke" FontSize="13" Margin="0,8,0,0"
+                                              Checked="StickerStrokeCheck_Changed" Unchecked="StickerStrokeCheck_Changed"/>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button x:Name="StickerDownloadRembgBtn" Content="Download from GitHub" FontSize="12" Padding="12,6"
+                                                Click="StickerDownloadRembgBtn_Click" Cursor="Hand"/>
+                                        <Button x:Name="StickerOpenLocalEngineRepoBtn" Content="Open GitHub" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                                Click="StickerOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

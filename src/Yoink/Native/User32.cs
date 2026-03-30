@@ -23,7 +23,10 @@ internal static partial class User32
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOOLWINDOW = 0x80;
     public const int WS_EX_APPWINDOW = 0x40000;
+    public const int WS_EX_TRANSPARENT = 0x20;
     public const uint GA_ROOTOWNER = 3;
+    public const uint GA_ROOT = 2;
+    public const uint GW_HWNDNEXT = 2;
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     public delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
@@ -71,6 +74,15 @@ internal static partial class User32
 
     [LibraryImport("user32.dll")]
     public static partial IntPtr WindowFromPoint(POINT point);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetForegroundWindow();
 
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
     public static partial int GetWindowTextW(IntPtr hWnd, [Out] char[] lpString, int nMaxCount);

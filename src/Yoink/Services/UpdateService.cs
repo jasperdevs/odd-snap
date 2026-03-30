@@ -106,11 +106,12 @@ public static class UpdateService
         };
 
         return assets.FirstOrDefault(asset =>
-                   asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                   && asset.Name.Contains(arch, StringComparison.OrdinalIgnoreCase))
-               ?? assets.FirstOrDefault(asset =>
                    asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
                    && asset.Name.Contains(arch, StringComparison.OrdinalIgnoreCase))
+               ?? assets.FirstOrDefault(asset =>
+                   asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                   && asset.Name.Contains(arch, StringComparison.OrdinalIgnoreCase))
+               ?? assets.FirstOrDefault(asset => asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                ?? assets.FirstOrDefault(asset => asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                ?? assets.FirstOrDefault();
     }

@@ -7,6 +7,7 @@ public enum CaptureMode
     ColorPicker,
     Ocr,
     Scan,
+    Sticker,
 
     Ruler,
     Draw,

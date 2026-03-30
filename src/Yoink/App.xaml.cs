@@ -9,6 +9,7 @@ using Yoink.Services;
 using Yoink.Helpers;
 using Yoink.UI;
 using System.Diagnostics;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
 namespace Yoink;
 
@@ -25,10 +26,25 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        if (e.Args.Any(a => a.Equals("--uninstall", StringComparison.OrdinalIgnoreCase) || a.Equals("/uninstall", StringComparison.OrdinalIgnoreCase)))
+        {
+            base.OnStartup(e);
+            try { UninstallService.RemoveInstalledAppEntry(); } catch { }
+            try { UninstallService.RemoveStartMenuShortcut(); } catch { }
+            try { UninstallService.RemoveStartupEntry(); } catch { }
+            try { UninstallService.RemoveAppData(); } catch { }
+            try { UninstallService.ScheduleInstallFolderRemoval(); } catch { }
+            Shutdown();
+            return;
+        }
+
         _mutex = new Mutex(true, "YoinkScreenshotTool_SingleInstance", out bool isNew);
         if (!isNew) { Shutdown(); return; }
 
         base.OnStartup(e);
+
+        try { UninstallService.RegisterInstalledAppEntry(); } catch { }
+        try { UninstallService.EnsureStartMenuShortcut(); } catch { }
 
         _settingsService = new SettingsService();
         _settingsService.Load();
@@ -77,16 +93,22 @@ public partial class App : Application
         _hotkeyService.OcrHotkeyPressed += OnOcrHotkeyPressed;
         _hotkeyService.PickerHotkeyPressed += OnPickerHotkeyPressed;
         _hotkeyService.ScanHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Scan);
+        _hotkeyService.StickerHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Sticker);
         _hotkeyService.RulerHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Ruler);
         _hotkeyService.GifHotkeyPressed += OnGifHotkeyPressed;
+        _hotkeyService.FullscreenHotkeyPressed += OnFullscreenHotkeyPressed;
+        _hotkeyService.ActiveWindowHotkeyPressed += OnActiveWindowHotkeyPressed;
 
         var s = _settingsService!.Settings;
         bool ok = _hotkeyService.Register(s.HotkeyModifiers, s.HotkeyKey);
         _hotkeyService.RegisterOcr(s.OcrHotkeyModifiers, s.OcrHotkeyKey);
         _hotkeyService.RegisterPicker(s.PickerHotkeyModifiers, s.PickerHotkeyKey);
         _hotkeyService.RegisterScan(s.ScanHotkeyModifiers, s.ScanHotkeyKey);
+        _hotkeyService.RegisterSticker(s.StickerHotkeyModifiers, s.StickerHotkeyKey);
         _hotkeyService.RegisterRuler(s.RulerHotkeyModifiers, s.RulerHotkeyKey);
         _hotkeyService.RegisterGif(s.GifHotkeyModifiers, s.GifHotkeyKey);
+        _hotkeyService.RegisterFullscreen(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey);
+        _hotkeyService.RegisterActiveWindow(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey);
 
 
         var name = HotkeyFormatter.Format(s.HotkeyModifiers, s.HotkeyKey);
@@ -141,6 +163,24 @@ public partial class App : Application
         PreviewWindow.DismissCurrent();
         ToastWindow.DismissCurrent();
         Dispatcher.BeginInvoke(LaunchGifRecording);
+    }
+
+    private void OnFullscreenHotkeyPressed()
+    {
+        if (_isCapturing) return;
+        _isCapturing = true;
+        PreviewWindow.DismissCurrent();
+        ToastWindow.DismissCurrent();
+        Dispatcher.BeginInvoke(CaptureFullscreenNow);
+    }
+
+    private void OnActiveWindowHotkeyPressed()
+    {
+        if (_isCapturing) return;
+        _isCapturing = true;
+        PreviewWindow.DismissCurrent();
+        ToastWindow.DismissCurrent();
+        Dispatcher.BeginInvoke(CaptureActiveWindowNow);
     }
 
     // ─── GIF recording launch ───────────────────────────────────────
@@ -210,6 +250,56 @@ public partial class App : Application
         timer.Start();
     }
 
+    private void CaptureFullscreenNow()
+    {
+        try
+        {
+            var (bmp, _) = ScreenCapture.CaptureAllScreens();
+            HandleCaptureResult(new Bitmap(bmp));
+            bmp.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _isCapturing = false;
+            ToastWindow.Show("Capture error", ex.Message);
+        }
+    }
+
+    private void CaptureActiveWindowNow()
+    {
+        try
+        {
+            var (bmp, bounds) = ScreenCapture.CaptureAllScreens();
+            var hwnd = Native.User32.GetForegroundWindow();
+            if (hwnd == IntPtr.Zero || !Native.User32.GetWindowRect(hwnd, out var rect))
+            {
+                bmp.Dispose();
+                _isCapturing = false;
+                ToastWindow.Show("Capture error", "Couldn't find the active window.");
+                return;
+            }
+
+            var crop = new Rectangle(rect.Left - bounds.X, rect.Top - bounds.Y, rect.Width, rect.Height);
+            crop.Intersect(new Rectangle(System.Drawing.Point.Empty, bmp.Size));
+            if (crop.Width <= 1 || crop.Height <= 1)
+            {
+                bmp.Dispose();
+                _isCapturing = false;
+                ToastWindow.Show("Capture error", "Active window is out of bounds.");
+                return;
+            }
+
+            using var cropped = ScreenCapture.CropRegion(bmp, crop);
+            HandleCaptureResult(new Bitmap(cropped));
+            bmp.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _isCapturing = false;
+            ToastWindow.Show("Capture error", ex.Message);
+        }
+    }
+
     // ─── Unified overlay launch ─────────────────────────────────────
 
     private void LaunchOverlay(CaptureMode initialMode)
@@ -227,7 +317,7 @@ public partial class App : Application
                     var (bmp, bounds) = ScreenCapture.CaptureAllScreens();
                     screenshot = bmp;
 
-                    var overlay = new RegionOverlayForm(screenshot, bounds, initialMode)
+                    var overlay = new RegionOverlayForm(screenshot, bounds, initialMode, _settingsService!.Settings.WindowDetection)
                     {
                         ShowCrosshairGuides = _settingsService!.Settings.ShowCrosshairGuides,
                         DetectWindows = _settingsService.Settings.DetectWindows,
@@ -301,6 +391,41 @@ public partial class App : Application
                         });
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
+                    };
+
+                    // Sticker capture (remove background then treat as normal image)
+                    overlay.StickerRegionSelected += sel =>
+                    {
+                        overlay.Hide();
+                        using var annotated = overlay.RenderAnnotatedBitmap();
+                        using var cropped = ScreenCapture.CropRegion(annotated, sel);
+                        var clone = new Bitmap(cropped);
+
+                        Dispatcher.BeginInvoke(async () =>
+                        {
+                            try
+                            {
+                                var processed = await StickerService.ProcessAsync(clone, _settingsService!.Settings.StickerUploadSettings);
+                                if (processed.Success && processed.Image is not null)
+                                {
+                                    HandleStickerResult(processed.Image, processed.ProviderName);
+                                }
+                                else
+                                {
+                                    ToastWindow.Show("Sticker", processed.Error);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                ToastWindow.Show("Sticker error", ex.Message);
+                            }
+                            finally
+                            {
+                                clone.Dispose();
+                                overlay.Close();
+                                System.Windows.Forms.Application.ExitThread();
+                            }
+                        });
                     };
 
                     // Color picker – copy hex without # prefix
@@ -390,14 +515,28 @@ public partial class App : Application
             string? filePath = null;
             Services.HistoryEntry? historyEntry = null;
 
+            if (_settingsService.Settings.SaveToFile)
+            {
+                var ext = CaptureOutputService.GetExtension(_settingsService.Settings.CaptureImageFormat);
+                var requestedPath = ResolveSavePath(
+                    Path.Combine(_settingsService.Settings.SaveDirectory, $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}"),
+                    _settingsService.Settings.CaptureImageFormat);
+                if (requestedPath is null)
+                {
+                    output.Dispose();
+                    return;
+                }
+                filePath = requestedPath;
+            }
+
             if (_settingsService!.Settings.SaveHistory)
             {
                 historyEntry = _historyService!.SaveCapture(output);
-                filePath = historyEntry.FilePath;
+                filePath ??= historyEntry.FilePath;
             }
 
             if (_settingsService.Settings.SaveToFile)
-                filePath = SaveToFile(output) ?? filePath;
+                SaveToFile(output, filePath!);
 
             var action = _settingsService.Settings.AfterCapture;
             if (action == AfterCaptureAction.ShowPreview)
@@ -417,6 +556,63 @@ public partial class App : Application
             {
                 _ = UploadFileAsync(filePath, "Screenshot", historyEntry);
             }
+
+            _isCapturing = false;
+        });
+    }
+
+    private void HandleStickerResult(Bitmap result, string providerName)
+    {
+        SoundService.PlayCaptureSound();
+
+        Dispatcher.BeginInvoke(() =>
+        {
+            var output = CaptureOutputService.PrepareBitmap(result, _settingsService!.Settings.CaptureMaxLongEdge);
+            result.Dispose();
+            string? filePath = null;
+            Services.HistoryEntry? historyEntry = null;
+
+            if (_settingsService.Settings.SaveToFile)
+            {
+                var requestedPath = ResolveSavePath(
+                    Path.Combine(_settingsService.Settings.SaveDirectory, $"yoink_sticker_{DateTime.Now:yyyyMMdd_HHmmss}.png"),
+                    CaptureImageFormat.Png);
+                if (requestedPath is null)
+                {
+                    output.Dispose();
+                    return;
+                }
+                filePath = requestedPath;
+            }
+
+            if (_settingsService!.Settings.SaveHistory)
+            {
+                historyEntry = _historyService!.SaveStickerEntry(output, providerName);
+                filePath ??= historyEntry.FilePath;
+            }
+
+            if (_settingsService.Settings.SaveToFile)
+                SaveStickerToFile(output, filePath!);
+
+            var action = _settingsService.Settings.AfterCapture;
+            if (action == AfterCaptureAction.ShowPreview)
+            {
+                var preview = new PreviewWindow(output, filePath);
+                preview.Show();
+            }
+            else
+            {
+                ClipboardService.CopyToClipboard(output);
+                output.Dispose();
+            }
+
+            if (filePath != null && _settingsService.Settings.AutoUploadScreenshots
+                && _settingsService.Settings.ImageUploadDestination != UploadDestination.None)
+            {
+                _ = UploadFileAsync(filePath, "Sticker", historyEntry);
+            }
+
+            _isCapturing = false;
         });
     }
 
@@ -454,6 +650,7 @@ public partial class App : Application
     {
         try
         {
+            SoundService.PlayUploadStartSound();
             var dest = _settingsService!.Settings.ImageUploadDestination;
             var settings = _settingsService.Settings.ImageUploadSettings;
             var result = await UploadService.UploadAsync(
@@ -461,6 +658,7 @@ public partial class App : Application
 
             if (result.Success)
             {
+                SoundService.PlayUploadDoneSound();
                 System.Windows.Clipboard.SetText(result.Url);
                 PreviewWindow.AttachUploadedLink(filePath, result.Url, UploadService.GetName(dest));
 
@@ -470,12 +668,15 @@ public partial class App : Application
                 if (entry != null)
                 {
                     entry.UploadUrl = result.Url;
-                    entry.UploadProvider = UploadService.GetName(dest);
-                    var currentName = Path.GetFileName(entry.FilePath);
-                    var prefix = UploadService.GetName(dest).ToLowerInvariant() + "_";
-                    entry.FileName = currentName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                        ? currentName
-                        : prefix + currentName;
+                    if (string.IsNullOrWhiteSpace(entry.UploadProvider))
+                    {
+                        entry.UploadProvider = UploadService.GetName(dest);
+                        var currentName = Path.GetFileName(entry.FilePath);
+                        var prefix = UploadService.GetName(dest).ToLowerInvariant() + "_";
+                        entry.FileName = currentName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                            ? currentName
+                            : prefix + currentName;
+                    }
                     _historyService!.SaveIndex();
                 }
             }
@@ -494,14 +695,40 @@ public partial class App : Application
         }
     }
 
-    private string? SaveToFile(Bitmap bmp)
+    private string SaveToFile(Bitmap bmp, string path)
     {
-        var dir = _settingsService!.Settings.SaveDirectory;
-        Directory.CreateDirectory(dir);
-        var ext = CaptureOutputService.GetExtension(_settingsService.Settings.CaptureImageFormat);
-        var path = Path.Combine(dir, $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         CaptureOutputService.SaveBitmap(bmp, path, _settingsService.Settings.CaptureImageFormat, _settingsService.Settings.JpegQuality);
         return path;
+    }
+
+    private string SaveStickerToFile(Bitmap bmp, string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        return path;
+    }
+
+    private string? ResolveSavePath(string defaultPath, CaptureImageFormat format)
+    {
+        if (!_settingsService!.Settings.AskForFileNameOnSave)
+            return defaultPath;
+
+        var dlg = new SaveFileDialog
+        {
+            InitialDirectory = Path.GetDirectoryName(defaultPath),
+            FileName = Path.GetFileName(defaultPath),
+            Filter = format switch
+            {
+                CaptureImageFormat.Jpeg => "JPEG image|*.jpg;*.jpeg|PNG image|*.png|Bitmap image|*.bmp",
+                CaptureImageFormat.Bmp => "Bitmap image|*.bmp|PNG image|*.png|JPEG image|*.jpg;*.jpeg",
+                _ => "PNG image|*.png|JPEG image|*.jpg;*.jpeg|Bitmap image|*.bmp"
+            },
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+
+        return dlg.ShowDialog() == true ? dlg.FileName : null;
     }
 
     // ─── Settings / History ─────────────────────────────────────────
@@ -511,6 +738,7 @@ public partial class App : Application
         if (_settingsWindow is { IsVisible: true }) { _settingsWindow.Activate(); return; }
         _settingsWindow = new SettingsWindow(_settingsService!, _historyService!);
         _settingsWindow.HotkeyChanged += () => RegisterHotkeys();
+        _settingsWindow.UninstallRequested += BeginUninstall;
         _settingsWindow.Show();
     }
 
@@ -527,6 +755,30 @@ public partial class App : Application
                     System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             }
         }, DispatcherPriority.Loaded);
+    }
+
+    private void BeginUninstall()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            var result = MessageBox.Show(
+                "Uninstall Yoink? This will remove the app data and try to remove the app folder.",
+                "Confirm uninstall",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            try { UninstallService.RemoveStartupEntry(); } catch { }
+            try { UninstallService.RemoveInstalledAppEntry(); } catch { }
+            try { UninstallService.RemoveStartMenuShortcut(); } catch { }
+            try { UninstallService.RemoveAppData(); } catch { }
+            try { UninstallService.ScheduleInstallFolderRemoval(); } catch { }
+
+            ToastWindow.Show("Uninstalling", "Yoink will close and remove its files.");
+            Shutdown();
+        });
     }
 
     private async Task CheckForUpdatesOnStartupAsync()

@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
     private UpdateCheckResult? _latestUpdate;
     private bool _updateCheckInFlight;
     public event Action? HotkeyChanged;
+    public event Action? UninstallRequested;
 
     public SettingsWindow(SettingsService settingsService, HistoryService historyService)
     {
@@ -48,6 +49,7 @@ public partial class SettingsWindow : Window
         {
             ApplyThemeColors();
             if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
+            UpdateLocalEngineUi();
         };
     }
 
@@ -92,7 +94,7 @@ public partial class SettingsWindow : Window
         Resources["ThemeInputBackgroundBrush"] = Theme.Brush(Theme.BgSecondary);
         Resources["ThemeInputBorderBrush"] = Theme.Brush(Theme.BorderSubtle);
         Resources["ThemeWindowBorderBrush"] = Theme.Brush(Theme.WindowBorder);
-        Resources["ThemeAccentBrush"] = new SolidColorBrush(System.Windows.Media.Color.FromRgb(25, 98, 244));
+        Resources["ThemeAccentBrush"] = Theme.Brush(Theme.Accent);
         OuterBorder.Background = Theme.Brush(Theme.BgPrimary);
         OuterBorder.BorderBrush = Theme.Brush(Theme.WindowBorder);
         TitleBarBorder.Background = Theme.Brush(Theme.TitleBar);
@@ -141,6 +143,9 @@ public partial class SettingsWindow : Window
         OcrHotkeyBox.Text = HotkeyFormatter.Format(s.OcrHotkeyModifiers, s.OcrHotkeyKey);
         PickerHotkeyBox.Text = HotkeyFormatter.Format(s.PickerHotkeyModifiers, s.PickerHotkeyKey);
         ScanHotkeyBox.Text = HotkeyFormatter.Format(s.ScanHotkeyModifiers, s.ScanHotkeyKey);
+        StickerHotkeyBox.Text = HotkeyFormatter.Format(s.StickerHotkeyModifiers, s.StickerHotkeyKey);
+        FullscreenHotkeyBox.Text = HotkeyFormatter.Format(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey);
+        ActiveWindowHotkeyBox.Text = HotkeyFormatter.Format(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey);
         GifHotkeyBox.Text = HotkeyFormatter.Format(s.GifHotkeyModifiers, s.GifHotkeyKey);
 
         DefaultCaptureModeCombo.SelectedIndex = s.DefaultCaptureMode == Yoink.Models.CaptureMode.Freeform ? 1 : 0;
@@ -176,13 +181,17 @@ public partial class SettingsWindow : Window
         DetectControlsCheck.IsChecked = s.DetectControls;
         DetectControlsCheck.IsEnabled = s.DetectWindows;
         ShowToolNumberBadgesCheck.IsChecked = s.ShowToolNumberBadges;
+        AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
+        WindowDetectionCombo.SelectedIndex = (int)s.WindowDetection;
 
         // Upload settings
         UploadDestCombo.SelectedIndex = (int)s.ImageUploadDestination;
         AutoUploadScreenshotsCheck.IsChecked = s.AutoUploadScreenshots;
         LoadUploadSettingsIntoUi(s.ImageUploadSettings);
+        LoadStickerSettingsIntoUi(s.StickerUploadSettings);
         UpdateUploadSettingsVisibility();
+        UpdateUploadTabVisibility();
         VersionText.Text = $"Yoink {UpdateService.GetCurrentVersionLabel()}";
 
         PopulateToolToggles();
@@ -190,6 +199,7 @@ public partial class SettingsWindow : Window
     }
 
     private UploadSettings ActiveUploadSettings => _settingsService.Settings.ImageUploadSettings;
+    private StickerSettings ActiveStickerSettings => _settingsService.Settings.StickerUploadSettings;
 
     private void LoadUploadSettingsIntoUi(UploadSettings s)
     {
@@ -233,6 +243,18 @@ public partial class SettingsWindow : Window
         CustomFieldBox.Text = s.CustomFileFormName;
         CustomJsonPathBox.Text = s.CustomResponseUrlPath;
         CustomHeadersBox.Text = s.CustomHeaders;
+    }
+
+    private void LoadStickerSettingsIntoUi(StickerSettings s)
+    {
+        StickerProviderCombo.SelectedIndex = (int)s.Provider;
+        StickerLocalEngineCombo.SelectedIndex = (int)s.LocalEngine;
+        StickerRemoveBgKeyBox.Text = s.RemoveBgApiKey;
+        StickerPhotoroomKeyBox.Text = s.PhotoroomApiKey;
+        StickerShadowCheck.IsChecked = s.AddShadow;
+        StickerStrokeCheck.IsChecked = s.AddStroke;
+        UpdateStickerProviderVisibility();
+        UpdateLocalEngineUi();
     }
 
     private void PopulateToolToggles()
@@ -289,11 +311,17 @@ public partial class SettingsWindow : Window
         UploadsPanel.Visibility = UploadsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
 
         if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
+        if (UploadsTab.IsChecked == true) UpdateUploadTabVisibility();
     }
 
     private void HistorySubTabChanged(object sender, RoutedEventArgs e)
     {
         LoadCurrentHistoryTab();
+    }
+
+    private void UploadSubTabChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateUploadTabVisibility();
     }
 
     private void LoadCurrentHistoryTab()
@@ -302,6 +330,7 @@ public partial class SettingsWindow : Window
         GifsPanel.Visibility = Visibility.Collapsed;
         TextPanel.Visibility = Visibility.Collapsed;
         ColorsPanel.Visibility = Visibility.Collapsed;
+        StickersPanel.Visibility = Visibility.Collapsed;
 
         if (ImagesSubTab.IsChecked == true)
         {
@@ -323,6 +352,64 @@ public partial class SettingsWindow : Window
             ColorsPanel.Visibility = Visibility.Visible;
             LoadColorHistory();
         }
+        else if (StickersSubTab.IsChecked == true)
+        {
+            StickersPanel.Visibility = Visibility.Visible;
+            LoadStickerHistory();
+        }
+    }
+
+    private void UpdateUploadTabVisibility()
+    {
+        ImageUploadsPanel.Visibility = UploadImagesSubTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        StickerUploadsPanel.Visibility = UploadStickersSubTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateStickerProviderVisibility()
+    {
+        var provider = (StickerProvider)StickerProviderCombo.SelectedIndex;
+        StickerRemoveBgPanel.Visibility = provider == StickerProvider.RemoveBg ? Visibility.Visible : Visibility.Collapsed;
+        StickerPhotoroomPanel.Visibility = provider == StickerProvider.Photoroom ? Visibility.Visible : Visibility.Collapsed;
+        StickerLocalCpuPanel.Visibility = provider == StickerProvider.LocalCpu ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateLocalEngineUi()
+    {
+        var engine = (LocalStickerEngine)StickerLocalEngineCombo.SelectedIndex;
+        bool downloaded = LocalStickerEngineService.IsModelDownloaded(engine);
+
+        StickerLocalEngineStatusText.Text = downloaded
+            ? $"{LocalStickerEngineService.GetEngineLabel(engine)} is downloaded and ready to use for sticker captures."
+            : LocalStickerEngineService.GetEngineDescription(engine);
+
+        StickerDownloadRembgBtn.Visibility = Visibility.Visible;
+        StickerOpenLocalEngineRepoBtn.Content = "Open model page";
+        StickerDownloadRembgBtn.Content = downloaded ? "Remove model" : "Download model";
+
+        if (!IsLoaded)
+            return;
+
+        ActiveStickerSettings.LocalEngine = engine;
+        _settingsService.Save();
+    }
+
+    private void SetStickerDownloadUi(bool isBusy, double? percent = null, string? message = null)
+    {
+        StickerDownloadRembgBtn.IsEnabled = !isBusy;
+        StickerOpenLocalEngineRepoBtn.IsEnabled = !isBusy;
+
+        StickerLocalEngineProgress.Visibility = isBusy || percent.HasValue ? Visibility.Visible : Visibility.Collapsed;
+        StickerLocalEngineProgressText.Visibility = !string.IsNullOrWhiteSpace(message) || isBusy ? Visibility.Visible : Visibility.Collapsed;
+
+        if (percent.HasValue)
+            StickerLocalEngineProgress.Value = Math.Clamp(percent.Value, 0, 100);
+        else
+            StickerLocalEngineProgress.Value = 0;
+
+        if (!string.IsNullOrWhiteSpace(message))
+            StickerLocalEngineProgressText.Text = message;
+        else if (!isBusy)
+            StickerLocalEngineProgressText.Text = string.Empty;
     }
 
     // ─── Hotkey recording ─────────────────────────────────────────
@@ -343,6 +430,15 @@ public partial class SettingsWindow : Window
         RecordHotkey(ScanHotkeyBox,
             s => s.ScanHotkeyModifiers, s => s.ScanHotkeyKey,
             (s, m, k) => { s.ScanHotkeyModifiers = m; s.ScanHotkeyKey = k; });
+        RecordHotkey(StickerHotkeyBox,
+            s => s.StickerHotkeyModifiers, s => s.StickerHotkeyKey,
+            (s, m, k) => { s.StickerHotkeyModifiers = m; s.StickerHotkeyKey = k; });
+        RecordHotkey(FullscreenHotkeyBox,
+            s => s.FullscreenHotkeyModifiers, s => s.FullscreenHotkeyKey,
+            (s, m, k) => { s.FullscreenHotkeyModifiers = m; s.FullscreenHotkeyKey = k; });
+        RecordHotkey(ActiveWindowHotkeyBox,
+            s => s.ActiveWindowHotkeyModifiers, s => s.ActiveWindowHotkeyKey,
+            (s, m, k) => { s.ActiveWindowHotkeyModifiers = m; s.ActiveWindowHotkeyKey = k; });
         RecordHotkey(GifHotkeyBox,
             s => s.GifHotkeyModifiers, s => s.GifHotkeyKey,
             (s, m, k) => { s.GifHotkeyModifiers = m; s.GifHotkeyKey = k; });
@@ -396,6 +492,15 @@ public partial class SettingsWindow : Window
     private void ScanHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
     private void ScanHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
     private void ScanHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
+    private void StickerHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
+    private void StickerHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
+    private void StickerHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
+    private void FullscreenHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
+    private void FullscreenHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
+    private void FullscreenHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
+    private void ActiveWindowHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
+    private void ActiveWindowHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
+    private void ActiveWindowHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
     private void GifHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
     private void GifHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
     private void GifHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
@@ -445,6 +550,33 @@ public partial class SettingsWindow : Window
         HotkeyChanged?.Invoke();
     }
 
+    private void ClearStickerHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsService.Settings.StickerHotkeyModifiers = 0;
+        _settingsService.Settings.StickerHotkeyKey = 0;
+        _settingsService.Save();
+        StickerHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
+        HotkeyChanged?.Invoke();
+    }
+
+    private void ClearFullscreenHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsService.Settings.FullscreenHotkeyModifiers = 0;
+        _settingsService.Settings.FullscreenHotkeyKey = 0;
+        _settingsService.Save();
+        FullscreenHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
+        HotkeyChanged?.Invoke();
+    }
+
+    private void ClearActiveWindowHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsService.Settings.ActiveWindowHotkeyModifiers = 0;
+        _settingsService.Settings.ActiveWindowHotkeyKey = 0;
+        _settingsService.Save();
+        ActiveWindowHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
+        HotkeyChanged?.Invoke();
+    }
+
     private static bool IsModifierOnly(Key k) =>
         k is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
             or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape;
@@ -484,6 +616,13 @@ public partial class SettingsWindow : Window
         bool on = SaveToFileCheck.IsChecked == true;
         _settingsService.Settings.SaveToFile = on;
         SaveDirPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        _settingsService.Save();
+    }
+
+    private void AskFileNameCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.AskForFileNameOnSave = AskFileNameCheck.IsChecked == true;
         _settingsService.Save();
     }
 
@@ -668,6 +807,11 @@ public partial class SettingsWindow : Window
         e.Handled = true;
     }
 
+    private void UninstallButton_Click(object sender, RoutedEventArgs e)
+    {
+        UninstallRequested?.Invoke();
+    }
+
     private void CrosshairGuidesCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded) return;
@@ -703,6 +847,14 @@ public partial class SettingsWindow : Window
         _settingsService.Save();
         ToastWindow.SetPosition(_settingsService.Settings.ToastPosition);
         PreviewWindow.SetPosition(_settingsService.Settings.ToastPosition);
+    }
+
+    private void WindowDetectionCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (WindowDetectionCombo.SelectedIndex < 0) WindowDetectionCombo.SelectedIndex = 1;
+        _settingsService.Settings.WindowDetection = (WindowDetectionMode)WindowDetectionCombo.SelectedIndex;
+        _settingsService.Save();
     }
 
     // ─── Upload settings ────────────────────────────────────────────
@@ -745,6 +897,103 @@ public partial class SettingsWindow : Window
         if (!IsLoaded) return;
         _settingsService.Settings.AutoUploadScreenshots = AutoUploadScreenshotsCheck.IsChecked == true;
         _settingsService.Save();
+    }
+
+    private void StickerProviderCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        ActiveStickerSettings.Provider = (StickerProvider)StickerProviderCombo.SelectedIndex;
+        UpdateStickerProviderVisibility();
+        UpdateLocalEngineUi();
+        _settingsService.Save();
+    }
+
+    private void StickerLocalEngineCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        UpdateLocalEngineUi();
+    }
+
+    private void StickerShadowCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        ActiveStickerSettings.AddShadow = StickerShadowCheck.IsChecked == true;
+        _settingsService.Save();
+    }
+
+    private void StickerStrokeCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        ActiveStickerSettings.AddStroke = StickerStrokeCheck.IsChecked == true;
+        _settingsService.Save();
+    }
+
+    private void StickerRemoveBgKeyBox_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        ActiveStickerSettings.RemoveBgApiKey = StickerRemoveBgKeyBox.Text;
+        _settingsService.Save();
+    }
+
+    private void StickerPhotoroomKeyBox_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        ActiveStickerSettings.PhotoroomApiKey = StickerPhotoroomKeyBox.Text;
+        _settingsService.Save();
+    }
+
+    private async void StickerDownloadRembgBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var engine = (LocalStickerEngine)StickerLocalEngineCombo.SelectedIndex;
+
+        if (LocalStickerEngineService.IsModelDownloaded(engine))
+        {
+            bool removed = LocalStickerEngineService.RemoveDownloadedModel(engine);
+            SetStickerDownloadUi(false, null, removed ? "Model removed." : "Couldn't remove the model.");
+            ToastWindow.Show("Sticker engine", removed ? "Removed the local sticker model." : "Couldn't remove the local sticker model.");
+            UpdateLocalEngineUi();
+            return;
+        }
+
+        SetStickerDownloadUi(true, 0, "Preparing download...");
+        try
+        {
+            var progress = new Progress<LocalStickerEngineDownloadProgress>(p =>
+            {
+                SetStickerDownloadUi(true, p.TotalBytes is > 0 ? p.Percent : null, p.StatusMessage);
+            });
+
+            var result = await LocalStickerEngineService.DownloadModelAsync(engine, progress);
+            if (!result.Success || string.IsNullOrWhiteSpace(result.ModelPath))
+            {
+                SetStickerDownloadUi(false, null, result.Message);
+                ToastWindow.Show("Sticker engine", result.Message);
+                return;
+            }
+
+            SetStickerDownloadUi(false, 100, "Download complete. The model is ready to use.");
+            ToastWindow.Show("Sticker engine", $"Downloaded {LocalStickerEngineService.GetEngineLabel(engine)}. Sticker captures will now use it automatically.");
+            UpdateLocalEngineUi();
+        }
+        catch (Exception ex)
+        {
+            SetStickerDownloadUi(false, null, ex.Message);
+            ToastWindow.Show("Sticker engine", ex.Message);
+        }
+    }
+
+    private void StickerOpenLocalEngineRepoBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var engine = (LocalStickerEngine)StickerLocalEngineCombo.SelectedIndex;
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = LocalStickerEngineService.GetProjectUrl(engine),
+                UseShellExecute = true
+            });
+        }
+        catch { }
     }
 
     private void ImgurClientIdBox_Changed(object sender, TextChangedEventArgs e)
@@ -983,10 +1232,13 @@ public partial class SettingsWindow : Window
     private bool _selectMode;
     private List<HistoryItemVM> _historyItems = new();
     private List<HistoryItemVM> _gifItems = new();
+    private List<HistoryItemVM> _stickerItems = new();
     private List<HistoryItemVM> _allHistoryItems = new();
     private List<HistoryItemVM> _allGifItems = new();
+    private List<HistoryItemVM> _allStickerItems = new();
     private int _historyRenderCount;
     private int _gifRenderCount;
+    private int _stickerRenderCount;
     private const int HistoryPageSize = 60;
 
     private void LoadHistory()
@@ -1237,7 +1489,8 @@ public partial class SettingsWindow : Window
     {
         string tab = ImagesSubTab.IsChecked == true ? "images"
             : GifsSubTab.IsChecked == true ? "GIFs"
-            : TextSubTab.IsChecked == true ? "text history" : "colors";
+            : TextSubTab.IsChecked == true ? "text history"
+            : ColorsSubTab.IsChecked == true ? "colors" : "stickers";
         if (MessageBox.Show($"Delete all {tab}?", "Confirm 1/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         if (MessageBox.Show($"Really delete all {tab}?", "Confirm 2/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         if (MessageBox.Show($"This cannot be undone. Delete all {tab}?", "Confirm 3/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
@@ -1245,7 +1498,8 @@ public partial class SettingsWindow : Window
         if (ImagesSubTab.IsChecked == true) _historyService.ClearImages();
         else if (GifsSubTab.IsChecked == true) _historyService.ClearGifs();
         else if (TextSubTab.IsChecked == true) _historyService.ClearOcr();
-        else _historyService.ClearColors();
+        else if (ColorsSubTab.IsChecked == true) _historyService.ClearColors();
+        else _historyService.ClearStickers();
 
         LoadCurrentHistoryTab();
     }
@@ -1283,6 +1537,13 @@ public partial class SettingsWindow : Window
             foreach (var entry in toDelete)
                 _historyService.DeleteColorEntry(entry);
             LoadColorHistory();
+        }
+        else if (StickersSubTab.IsChecked == true)
+        {
+            var toDelete = _stickerItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
+            foreach (var entry in toDelete)
+                _historyService.DeleteEntry(entry);
+            LoadStickerHistory();
         }
     }
 
@@ -1348,6 +1609,69 @@ public partial class SettingsWindow : Window
         if (_gifRenderCount >= _allGifItems.Count) return;
         _gifRenderCount = Math.Min(_gifRenderCount + HistoryPageSize, _allGifItems.Count);
         RenderGifItems();
+    }
+
+    private void LoadStickerHistory()
+    {
+        _selectMode = false;
+        SelectBtn.Content = "Select";
+        DeleteSelectedBtn.Visibility = Visibility.Collapsed;
+        StickerStack.Children.Clear();
+
+        var entries = _historyService.StickerEntries;
+        long totalBytes = 0;
+        foreach (var e in entries)
+            try { totalBytes += new FileInfo(e.FilePath).Length; } catch { }
+        var sizeStr = FormatStorageSize(totalBytes);
+        HistoryCountText.Text = $"{entries.Count} sticker{(entries.Count == 1 ? "" : "s")} · {sizeStr}";
+        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        HistoryEmptyLabel.Text = "No stickers yet";
+
+        _allStickerItems = entries.Select(e => new HistoryItemVM
+        {
+            Entry = e,
+            ThumbPath = e.FilePath,
+            Dimensions = e.Width > 0 ? $"{e.Width} x {e.Height}" : "",
+            TimeAgo = FormatTimeAgo(e.CapturedAt)
+        }).ToList();
+
+        _stickerRenderCount = Math.Min(HistoryPageSize, _allStickerItems.Count);
+        RenderStickerItems();
+    }
+
+    private void RenderStickerItems()
+    {
+        StickerStack.Children.Clear();
+        _stickerItems = _allStickerItems.Take(_stickerRenderCount).ToList();
+        var groups = _stickerItems.GroupBy(i => i.Entry.CapturedAt.Date).OrderByDescending(g => g.Key);
+        foreach (var group in groups)
+        {
+            string label = group.Key == DateTime.Today ? "Today"
+                : group.Key == DateTime.Today.AddDays(-1) ? "Yesterday"
+                : group.Key.ToString("MMMM d, yyyy");
+
+            StickerStack.Children.Add(new TextBlock
+            {
+                Text = label, FontSize = 12, FontWeight = FontWeights.SemiBold,
+                Opacity = 0.45, Margin = new Thickness(6, 10, 0, 4)
+            });
+
+            var wrap = new WrapPanel();
+            foreach (var item in group)
+            {
+                var thumb = CreateHistoryCard(item);
+                wrap.Children.Add(thumb);
+            }
+            StickerStack.Children.Add(wrap);
+        }
+    }
+
+    private void StickerPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 300) return;
+        if (_stickerRenderCount >= _allStickerItems.Count) return;
+        _stickerRenderCount = Math.Min(_stickerRenderCount + HistoryPageSize, _allStickerItems.Count);
+        RenderStickerItems();
     }
 
     private Border CreateGifCard(HistoryItemVM vm)
@@ -1763,7 +2087,45 @@ public partial class SettingsWindow : Window
     {
         string logoPath = isPath ? (providerOrPath ?? string.Empty) : UploadService.GetHistoryLogoPath(providerOrPath);
         var logoSource = LoadPackImage(logoPath);
-        if (logoSource == null) return null;
+        if (logoSource == null)
+        {
+            if (string.IsNullOrWhiteSpace(providerOrPath)) return null;
+
+            string text = providerOrPath.Trim();
+            if (!isPath)
+            {
+                text = text switch
+                {
+                    "Remove.bg" => "RBG",
+                    "Photoroom" => "PR",
+                    "Local CPU" => "CPU",
+                    _ => text.Length <= 4 ? text.ToUpperInvariant() : text[..4].ToUpperInvariant()
+                };
+            }
+
+            return new Border
+            {
+                MinWidth = 24,
+                Height = 24,
+                CornerRadius = new CornerRadius(7),
+                Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(210, 24, 24, 24)),
+                BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(28, 255, 255, 255)),
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(6, 6, 0, 0),
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+                VerticalAlignment = System.Windows.VerticalAlignment.Top,
+                Child = new TextBlock
+                {
+                    Text = text,
+                    FontSize = 8.5,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = System.Windows.Media.Brushes.White,
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                    VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                    Margin = new Thickness(4, 0, 4, 0)
+                }
+            };
+        }
 
         return new Border
         {

@@ -12,7 +12,8 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>yoink.ico</ApplicationIcon>
-    <Version>0.4.1</Version>
+    <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
+    <Version>0.4.2</Version>
     <Authors>Yoink Contributors</Authors>
     <Description>Fast screenshot and color picker for Windows</Description>
     <RepositoryUrl>https://github.com/yoink-tool/yoink</RepositoryUrl>
@@ -57,6 +58,7 @@
   <ItemGroup>
     <PackageReference Include="AnimatedGif" Version="1.0.5" />
     <PackageReference Include="FluentFTP" Version="52.1.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.21.0" />
     <PackageReference Include="SSH.NET" Version="2024.2.0" />
     <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />

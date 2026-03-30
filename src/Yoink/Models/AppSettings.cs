@@ -30,6 +30,12 @@ public enum CaptureImageFormat
     Bmp
 }
 
+public enum WindowDetectionMode
+{
+    Off,
+    WindowOnly
+}
+
 public sealed class AppSettings
 {
     public uint HotkeyModifiers { get; set; } = Native.User32.MOD_ALT;
@@ -46,6 +52,12 @@ public sealed class AppSettings
     // Optional custom-tool hotkeys (disabled by default)
     public uint ScanHotkeyModifiers { get; set; }
     public uint ScanHotkeyKey { get; set; }
+    public uint StickerHotkeyModifiers { get; set; }
+    public uint StickerHotkeyKey { get; set; }
+    public uint FullscreenHotkeyModifiers { get; set; }
+    public uint FullscreenHotkeyKey { get; set; }
+    public uint ActiveWindowHotkeyModifiers { get; set; }
+    public uint ActiveWindowHotkeyKey { get; set; }
     public uint RulerHotkeyModifiers { get; set; }
     public uint RulerHotkeyKey { get; set; }
 
@@ -57,6 +69,7 @@ public sealed class AppSettings
 
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.ShowPreview;
     public bool SaveToFile { get; set; } = true;
+    public bool AskForFileNameOnSave { get; set; }
     public CaptureImageFormat CaptureImageFormat { get; set; } = CaptureImageFormat.Png;
     public int CaptureMaxLongEdge { get; set; }
     public string SaveDirectory { get; set; } = System.IO.Path.Combine(
@@ -64,6 +77,7 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; } = true;
     public bool AutoCheckForUpdates { get; set; } = true;
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
+    public WindowDetectionMode WindowDetection { get; set; } = WindowDetectionMode.WindowOnly;
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }
     public bool ShowCrosshairGuides { get; set; } // off by default
@@ -81,6 +95,7 @@ public sealed class AppSettings
     public bool AutoUploadScreenshots { get; set; }
     public Services.UploadDestination ImageUploadDestination { get; set; } = Services.UploadDestination.None;
     public Services.UploadSettings ImageUploadSettings { get; set; } = new();
+    public Services.StickerSettings StickerUploadSettings { get; set; } = new();
 
     // Toolbar customization: which tools appear in the dock
     // null = all tools enabled (default). List of tool IDs from ToolDef.AllTools.
@@ -98,6 +113,7 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
         new("picker",      "Color Picker", '\uE13E', CaptureMode.ColorPicker, 0), // pipette
         new("ocr",         "OCR",          '\uE53C', CaptureMode.Ocr,         0), // scan-text
         new("scan",        "QR/Barcode",   '\uE1DE', CaptureMode.Scan,        0), // qr-code
+        new("sticker",     "Sticker",      '\uE7C5', CaptureMode.Sticker,     0), // sticker
         new("ruler",       "Ruler",        '\uE14E', CaptureMode.Ruler,       1), // ruler
         new("highlight",   "Highlight",    '\uE0F7', CaptureMode.Highlight,   1), // highlighter
         new("rectShape",   "Rectangle",    '\uE16A', CaptureMode.RectShape,   1), // square
@@ -115,5 +131,5 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
     };
 
     public static List<string> DefaultEnabledIds() =>
-        AllTools.Select(t => t.Id).ToList();
+        AllTools.Where(t => t.Id != "sticker").Select(t => t.Id).ToList();
 }

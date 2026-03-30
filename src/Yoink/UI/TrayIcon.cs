@@ -105,7 +105,7 @@ public sealed class TrayIcon : IDisposable
             if (!string.IsNullOrEmpty(exe) && System.IO.File.Exists(exe))
             {
                 var icon = Icon.ExtractAssociatedIcon(exe);
-                if (icon != null) return icon;
+                if (icon != null) return ToGrayscaleIcon(icon);
             }
         }
         catch { }
@@ -120,6 +120,25 @@ public sealed class TrayIcon : IDisposable
         g.DrawLine(pen, 26, 4, 16, 16);
         g.DrawLine(pen, 16, 16, 16, 28);
         return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    private static Icon ToGrayscaleIcon(Icon icon)
+    {
+        using var bmp = icon.ToBitmap();
+        var gray = new Bitmap(bmp.Width, bmp.Height);
+        using var g = Graphics.FromImage(gray);
+        var matrix = new System.Drawing.Imaging.ColorMatrix(new[]
+        {
+            new[] { 0.299f, 0.299f, 0.299f, 0f, 0f },
+            new[] { 0.587f, 0.587f, 0.587f, 0f, 0f },
+            new[] { 0.114f, 0.114f, 0.114f, 0f, 0f },
+            new[] { 0f, 0f, 0f, 1f, 0f },
+            new[] { 0f, 0f, 0f, 0f, 1f }
+        });
+        using var attrs = new System.Drawing.Imaging.ImageAttributes();
+        attrs.SetColorMatrix(matrix);
+        g.DrawImage(bmp, new Rectangle(0, 0, gray.Width, gray.Height), 0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, attrs);
+        return Icon.FromHandle(gray.GetHicon());
     }
 
     public void Dispose()

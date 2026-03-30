@@ -101,6 +101,8 @@ Yoink can upload screenshots after capture. Upload targets include:
 
 Availability depends on the target service and your credentials.
 
+Sticker uploads use the same upload destinations as normal image uploads.
+
 ## License
 
 [MIT](LICENSE)

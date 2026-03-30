@@ -10,20 +10,29 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_PICKER = 9003;
     private const int HOTKEY_SCAN = 9004;
     private const int HOTKEY_RULER = 9005;
+    private const int HOTKEY_STICKER = 9006;
     private const int HOTKEY_GIF = 9007;
+    private const int HOTKEY_FULLSCREEN = 9008;
+    private const int HOTKEY_ACTIVE_WINDOW = 9009;
     private bool _captureRegistered;
     private bool _ocrRegistered;
     private bool _pickerRegistered;
     private bool _scanRegistered;
     private bool _rulerRegistered;
+    private bool _stickerRegistered;
     private bool _gifRegistered;
+    private bool _fullscreenRegistered;
+    private bool _activeWindowRegistered;
 
     public event Action? HotkeyPressed;
     public event Action? OcrHotkeyPressed;
     public event Action? PickerHotkeyPressed;
     public event Action? ScanHotkeyPressed;
     public event Action? RulerHotkeyPressed;
+    public event Action? StickerHotkeyPressed;
     public event Action? GifHotkeyPressed;
+    public event Action? FullscreenHotkeyPressed;
+    public event Action? ActiveWindowHotkeyPressed;
 
     public bool Register(uint modifiers, uint key)
     {
@@ -66,12 +75,36 @@ public sealed class HotkeyService : IDisposable
         return _rulerRegistered;
     }
 
+    public bool RegisterSticker(uint modifiers, uint key)
+    {
+        if (key == 0) { _stickerRegistered = false; return true; }
+        _stickerRegistered = User32.RegisterHotKey(
+            IntPtr.Zero, HOTKEY_STICKER, modifiers | User32.MOD_NOREPEAT, key);
+        return _stickerRegistered;
+    }
+
     public bool RegisterGif(uint modifiers, uint key)
     {
         if (key == 0) { _gifRegistered = false; return true; }
         _gifRegistered = User32.RegisterHotKey(
             IntPtr.Zero, HOTKEY_GIF, modifiers | User32.MOD_NOREPEAT, key);
         return _gifRegistered;
+    }
+
+    public bool RegisterFullscreen(uint modifiers, uint key)
+    {
+        if (key == 0) { _fullscreenRegistered = false; return true; }
+        _fullscreenRegistered = User32.RegisterHotKey(
+            IntPtr.Zero, HOTKEY_FULLSCREEN, modifiers | User32.MOD_NOREPEAT, key);
+        return _fullscreenRegistered;
+    }
+
+    public bool RegisterActiveWindow(uint modifiers, uint key)
+    {
+        if (key == 0) { _activeWindowRegistered = false; return true; }
+        _activeWindowRegistered = User32.RegisterHotKey(
+            IntPtr.Zero, HOTKEY_ACTIVE_WINDOW, modifiers | User32.MOD_NOREPEAT, key);
+        return _activeWindowRegistered;
     }
 
     public void Unregister()
@@ -81,7 +114,10 @@ public sealed class HotkeyService : IDisposable
         if (_pickerRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_PICKER); _pickerRegistered = false; }
         if (_scanRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCAN); _scanRegistered = false; }
         if (_rulerRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_RULER); _rulerRegistered = false; }
+        if (_stickerRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_STICKER); _stickerRegistered = false; }
         if (_gifRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_GIF); _gifRegistered = false; }
+        if (_fullscreenRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_FULLSCREEN); _fullscreenRegistered = false; }
+        if (_activeWindowRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_ACTIVE_WINDOW); _activeWindowRegistered = false; }
         ComponentDispatcher.ThreadPreprocessMessage -= OnMsg;
     }
 
@@ -94,7 +130,10 @@ public sealed class HotkeyService : IDisposable
         else if (id == HOTKEY_PICKER) { PickerHotkeyPressed?.Invoke(); handled = true; }
         else if (id == HOTKEY_SCAN) { ScanHotkeyPressed?.Invoke(); handled = true; }
         else if (id == HOTKEY_RULER) { RulerHotkeyPressed?.Invoke(); handled = true; }
+        else if (id == HOTKEY_STICKER) { StickerHotkeyPressed?.Invoke(); handled = true; }
         else if (id == HOTKEY_GIF) { GifHotkeyPressed?.Invoke(); handled = true; }
+        else if (id == HOTKEY_FULLSCREEN) { FullscreenHotkeyPressed?.Invoke(); handled = true; }
+        else if (id == HOTKEY_ACTIVE_WINDOW) { ActiveWindowHotkeyPressed?.Invoke(); handled = true; }
     }
 
     public void Dispose() => Unregister();

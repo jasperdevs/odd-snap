@@ -11,6 +11,8 @@ public static class SoundService
     private static byte[]? _scanWav;
     private static byte[]? _recordStartWav;
     private static byte[]? _recordStopWav;
+    private static byte[]? _uploadStartWav;
+    private static byte[]? _uploadDoneWav;
     private static byte[]? _errorWav;
 
     public static bool Muted { get; set; }
@@ -55,6 +57,20 @@ public static class SoundService
         if (Muted) return;
         _recordStopWav ??= GenerateRecordStopWav();
         PlayAsync(_recordStopWav);
+    }
+
+    public static void PlayUploadStartSound()
+    {
+        if (Muted) return;
+        _uploadStartWav ??= GenerateUploadStartWav();
+        PlayAsync(_uploadStartWav);
+    }
+
+    public static void PlayUploadDoneSound()
+    {
+        if (Muted) return;
+        _uploadDoneWav ??= GenerateUploadDoneWav();
+        PlayAsync(_uploadDoneWav);
     }
 
     public static void PlayErrorSound()
@@ -256,6 +272,58 @@ public static class SoundService
                 {
                     double env = Math.Sin(Math.PI * local / beepLen);
                     sample += Math.Sin(2 * Math.PI * freqs[b] * local) * env * 0.35;
+                }
+            }
+            bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
+        }
+        return ms.ToArray();
+    }
+
+    private static byte[] GenerateUploadStartWav()
+    {
+        const int sampleRate = 44100;
+        const int durationMs = 90;
+        int numSamples = sampleRate * durationMs / 1000;
+
+        using var ms = new MemoryStream();
+        using var bw = new BinaryWriter(ms);
+        WriteWavHeader(bw, numSamples, sampleRate);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            double t = (double)i / sampleRate;
+            double env = Math.Exp(-t * 26);
+            double sample = (Math.Sin(2 * Math.PI * 820 * t) * 0.42
+                           + Math.Sin(2 * Math.PI * 1120 * t) * 0.18) * env;
+            bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
+        }
+        return ms.ToArray();
+    }
+
+    private static byte[] GenerateUploadDoneWav()
+    {
+        const int sampleRate = 44100;
+        const int durationMs = 170;
+        int numSamples = sampleRate * durationMs / 1000;
+
+        using var ms = new MemoryStream();
+        using var bw = new BinaryWriter(ms);
+        WriteWavHeader(bw, numSamples, sampleRate);
+
+        double[] freqs = [740, 988];
+        double beepLen = durationMs / 1000.0 / 2.5;
+        for (int i = 0; i < numSamples; i++)
+        {
+            double t = (double)i / sampleRate;
+            double sample = 0;
+            for (int b = 0; b < 2; b++)
+            {
+                double start = b * beepLen * 1.1;
+                double local = t - start;
+                if (local >= 0 && local < beepLen)
+                {
+                    double env = Math.Sin(Math.PI * local / beepLen);
+                    sample += Math.Sin(2 * Math.PI * freqs[b] * local) * env * 0.34;
                 }
             }
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));

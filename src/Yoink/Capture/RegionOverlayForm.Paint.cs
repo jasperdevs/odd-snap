@@ -33,7 +33,7 @@ public sealed partial class RegionOverlayForm
 
         bool isOcr = _mode == CaptureMode.Ocr;
         bool isScan = _mode == CaptureMode.Scan;
-        bool isSelectionMode = _mode == CaptureMode.Rectangle || _mode == CaptureMode.Ocr || _mode == CaptureMode.Scan;
+        bool isSelectionMode = _mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker;
 
         // Screen dim: dark outside selection, clear inside, light dim when no selection
         if (_hasSelection && isSelectionMode)
@@ -83,6 +83,7 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Rectangle when _hasSelection:
             case CaptureMode.Ocr when _hasSelection:
             case CaptureMode.Scan when _hasSelection:
+            case CaptureMode.Sticker when _hasSelection:
                 // Subtle outer shadow
                 using (var shadowPen = new Pen(Color.FromArgb(40, 0, 0, 0), 4f))
                 {
@@ -358,8 +359,20 @@ public sealed partial class RegionOverlayForm
         }
         if (_mode == CaptureMode.CurvedArrow && _isCurvedArrowDragging && _currentCurvedArrow is { Count: >= 2 })
             SketchRenderer.DrawCurvedArrow(g, _currentCurvedArrow, _toolColor, 42);
-        if (_mode == CaptureMode.Draw && _isSelecting && _currentStroke is { Count: >= 2 })
-            SketchRenderer.DrawFreehandStroke(g, _currentStroke, _toolColor, 6f);
+        if (_mode == CaptureMode.Draw && _isSelecting && _currentStroke is { Count: >= 1 })
+        {
+            if ((ModifierKeys & Keys.Shift) != 0)
+            {
+                var start = _currentStroke[0];
+                var end = GetConstrainedDrawPoint(PointToClient(System.Windows.Forms.Cursor.Position));
+                if (start != end)
+                    SketchRenderer.DrawLine(g, start, end, _toolColor, start.GetHashCode());
+            }
+            else if (_currentStroke.Count >= 2)
+            {
+                SketchRenderer.DrawFreehandStroke(g, _currentStroke, _toolColor, 6f);
+            }
+        }
 
         // Magnifier preview
         if (_mode == CaptureMode.Magnifier)
@@ -1036,6 +1049,31 @@ public sealed partial class RegionOverlayForm
     private static void DrawIcon(Graphics g, string icon, Rectangle b, Color c)
     {
         if (icon == "color") return;
+        if (icon == "sticker")
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var body = new RectangleF(b.X + 9.5f, b.Y + 8.5f, b.Width - 19f, b.Height - 19f);
+            using var pen = new Pen(c, 1.8f)
+            {
+                LineJoin = LineJoin.Round,
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round
+            };
+            using var path = new GraphicsPath();
+            path.AddArc(body.X, body.Y, 6, 6, 180, 90);
+            path.AddLine(body.X + 6, body.Y, body.Right - 7, body.Y);
+            path.AddLine(body.Right - 7, body.Y, body.Right, body.Y + 7);
+            path.AddLine(body.Right, body.Y + 7, body.Right, body.Bottom - 6);
+            path.AddArc(body.Right - 6, body.Bottom - 6, 6, 6, 0, 90);
+            path.AddArc(body.X, body.Bottom - 6, 6, 6, 90, 90);
+            path.CloseFigure();
+            g.DrawPath(pen, path);
+
+            g.DrawLine(pen, body.Right - 7, body.Y, body.Right - 7, body.Y + 7);
+            g.DrawLine(pen, body.Right - 7, body.Y + 7, body.Right, body.Y + 7);
+            g.SmoothingMode = SmoothingMode.Default;
+            return;
+        }
         if (!GetIconGlyphMap().TryGetValue(icon, out char glyph)) return;
 
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;

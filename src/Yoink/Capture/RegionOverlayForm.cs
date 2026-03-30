@@ -14,6 +14,7 @@ public sealed partial class RegionOverlayForm : Form
     private readonly int[] _pixelData;
     private readonly int _bmpW, _bmpH;
     private readonly Rectangle _virtualBounds;
+    private readonly WindowDetectionMode _windowDetectionMode;
 
     private CaptureMode _mode = CaptureMode.Rectangle;
     private bool _isSelecting;
@@ -337,14 +338,17 @@ public sealed partial class RegionOverlayForm : Form
     public event Action<Bitmap>? FreeformSelected;
     public event Action<string>? ColorPicked;
     public event Action<Rectangle>? ScanRegionSelected;
+    public event Action<Rectangle>? StickerRegionSelected;
     public event Action? SelectionCancelled;
     public event Action? SettingsRequested;
 
     public RegionOverlayForm(Bitmap screenshot, Rectangle virtualBounds,
-        CaptureMode initialMode = CaptureMode.Rectangle)
+        CaptureMode initialMode = CaptureMode.Rectangle,
+        WindowDetectionMode windowDetectionMode = WindowDetectionMode.WindowOnly)
     {
         _screenshot = screenshot;
         _virtualBounds = virtualBounds;
+        _windowDetectionMode = windowDetectionMode;
         _bmpW = _screenshot.Width;
         _bmpH = _screenshot.Height;
         _mode = initialMode;
@@ -404,6 +408,7 @@ public sealed partial class RegionOverlayForm : Form
     {
         base.OnShown(e);
         _toolbarAnim = 1f;
+        WindowDetector.RegisterIgnoredWindow(Handle);
         Native.User32.SetWindowPos(Handle, Native.User32.HWND_TOPMOST,
             0, 0, 0, 0,
             Native.User32.SWP_NOMOVE | Native.User32.SWP_NOSIZE | Native.User32.SWP_SHOWWINDOW);
@@ -424,6 +429,7 @@ public sealed partial class RegionOverlayForm : Form
         _toolbarForm = new ToolbarForm(this);
         PositionToolbarForm();
         _toolbarForm.Show(this);
+        WindowDetector.RegisterIgnoredWindow(_toolbarForm.Handle);
         _toolbarForm.UpdateSurface();
 
         // Ensure overlay keeps keyboard focus after showing toolbar
@@ -547,6 +553,18 @@ public sealed partial class RegionOverlayForm : Form
         if (_emojiSearchBox != null) { _emojiSearchBox.Visible = false; Focus(); }
     }
 
+    private void PrimeVisibleEmojiCache()
+    {
+        try
+        {
+            var filtered = GetFilteredEmojiPalette();
+            int count = Math.Min(filtered.Length, 12);
+            for (int i = 0; i < count; i++)
+                _emojiRenderer.GetEmoji(filtered[i].emoji, 22f);
+        }
+        catch { }
+    }
+
     private void ShowFontSearchBox()
     {
         if (_fontSearchBox == null)
@@ -667,6 +685,9 @@ public sealed partial class RegionOverlayForm : Form
     {
         if (disposing)
         {
+            WindowDetector.UnregisterIgnoredWindow(Handle);
+            if (_toolbarForm != null)
+                WindowDetector.UnregisterIgnoredWindow(_toolbarForm.Handle);
             CloseMagWindow();
             _toolbarForm?.Close();
             _toolbarForm?.Dispose();
