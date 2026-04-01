@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Yoink: Windows-first screenshot, annotation, OCR, sticker, and recording tool</strong>
+  <strong>Yoink: All-in-one open-source fast, clean ShareX alternative</strong>
 </p>
 
 <p align="center">
@@ -18,27 +18,27 @@
     <img src="https://img.shields.io/github/downloads/jasperdevs/yoink/latest/total?style=flat-square&cacheSeconds=300" alt="Downloads" />
   </a>
   <a href="https://github.com/jasperdevs/yoink/stargazers">
-    <img src="https://img.shields.io/github/stars/jasperdevs/yoink?style=flat-square" alt="Stars" />
-  </a>
+  <img src="https://img.shields.io/github/stars/jasperdevs/yoink?style=flat-square" alt="Stars" />
+</a>
   <a href="https://github.com/jasperdevs/yoink/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/jasperdevs/yoink?style=flat-square" alt="License" />
   </a>
 </p>
 
+
 <p align="center">
   <a href="https://github.com/jasperdevs/yoink/releases/latest">
     <img src="https://img.shields.io/badge/windows-download-1962F4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" />
   </a>
-  <img src="https://img.shields.io/badge/platform-Windows%20only-6b7280?style=for-the-badge" alt="Windows only" />
+  <img src="https://img.shields.io/badge/macos-planned-6b7280?style=for-the-badge&logo=apple&logoColor=white" alt="macOS Planned" />
+  <img src="https://img.shields.io/badge/linux-planned-6b7280?style=for-the-badge&logo=linux&logoColor=white" alt="Linux Planned" />
 </p>
 
 <p align="center">
-  <img width="947" height="490" alt="image" src="assets/banner3333.png" />
+<img width="947" height="490" alt="image" src="assets/banner3333.png" />
 </p>
 
 Yoink is a free, open-source screenshot tool that stays out of the way until you need it. Capture part of the screen, mark it up, copy it, save it, drag it out, record it, or upload it without breaking your flow.
-
-Yoink is intentionally Windows-first. It focuses on a compact day-to-day workflow instead of trying to be a full ShareX automation clone.
 
 ## Download
 
@@ -51,7 +51,7 @@ Grab the latest release from the [**Releases page**](https://github.com/jasperde
 - OCR, color picking, QR/barcode scanning, stickers, and screen recording with GIF/MP4/WebM/MKV output
 - Drag-and-drop preview plus local history for images, text, colors, stickers, and recordings
 - Optional uploads for screenshots, stickers, and recordings to public hosts, cloud storage, or self-hosted targets
-- Focused on reducing friction in the capture flow rather than exposing every possible workflow knob
+- More to come (and more i didnt mention lol)
 
 ## Stickers
 
@@ -62,8 +62,7 @@ Yoink can turn captures into stickers by removing the background, then saving, p
 </p>
 
 - Cloud sticker providers: `remove.bg`, `Photoroom`
-- rembg local models: `U2Netp`, `U2Net`, `BiRefNet Lite`, `BRIA RMBG`
-- Local sticker execution: `CPU` or `GPU (DirectML)` on Windows
+- Local sticker models: `U2Netp`, `BRIA RMBG`
 - Optional sticker finishing: drop shadow and white stroke
 
 ## Default hotkeys
@@ -88,10 +87,9 @@ Hotkeys can be changed in settings.
 
 ## Build from source
 
-```bash
+```
 git clone https://github.com/jasperdevs/yoink.git
 cd yoink
-dotnet test tests/Yoink.Tests/Yoink.Tests.csproj -c Release
 dotnet publish src/Yoink/Yoink.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o release
 ```
 
@@ -109,24 +107,9 @@ Availability depends on the target service and your credentials.
 
 Sticker uploads use the same upload destinations as normal image uploads.
 
-## Contributing
-
-Contributions are welcome, but keep them aligned with the project goal: a faster, cleaner Windows screenshot tool.
-
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR
-- File bugs with the issue template so reports include reproduction details
-- Keep PRs small and focused
-- Avoid adding broad ShareX-style automation unless the feature clearly improves the default workflow
-
 ## License
 
-[GPL-3.0](LICENSE)
-
-## Project Status
-
-- Windows only for now
-- Linux and macOS support are not currently planned
-- The repo is still actively evolving, so behavior and UI may change between releases
+[MIT](LICENSE)
 
 ## Star History
 
