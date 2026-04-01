@@ -14,7 +14,7 @@
     <ApplicationIcon>yoink.ico</ApplicationIcon>
     <Version>0.5.0</Version>
     <Authors>Yoink Contributors</Authors>
-    <Description>Windows-first screenshot, annotation, OCR, sticker, and recording tool</Description>
+    <Description>Screenshot, annotation, OCR, sticker, and recording tool for Windows</Description>
     <RepositoryUrl>https://github.com/jasperdevs/yoink</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
