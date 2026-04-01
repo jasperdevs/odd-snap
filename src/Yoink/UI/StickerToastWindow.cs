@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.IO;
+using System.Windows.Input;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -15,13 +16,18 @@ public sealed class StickerToastWindow : Window
     private readonly DispatcherTimer _timer;
     private bool _isHovered;
     private bool _isDismissing;
+    private bool _isDragging;
+    private System.Windows.Point _mouseDownPos;
+    private readonly Bitmap _sticker;
     private readonly Yoink.Models.ToastPosition _position;
     private readonly Border _progressBar;
     private readonly ScaleTransform _progressScale;
+    private readonly ScaleTransform _dragScale;
 
     public StickerToastWindow(Bitmap sticker, Yoink.Models.ToastPosition position)
     {
         _position = position;
+        _sticker = new Bitmap(sticker);
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         ShowInTaskbar = false;
@@ -35,6 +41,7 @@ public sealed class StickerToastWindow : Window
 
         Theme.Refresh();
 
+        _dragScale = new ScaleTransform(1, 1);
         _progressScale = new ScaleTransform(1, 1);
         _progressBar = new Border
         {
@@ -43,12 +50,12 @@ public sealed class StickerToastWindow : Window
             HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Bottom,
             RenderTransform = _progressScale,
-            RenderTransformOrigin = new System.Windows.Point(0, 0.5),
+        RenderTransformOrigin = new System.Windows.Point(0, 0.5),
         };
 
         var stickerImage = new System.Windows.Controls.Image
         {
-            Source = ToBitmapSource(sticker),
+            Source = ToBitmapSource(_sticker),
             Stretch = System.Windows.Media.Stretch.None,
             HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -64,6 +71,15 @@ public sealed class StickerToastWindow : Window
         var container = new Grid();
         container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        container.RenderTransform = new TransformGroup
+        {
+            Children = new TransformCollection
+            {
+                _dragScale,
+                new TranslateTransform()
+            }
+        };
+        container.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
         container.Children.Add(stickerImage);
         Grid.SetRow(_progressBar, 1);
         container.Children.Add(_progressBar);
@@ -92,7 +108,10 @@ public sealed class StickerToastWindow : Window
             _timer.Interval = TimeSpan.FromSeconds(remaining);
             _timer.Start();
         };
-        MouseLeftButtonDown += (_, _) => SlideAway();
+        MouseLeftButtonDown += OnMouseLeftButtonDown;
+        MouseMove += OnMouseMove;
+        MouseLeftButtonUp += OnMouseLeftButtonUp;
+        Cursor = System.Windows.Input.Cursors.Hand;
         SourceInitialized += (_, _) => PopupWindowHelper.ApplyNoActivateChrome(this);
         Loaded += OnLoaded;
     }
@@ -101,6 +120,85 @@ public sealed class StickerToastWindow : Window
     {
         _timer.Stop();
         try { Close(); } catch { }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _timer.Stop();
+        _sticker.Dispose();
+        base.OnClosed(e);
+    }
+
+    private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _mouseDownPos = e.GetPosition(this);
+        _isDragging = false;
+        CaptureMouse();
+    }
+
+    private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var diff = e.GetPosition(this) - _mouseDownPos;
+        if (!_isDragging && Math.Abs(diff.X) < 5 && Math.Abs(diff.Y) < 5)
+            return;
+
+        if (!_isDragging)
+        {
+            _isDragging = true;
+            BeginDragFeedback();
+        }
+
+        var temp = Path.Combine(Path.GetTempPath(), $"yoink_sticker_{Guid.NewGuid():N}.png");
+        _sticker.Save(temp, System.Drawing.Imaging.ImageFormat.Png);
+        try
+        {
+            var data = new System.Windows.DataObject();
+            data.SetFileDropList(new System.Collections.Specialized.StringCollection { temp });
+            var result = System.Windows.DragDrop.DoDragDrop(this, data, System.Windows.DragDropEffects.Copy | System.Windows.DragDropEffects.Move);
+            if (result != System.Windows.DragDropEffects.None)
+                SlideAway();
+            else
+                EndDragFeedback();
+        }
+        finally
+        {
+            try { File.Delete(temp); } catch { }
+            _isDragging = false;
+            if (IsMouseCaptured) ReleaseMouseCapture();
+        }
+    }
+
+    private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsMouseCaptured)
+            return;
+
+        ReleaseMouseCapture();
+        if (_isDragging)
+            return;
+
+        SlideAway();
+    }
+
+    private void BeginDragFeedback()
+    {
+        _dragScale.BeginAnimation(ScaleTransform.ScaleXProperty,
+            new DoubleAnimation { To = 0.96, Duration = TimeSpan.FromMilliseconds(140), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut } });
+        _dragScale.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation { To = 0.96, Duration = TimeSpan.FromMilliseconds(140), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut } });
+        BeginAnimation(OpacityProperty, new DoubleAnimation { To = 0.82, Duration = TimeSpan.FromMilliseconds(140) });
+    }
+
+    private void EndDragFeedback()
+    {
+        _dragScale.BeginAnimation(ScaleTransform.ScaleXProperty,
+            new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(120) });
+        _dragScale.BeginAnimation(ScaleTransform.ScaleYProperty,
+            new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(120) });
+        BeginAnimation(OpacityProperty, new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(120) });
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)

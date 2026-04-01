@@ -14,8 +14,9 @@
     <ApplicationIcon>yoink.ico</ApplicationIcon>
     <Version>0.5.0</Version>
     <Authors>Yoink Contributors</Authors>
-    <Description>Fast screenshot and color picker for Windows</Description>
-    <RepositoryUrl>https://github.com/yoink-tool/yoink</RepositoryUrl>
+    <Description>Windows-first screenshot, annotation, OCR, sticker, and recording tool</Description>
+    <RepositoryUrl>https://github.com/jasperdevs/yoink</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -63,7 +64,6 @@
   <ItemGroup>
     <PackageReference Include="AnimatedGif" Version="1.0.5" />
     <PackageReference Include="FluentFTP" Version="52.1.0" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.21.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="SSH.NET" Version="2024.2.0" />
     <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />

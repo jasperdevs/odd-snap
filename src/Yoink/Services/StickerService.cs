@@ -17,7 +17,16 @@ public enum StickerProvider
 public enum LocalStickerEngine
 {
     BriaRmbg,
-    U2Netp
+    U2Netp,
+    U2Net,
+    BiRefNetLite,
+    IsNetGeneralUse
+}
+
+public enum StickerExecutionProvider
+{
+    Cpu,
+    Gpu
 }
 
 public sealed class StickerSettings
@@ -26,8 +35,15 @@ public sealed class StickerSettings
     public string RemoveBgApiKey { get; set; } = "";
     public string PhotoroomApiKey { get; set; } = "";
     public LocalStickerEngine LocalEngine { get; set; } = LocalStickerEngine.U2Netp;
+    public LocalStickerEngine LocalCpuEngine { get; set; } = LocalStickerEngine.U2Netp;
+    public LocalStickerEngine LocalGpuEngine { get; set; } = LocalStickerEngine.BiRefNetLite;
+    public StickerExecutionProvider LocalExecutionProvider { get; set; } = StickerExecutionProvider.Cpu;
     public bool AddShadow { get; set; }
     public bool AddStroke { get; set; }
+
+    public LocalStickerEngine GetActiveLocalEngine() => LocalExecutionProvider == StickerExecutionProvider.Gpu
+        ? LocalGpuEngine
+        : LocalCpuEngine;
 }
 
 public sealed class StickerResult
@@ -50,7 +66,7 @@ public static class StickerService
     {
         StickerProvider.RemoveBg => "Remove.bg",
         StickerProvider.Photoroom => "Photoroom",
-        StickerProvider.LocalCpu => "Local CPU",
+        StickerProvider.LocalCpu => "Local",
         _ => ""
     };
 
@@ -118,20 +134,55 @@ public static class StickerService
 
     private static async Task<StickerResult> ProcessLocalAsync(Bitmap input, StickerSettings settings)
     {
+        var gpuEngine = settings.GetActiveLocalEngine();
+        if (settings.LocalExecutionProvider == StickerExecutionProvider.Gpu)
+        {
+            var gpuAttempt = await TryProcessLocalAsync(input, gpuEngine, StickerExecutionProvider.Gpu, settings);
+            if (gpuAttempt.Success)
+                return gpuAttempt;
+
+            var cpuFallbackEngine = settings.LocalCpuEngine;
+            var cpuFallback = await TryProcessLocalAsync(input, cpuFallbackEngine, StickerExecutionProvider.Cpu, settings);
+            if (cpuFallback.Success)
+            {
+                return new StickerResult
+                {
+                    Success = true,
+                    Image = cpuFallback.Image,
+                    ProviderName = $"{LocalStickerEngineService.GetEngineLabel(cpuFallbackEngine)} (CPU fallback)"
+                };
+            }
+
+            return new StickerResult
+            {
+                Error = $"{gpuAttempt.Error} CPU fallback failed: {cpuFallback.Error}",
+                ProviderName = LocalStickerEngineService.GetEngineLabel(gpuEngine)
+            };
+        }
+
+        return await TryProcessLocalAsync(input, gpuEngine, StickerExecutionProvider.Cpu, settings);
+    }
+
+    private static async Task<StickerResult> TryProcessLocalAsync(Bitmap input, LocalStickerEngine engine, StickerExecutionProvider executionProvider, StickerSettings settings)
+    {
         try
         {
-            using var processed = await Task.Run(() => LocalStickerEngineService.Process(input, settings.LocalEngine));
+            using var processed = await Task.Run(() => LocalStickerEngineService.Process(input, engine, executionProvider));
             using var finished = LocalStickerEngineService.ApplyPresentationEffects(processed, settings.AddStroke, settings.AddShadow);
             return new StickerResult
             {
                 Success = true,
                 Image = new Bitmap(finished),
-                ProviderName = LocalStickerEngineService.GetEngineLabel(settings.LocalEngine)
+                ProviderName = LocalStickerEngineService.GetEngineLabel(engine)
             };
         }
         catch (Exception ex)
         {
-            return new StickerResult { Error = ex.Message, ProviderName = LocalStickerEngineService.GetEngineLabel(settings.LocalEngine) };
+            return new StickerResult
+            {
+                Error = ex.Message,
+                ProviderName = LocalStickerEngineService.GetEngineLabel(engine)
+            };
         }
     }
 

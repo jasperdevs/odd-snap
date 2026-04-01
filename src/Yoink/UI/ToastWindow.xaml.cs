@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using System.Windows.Media.Imaging;
@@ -22,9 +24,12 @@ public partial class ToastWindow : Window
     private static double _durationSeconds = 2.5;
 
     private bool _isPinned;
-    private bool _hasImagePreview;
     private string? _savedFilePath;
     private Bitmap? _previewBitmap;
+    private bool _isDragging;
+    private System.Windows.Point _mouseDownPos;
+    private System.Windows.Media.Brush? _dragBorderBrush;
+    private Thickness _dragBorderThickness;
 
     private ToastWindow(string title, string body, Color? swatchColor)
     {
@@ -70,14 +75,141 @@ public partial class ToastWindow : Window
             _timer.Interval = TimeSpan.FromSeconds(remaining);
             _timer.Start();
         };
-        MouseLeftButtonDown += (_, _) =>
-        {
-            if (_hasImagePreview) return; // image toasts handle clicks on the image/text
-            if (_savedFilePath != null) { OpenFileLocation(_savedFilePath); return; }
-            SlideAway();
-        };
+        MouseLeftButtonDown += OnMouseLeftButtonDown;
+        MouseMove += OnMouseMove;
+        MouseLeftButtonUp += OnMouseLeftButtonUp;
+        Cursor = System.Windows.Input.Cursors.Hand;
         SourceInitialized += (_, _) => PopupWindowHelper.ApplyNoActivateChrome(this);
         Loaded += OnLoaded;
+    }
+
+    private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (IsChildOf(e.OriginalSource as DependencyObject, CloseBtn) ||
+            IsChildOf(e.OriginalSource as DependencyObject, PinBtn) ||
+            IsChildOf(e.OriginalSource as DependencyObject, SaveBtn))
+        {
+            return;
+        }
+
+        _mouseDownPos = e.GetPosition(this);
+        _isDragging = false;
+        CaptureMouse();
+    }
+
+    private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var diff = e.GetPosition(this) - _mouseDownPos;
+        if (!_isDragging && Math.Abs(diff.X) < 5 && Math.Abs(diff.Y) < 5)
+            return;
+
+        if (!_isDragging)
+        {
+            _isDragging = true;
+            BeginDragFeedback();
+        }
+
+        var dragFile = GetDragFilePath();
+        if (dragFile is null)
+        {
+            EndDragFeedback(cancelled: false);
+            ReleaseMouseCapture();
+            SlideAway();
+            return;
+        }
+
+        try
+        {
+            var data = new System.Windows.DataObject();
+            data.SetFileDropList(new System.Collections.Specialized.StringCollection { dragFile });
+            var result = System.Windows.DragDrop.DoDragDrop(this, data, System.Windows.DragDropEffects.Copy | System.Windows.DragDropEffects.Move);
+            if (result != System.Windows.DragDropEffects.None)
+                SlideAway();
+            else
+                EndDragFeedback(cancelled: true);
+        }
+        finally
+        {
+            if (_savedFilePath is null && File.Exists(dragFile))
+            {
+                try { File.Delete(dragFile); } catch { }
+            }
+
+            _isDragging = false;
+            if (IsMouseCaptured) ReleaseMouseCapture();
+        }
+    }
+
+    private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsMouseCaptured)
+            return;
+
+        ReleaseMouseCapture();
+        if (_isDragging)
+            return;
+
+        if (_savedFilePath != null && File.Exists(_savedFilePath))
+        {
+            OpenFileLocation(_savedFilePath);
+            return;
+        }
+
+        SlideAway();
+    }
+
+    private void BeginDragFeedback()
+    {
+        _dragBorderBrush = Root.BorderBrush;
+        _dragBorderThickness = Root.BorderThickness;
+        Root.BorderBrush = Theme.Brush(System.Windows.Media.Color.FromArgb(120, 120, 180, 255));
+        Root.BorderThickness = new Thickness(1.5);
+        DragScale.CenterX = ActualWidth / 2;
+        DragScale.CenterY = ActualHeight / 2;
+        DragScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
+            new DoubleAnimation { To = 0.96, Duration = TimeSpan.FromMilliseconds(140), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut } });
+        DragScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty,
+            new DoubleAnimation { To = 0.96, Duration = TimeSpan.FromMilliseconds(140), EasingFunction = new QuarticEase { EasingMode = EasingMode.EaseOut } });
+        BeginAnimation(OpacityProperty, new DoubleAnimation { To = 0.82, Duration = TimeSpan.FromMilliseconds(140) });
+    }
+
+    private void EndDragFeedback(bool cancelled)
+    {
+        if (_dragBorderBrush is not null)
+            Root.BorderBrush = _dragBorderBrush;
+        Root.BorderThickness = _dragBorderThickness;
+        _dragBorderBrush = null;
+        DragScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
+            new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(120) });
+        DragScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty,
+            new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(120) });
+        BeginAnimation(OpacityProperty, new DoubleAnimation { To = 1, Duration = TimeSpan.FromMilliseconds(120) });
+    }
+
+    private static bool IsChildOf(DependencyObject? child, DependencyObject parent)
+    {
+        while (child != null)
+        {
+            if (child == parent) return true;
+            child = VisualTreeHelper.GetParent(child);
+        }
+        return false;
+    }
+
+    private string? GetDragFilePath()
+    {
+        if (_savedFilePath != null && File.Exists(_savedFilePath))
+            return _savedFilePath;
+
+        if (_previewBitmap is null)
+            return null;
+
+        var temp = Path.Combine(Path.GetTempPath(), $"yoink_toast_{Guid.NewGuid():N}.png");
+        _previewBitmap.Save(temp, System.Drawing.Imaging.ImageFormat.Png);
+        return temp;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -258,7 +390,6 @@ public partial class ToastWindow : Window
                                      $"{screenshot.Width}x{screenshot.Height}", null);
         toast._previewBitmap = screenshot;
         toast._savedFilePath = filePath;
-        toast._hasImagePreview = true;
 
         // Set image thumbnail — preserve aspect ratio, adapt toast width to image shape
         toast.ImageArea.Visibility = Visibility.Visible;
@@ -367,59 +498,11 @@ public partial class ToastWindow : Window
             }
         };
 
-        // Drag-and-drop: track mouse, start drag on threshold
-        System.Windows.Point mouseDownPos = default;
-        bool mouseIsDown = false;
-        toast.PreviewImage.MouseLeftButtonDown += (_, e) => { mouseDownPos = e.GetPosition(toast); mouseIsDown = true; };
-        toast.PreviewImage.MouseMove += (_, e) =>
-        {
-            if (!mouseIsDown || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) return;
-            var diff = e.GetPosition(toast) - mouseDownPos;
-            if (Math.Abs(diff.X) < 8 && Math.Abs(diff.Y) < 8) return;
-            mouseIsDown = false;
-            string? dragFile = filePath;
-            if ((dragFile == null || !System.IO.File.Exists(dragFile)) && screenshot != null)
-            {
-                dragFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-                screenshot.Save(dragFile, System.Drawing.Imaging.ImageFormat.Png);
-            }
-            if (dragFile == null) return;
-
-            // Visual feedback: fade + accent border to show drag active
-            toast.Opacity = 0.65;
-            var prevBorder = toast.Root.BorderBrush;
-            toast.Root.BorderBrush = Theme.Brush(System.Windows.Media.Color.FromArgb(100, 120, 180, 255));
-            toast.Root.BorderThickness = new Thickness(2);
-
-            var data = new System.Windows.DataObject();
-            data.SetFileDropList(new System.Collections.Specialized.StringCollection { dragFile });
-            var result = System.Windows.DragDrop.DoDragDrop(toast, data, System.Windows.DragDropEffects.Copy | System.Windows.DragDropEffects.Move);
-
-            if (result != System.Windows.DragDropEffects.None)
-            {
-                toast.SlideAway();
-            }
-            else
-            {
-                // Cancelled - restore
-                toast.Opacity = 1;
-                toast.Root.BorderBrush = prevBorder;
-                toast.Root.BorderThickness = new Thickness(1);
-            }
-        };
-        toast.PreviewImage.MouseLeftButtonUp += (_, e) =>
-        {
-            if (!mouseIsDown) return;
-            mouseIsDown = false;
-            // Click (no drag) — open file location
-            OpenFileLocation(filePath);
-        };
-
-        // Click on text area also opens file location
+        // Click on text/image opens file location if there is one, otherwise it dismisses.
         toast.TitleText.Cursor = System.Windows.Input.Cursors.Hand;
         toast.BodyText.Cursor = System.Windows.Input.Cursors.Hand;
-        toast.TitleText.MouseLeftButtonDown += (_, _) => OpenFileLocation(filePath);
-        toast.BodyText.MouseLeftButtonDown += (_, _) => OpenFileLocation(filePath);
+        if (filePath != null)
+            toast.ToolTip = "Drag to move the file or click to open its location";
 
         _current = toast;
         toast.Show();

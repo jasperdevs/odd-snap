@@ -57,12 +57,15 @@ public partial class SettingsWindow
     private void LoadStickerSettingsIntoUi(StickerSettings s)
     {
         StickerProviderCombo.SelectedIndex = (int)s.Provider;
-        StickerLocalEngineCombo.SelectedIndex = (int)s.LocalEngine;
+        StickerLocalExecutionCombo.SelectedIndex = (int)s.LocalExecutionProvider;
+        SelectStickerEngine(StickerLocalCpuEngineCombo, s.LocalCpuEngine);
+        SelectStickerEngine(StickerLocalGpuEngineCombo, s.LocalGpuEngine);
         StickerRemoveBgKeyBox.Text = s.RemoveBgApiKey;
         StickerPhotoroomKeyBox.Text = s.PhotoroomApiKey;
         StickerShadowCheck.IsChecked = s.AddShadow;
         StickerStrokeCheck.IsChecked = s.AddStroke;
         UpdateStickerProviderVisibility();
+        UpdateStickerExecutionUi();
         UpdateLocalEngineUi();
     }
 
@@ -82,28 +85,74 @@ public partial class SettingsWindow
 
     private void UpdateLocalEngineUi()
     {
-        var engine = (LocalStickerEngine)StickerLocalEngineCombo.SelectedIndex;
+        var executionProvider = (StickerExecutionProvider)StickerLocalExecutionCombo.SelectedIndex;
+        var engine = executionProvider == StickerExecutionProvider.Gpu
+            ? GetSelectedStickerEngine(StickerLocalGpuEngineCombo)
+            : GetSelectedStickerEngine(StickerLocalCpuEngineCombo);
         bool downloaded = LocalStickerEngineService.IsModelDownloaded(engine);
 
         StickerLocalEngineStatusText.Text = downloaded
             ? $"{LocalStickerEngineService.GetEngineLabel(engine)} is downloaded and ready to use for sticker captures."
-            : LocalStickerEngineService.GetEngineDescription(engine);
+            : $"{LocalStickerEngineService.GetQualityHint(engine)}: {LocalStickerEngineService.GetEngineDescription(engine)}";
 
         StickerDownloadRembgBtn.Visibility = Visibility.Visible;
-        StickerOpenLocalEngineRepoBtn.Content = "Open model page";
-        StickerDownloadRembgBtn.Content = downloaded ? "Remove model" : "Download model";
+        StickerOpenLocalEngineRepoBtn.Content = "Open rembg";
+        StickerDownloadRembgBtn.Content = downloaded ? "Remove model" : "Warm up model";
 
         if (!IsLoaded)
             return;
 
+        ActiveStickerSettings.LocalExecutionProvider = executionProvider;
         ActiveStickerSettings.LocalEngine = engine;
+        if (executionProvider == StickerExecutionProvider.Gpu)
+            ActiveStickerSettings.LocalGpuEngine = engine;
+        else
+            ActiveStickerSettings.LocalCpuEngine = engine;
         _settingsService.Save();
+    }
+
+    private static LocalStickerEngine GetSelectedStickerEngine(System.Windows.Controls.ComboBox combo)
+    {
+        if (combo.SelectedItem is ComboBoxItem item && item.Tag is string tag && Enum.TryParse(tag, out LocalStickerEngine engine))
+            return engine;
+
+        return LocalStickerEngine.BriaRmbg;
+    }
+
+    private static void SelectStickerEngine(System.Windows.Controls.ComboBox combo, LocalStickerEngine engine)
+    {
+        foreach (var item in combo.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is string tag && Enum.TryParse(tag, out LocalStickerEngine itemEngine) && itemEngine == engine)
+            {
+                combo.SelectedItem = item;
+                return;
+            }
+        }
+
+        combo.SelectedIndex = 0;
+    }
+
+    private void UpdateStickerExecutionUi()
+    {
+        var executionProvider = (StickerExecutionProvider)StickerLocalExecutionCombo.SelectedIndex;
+        StickerLocalCpuEnginePanel.Visibility = executionProvider == StickerExecutionProvider.Cpu ? Visibility.Visible : Visibility.Collapsed;
+        StickerLocalGpuEnginePanel.Visibility = executionProvider == StickerExecutionProvider.Gpu ? Visibility.Visible : Visibility.Collapsed;
+        StickerInstallDriversBtn.Content = RembgRuntimeService.GetSetupButtonText(executionProvider);
+        StickerLocalEngineStatusText.Text = RembgRuntimeService.GetRuntimeSummary(executionProvider);
+
+        if (!IsLoaded)
+            return;
+
+        ActiveStickerSettings.LocalExecutionProvider = executionProvider;
+        UpdateLocalEngineUi();
     }
 
     private void SetStickerDownloadUi(bool isBusy, double? percent = null, string? message = null)
     {
         StickerDownloadRembgBtn.IsEnabled = !isBusy;
         StickerOpenLocalEngineRepoBtn.IsEnabled = !isBusy;
+        StickerRemoveAllModelsBtn.IsEnabled = !isBusy;
 
         StickerLocalEngineProgress.Visibility = isBusy || percent.HasValue ? Visibility.Visible : Visibility.Collapsed;
         StickerLocalEngineProgressText.Visibility = !string.IsNullOrWhiteSpace(message) || isBusy ? Visibility.Visible : Visibility.Collapsed;

@@ -17,7 +17,10 @@
             <DropShadowEffect BlurRadius="20" ShadowDepth="2" Opacity="0.35" Color="Black"/>
         </Border.Effect>
         <Border.RenderTransform>
-            <TranslateTransform x:Name="SlideX" X="0"/>
+            <TransformGroup>
+                <ScaleTransform x:Name="DragScale" ScaleX="1" ScaleY="1"/>
+                <TranslateTransform x:Name="SlideX" X="0"/>
+            </TransformGroup>
         </Border.RenderTransform>
 
         <Grid>

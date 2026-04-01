@@ -369,6 +369,8 @@ public partial class App
                         using var annotated = overlay.RenderAnnotatedBitmap();
                         using var cropped = ScreenCapture.CropRegion(annotated, sel);
                         var clone = new Bitmap(cropped);
+                        overlay.Close();
+                        System.Windows.Forms.Application.ExitThread();
 
                         Dispatcher.BeginInvoke(async () =>
                         {
@@ -391,8 +393,6 @@ public partial class App
                             finally
                             {
                                 clone.Dispose();
-                                overlay.Close();
-                                System.Windows.Forms.Application.ExitThread();
                             }
                         });
                     };

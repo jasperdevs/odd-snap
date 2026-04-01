@@ -1,12 +1,7 @@
-using Microsoft.ML.OnnxRuntime;
-using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
 
 namespace Yoink.Services;
 
@@ -19,135 +14,90 @@ public sealed record LocalStickerModelInstallResult(bool Success, string Message
 
 public static class LocalStickerEngineService
 {
-    private sealed record ModelDef(string Id, string Label, string Description, string Url, string ReferenceUrl, int Resolution, string FileName, string InputName = "input");
-    private sealed class SessionEntry(InferenceSession session)
-    {
-        public InferenceSession Session { get; } = session;
-        public DateTime LastUsedUtc { get; set; } = DateTime.UtcNow;
-    }
-
-    private static readonly HttpClient Http = CreateHttpClient();
-    private static readonly Dictionary<string, SessionEntry> Sessions = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Lock SessionLock = new();
-    private static readonly TimeSpan SessionIdleTimeout = TimeSpan.FromSeconds(30);
-    private static readonly System.Threading.Timer SessionCleanupTimer = new(_ => CleanupIdleSessions(), null, SessionIdleTimeout, SessionIdleTimeout);
+    private sealed record ModelDef(string Label, string Description, string SourceUrl, string FileName, string ModelId);
 
     private static readonly IReadOnlyDictionary<LocalStickerEngine, ModelDef> Models = new Dictionary<LocalStickerEngine, ModelDef>
     {
         [LocalStickerEngine.BriaRmbg] = new(
-            "bria_rmbg_quantized",
-            "BRIA RMBG",
-            "Higher-quality local model. Recommended for most screenshots.",
-            "https://huggingface.co/briaai/RMBG-1.4/resolve/28f8f4114c1385f1478e1102922dce7038164c43/onnx/model_quantized.onnx?download=true",
-            "https://huggingface.co/briaai/RMBG-1.4",
-            1024,
-            "bria-rmbg-quantized.onnx"),
+            "BRIA RMBG (Recommended, Best quality)",
+            "Recommended default. Best quality overall, with a bit more processing cost.",
+            "https://huggingface.co/briaai/RMBG-2.0",
+            "bria-rmbg-2.0.onnx",
+            "bria-rmbg"),
         [LocalStickerEngine.U2Netp] = new(
-            "u2netp",
-            "U2Netp",
-            "Smaller lightweight local model. Faster, but a little rougher around edges.",
-            "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
+            "U2Netp (Fastest, Lowest quality)",
+            "Fastest option. Lightest model, but the roughest edges.",
             "https://github.com/xuebinqin/U-2-Net",
-            320,
-            "u2netp.onnx")
+            "u2netp.onnx",
+            "u2netp"),
+        [LocalStickerEngine.U2Net] = new(
+            "U2Net (Older, Middle quality)",
+            "Older general-use model. Middle-of-the-road quality and speed.",
+            "https://github.com/xuebinqin/U-2-Net",
+            "u2net.onnx",
+            "u2net"),
+        [LocalStickerEngine.BiRefNetLite] = new(
+            "BiRefNet Lite (High quality)",
+            "High-quality model. Heavier than BRIA RMBG, often strong on detailed subjects.",
+            "https://github.com/ZhengPeng7/BiRefNet",
+            "BiRefNet-general-bb_swin_v1_tiny-epoch_232.onnx",
+            "birefnet-general-lite"),
+        [LocalStickerEngine.IsNetGeneralUse] = new(
+            "ISNet General Use (Balanced)",
+            "Balanced quality and speed. Solid middle option for mixed content.",
+            "https://github.com/xuebinqin/DIS",
+            "isnet-general-use.onnx",
+            "isnet-general-use")
     };
 
     public static string GetEngineLabel(LocalStickerEngine engine) => Models[engine].Label;
     public static string GetEngineDescription(LocalStickerEngine engine) => Models[engine].Description;
-    public static string GetProjectUrl(LocalStickerEngine engine) => Models[engine].ReferenceUrl;
+    public static string GetProjectUrl(LocalStickerEngine engine) => Models[engine].SourceUrl;
 
-    public static bool IsModelDownloaded(LocalStickerEngine engine) => File.Exists(GetModelPath(engine));
-
-    public static string GetModelPath(LocalStickerEngine engine)
+    public static string GetQualityHint(LocalStickerEngine engine) => engine switch
     {
-        Directory.CreateDirectory(GetModelDirectory());
-        return Path.Combine(GetModelDirectory(), Models[engine].FileName);
+        LocalStickerEngine.BriaRmbg => "Recommended / best quality",
+        LocalStickerEngine.BiRefNetLite => "High quality",
+        LocalStickerEngine.IsNetGeneralUse => "Balanced",
+        LocalStickerEngine.U2Net => "Older / middle quality",
+        LocalStickerEngine.U2Netp => "Fastest / lowest quality",
+        _ => "Unknown"
+    };
+
+    public static void Shutdown()
+    {
     }
 
-    public static bool RemoveDownloadedModel(LocalStickerEngine engine)
+    public static void ReleaseSessions()
     {
-        var modelPath = GetModelPath(engine);
-        try
-        {
-            lock (SessionLock)
-            {
-                if (Sessions.Remove(modelPath, out var entry))
-                    entry.Session.Dispose();
-            }
-
-            if (File.Exists(modelPath))
-                File.Delete(modelPath);
-
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
     }
+
+    public static bool IsModelDownloaded(LocalStickerEngine engine) => RembgRuntimeService.IsModelCached(engine);
+
+    public static string GetModelPath(LocalStickerEngine engine) => RembgRuntimeService.GetModelPath(engine);
+
+    public static bool RemoveDownloadedModel(LocalStickerEngine engine) => RembgRuntimeService.RemoveCachedModel(engine);
 
     public static async Task<LocalStickerModelInstallResult> DownloadModelAsync(LocalStickerEngine engine, IProgress<LocalStickerEngineDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
     {
-        var model = Models[engine];
-        var modelPath = GetModelPath(engine);
-        var tempPath = modelPath + ".download";
-
         try
         {
-            progress?.Report(new LocalStickerEngineDownloadProgress(0, null, $"Downloading {model.Label} model..."));
-
-            using var request = new HttpRequestMessage(HttpMethod.Get, model.Url);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/octet-stream"));
-            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-
-            await using (var output = File.Create(tempPath))
-            await using (var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
-            {
-                await CopyWithProgressAsync(input, output, response.Content.Headers.ContentLength, progress, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (File.Exists(modelPath))
-                File.Delete(modelPath);
-            File.Move(tempPath, modelPath);
-
-            progress?.Report(new LocalStickerEngineDownloadProgress(new FileInfo(modelPath).Length, new FileInfo(modelPath).Length, "Download complete."));
-            return new LocalStickerModelInstallResult(true, $"Downloaded {model.Label}.", modelPath, model.ReferenceUrl);
+            progress?.Report(new LocalStickerEngineDownloadProgress(0, null, $"Preparing {GetEngineLabel(engine)} with rembg..."));
+            await RembgRuntimeService.EnsureInstalledAsync(StickerExecutionProvider.Cpu, null, cancellationToken).ConfigureAwait(false);
+            await RembgRuntimeService.WarmupModelAsync(engine, StickerExecutionProvider.Cpu, cancellationToken).ConfigureAwait(false);
+            var modelPath = GetModelPath(engine);
+            progress?.Report(new LocalStickerEngineDownloadProgress(100, 100, "Model is ready."));
+            return new LocalStickerModelInstallResult(true, $"Prepared {GetEngineLabel(engine)}.", modelPath, GetProjectUrl(engine));
         }
         catch (Exception ex)
         {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-            return new LocalStickerModelInstallResult(false, ex is HttpRequestException
-                ? $"Couldn't download {model.Label}. Check your connection or open the model page and verify the source."
-                : ex.Message, null, model.ReferenceUrl);
+            return new LocalStickerModelInstallResult(false, ex.Message, null, GetProjectUrl(engine));
         }
     }
 
-    public static Bitmap Process(Bitmap input, LocalStickerEngine engine)
+    public static Bitmap Process(Bitmap input, LocalStickerEngine engine, StickerExecutionProvider executionProvider)
     {
-        var modelPath = GetModelPath(engine);
-        if (!File.Exists(modelPath))
-            throw new InvalidOperationException($"{GetEngineLabel(engine)} is not downloaded yet.");
-
-        var model = Models[engine];
-        using var resized = ResizeBitmap(input, model.Resolution, model.Resolution);
-        var session = GetOrCreateSession(modelPath);
-        var inputName = session.InputMetadata.Keys.FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(inputName))
-            throw new InvalidOperationException($"{GetEngineLabel(engine)} model is missing an input definition.");
-
-        var tensor = CreateInputTensor(resized);
-
-        using var results = session.Run(new[] { NamedOnnxValue.CreateFromTensor(inputName, tensor) });
-        var firstResult = results.FirstOrDefault();
-        if (firstResult is null)
-            throw new InvalidOperationException($"{GetEngineLabel(engine)} returned no output.");
-
-        var output = firstResult.AsTensor<float>();
-        if (output is null)
-            throw new InvalidOperationException($"{GetEngineLabel(engine)} returned an invalid output tensor.");
-
-        return ComposeTransparentBitmap(input, output, model.Resolution, model.Resolution);
+        return RembgRuntimeService.RemoveBackgroundAsync(input, engine, executionProvider).GetAwaiter().GetResult();
     }
 
     public static Bitmap ApplyPresentationEffects(Bitmap source, bool addStroke, bool addShadow)
@@ -183,189 +133,50 @@ public static class LocalStickerEngineService
         return canvas;
     }
 
-    private static string GetModelDirectory() => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "sticker-models");
-
-    private static InferenceSession GetOrCreateSession(string modelPath)
-    {
-        lock (SessionLock)
-        {
-            if (Sessions.TryGetValue(modelPath, out var existing))
-            {
-                existing.LastUsedUtc = DateTime.UtcNow;
-                DisposeOtherSessions(modelPath);
-                return existing.Session;
-            }
-
-            var options = new SessionOptions();
-            options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-            var entry = new SessionEntry(new InferenceSession(modelPath, options));
-            Sessions[modelPath] = entry;
-            DisposeOtherSessions(modelPath);
-            return entry.Session;
-        }
-    }
-
-    private static void DisposeOtherSessions(string activeModelPath)
-    {
-        foreach (var key in Sessions.Keys.Where(key => !string.Equals(key, activeModelPath, StringComparison.OrdinalIgnoreCase)).ToList())
-        {
-            var entry = Sessions[key];
-            Sessions.Remove(key);
-            entry.Session.Dispose();
-        }
-    }
-
-    private static void CleanupIdleSessions()
-    {
-        lock (SessionLock)
-        {
-            var cutoff = DateTime.UtcNow - SessionIdleTimeout;
-            foreach (var key in Sessions.Where(pair => pair.Value.LastUsedUtc < cutoff).Select(pair => pair.Key).ToList())
-            {
-                var entry = Sessions[key];
-                Sessions.Remove(key);
-                entry.Session.Dispose();
-            }
-        }
-    }
-
-    /// <summary>Release all loaded ONNX sessions to free memory. Timer keeps running for future use.</summary>
-    public static void ReleaseSessions()
-    {
-        lock (SessionLock)
-        {
-            foreach (var entry in Sessions.Values)
-                try { entry.Session.Dispose(); } catch { }
-            Sessions.Clear();
-        }
-    }
-
-    /// <summary>Full shutdown — disposes timer and sessions. Call only on app exit.</summary>
-    public static void Shutdown()
-    {
-        try { SessionCleanupTimer.Dispose(); } catch { }
-        ReleaseSessions();
-    }
-
-    private static DenseTensor<float> CreateInputTensor(Bitmap bitmap)
-    {
-        var tensor = new DenseTensor<float>(new[] { 1, 3, bitmap.Height, bitmap.Width });
-        for (int y = 0; y < bitmap.Height; y++)
-        {
-            for (int x = 0; x < bitmap.Width; x++)
-            {
-                var pixel = bitmap.GetPixel(x, y);
-                tensor[0, 0, y, x] = (pixel.R - 127.5f) / 127.5f;
-                tensor[0, 1, y, x] = (pixel.G - 127.5f) / 127.5f;
-                tensor[0, 2, y, x] = (pixel.B - 127.5f) / 127.5f;
-            }
-        }
-        return tensor;
-    }
-
-    private static Bitmap ComposeTransparentBitmap(Bitmap original, Tensor<float> maskTensor, int maskWidth, int maskHeight)
-    {
-        using var alphaMask = new Bitmap(maskWidth, maskHeight);
-        for (int y = 0; y < maskHeight; y++)
-        {
-            for (int x = 0; x < maskWidth; x++)
-            {
-                float raw = maskTensor.Rank switch
-                {
-                    4 => maskTensor[0, 0, y, x],
-                    3 => maskTensor[0, y, x],
-                    _ => maskTensor[y, x]
-                };
-                int alpha = (int)Math.Clamp(raw * 255f, 0f, 255f);
-                alphaMask.SetPixel(x, y, Color.FromArgb(alpha, alpha, alpha, alpha));
-            }
-        }
-
-        using var resizedMask = ResizeBitmap(alphaMask, original.Width, original.Height);
-        var output = new Bitmap(original.Width, original.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        for (int y = 0; y < original.Height; y++)
-        {
-            for (int x = 0; x < original.Width; x++)
-            {
-                var src = original.GetPixel(x, y);
-                int alpha = resizedMask.GetPixel(x, y).A;
-                output.SetPixel(x, y, Color.FromArgb(alpha, src.R, src.G, src.B));
-            }
-        }
-        return output;
-    }
-
-    private static Bitmap ResizeBitmap(Bitmap source, int width, int height)
-    {
-        var output = new Bitmap(width, height);
-        using var g = Graphics.FromImage(output);
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-        g.SmoothingMode = SmoothingMode.HighQuality;
-        g.DrawImage(source, 0, 0, width, height);
-        return output;
-    }
-
     private static Bitmap CreateAlphaTintBitmap(Bitmap source, Color tint)
     {
-        var output = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-        for (int y = 0; y < source.Height; y++)
+        var result = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(result);
+        g.Clear(Color.Transparent);
+
+        using var attributes = new ImageAttributes();
+        var colorMatrix = new ColorMatrix(new[]
         {
-            for (int x = 0; x < source.Width; x++)
-            {
-                var src = source.GetPixel(x, y);
-                if (src.A == 0) continue;
-                output.SetPixel(x, y, Color.FromArgb(src.A, tint.R, tint.G, tint.B));
-            }
-        }
-        return output;
+            new[] { 0f, 0f, 0f, 0f, 0f },
+            new[] { 0f, 0f, 0f, 0f, 0f },
+            new[] { 0f, 0f, 0f, 0f, 0f },
+            new[] { 0f, 0f, 0f, 1f, 0f },
+            new[] { tint.R / 255f, tint.G / 255f, tint.B / 255f, 0f, 1f }
+        });
+        attributes.SetColorMatrix(colorMatrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
+        g.DrawImage(source, new Rectangle(0, 0, source.Width, source.Height), 0, 0, source.Width, source.Height, GraphicsUnit.Pixel, attributes);
+        return result;
     }
 
     private static void DrawMask(Graphics g, Bitmap mask, int x, int y, float opacity)
     {
-        using var attrs = new ImageAttributes();
-        var matrix = new ColorMatrix
+        var cm = new ColorMatrix
         {
+            Matrix00 = 1f,
+            Matrix11 = 1f,
+            Matrix22 = 1f,
             Matrix33 = opacity
         };
-        attrs.SetColorMatrix(matrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
-        g.DrawImage(mask, new Rectangle(x, y, mask.Width, mask.Height), 0, 0, mask.Width, mask.Height, GraphicsUnit.Pixel, attrs);
+        using var attributes = new ImageAttributes();
+        attributes.SetColorMatrix(cm, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
+        g.DrawImage(mask, new Rectangle(x, y, mask.Width, mask.Height), 0, 0, mask.Width, mask.Height, GraphicsUnit.Pixel, attributes);
     }
 
     private static IEnumerable<(int dx, int dy)> GetStrokeOffsets(int radius)
     {
-        for (int dy = -radius; dy <= radius; dy++)
+        for (int y = -radius; y <= radius; y++)
         {
-            for (int dx = -radius; dx <= radius; dx++)
+            for (int x = -radius; x <= radius; x++)
             {
-                if (dx == 0 && dy == 0) continue;
-                if (dx * dx + dy * dy <= radius * radius)
-                    yield return (dx, dy);
+                if (x == 0 && y == 0) continue;
+                if (x * x + y * y <= radius * radius)
+                    yield return (x, y);
             }
         }
-    }
-
-    private static async Task CopyWithProgressAsync(Stream input, Stream output, long? totalBytes, IProgress<LocalStickerEngineDownloadProgress>? progress, CancellationToken cancellationToken)
-    {
-        byte[] buffer = new byte[1024 * 128];
-        long received = 0;
-        int read;
-
-        while ((read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
-        {
-            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-            received += read;
-            progress?.Report(new LocalStickerEngineDownloadProgress(received, totalBytes, totalBytes is > 0
-                ? $"Downloading... {received / 1024 / 1024} MB / {totalBytes.Value / 1024 / 1024} MB"
-                : $"Downloading... {received / 1024 / 1024} MB"));
-        }
-    }
-
-    private static HttpClient CreateHttpClient()
-    {
-        var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd($"Yoink/{UpdateService.GetCurrentVersion()}");
-        client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
-        return client;
     }
 }

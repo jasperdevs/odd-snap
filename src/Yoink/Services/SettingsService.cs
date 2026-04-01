@@ -53,6 +53,26 @@ public sealed class SettingsService
                         if (!Settings.EnabledTools.Contains(tool))
                             Settings.EnabledTools.Add(tool);
                 }
+
+                // Migrate older sticker settings that only stored one local engine.
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("StickerUploadSettings", out var stickerSettings))
+                {
+                    bool hasCpuEngine = stickerSettings.TryGetProperty("LocalCpuEngine", out _);
+                    bool hasGpuEngine = stickerSettings.TryGetProperty("LocalGpuEngine", out _);
+                    if (!hasCpuEngine && !hasGpuEngine &&
+                        stickerSettings.TryGetProperty("LocalEngine", out var legacyEngineValue) &&
+                        legacyEngineValue.ValueKind == JsonValueKind.Number &&
+                        legacyEngineValue.TryGetInt32(out var legacyEngineIndex) &&
+                        Enum.IsDefined(typeof(LocalStickerEngine), legacyEngineIndex))
+                    {
+                        var legacyEngine = (LocalStickerEngine)legacyEngineIndex;
+                        Settings.StickerUploadSettings.LocalCpuEngine = legacyEngine == LocalStickerEngine.BiRefNetLite
+                            ? LocalStickerEngine.U2Netp
+                            : legacyEngine;
+                        Settings.StickerUploadSettings.LocalEngine = legacyEngine;
+                    }
+                }
             }
         }
         catch

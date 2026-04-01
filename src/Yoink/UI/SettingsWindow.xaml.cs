@@ -1023,10 +1023,49 @@ public partial class SettingsWindow : Window
         _settingsService.Save();
     }
 
-    private void StickerLocalEngineCombo_Changed(object sender, SelectionChangedEventArgs e)
+    private void StickerLocalCpuEngineCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
         UpdateLocalEngineUi();
+    }
+
+    private void StickerLocalGpuEngineCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        UpdateLocalEngineUi();
+    }
+
+    private void StickerLocalExecutionCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        UpdateStickerExecutionUi();
+    }
+
+    private LocalStickerEngine GetSelectedLocalStickerEngine()
+    {
+        var executionProvider = (StickerExecutionProvider)StickerLocalExecutionCombo.SelectedIndex;
+        return executionProvider == StickerExecutionProvider.Gpu
+            ? GetSelectedStickerEngine(StickerLocalGpuEngineCombo)
+            : GetSelectedStickerEngine(StickerLocalCpuEngineCombo);
+    }
+
+    private async void StickerInstallDriversBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var executionProvider = (StickerExecutionProvider)StickerLocalExecutionCombo.SelectedIndex;
+            StickerInstallDriversBtn.IsEnabled = false;
+            await RembgRuntimeService.EnsureInstalledAsync(executionProvider);
+            ToastWindow.Show("rembg", $"{RembgRuntimeService.GetSetupTargetName(executionProvider)} complete.");
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError("rembg setup failed", ex.Message);
+        }
+        finally
+        {
+            StickerInstallDriversBtn.IsEnabled = true;
+        }
     }
 
     private void StickerShadowCheck_Changed(object sender, RoutedEventArgs e)
@@ -1059,7 +1098,7 @@ public partial class SettingsWindow : Window
 
     private async void StickerDownloadRembgBtn_Click(object sender, RoutedEventArgs e)
     {
-        var engine = (LocalStickerEngine)StickerLocalEngineCombo.SelectedIndex;
+        var engine = GetSelectedLocalStickerEngine();
 
         if (LocalStickerEngineService.IsModelDownloaded(engine))
         {
@@ -1104,7 +1143,7 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            var engine = (LocalStickerEngine)StickerLocalEngineCombo.SelectedIndex;
+            var engine = GetSelectedLocalStickerEngine();
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = LocalStickerEngineService.GetProjectUrl(engine),
@@ -1112,6 +1151,27 @@ public partial class SettingsWindow : Window
             });
         }
         catch { }
+    }
+
+    private void StickerRemoveAllModelsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show(
+                "Remove all downloaded local sticker models?\n\nThey will be downloaded again the next time you use them.",
+                "Remove Models",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        bool removed = RembgRuntimeService.RemoveAllCachedModels();
+        if (removed)
+        {
+            ToastWindow.Show("Sticker engine", "Removed all downloaded local sticker models.");
+            UpdateLocalEngineUi();
+        }
+        else
+        {
+            ToastWindow.ShowError("Sticker engine error", "Couldn't remove the downloaded models.");
+        }
     }
 
     private void ImgurClientIdBox_Changed(object sender, TextChangedEventArgs e)
@@ -1474,7 +1534,7 @@ public partial class SettingsWindow : Window
                 {
                     "Remove.bg" => "RBG",
                     "Photoroom" => "PR",
-                    "Local CPU" => "CPU",
+                    "Local" => "LCL",
                     _ => text.Length <= 4 ? text.ToUpperInvariant() : text[..4].ToUpperInvariant()
                 };
             }

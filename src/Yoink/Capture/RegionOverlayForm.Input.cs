@@ -520,7 +520,9 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Sticker when _isSelecting:
                 _autoDetectActive = false;
                 _selectionEnd = e.Location;
-                _selectionRect = NormRect(_selectionStart, _selectionEnd);
+                _selectionRect = _mode == CaptureMode.Rectangle && (ModifierKeys & Keys.Shift) != 0
+                    ? GetSquareSelectionRect(_selectionStart, _selectionEnd)
+                    : NormRect(_selectionStart, _selectionEnd);
                 if (_selectionRect.Width > 3 || _selectionRect.Height > 3) _hasDragged = true;
                 _hasSelection = _selectionRect.Width > 2 && _selectionRect.Height > 2;
                 needsRepaint = true;
@@ -1041,6 +1043,16 @@ public sealed partial class RegionOverlayForm
         for (int i = 0; i < _toolbarButtons.Length; i++)
             if (_toolbarButtons[i].Contains(p)) return i;
         return -1;
+    }
+
+    private static Rectangle GetSquareSelectionRect(Point start, Point current)
+    {
+        int dx = current.X - start.X;
+        int dy = current.Y - start.Y;
+        int size = Math.Max(Math.Abs(dx), Math.Abs(dy));
+        int x2 = start.X + Math.Sign(dx == 0 ? 1 : dx) * size;
+        int y2 = start.Y + Math.Sign(dy == 0 ? 1 : dy) * size;
+        return NormRect(start, new Point(x2, y2));
     }
 
     private void SetMode(CaptureMode m)

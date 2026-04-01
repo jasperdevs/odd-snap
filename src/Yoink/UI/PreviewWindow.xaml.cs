@@ -339,10 +339,10 @@ public partial class PreviewWindow : Window
             DragScale.CenterX = ActualWidth / 2;
             DragScale.CenterY = ActualHeight / 2;
             DragScale.BeginAnimation(ScaleTransform.ScaleXProperty,
-                new DoubleAnimation { To = 0.92, Duration = dur, EasingFunction = ease });
+                new DoubleAnimation { To = 0.96, Duration = dur, EasingFunction = ease });
             DragScale.BeginAnimation(ScaleTransform.ScaleYProperty,
-                new DoubleAnimation { To = 0.92, Duration = dur, EasingFunction = ease });
-            BeginAnimation(OpacityProperty, new DoubleAnimation { To = 0.7, Duration = dur, EasingFunction = ease });
+                new DoubleAnimation { To = 0.96, Duration = dur, EasingFunction = ease });
+            BeginAnimation(OpacityProperty, new DoubleAnimation { To = 0.82, Duration = dur, EasingFunction = ease });
 
             var shake = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(200) };
             shake.KeyFrames.Add(new LinearDoubleKeyFrame(-2, KeyTime.FromPercent(0.15)));

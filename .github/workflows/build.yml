@@ -38,6 +38,10 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore src/Yoink/Yoink.csproj -r ${{ matrix.rid }}
 
+      - name: Test
+        if: matrix.rid == 'win-x64'
+        run: dotnet test tests/Yoink.Tests/Yoink.Tests.csproj -c Release
+
       - name: Publish
         run: >
           dotnet publish src/Yoink/Yoink.csproj

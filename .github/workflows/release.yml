@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: windows-latest
+            rid: win-x86
+          - os: windows-11-arm
+            rid: win-arm64
+
+    runs-on: ${{ matrix.os }}
+    name: Package ${{ matrix.rid }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore src/Yoink/Yoink.csproj -r ${{ matrix.rid }}
+
+      - name: Publish
+        run: >
+          dotnet publish src/Yoink/Yoink.csproj
+          -c Release
+          -r ${{ matrix.rid }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -o publish
+
+      - name: Create archive and checksum
+        shell: pwsh
+        run: |
+          $zipName = "Yoink-${{ matrix.rid }}.zip"
+          $zipPath = Join-Path $PWD $zipName
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Compress-Archive -Path (Join-Path $PWD 'publish\*') -DestinationPath $zipPath -Force
+          $hash = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLowerInvariant()
+          $checksumPath = "$zipPath.sha256.txt"
+          Set-Content -Path $checksumPath -Value "$hash  $zipName" -NoNewline
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yoink-${{ matrix.rid }}
+          path: |
+            Yoink-${{ matrix.rid }}.zip
+            Yoink-${{ matrix.rid }}.zip.sha256.txt
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: windows-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*.zip
+            dist/**/*.sha256.txt
+          generate_release_notes: true

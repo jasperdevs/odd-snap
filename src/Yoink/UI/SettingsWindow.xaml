@@ -293,7 +293,7 @@
         </Grid.RowDefinitions>
 
         <!-- Custom title bar -->
-        <Border x:Name="TitleBarBorder" Grid.Row="0" Padding="16,10,8,10" Background="#1A1A1A"
+        <Border x:Name="TitleBarBorder" Grid.Row="0" Padding="16,8,0,0" Background="#1A1A1A"
                 CornerRadius="11,11,0,0"
                 MouseLeftButtonDown="TitleBar_MouseDown">
             <Grid>
@@ -305,12 +305,12 @@
                                FontFamily="Segoe UI Variable Display"
                                Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.85" VerticalAlignment="Center"/>
                 </StackPanel>
-                <Border Width="34" Height="30" CornerRadius="7" Cursor="Hand" Background="Transparent"
+                <Border Width="40" Height="34" CornerRadius="0,11,0,0" Cursor="Hand" Background="Transparent"
                         MouseLeftButtonDown="CloseBtn_Click" MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
-                        HorizontalAlignment="Right">
-                    <Canvas Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Line X1="0" Y1="0" X2="10" Y2="10" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.3"/>
-                        <Line X1="10" Y1="0" X2="0" Y2="10" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.3"/>
+                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,0,0">
+                    <Canvas Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Line X1="0" Y1="0" X2="12" Y2="12" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.4"/>
+                        <Line X1="12" Y1="0" X2="0" Y2="12" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.4"/>
                     </Canvas>
                 </Border>
             </Grid>
@@ -1262,7 +1262,7 @@
                                         <ComboBoxItem Content="None"/>
                                         <ComboBoxItem Content="Remove.bg"/>
                                         <ComboBoxItem Content="Photoroom"/>
-                                        <ComboBoxItem Content="Local CPU (Recommended)"/>
+                                        <ComboBoxItem Content="Local (CPU/GPU)"/>
                                     </ComboBox>
                                 </Grid>
 
@@ -1283,17 +1283,65 @@
                                 </StackPanel>
 
                                 <StackPanel x:Name="StickerLocalCpuPanel" Visibility="Collapsed">
-                                    <TextBlock Text="Local engine" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Local sticker models" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
 
-                                    <ComboBox x:Name="StickerLocalEngineCombo" FontSize="12" Padding="8,5" MinWidth="180"
-                                              SelectionChanged="StickerLocalEngineCombo_Changed">
-                                        <ComboBoxItem Content="BRIA RMBG (Recommended)"/>
-                                        <ComboBoxItem Content="U2Netp (Lightweight)"/>
-                                    </ComboBox>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Execution mode" FontSize="13" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="StickerLocalExecutionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="180"
+                                                  SelectionChanged="StickerLocalExecutionCombo_Changed">
+                                            <ComboBoxItem Content="CPU"/>
+                                            <ComboBoxItem Content="GPU (CUDA)"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <TextBlock Text="List is ordered from best quality to fastest. U2Netp is the lightest option." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                                    <Grid x:Name="StickerLocalCpuEnginePanel" Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="CPU model" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                            <ComboBox x:Name="StickerLocalCpuEngineCombo" FontSize="12" Padding="8,5" MinWidth="180"
+                                                      SelectionChanged="StickerLocalCpuEngineCombo_Changed">
+                                                <ComboBoxItem Content="BRIA RMBG" Tag="BriaRmbg"/>
+                                                <ComboBoxItem Content="BiRefNet Lite (High quality)" Tag="BiRefNetLite"/>
+                                                <ComboBoxItem Content="ISNet General Use (Balanced)" Tag="IsNetGeneralUse"/>
+                                                <ComboBoxItem Content="U2Net (Older)" Tag="U2Net"/>
+                                                <ComboBoxItem Content="U2Netp (Fastest)" Tag="U2Netp"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid x:Name="StickerLocalGpuEnginePanel" Margin="0,0,0,8" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="GPU model" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                            <ComboBox x:Name="StickerLocalGpuEngineCombo" FontSize="12" Padding="8,5" MinWidth="180"
+                                                      SelectionChanged="StickerLocalGpuEngineCombo_Changed">
+                                                <ComboBoxItem Content="BRIA RMBG" Tag="BriaRmbg"/>
+                                                <ComboBoxItem Content="BiRefNet Lite (High quality)" Tag="BiRefNetLite"/>
+                                                <ComboBoxItem Content="ISNet General Use (Balanced)" Tag="IsNetGeneralUse"/>
+                                                <ComboBoxItem Content="U2Net (Older)" Tag="U2Net"/>
+                                                <ComboBoxItem Content="U2Netp (Fastest)" Tag="U2Netp"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <Button x:Name="StickerInstallDriversBtn" Grid.Column="1" Content="Install rembg" FontSize="12"
+                                                Padding="12,6" Margin="10,22,0,0" VerticalAlignment="Top"
+                                                Click="StickerInstallDriversBtn_Click" Cursor="Hand"/>
+                                    </Grid>
 
                                     <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
 
-                                    <TextBlock x:Name="StickerLocalEngineStatusText" Text="Pick a local engine." FontSize="11" Opacity="0.35" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="StickerLocalEngineStatusText" Text="Pick a model. Models download automatically on first use." FontSize="11" Opacity="0.35" TextWrapping="Wrap"/>
                                     <ProgressBar x:Name="StickerLocalEngineProgress" Height="6" Margin="0,8,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
                                     <TextBlock x:Name="StickerLocalEngineProgressText" FontSize="10" Opacity="0.25" Margin="0,4,0,0" Visibility="Collapsed"/>
 
@@ -1306,10 +1354,12 @@
                                 </StackPanel>
 
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                    <Button x:Name="StickerDownloadRembgBtn" Content="Download from GitHub" FontSize="12" Padding="12,6"
+                                    <Button x:Name="StickerDownloadRembgBtn" Content="Warm up model" FontSize="12" Padding="12,6"
                                             Click="StickerDownloadRembgBtn_Click" Cursor="Hand"/>
-                                    <Button x:Name="StickerOpenLocalEngineRepoBtn" Content="Open GitHub" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                    <Button x:Name="StickerOpenLocalEngineRepoBtn" Content="Open rembg" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="StickerOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
+                                    <Button x:Name="StickerRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                            Click="StickerRemoveAllModelsBtn_Click" Cursor="Hand"/>
                                 </StackPanel>
                         </StackPanel>
                     </controls:ProviderSection>
