@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -12,37 +13,69 @@ public sealed partial class RegionOverlayForm
     private bool _pickerReady;
     private bool _pickerBusy;
     private int _lastPickedArgb;
+    private Point _lastRenderedPickerPoint = Point.Empty;
+    private Point _pendingPickerPoint;
+    private bool _pickerUpdateQueued;
+    private readonly System.Diagnostics.Stopwatch _pickerStopwatch = System.Diagnostics.Stopwatch.StartNew();
     private PickerMagnifierForm? _pickerForm;
 
     private void OnPickerTick(object? sender, EventArgs e)
     {
-        // Timer path disabled; picker is now driven directly from OnMouseMove.
+        if (_pickerBusy || !_pickerUpdateQueued)
+            return;
+
+        if (_pickerStopwatch.ElapsedMilliseconds < 16)
+            return;
+
+        _pickerUpdateQueued = false;
+        RenderColorPickerFrame(_pendingPickerPoint);
     }
 
     private void EnsurePickerForm()
     {
         if (_pickerForm != null) return;
         _pickerForm = new PickerMagnifierForm();
-        _pickerForm.Show(this);
+        var _ = _pickerForm.Handle;
     }
 
     internal void UpdateColorPicker(Point overlayPoint)
     {
+        _pendingPickerPoint = overlayPoint;
+        _pickerUpdateQueued = true;
+        if (!_pickerBusy)
+            RenderColorPickerFrame(overlayPoint);
+    }
+
+    private void RenderColorPickerFrame(Point overlayPoint)
+    {
         if (_pickerBusy) return;
-        if (_pickerReady && overlayPoint == _pickerCursorPos) return;
+        if (_pickerReady && overlayPoint == _lastRenderedPickerPoint && _pickerForm != null)
+            return;
 
         _pickerBusy = true;
-        _pickerReady = true;
-        _pickerCursorPos = overlayPoint;
-        BuildMagnifier();
-        EnsurePickerForm();
+        try
+        {
+            _pickerReady = true;
+            _pickerCursorPos = overlayPoint;
+            BuildMagnifier();
+            EnsurePickerForm();
+            var pickerForm = _pickerForm;
+            if (pickerForm is null)
+                return;
 
-        var (mx, my) = MagPos(_pickerCursorPos);
-        _pickerForm!.UpdateMagnifier(_magBitmap, _pickerCursorPos, _pickedColor, _hexStr, _rgbStr);
-        _pickerForm.Left = mx + _virtualBounds.X - 4;
-        _pickerForm.Top = my + _virtualBounds.Y - 4;
-
-        _pickerBusy = false;
+            var (mx, my) = MagPos(_pickerCursorPos);
+            pickerForm.Left = mx + _virtualBounds.X - 4;
+            pickerForm.Top = my + _virtualBounds.Y - 4;
+            if (!pickerForm.Visible)
+                pickerForm.Show(this);
+            pickerForm.UpdateMagnifier(_magBitmap, _pickerCursorPos, _pickedColor, _hexStr, _rgbStr);
+            _lastRenderedPickerPoint = overlayPoint;
+            _pickerStopwatch.Restart();
+        }
+        finally
+        {
+            _pickerBusy = false;
+        }
     }
 
     private void CloseMagWindow()
@@ -50,6 +83,8 @@ public sealed partial class RegionOverlayForm
         _pickerForm?.Close();
         _pickerForm?.Dispose();
         _pickerForm = null;
+        _pickerUpdateQueued = false;
+        _pickerReady = false;
     }
 
     private void BuildMagnifier()

@@ -5,9 +5,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Yoink.Helpers;
 using Yoink.Models;
 using Yoink.Services;
 using Image = System.Windows.Controls.Image;
+using WpfPoint = System.Windows.Point;
 
 namespace Yoink.UI;
 
@@ -35,7 +37,7 @@ public partial class SettingsWindow
         var entries = _historyService.ImageEntries;
         long totalBytes = 0;
         foreach (var e in entries)
-            try { totalBytes += new FileInfo(e.FilePath).Length; } catch { }
+            totalBytes += e.FileSizeBytes > 0 ? e.FileSizeBytes : TryGetFileLength(e.FilePath);
         var sizeStr = FormatStorageSize(totalBytes);
         HistoryCountText.Text = $"{entries.Count} capture{(entries.Count == 1 ? "" : "s")} \u00B7 {sizeStr}";
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -69,7 +71,7 @@ public partial class SettingsWindow
                 Text = label,
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
-                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
                 Foreground = Theme.Brush(Theme.TextPrimary),
                 Opacity = 0.45,
                 Margin = new Thickness(6, 12, 0, 6)
@@ -92,8 +94,54 @@ public partial class SettingsWindow
 
     private sealed record MediaCardShell(Border Card, Grid ImageContainer, StackPanel InfoPanel, Border CopyButton, Image Image);
 
+    private static bool IsDraggableFile(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && File.Exists(path);
+
+    private static void AttachFileDragHandlers(Border card, FrameworkElement dragSource, string filePath, Func<bool> canDrag, Action<bool> setDragging)
+    {
+        WpfPoint dragStart = default;
+        bool pressed = false;
+        bool dragging = false;
+
+        dragSource.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            if (!canDrag())
+                return;
+            pressed = true;
+            dragging = false;
+            setDragging(false);
+            dragStart = e.GetPosition(card);
+        };
+
+        dragSource.PreviewMouseMove += (_, e) =>
+        {
+            if (!pressed || dragging || e.LeftButton != MouseButtonState.Pressed || !canDrag())
+                return;
+
+            var current = e.GetPosition(card);
+            if (Math.Abs(current.X - dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(current.Y - dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            dragging = true;
+            pressed = false;
+            setDragging(true);
+            var data = new System.Windows.DataObject(System.Windows.DataFormats.FileDrop, new[] { filePath });
+            System.Windows.DragDrop.DoDragDrop(card, data, System.Windows.DragDropEffects.Copy);
+            setDragging(false);
+        };
+
+        dragSource.PreviewMouseLeftButtonUp += (_, _) =>
+        {
+            pressed = false;
+            dragging = false;
+            setDragging(false);
+        };
+    }
+
     private MediaCardShell BuildMediaCardShell(HistoryItemVM vm, Action copyAction)
     {
+        bool isDraggingFile = false;
         var img = new Image { Stretch = Stretch.UniformToFill, Opacity = 0 };
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
 
@@ -163,6 +211,9 @@ public partial class SettingsWindow
             RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
         };
 
+        if (IsDraggableFile(vm.Entry.FilePath))
+            AttachFileDragHandlers(card, card, vm.Entry.FilePath, () => !_selectMode, v => isDraggingFile = v);
+
         card.SizeChanged += (s, _) =>
         {
             var b = (Border)s!;
@@ -198,7 +249,7 @@ public partial class SettingsWindow
                 new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
         };
 
-        card.MouseLeftButtonDown += (s, e) =>
+        card.MouseLeftButtonUp += (s, e) =>
         {
             if (_selectMode)
             {
@@ -206,6 +257,9 @@ public partial class SettingsWindow
                 UpdateCardSelection(card, vm);
                 return;
             }
+
+            if (isDraggingFile)
+                return;
 
             if (!string.IsNullOrEmpty(vm.Entry.UploadUrl))
             {
@@ -281,14 +335,14 @@ public partial class SettingsWindow
         {
             Text = vm.Entry.FileName,
             FontSize = 11,
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
             TextTrimming = TextTrimming.CharacterEllipsis
         });
         shell.InfoPanel.Children.Add(new TextBlock
         {
             Text = vm.TimeAgo,
             FontSize = 10,
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
             Opacity = 0.3
         });
         return shell.Card;
@@ -345,7 +399,7 @@ public partial class SettingsWindow
         {
             Text = vm.Entry.FileName,
             FontSize = 11,
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
             TextTrimming = TextTrimming.CharacterEllipsis
         });
         if (!string.IsNullOrEmpty(sizeStr))
@@ -354,7 +408,7 @@ public partial class SettingsWindow
             {
                 Text = sizeStr,
                 FontSize = 10,
-                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
                 Opacity = 0.35
             });
         }
@@ -362,7 +416,7 @@ public partial class SettingsWindow
         {
             Text = vm.TimeAgo,
             FontSize = 10,
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
             Opacity = 0.3
         });
 
@@ -455,7 +509,7 @@ public partial class SettingsWindow
         var entries = _historyService.GifEntries;
         long totalBytes = 0;
         foreach (var e in entries)
-            try { totalBytes += new FileInfo(e.FilePath).Length; } catch { }
+            totalBytes += e.FileSizeBytes > 0 ? e.FileSizeBytes : TryGetFileLength(e.FilePath);
         var sizeStr = FormatStorageSize(totalBytes);
         HistoryCountText.Text = $"{entries.Count} GIF{(entries.Count == 1 ? "" : "s")} \u00B7 {sizeStr}";
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -518,7 +572,7 @@ public partial class SettingsWindow
         var entries = _historyService.StickerEntries;
         long totalBytes = 0;
         foreach (var e in entries)
-            try { totalBytes += new FileInfo(e.FilePath).Length; } catch { }
+            totalBytes += e.FileSizeBytes > 0 ? e.FileSizeBytes : TryGetFileLength(e.FilePath);
         var sizeStr = FormatStorageSize(totalBytes);
         HistoryCountText.Text = $"{entries.Count} sticker{(entries.Count == 1 ? "" : "s")} · {sizeStr}";
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -569,5 +623,11 @@ public partial class SettingsWindow
         if (_stickerRenderCount >= _allStickerItems.Count) return;
         _stickerRenderCount = Math.Min(_stickerRenderCount + HistoryPageSize, _allStickerItems.Count);
         RenderStickerItems();
+    }
+
+    private static long TryGetFileLength(string filePath)
+    {
+        try { return new FileInfo(filePath).Length; }
+        catch { return 0; }
     }
 }

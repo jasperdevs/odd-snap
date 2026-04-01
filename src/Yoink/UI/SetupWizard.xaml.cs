@@ -43,7 +43,7 @@ public partial class SetupWizard : Window
 
     private void BuildHotkeyRows()
     {
-        var segoe = new System.Windows.Media.FontFamily("Segoe UI Variable Text");
+        var segoe = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName);
         var iconColor = Theme.IsDark ? System.Drawing.Color.FromArgb(160, 255, 255, 255) : System.Drawing.Color.FromArgb(170, 0, 0, 0);
         var s = _settingsService.Settings;
 

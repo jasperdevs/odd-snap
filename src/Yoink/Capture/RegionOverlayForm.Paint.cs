@@ -1,10 +1,13 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using System.Linq;
+using Yoink.Helpers;
 using Yoink.Models;
 
 // Unified dash/border constants for consistency across all selection borders
@@ -14,11 +17,20 @@ namespace Yoink.Capture;
 
 public sealed partial class RegionOverlayForm
 {
+    private static void ApplyUiGraphics(Graphics g)
+    {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.CompositingMode = CompositingMode.SourceOver;
+        g.CompositingQuality = CompositingQuality.HighQuality;
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
-
         g.PixelOffsetMode = PixelOffsetMode.None;
         g.SmoothingMode = SmoothingMode.None;
 
@@ -51,24 +63,6 @@ public sealed partial class RegionOverlayForm
             g.FillRectangle(dimOverlay, clip);
         }
 
-        // Toolbar backdrop fade — pre-cached brushes, zero allocation per frame
-        if (_toolbarRect.Width > 0)
-        {
-            int fadeEnd = _toolbarRect.Bottom + 50;
-            int w = ClientSize.Width;
-            if (fadeEnd > 0 && fadeEnd < ClientSize.Height)
-            {
-                EnsureFadeBrushes();
-                int bands = _fadeBrushes!.Length;
-                int bandH = Math.Max(2, fadeEnd / bands);
-                for (int i = 0; i < bands; i++)
-                {
-                    if (_fadeBrushes[i] == null) break;
-                    g.FillRectangle(_fadeBrushes[i]!, 0, i * bandH, w, bandH);
-                }
-            }
-        }
-
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         // Live tool previews (active drawing in progress)
@@ -86,7 +80,7 @@ public sealed partial class RegionOverlayForm
 
                 // Corner handles
                 int hs = 6;
-                using var hBrush = new SolidBrush(Color.White);
+                using var hBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
                 using var hPen = new Pen(Color.FromArgb(200, 100, 149, 237), 1f);
                 var corners = new[] {
                     new Rectangle(selRect.X - hs / 2, selRect.Y - hs / 2, hs, hs),
@@ -112,7 +106,7 @@ public sealed partial class RegionOverlayForm
         }
         else if (isSelectionMode && !_hasSelection && !_isSelecting)
         {
-            using var pen = new Pen(Color.FromArgb(60, 255, 255, 255), 2f);
+            using var pen = new Pen(UiChrome.SurfaceTextPrimary, 2f);
             g.DrawRectangle(pen, 1, 1, ClientSize.Width - 3, ClientSize.Height - 3);
             _lastAutoDetectRect = Rectangle.Empty;
         }
@@ -269,7 +263,7 @@ public sealed partial class RegionOverlayForm
     }
 
     /// <summary>Static dashed pen for all selection borders.</summary>
-    private static Pen DashedPen(int alpha, float width = 2f) => new Pen(Color.FromArgb(alpha, 255, 255, 255), width)
+    private static Pen DashedPen(int alpha, float width = 2f) => new Pen(Color.FromArgb(alpha, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B), width)
     {
         DashStyle = DashStyle.Dash,
         DashPattern = new[] { 6f, 4f }
@@ -330,12 +324,35 @@ public sealed partial class RegionOverlayForm
 
     private static void PaintShadow(Graphics g, RectangleF rect, float radius, int alpha = 52, float yOffset = 1f)
     {
-        var shadowRect = rect;
-        shadowRect.Inflate(2f, 2f);
-        shadowRect.Offset(0, yOffset);
-        using var path = RRect(shadowRect, radius + 2f);
-        using var brush = new SolidBrush(Color.FromArgb(alpha, 0, 0, 0));
-        g.FillPath(brush, path);
+        var oldSmooth = g.SmoothingMode;
+        var oldComp = g.CompositingMode;
+        var oldCompQual = g.CompositingQuality;
+        var oldPix = g.PixelOffsetMode;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.CompositingMode = CompositingMode.SourceOver;
+        g.CompositingQuality = CompositingQuality.HighQuality;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+        var baseRect = rect;
+        baseRect.Inflate(2f, 2f);
+        var offsets = new (float dx, float dy, int a)[]
+        {
+            (5f, yOffset + 5f, alpha / 6),
+            (3f, yOffset + 3f, alpha / 4),
+            (1.5f, yOffset + 1.5f, alpha / 2),
+            (0f, yOffset, alpha),
+        };
+        foreach (var (dx, dy, a) in offsets)
+        {
+            using var path = RRect(new RectangleF(baseRect.X + dx, baseRect.Y + dy, baseRect.Width, baseRect.Height), radius + 2f);
+            using var brush = new SolidBrush(Color.FromArgb(Math.Clamp(a, 1, 255), 0, 0, 0));
+            g.FillPath(brush, path);
+        }
+
+        g.SmoothingMode = oldSmooth;
+        g.CompositingMode = oldComp;
+        g.CompositingQuality = oldCompQual;
+        g.PixelOffsetMode = oldPix;
     }
 
     // This method only renders live previews for the in-progress tool state.
@@ -350,7 +367,7 @@ public sealed partial class RegionOverlayForm
             {
                 using var brush = new SolidBrush(Color.FromArgb(180, _eraserColor));
                 g.FillRectangle(brush, pr);
-                using var pen = new Pen(Color.FromArgb(120, 255, 255, 255), 1f) { DashStyle = DashStyle.Dash };
+                using var pen = new Pen(UiChrome.SurfaceTextPrimary, 1f) { DashStyle = DashStyle.Dash };
                 g.DrawRectangle(pen, pr);
             }
         }
@@ -359,7 +376,7 @@ public sealed partial class RegionOverlayForm
             var pr = NormRect(_blurStart, PointToClient(System.Windows.Forms.Cursor.Position));
             if (pr.Width > 2 && pr.Height > 2)
             {
-                using var pen = new Pen(Color.FromArgb(150, 255, 255, 255), 1f) { DashStyle = DashStyle.Dash };
+                using var pen = new Pen(UiChrome.SurfaceTextPrimary, 1f) { DashStyle = DashStyle.Dash };
                 g.DrawRectangle(pen, pr);
             }
         }
@@ -394,7 +411,7 @@ public sealed partial class RegionOverlayForm
         if (_mode == CaptureMode.Arrow && _isArrowDragging)
         {
             var cur = PointToClient(System.Windows.Forms.Cursor.Position);
-            SketchRenderer.DrawArrow(g, _arrowStart, cur, _toolColor, _arrowStart.GetHashCode());
+            SketchRenderer.DrawArrow(g, _arrowStart, cur, _toolColor, _arrowStart.GetHashCode(), includeShadow: false);
         }
         if (_mode == CaptureMode.CurvedArrow && _isCurvedArrowDragging && _currentCurvedArrow is { Count: >= 2 })
             SketchRenderer.DrawCurvedArrow(g, _currentCurvedArrow, _toolColor, 42);
@@ -430,7 +447,7 @@ public sealed partial class RegionOverlayForm
             // Dashed selection border
             var textRect = new RectangleF(_textPos.X - 6, _textPos.Y - 4,
                 Math.Max(textSize.Width + 12, 100), textSize.Height + 8);
-            using var dashPen = new Pen(Color.FromArgb(140, 255, 255, 255), 1f) { DashStyle = DashStyle.Dash };
+            using var dashPen = new Pen(UiChrome.SurfaceTextPrimary, 1f) { DashStyle = DashStyle.Dash };
             g.DrawRectangle(dashPen, textRect.X, textRect.Y, textRect.Width, textRect.Height);
 
             // Corner resize handles
@@ -441,7 +458,7 @@ public sealed partial class RegionOverlayForm
                 new(textRect.X - hs/2, textRect.Bottom - hs/2, hs, hs),
                 new(textRect.Right - hs/2, textRect.Bottom - hs/2, hs, hs),
             };
-            using var handleBrush = new SolidBrush(Color.White);
+            using var handleBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
             foreach (var h in handles)
                 g.FillRectangle(handleBrush, h);
 
@@ -453,14 +470,14 @@ public sealed partial class RegionOverlayForm
             }
             else
             {
-                using var placeholderBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
+                using var placeholderBrush = new SolidBrush(UiChrome.SurfaceTextMuted);
                 g.DrawString(display, font, placeholderBrush, _textPos.X, _textPos.Y);
             }
 
             // Blinking cursor
             if (_textBuffer.Length > 0)
             {
-                var cursorX = _textPos.X + g.MeasureString(_textBuffer, font).Width - 2;
+                var cursorX = _textPos.X + _activeTextMeasureWidth - 2;
                 using var cursorPen = new Pen(_toolColor, 2f);
                 g.DrawLine(cursorPen, cursorX, _textPos.Y + 2, cursorX, _textPos.Y + textSize.Height - 4);
             }
@@ -482,7 +499,7 @@ public sealed partial class RegionOverlayForm
 
     /// <summary>Text annotation: uses DrawString for correct kerning. Shadow and stroke via offset draws.</summary>
     private static void PaintExcalidrawText(Graphics g, Point pos, string text, float fontSize, Color color,
-        bool bold = true, bool italic = false, bool stroke = true, bool shadow = true, string fontFamily = "Segoe UI")
+        bool bold = true, bool italic = false, bool stroke = true, bool shadow = true, string fontFamily = UiChrome.DefaultFontFamily)
     {
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
@@ -494,20 +511,17 @@ public sealed partial class RegionOverlayForm
             // Shadow: draw text offset in dark color at multiple offsets for soft effect
             if (shadow)
             {
-                using var shadowBrush = new SolidBrush(Color.FromArgb(50, 0, 0, 0));
-                g.DrawString(text, font, shadowBrush, pos.X + 2, pos.Y + 2);
-                using var shadowBrush2 = new SolidBrush(Color.FromArgb(25, 0, 0, 0));
-                g.DrawString(text, font, shadowBrush2, pos.X + 3, pos.Y + 3);
+                g.DrawString(text, font, TextShadowBrush1, pos.X + 2, pos.Y + 2);
+                g.DrawString(text, font, TextShadowBrush2, pos.X + 3, pos.Y + 3);
             }
 
             // Stroke: draw text at small offsets in dark color to simulate outline
             if (stroke)
             {
-                using var strokeBrush = new SolidBrush(Color.FromArgb(60, 0, 0, 0));
                 for (int ox = -1; ox <= 1; ox++)
                     for (int oy = -1; oy <= 1; oy++)
                         if (ox != 0 || oy != 0)
-                            g.DrawString(text, font, strokeBrush, pos.X + ox, pos.Y + oy);
+                            g.DrawString(text, font, TextStrokeBrush, pos.X + ox, pos.Y + oy);
             }
 
             // Main text
@@ -528,13 +542,13 @@ public sealed partial class RegionOverlayForm
         using var brush = new SolidBrush(color);
         g.FillEllipse(brush, pos.X - radius, pos.Y - radius, radius * 2, radius * 2);
         // White border
-        using var borderPen = new Pen(Color.White, 2f);
+        using var borderPen = new Pen(UiChrome.SurfaceTextPrimary, 2f);
         g.DrawEllipse(borderPen, pos.X - radius, pos.Y - radius, radius * 2, radius * 2);
         // Number
-        var font = GetAnnotationFont("Segoe UI", 12f, FontStyle.Bold);
+        var font = UiChrome.ChromeFont(12f, FontStyle.Bold);
         string text = num.ToString();
         var sz = g.MeasureString(text, font);
-        using var textBrush = new SolidBrush(Color.White);
+        using var textBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
         g.DrawString(text, font, textBrush, pos.X - sz.Width / 2, pos.Y - sz.Height / 2);
         g.SmoothingMode = SmoothingMode.Default;
     }
@@ -566,33 +580,52 @@ public sealed partial class RegionOverlayForm
 
         var dstRect = new Rectangle(px, py, dstSize, dstSize);
 
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using (var bgPath = RRect(new RectangleF(px - 2, py - 2, dstSize + 4, dstSize + 4), 8))
+        var state = g.Save();
+        try
         {
-            using var bg = new SolidBrush(Color.FromArgb((int)(200 * opacity), 15, 15, 15));
-            g.FillPath(bg, bgPath);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var bgPath = RRect(new RectangleF(px - 2, py - 2, dstSize + 4, dstSize + 4), 8))
+            {
+                using var bg = new SolidBrush(Color.FromArgb((int)(200 * opacity), UiChrome.SurfaceElevated.R, UiChrome.SurfaceElevated.G, UiChrome.SurfaceElevated.B));
+                g.FillPath(bg, bgPath);
+            }
+
+            using var clipPath = RRect(dstRect, 6);
+            g.SetClip(clipPath);
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+            g.DrawImage(_screenshot, dstRect, srcRect, GraphicsUnit.Pixel);
+
+            int ccx = px + dstSize / 2, ccy = py + dstSize / 2;
+            using var crossPen = new Pen(Color.FromArgb((int)(180 * opacity), UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B), 1f);
+            g.DrawLine(crossPen, ccx - 8, ccy, ccx + 8, ccy);
+            g.DrawLine(crossPen, ccx, ccy - 8, ccx, ccy + 8);
+
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var borderPen = new Pen(Color.FromArgb((int)(70 * opacity), UiChrome.SurfaceBorderStrong.R, UiChrome.SurfaceBorderStrong.G, UiChrome.SurfaceBorderStrong.B), 1f);
+            g.DrawPath(borderPen, clipPath);
         }
-        g.SmoothingMode = SmoothingMode.Default;
+        finally
+        {
+            g.Restore(state);
+        }
+    }
 
-        using var clipPath = RRect(dstRect, 6);
-        var oldClip = g.Clip;
-        g.SetClip(clipPath);
-        g.InterpolationMode = InterpolationMode.NearestNeighbor;
-        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
-        g.DrawImage(_screenshot, dstRect, srcRect, GraphicsUnit.Pixel);
-        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Default;
-        g.InterpolationMode = InterpolationMode.Default;
-        g.Clip = oldClip;
+    private Graphics GetBlurPreviewGraphics(Size size)
+    {
+        if (size.Width <= 0 || size.Height <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size));
 
-        int ccx = px + dstSize / 2, ccy = py + dstSize / 2;
-        using var crossPen = new Pen(Color.FromArgb((int)(180 * opacity), 255, 255, 255), 1f);
-        g.DrawLine(crossPen, ccx - 8, ccy, ccx + 8, ccy);
-        g.DrawLine(crossPen, ccx, ccy - 8, ccx, ccy + 8);
+        if (_blurPreviewBitmap == null || _blurPreviewSize != size)
+        {
+            _blurPreviewGraphics?.Dispose();
+            _blurPreviewBitmap?.Dispose();
+            _blurPreviewBitmap = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppArgb);
+            _blurPreviewGraphics = Graphics.FromImage(_blurPreviewBitmap);
+            _blurPreviewSize = size;
+        }
 
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var borderPen = new Pen(Color.FromArgb((int)(50 * opacity), 255, 255, 255), 1f);
-        g.DrawPath(borderPen, clipPath);
-        g.SmoothingMode = SmoothingMode.Default;
+        return _blurPreviewGraphics!;
     }
 
     private void PaintFontPicker(Graphics g)
@@ -621,9 +654,9 @@ public sealed partial class RegionOverlayForm
         PaintShadow(g, _fontPickerRect, 10f, 58, 1f);
         using (var bgPath = RRect(_fontPickerRect, 10))
         {
-            using var bg = new SolidBrush(Color.FromArgb(235, 18, 18, 18));
+            using var bg = new SolidBrush(UiChrome.SurfaceElevated);
             g.FillPath(bg, bgPath);
-            using var border = new Pen(Color.FromArgb(40, 255, 255, 255));
+            using var border = new Pen(UiChrome.SurfaceBorderSubtle);
             g.DrawPath(border, bgPath);
         }
 
@@ -631,21 +664,21 @@ public sealed partial class RegionOverlayForm
         var searchRect = new Rectangle(px + pad, py + pad, pw - pad * 2, searchBarH);
         using (var searchPath = RRect(searchRect, 6))
         {
-            using var searchBg = new SolidBrush(Color.FromArgb(40, 255, 255, 255));
+            using var searchBg = new SolidBrush(UiChrome.SurfaceHover);
             g.FillPath(searchBg, searchPath);
-            using var focusBorder = new Pen(Color.FromArgb(100, 255, 255, 255), 1f);
+            using var focusBorder = new Pen(UiChrome.SurfaceBorderStrong, 1f);
             g.DrawPath(focusBorder, searchPath);
         }
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
         string searchDisplay = _fontSearch.Length > 0 ? _fontSearch : "Search fonts...";
         using var searchBrush = new SolidBrush(_fontSearch.Length > 0
-            ? Color.FromArgb(230, 255, 255, 255) : Color.FromArgb(70, 255, 255, 255));
-        var searchFont = GetAnnotationFont("Segoe UI", 10f, FontStyle.Regular);
+            ? UiChrome.SurfaceTextPrimary : UiChrome.SurfaceTextMuted);
+        var searchFont = UiChrome.ChromeFont(10f);
         g.DrawString(searchDisplay, searchFont, searchBrush, searchRect.X + 8, searchRect.Y + 5);
         if (_fontSearch.Length > 0)
         {
             float cursorX = searchRect.X + 8 + g.MeasureString(_fontSearch, searchFont).Width - 2;
-            using var cursorPen = new Pen(Color.FromArgb(200, 255, 255, 255), 1.5f);
+            using var cursorPen = new Pen(UiChrome.SurfaceTextPrimary, 1.5f);
             g.DrawLine(cursorPen, cursorX, searchRect.Y + 7, cursorX, searchRect.Bottom - 7);
         }
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
@@ -666,7 +699,7 @@ public sealed partial class RegionOverlayForm
                 var itemRect = new Rectangle(px + pad, iy, pw - pad * 2, itemH);
                 using var itemPath = RRect(itemRect, 5);
                 int alpha = active ? 40 : 20;
-                using var itemBg = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255));
+                using var itemBg = new SolidBrush(Color.FromArgb(alpha, UiChrome.SurfaceHover.R, UiChrome.SurfaceHover.G, UiChrome.SurfaceHover.B));
                 g.FillPath(itemBg, itemPath);
             }
 
@@ -674,10 +707,10 @@ public sealed partial class RegionOverlayForm
             if (!_fontCache.TryGetValue(name, out var font))
             {
                 try { font = new Font(name, 11f); }
-                catch { font = new Font("Segoe UI", 11f); }
+                catch { font = UiChrome.ChromeFont(11f); }
                 _fontCache[name] = font;
             }
-            using var brush = new SolidBrush(Color.FromArgb(active ? 255 : 180, 255, 255, 255));
+            using var brush = new SolidBrush(Color.FromArgb(active ? 255 : 180, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
             g.DrawString(name, font, brush, px + pad + 6, iy + 4);
         }
 
@@ -687,11 +720,11 @@ public sealed partial class RegionOverlayForm
             int trackH = visibleCount * itemH - 4;
             int trackX = px + pw - pad - 3;
             int trackY = listY + 2;
-            using var trackBrush = new SolidBrush(Color.FromArgb(20, 255, 255, 255));
+            using var trackBrush = new SolidBrush(UiChrome.SurfaceHover);
             g.FillRectangle(trackBrush, trackX, trackY, 3, trackH);
             int thumbH = Math.Max(10, trackH * visibleCount / fonts.Length);
             int thumbY = maxScroll > 0 ? trackY + (int)((float)_fontPickerScroll / maxScroll * (trackH - thumbH)) : trackY;
-            using var thumbBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
+            using var thumbBrush = new SolidBrush(UiChrome.SurfaceTextMuted);
             g.FillRectangle(thumbBrush, trackX, thumbY, 3, thumbH);
         }
 
@@ -742,9 +775,9 @@ public sealed partial class RegionOverlayForm
         PaintShadow(g, _emojiPickerRect, 12f, 58, 1f);
         using (var bgPath = RRect(_emojiPickerRect, 12))
         {
-            using var bg = new SolidBrush(Color.FromArgb(230, 32, 32, 32));
+            using var bg = new SolidBrush(UiChrome.SurfaceElevated);
             g.FillPath(bg, bgPath);
-            using var border = new Pen(Color.FromArgb(35, 255, 255, 255), 1f);
+            using var border = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
             g.DrawPath(border, bgPath);
         }
 
@@ -752,30 +785,30 @@ public sealed partial class RegionOverlayForm
         var searchRect = new Rectangle(px + pad, py + pad, pw - pad * 2, searchBarH);
         using (var searchPath = RRect(searchRect, 6))
         {
-            using var searchBg = new SolidBrush(Color.FromArgb(40, 255, 255, 255));
+            using var searchBg = new SolidBrush(UiChrome.SurfaceHover);
             g.FillPath(searchBg, searchPath);
             // Focus border
-            using var focusBorder = new Pen(Color.FromArgb(100, 255, 255, 255), 1f);
+            using var focusBorder = new Pen(UiChrome.SurfaceBorderStrong, 1f);
             g.DrawPath(focusBorder, searchPath);
         }
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-        var searchFont = GetAnnotationFont("Segoe UI", 10f, FontStyle.Regular);
+        var searchFont = UiChrome.ChromeFont(10f);
         string searchDisplay = _emojiSearch.Length > 0 ? _emojiSearch : "Search emoji...";
         using var searchBrush = new SolidBrush(_emojiSearch.Length > 0
-            ? Color.FromArgb(230, 255, 255, 255)
-            : Color.FromArgb(70, 255, 255, 255));
+            ? UiChrome.SurfaceTextPrimary
+            : UiChrome.SurfaceTextMuted);
         g.DrawString(searchDisplay, searchFont, searchBrush, searchRect.X + 8, searchRect.Y + 5);
         // Text cursor (always visible when picker is open)
         {
             float cursorX = _emojiSearch.Length > 0
                 ? searchRect.X + 8 + g.MeasureString(_emojiSearch, searchFont).Width - 2
                 : searchRect.X + 8;
-            using var cursorPen = new Pen(Color.FromArgb(200, 255, 255, 255), 1.5f);
+            using var cursorPen = new Pen(UiChrome.SurfaceTextPrimary, 1.5f);
             g.DrawLine(cursorPen, cursorX, searchRect.Y + 7, cursorX, searchRect.Bottom - 7);
         }
 
-        var searchHintFont = GetAnnotationFont("Segoe UI", 8f, FontStyle.Regular);
-        using var searchHintBrush = new SolidBrush(Color.FromArgb(70, 255, 255, 255));
+        var searchHintFont = UiChrome.ChromeFont(8f);
+        using var searchHintBrush = new SolidBrush(UiChrome.SurfaceTextMuted);
         g.DrawString("Type to search", searchHintFont, searchHintBrush, searchRect.Right - 78, searchRect.Y + 7);
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
 
@@ -795,7 +828,7 @@ public sealed partial class RegionOverlayForm
             if (hovered)
             {
                 using var hoverPath = RRect(new RectangleF(ex - 2, ey - 2, emojiSize + 4, emojiSize + 4), 6);
-                using var hoverBg = new SolidBrush(Color.FromArgb(40, 255, 255, 255));
+                using var hoverBg = new SolidBrush(UiChrome.SurfaceHover);
                 g.FillPath(hoverBg, hoverPath);
             }
 
@@ -809,11 +842,11 @@ public sealed partial class RegionOverlayForm
             int trackH = gridH - 4;
             int trackX = px + pw - pad - 3;
             int trackY = gridY + 2;
-            using var trackBrush = new SolidBrush(Color.FromArgb(20, 255, 255, 255));
+            using var trackBrush = new SolidBrush(UiChrome.SurfaceHover);
             g.FillRectangle(trackBrush, trackX, trackY, 3, trackH);
             int thumbH = Math.Max(10, trackH * visibleRows / totalRows);
             int thumbY = trackY + (int)((float)scrollRow / (totalRows - visibleRows) * (trackH - thumbH));
-            using var thumbBrush = new SolidBrush(Color.FromArgb(80, 255, 255, 255));
+            using var thumbBrush = new SolidBrush(UiChrome.SurfaceTextMuted);
             g.FillRectangle(thumbBrush, trackX, thumbY, 3, thumbH);
         }
 
@@ -839,9 +872,9 @@ public sealed partial class RegionOverlayForm
         PaintShadow(g, _colorPickerRect, 8f, 58, 1f);
         using (var bgPath = RRect(_colorPickerRect, 8))
         {
-            using var bg = new SolidBrush(Color.FromArgb(220, 20, 20, 20));
+            using var bg = new SolidBrush(UiChrome.SurfaceElevated);
             g.FillPath(bg, bgPath);
-            using var border = new Pen(Color.FromArgb(40, 255, 255, 255));
+            using var border = new Pen(UiChrome.SurfaceBorderSubtle);
             g.DrawPath(border, bgPath);
         }
 
@@ -854,7 +887,7 @@ public sealed partial class RegionOverlayForm
             g.FillEllipse(brush, sx, sy, swatchSize, swatchSize);
             if (ToolColors[i] == _toolColor)
             {
-                using var selPen = new Pen(Color.White, 2f);
+                using var selPen = new Pen(UiChrome.SurfaceTextPrimary, 2f);
                 g.DrawEllipse(selPen, sx, sy, swatchSize, swatchSize);
             }
         }
@@ -868,13 +901,13 @@ public sealed partial class RegionOverlayForm
             _toolbarRect.Width, _toolbarRect.Height);
 
         // Pill background -- solid dark, barely-visible border like Windows Snipping Tool
-        PaintShadow(g, r, ToolbarHeight / 2f, 58, 1f);
-        using (var p = RRect(r, ToolbarHeight / 2))
+        PaintShadow(g, r, UiChrome.ToolbarHeight / 2f, 58, 1f);
+        using (var p = RRect(r, UiChrome.ToolbarHeight / 2))
         {
-            using var baseFill = new SolidBrush(Color.FromArgb(255, 32, 32, 32));
-            g.FillPath(baseFill, p);
-            using var bp = new Pen(Color.FromArgb(18, 255, 255, 255), 1f);
-            g.DrawPath(bp, p);
+            using var bg = new SolidBrush(UiChrome.SurfacePill);
+            using var border = new Pen(UiChrome.SurfaceBorder, 1f);
+            g.FillPath(bg, p);
+            g.DrawPath(border, p);
         }
 
         // Separator lines at group boundaries
@@ -883,38 +916,25 @@ public sealed partial class RegionOverlayForm
         foreach (int idx in _sepAfter)
         {
             if (idx < 0 || idx >= _toolbarButtons.Length - 1) continue;
-            int sx = _toolbarButtons[idx].Right + (ButtonSpacing + GroupGap) / 2;
-            using var sepPen = new Pen(Color.FromArgb(32, 255, 255, 255), 1f);
+            int sx = _toolbarButtons[idx].Right + (UiChrome.ToolbarButtonSpacing + GroupGap) / 2;
+            using var sepPen = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
             g.DrawLine(sepPen, sx, sepY1, sx, sepY2);
         }
-
-        // Build dynamic arrays from visible tools + fixed buttons
-        int toolCount = _visibleTools.Length;
-        string[] icons = new string[BtnCount];
-        string[] labels = new string[BtnCount];
-        CaptureMode?[] modes = new CaptureMode?[BtnCount];
-        for (int i = 0; i < toolCount; i++)
-        {
-            icons[i] = _visibleTools[i].Id;
-            labels[i] = _visibleTools[i].Label;
-            modes[i] = _visibleTools[i].Mode;
-        }
-        icons[toolCount] = "color"; labels[toolCount] = "Color"; modes[toolCount] = null;
-        icons[toolCount + 1] = "gear"; labels[toolCount + 1] = "Settings"; modes[toolCount + 1] = null;
-        icons[toolCount + 2] = "close"; labels[toolCount + 2] = "Close (Esc)"; modes[toolCount + 2] = null;
 
         for (int i = 0; i < BtnCount; i++)
         {
             var btn = _toolbarButtons[i];
-            bool active = modes[i] is { } m && _mode == m;
+            bool active = _toolbarModes[i] is { } m && _mode == m;
             bool hover = _hoveredButton == i;
 
             // Color dot button
-            if (icons[i] == "color")
+            if (_toolbarIcons[i] == "color")
             {
                 if (hover)
-                    g.FillEllipse(new SolidBrush(Color.FromArgb(18, 255, 255, 255)),
-                        btn.X, btn.Y, btn.Width, btn.Height);
+                {
+                    using var hoverBrush = new SolidBrush(UiChrome.SurfaceHover);
+                    g.FillEllipse(hoverBrush, btn.X, btn.Y, btn.Width, btn.Height);
+                }
                 int dotSize = 16;
                 int dx = btn.X + (btn.Width - dotSize) / 2;
                 int dy = btn.Y + (btn.Height - dotSize) / 2;
@@ -925,27 +945,30 @@ public sealed partial class RegionOverlayForm
 
             // Hover: pill-shaped highlight matching the dock radius
             if (hover)
-                g.FillEllipse(new SolidBrush(Color.FromArgb(18, 255, 255, 255)),
-                    btn.X, btn.Y, btn.Width, btn.Height);
+            {
+                using var hoverBrush = new SolidBrush(UiChrome.SurfaceHover);
+                g.FillEllipse(hoverBrush, btn.X, btn.Y, btn.Width, btn.Height);
+            }
 
             // Active = full white icon, default = dimmed, hover = mid
             int ia = active ? 255 : hover ? 220 : i >= BtnCount - 2 ? 130 : 160;
-            DrawIcon(g, icons[i], btn, Color.FromArgb(ia, 255, 255, 255));
+            var iconColor = UiChrome.SurfaceTextPrimary;
+            DrawIcon(g, _toolbarIcons[i], btn, Color.FromArgb(ia, iconColor.R, iconColor.G, iconColor.B));
         }
 
         // Tooltip with hotkey hint on hover (all tools)
-        if (_hoveredButton >= 0 && _hoveredButton < labels.Length)
+        if (_hoveredButton >= 0 && _hoveredButton < _toolbarLabels.Length)
         {
-            string tipText = labels[_hoveredButton];
+            string tipText = _toolbarLabels[_hoveredButton];
 
-            if (_hoveredButton < toolCount)
+            if (_hoveredButton < _visibleTools.Length)
             {
                 var tool = _visibleTools[_hoveredButton];
                 if (tool.Group == 1)
                 {
                     // Annotation tool — show position-based number key
                     int keyIdx = 0;
-                    for (int j = 0; j < toolCount; j++)
+                    for (int j = 0; j < _visibleTools.Length; j++)
                     {
                         if (_visibleTools[j].Group != 1) continue;
                         if (j == _hoveredButton) { if (keyIdx < AnnotationKeyMap.Length) tipText += $"  ({AnnotationKeyMap[keyIdx].label})"; break; }
@@ -962,7 +985,7 @@ public sealed partial class RegionOverlayForm
             }
 
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            var tipFont = GetAnnotationFont("Segoe UI Semibold", 8.25f, FontStyle.Regular);
+            var tipFont = UiChrome.ChromeFont(8.25f, FontStyle.Regular);
             var sz = g.MeasureString(tipText, tipFont);
             var btnRect = _toolbarButtons[_hoveredButton];
             float tx = btnRect.X + btnRect.Width / 2f - sz.Width / 2f;
@@ -975,13 +998,13 @@ public sealed partial class RegionOverlayForm
             PaintShadow(g, tipRect, tipRect.Height / 2f, 52, 1f);
             using (var tipPath = RRect(tipRect, tipRect.Height / 2f))
             {
-                using var tipBg = new SolidBrush(Color.FromArgb(240, 24, 24, 24));
+                using var tipBg = new SolidBrush(UiChrome.SurfaceTooltip);
+                using var tipBorder = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
                 g.FillPath(tipBg, tipPath);
-                using var tipBorder = new Pen(Color.FromArgb(28, 255, 255, 255), 1f);
                 g.DrawPath(tipBorder, tipPath);
             }
-            using var tipBrush = new SolidBrush(Color.FromArgb(200, 255, 255, 255));
-            g.DrawString(tipText, tipFont, tipBrush, tx, ty);
+            using var tipFg = new SolidBrush(UiChrome.SurfaceTextPrimary);
+            g.DrawString(tipText, tipFont, tipFg, tx, ty);
             g.TextRenderingHint = TextRenderingHint.SystemDefault;
         }
 
@@ -994,10 +1017,16 @@ public sealed partial class RegionOverlayForm
     /// </summary>
     public void PaintToolbarTo(Graphics g, Rectangle clip, Point unused)
     {
+        ApplyUiGraphics(g);
+        float eased = 1f - MathF.Pow(1f - _toolbarAnim, 3f);
+        int slide = (int)Math.Round((eased - 1f) * 8f);
+        var state = g.Save();
+        g.TranslateTransform(0, slide);
         PaintToolbar(g);
         if (_colorPickerOpen) PaintColorPicker(g);
         if (_emojiPickerOpen) PaintEmojiPicker(g);
         if (_fontPickerOpen) PaintFontPicker(g);
+        g.Restore(state);
     }
 
     // Pre-cached annotation fonts (allocated once, reused every frame)
@@ -1009,10 +1038,14 @@ public sealed partial class RegionOverlayForm
             return cached;
         Font font;
         try { font = new Font(family, size, style); }
-        catch { font = new Font("Segoe UI", size, style); }
+        catch { font = UiChrome.ChromeFont(size, style); }
         _annotationFontCache[key] = font;
         return font;
     }
+
+    private static readonly SolidBrush TextShadowBrush1 = new(Color.FromArgb(50, 0, 0, 0));
+    private static readonly SolidBrush TextShadowBrush2 = new(Color.FromArgb(25, 0, 0, 0));
+    private static readonly SolidBrush TextStrokeBrush = new(Color.FromArgb(60, 0, 0, 0));
 
     // Pre-cached fade brushes (allocated once, reused every frame)
     private static SolidBrush?[]? _fadeBrushes;
@@ -1036,60 +1069,8 @@ public sealed partial class RegionOverlayForm
         ["close"] = '\uE1B1', // lucide x
     };
 
-    private static System.Drawing.Text.PrivateFontCollection? _iconFontCollection;
     private static Font? _iconFontCached;
-    private static byte[]? _iconFontData;
-
-    private static Font GetIconFont()
-    {
-        if (_iconFontCached != null) return _iconFontCached;
-
-        _iconFontCollection = new System.Drawing.Text.PrivateFontCollection();
-
-        if (!TryLoadEmbeddedIconFont(_iconFontCollection))
-        {
-            string dir = AppContext.BaseDirectory;
-            string path = Path.Combine(dir, "lucide.ttf");
-            if (File.Exists(path))
-                _iconFontCollection.AddFontFile(path);
-        }
-
-        var family = _iconFontCollection.Families.Length > 0
-            ? _iconFontCollection.Families[0]
-            : new FontFamily("Segoe UI");
-        _iconFontCached = new Font(family, 14f, FontStyle.Regular, GraphicsUnit.Point);
-        _iconFontData = null; // Free the byte array — font is loaded, data no longer needed
-        return _iconFontCached;
-    }
-
-    private static bool TryLoadEmbeddedIconFont(PrivateFontCollection fonts)
-    {
-        const string resourceName = "Yoink.lucide.ttf";
-
-        using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
-        if (stream is null)
-            return false;
-
-        _iconFontData = new byte[checked((int)stream.Length)];
-        int offset = 0;
-        while (offset < _iconFontData.Length)
-        {
-            int read = stream.Read(_iconFontData, offset, _iconFontData.Length - offset);
-            if (read <= 0)
-                return false;
-            offset += read;
-        }
-
-        unsafe
-        {
-            fixed (byte* ptr = _iconFontData)
-            {
-                fonts.AddMemoryFont((nint)ptr, _iconFontData.Length);
-            }
-        }
-
-        return fonts.Families.Length > 0;
-    }
+    private static Font GetIconFont() => _iconFontCached ??= IconFont.Create(UiChrome.IconGlyphSize);
 
     private static readonly StringFormat _iconFmt = new(StringFormat.GenericTypographic)
     {
@@ -1155,7 +1136,7 @@ public sealed partial class RegionOverlayForm
             : isScan ? $"SCAN  {rect.Width} x {rect.Height}"
             : $"{rect.Width} x {rect.Height}";
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        var font = GetAnnotationFont("Segoe UI", 10f, FontStyle.Regular);
+        var font = UiChrome.ChromeFont(10f);
         var sz = g.MeasureString(text, font);
         float lx = rect.X, ly = rect.Bottom + 8;
         if (ly + sz.Height > ClientSize.Height) ly = rect.Y - sz.Height - 8;
@@ -1163,13 +1144,13 @@ public sealed partial class RegionOverlayForm
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using (var p = RRect(lr, 8))
         {
-            using var lblBg = new SolidBrush(Color.FromArgb(230, 32, 32, 32));
+            using var lblBg = new SolidBrush(UiChrome.SurfacePill);
             g.FillPath(lblBg, p);
-            using var border = new Pen(Color.FromArgb(35, 255, 255, 255), 1f);
+            using var border = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
             g.DrawPath(border, p);
         }
         g.SmoothingMode = SmoothingMode.Default;
-        using var fg = new SolidBrush(Color.FromArgb(220, 255, 255, 255));
+        using var fg = new SolidBrush(UiChrome.SurfaceTextPrimary);
         g.DrawString(text, font, fg, lx, ly);
         g.TextRenderingHint = TextRenderingHint.SystemDefault;
     }
@@ -1181,10 +1162,10 @@ public sealed partial class RegionOverlayForm
 
         float btnH = 26, btnPad = 3, pad = 5, sepW = 6;
 
-        var uiFont = GetAnnotationFont("Segoe UI", 9f, FontStyle.Regular);
-        var uiFontBold = GetAnnotationFont("Segoe UI", 9.5f, FontStyle.Bold);
-        var uiFontItalic = GetAnnotationFont("Segoe UI", 9.5f, FontStyle.Italic);
-        var uiFontSmall = GetAnnotationFont("Segoe UI", 7.5f, FontStyle.Regular);
+        var uiFont = UiChrome.ChromeFont(9f);
+        var uiFontBold = UiChrome.ChromeFont(9.5f, FontStyle.Bold);
+        var uiFontItalic = UiChrome.ChromeFont(9.5f, FontStyle.Italic);
+        var uiFontSmall = UiChrome.ChromeFont(7.5f);
 
         string fontLabel = _textFontFamily.Length > 14 ? _textFontFamily[..13] + ".." : _textFontFamily;
         var fontLabelSize = g.MeasureString(fontLabel, uiFont);
@@ -1203,9 +1184,9 @@ public sealed partial class RegionOverlayForm
         PaintShadow(g, _textToolbarRect, 8f, 48, 1f);
         using (var bgPath = RRect(_textToolbarRect, 8))
         {
-            using var bg = new SolidBrush(Color.FromArgb(245, 28, 28, 28));
+            using var bg = new SolidBrush(UiChrome.SurfacePill);
             g.FillPath(bg, bgPath);
-            using var border = new Pen(Color.FromArgb(25, 255, 255, 255), 1f);
+            using var border = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
             g.DrawPath(border, bgPath);
         }
 
@@ -1219,15 +1200,16 @@ public sealed partial class RegionOverlayForm
             bool hovered = _hoveredTextBtn == btnIdx;
             using var btnPath = RRect(rect, 5);
             int bgAlpha = active ? 50 : hovered ? 30 : 12;
-            using var btnBg = new SolidBrush(Color.FromArgb(bgAlpha, 255, 255, 255));
+            var bgColor = UiChrome.SurfaceTextPrimary;
+            using var btnBg = new SolidBrush(Color.FromArgb(bgAlpha, bgColor.R, bgColor.G, bgColor.B));
             g.FillPath(btnBg, btnPath);
             if (hovered)
             {
-                using var hoverBorder = new Pen(Color.FromArgb(40, 255, 255, 255), 1f);
+                using var hoverBorder = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
                 g.DrawPath(hoverBorder, btnPath);
             }
             int textAlpha = active ? 255 : hovered ? 200 : 120;
-            using var brush = new SolidBrush(Color.FromArgb(textAlpha, 255, 255, 255));
+            using var brush = new SolidBrush(Color.FromArgb(textAlpha, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
             g.DrawString(label, f, brush, rect, _iconFmt);
             btnIdx++;
         }
@@ -1248,16 +1230,17 @@ public sealed partial class RegionOverlayForm
             bool fontHovered = _hoveredTextBtn == 4;
             using var btnPath = RRect(_textFontBtnRect, 5);
             int bgAlpha = _fontPickerOpen ? 40 : fontHovered ? 30 : 12;
-            using var btnBg = new SolidBrush(Color.FromArgb(bgAlpha, 255, 255, 255));
+            var bgColor = UiChrome.SurfaceTextPrimary;
+            using var btnBg = new SolidBrush(Color.FromArgb(bgAlpha, bgColor.R, bgColor.G, bgColor.B));
             g.FillPath(btnBg, btnPath);
             if (fontHovered)
             {
-                using var hoverBorder = new Pen(Color.FromArgb(40, 255, 255, 255), 1f);
+                using var hoverBorder = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
                 g.DrawPath(hoverBorder, btnPath);
             }
         }
         int fontTextAlpha = _hoveredTextBtn == 4 ? 255 : 200;
-        using var fontBrush = new SolidBrush(Color.FromArgb(fontTextAlpha, 255, 255, 255));
+        using var fontBrush = new SolidBrush(Color.FromArgb(fontTextAlpha, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
         g.DrawString(fontLabel, uiFont, fontBrush, _textFontBtnRect, _iconFmt);
 
         // Tooltip for hovered text button
@@ -1269,18 +1252,18 @@ public sealed partial class RegionOverlayForm
                 2 => _textStrokeBtnRect, 3 => _textShadowBtnRect,
                 _ => _textFontBtnRect
             };
-            var tipFont = GetAnnotationFont("Segoe UI", 8f, FontStyle.Regular);
+            var tipFont = UiChrome.ChromeFont(8f);
             var tipSize = g.MeasureString(_textBtnTooltip, tipFont);
             float tipX = hovRect.X + hovRect.Width / 2f - tipSize.Width / 2f - 6;
             float tipY = _textToolbarRect.Y - tipSize.Height - 10;
             var tipRect = new RectangleF(tipX, tipY, tipSize.Width + 12, tipSize.Height + 6);
             PaintShadow(g, tipRect, tipRect.Height / 2f, 40, 1f);
             using var tipPath = RRect(tipRect, tipRect.Height / 2f);
-            using var tipBg = new SolidBrush(Color.FromArgb(240, 24, 24, 24));
+            using var tipBg = new SolidBrush(UiChrome.SurfaceTooltip);
             g.FillPath(tipBg, tipPath);
-            using var tipBorder = new Pen(Color.FromArgb(25, 255, 255, 255), 1f);
+            using var tipBorder = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
             g.DrawPath(tipBorder, tipPath);
-            using var tipBrush = new SolidBrush(Color.FromArgb(200, 255, 255, 255));
+            using var tipBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
             g.DrawString(_textBtnTooltip, tipFont, tipBrush, tipX + 6, tipY + 3);
         }
 
@@ -1295,27 +1278,27 @@ public sealed partial class RegionOverlayForm
         float dist = MathF.Sqrt(dx * dx + dy * dy);
         float angle = MathF.Atan2(dy, dx) * 180f / MathF.PI;
 
-        using var shadowPen = new Pen(Color.FromArgb(45, 0, 0, 0), 4f)
+        using var shadowPen = new Pen(UiChrome.SurfaceShadow, 4f)
         { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        using var pen = new Pen(Color.FromArgb(235, 255, 255, 255), 2f)
+        using var pen = new Pen(UiChrome.SurfaceTextPrimary, 2f)
         { StartCap = LineCap.Round, EndCap = LineCap.Round };
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.DrawLine(shadowPen, from.X + 1, from.Y + 1, to.X + 1, to.Y + 1);
         g.DrawLine(pen, from, to);
-        using var dotBrush = new SolidBrush(Color.White);
+        using var dotBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
         g.FillEllipse(dotBrush, from.X - 3, from.Y - 3, 6, 6);
         g.FillEllipse(dotBrush, to.X - 3, to.Y - 3, 6, 6);
 
         string text = $"{(int)dist}px   {Math.Abs(dx):0}px x {Math.Abs(dy):0}px   {angle:0.#} deg";
-        var font = GetAnnotationFont("Segoe UI", 10f, FontStyle.Regular);
+        var font = UiChrome.ChromeFont(10f);
         var sz = g.MeasureString(text, font);
         var mid = new PointF((from.X + to.X) / 2f, (from.Y + to.Y) / 2f);
         var label = new RectangleF(mid.X - sz.Width / 2f - 8, mid.Y - sz.Height - 16, sz.Width + 16, sz.Height + 8);
         PaintShadow(g, label, 8f, 48, 1f);
         using var path = RRect(label, 8f);
-        using var bg = new SolidBrush(Color.FromArgb(235, 32, 32, 32));
-        using var border = new Pen(Color.FromArgb(28, 255, 255, 255), 1f);
-        using var fg = new SolidBrush(Color.FromArgb(220, 255, 255, 255));
+        using var bg = new SolidBrush(UiChrome.SurfacePill);
+        using var border = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
+        using var fg = new SolidBrush(UiChrome.SurfaceTextPrimary);
         g.FillPath(bg, path);
         g.DrawPath(border, path);
         g.DrawString(text, font, fg, label.X + 8, label.Y + 4);
@@ -1330,15 +1313,13 @@ public sealed partial class RegionOverlayForm
         if (clamped.Width < 1 || clamped.Height < 1) return;
         int sw = Math.Max(1, clamped.Width / blockSize);
         int sh = Math.Max(1, clamped.Height / blockSize);
-        using var small = new Bitmap(sw, sh, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using (var sg = Graphics.FromImage(small))
-        {
-            sg.InterpolationMode = InterpolationMode.Bilinear;
-            sg.DrawImage(_screenshot, new Rectangle(0, 0, sw, sh), clamped, GraphicsUnit.Pixel);
-        }
+        var small = GetBlurPreviewGraphics(new Size(sw, sh));
+        small.Clear(Color.Transparent);
+        small.InterpolationMode = InterpolationMode.Bilinear;
+        small.DrawImage(_screenshot, new Rectangle(0, 0, sw, sh), clamped, GraphicsUnit.Pixel);
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
         g.PixelOffsetMode = PixelOffsetMode.Half;
-        g.DrawImage(small, clamped);
+        g.DrawImage(_blurPreviewBitmap!, clamped);
         g.InterpolationMode = InterpolationMode.Default;
         g.PixelOffsetMode = PixelOffsetMode.Default;
     }

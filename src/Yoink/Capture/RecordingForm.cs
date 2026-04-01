@@ -4,6 +4,7 @@ using System.Drawing.Text;
 using System.IO;
 using System.Windows.Forms;
 using Yoink.Native;
+using Yoink.Helpers;
 using Yoink.Services;
 
 namespace Yoink.Capture;
@@ -63,26 +64,26 @@ public sealed class RecordingForm : Form
     // Cached GDI objects for paint
     private readonly SolidBrush _dimBrush = new(Color.FromArgb(100, 0, 0, 0));
     private readonly Pen _selPen = new(Color.FromArgb(220, 239, 68, 68), 2f) { DashStyle = DashStyle.Dash };
-    private readonly Font _labelFont = new("Segoe UI", 9f, FontStyle.Bold);
-    private readonly Font _hintFont = new("Segoe UI", 13f);
-    private readonly SolidBrush _hintBrush = new(Color.FromArgb(140, 255, 255, 255));
-    private readonly SolidBrush _bgLabelBrush = new(Color.FromArgb(220, 24, 24, 24));
-    private readonly SolidBrush _textLabelBrush = new(Color.FromArgb(220, 239, 68, 68));
+    private readonly Font _labelFont = UiChrome.ChromeFont(9f, FontStyle.Bold);
+    private readonly Font _hintFont = UiChrome.ChromeFont(UiChrome.ChromeHintSize);
+    private readonly SolidBrush _hintBrush = new(UiChrome.SurfaceTextMuted);
+    private readonly SolidBrush _bgLabelBrush = new(UiChrome.SurfacePill);
+    private readonly SolidBrush _textLabelBrush = new(UiChrome.SurfaceTextPrimary);
     private readonly Pen _borderPen = new(Color.FromArgb(200, 239, 68, 68), 2f) { DashStyle = DashStyle.Dash };
     private readonly SolidBrush _cornerBrush = new(Color.FromArgb(220, 239, 68, 68));
     private readonly SolidBrush _shadowBrush = new(Color.FromArgb(60, 0, 0, 0));
-    private readonly SolidBrush _toolbarBgBrush = new(Color.FromArgb(252, 28, 28, 28));
-    private readonly Pen _toolbarBorderPen = new(Color.FromArgb(30, 255, 255, 255), 1f);
+    private readonly SolidBrush _toolbarBgBrush = new(UiChrome.SurfacePill);
+    private readonly Pen _toolbarBorderPen = new(UiChrome.SurfaceBorder, 1f);
     private readonly SolidBrush _dotBrush = new(Color.FromArgb(240, 239, 68, 68));
     private readonly Pen _ringPen = new(Color.FromArgb(80, 239, 68, 68), 1.5f);
-    private readonly Font _timeFont = new("Segoe UI Variable Text", 11f, FontStyle.Bold);
-    private readonly SolidBrush _timeBrush = new(Color.FromArgb(220, 255, 255, 255));
-    private readonly Font _btnFont = new("Segoe UI Variable Text", 9.5f, FontStyle.Bold);
-    private readonly Font _encFont = new("Segoe UI", 10f, FontStyle.Bold);
+    private readonly Font _timeFont = UiChrome.ChromeFont(UiChrome.ChromeTitleSize, FontStyle.Bold);
+    private readonly SolidBrush _timeBrush = new(UiChrome.SurfaceTextPrimary);
+    private readonly Font _btnFont = UiChrome.ChromeFont(9.5f, FontStyle.Bold);
+    private readonly Font _encFont = UiChrome.ChromeFont(10f, FontStyle.Bold);
     private readonly SolidBrush _encTextBrush = new(Color.FromArgb(200, 255, 255, 255));
     private readonly SolidBrush _spinBrush = new(Color.FromArgb(200, 239, 68, 68));
-    private readonly SolidBrush _encBgBrush = new(Color.FromArgb(250, 24, 24, 24));
-    private readonly Pen _encBorderPen = new(Color.FromArgb(25, 255, 255, 255), 1f);
+    private readonly SolidBrush _encBgBrush = new(UiChrome.SurfacePill);
+    private readonly Pen _encBorderPen = new(UiChrome.SurfaceBorderSubtle, 1f);
 
     public RecordingForm(Bitmap screenshot, Rectangle virtualBounds, int fps, string savePath,
                          Models.RecordingFormat format = Models.RecordingFormat.GIF, int maxHeight = 0,
@@ -107,7 +108,7 @@ public sealed class RecordingForm : Form
         StartPosition = FormStartPosition.Manual;
         Bounds = new Rectangle(virtualBounds.X, virtualBounds.Y, virtualBounds.Width, virtualBounds.Height);
         Cursor = Cursors.Cross;
-        BackColor = Color.Black;
+            BackColor = UiChrome.SurfaceWindowBackground;
         KeyPreview = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                  ControlStyles.OptimizedDoubleBuffer | ControlStyles.Opaque, true);
@@ -170,8 +171,9 @@ public sealed class RecordingForm : Form
     {
         if (_state == State.Selecting && _isDragging)
         {
+            var oldSel = _selection;
             _selection = NormRect(_dragStart, e.Location);
-            Invalidate();
+            Invalidate(Rectangle.Union(oldSel, _selection));
         }
         else if (_state == State.Recording)
         {
@@ -180,7 +182,7 @@ public sealed class RecordingForm : Form
                         : _discardBtn.Contains(e.Location) ? 1
                         : -1;
             Cursor = _hoveredBtn >= 0 ? Cursors.Hand : Cursors.Default;
-            if (_hoveredBtn != prev) Invalidate();
+            if (_hoveredBtn != prev) Invalidate(_toolbarRect);
         }
     }
 
@@ -189,11 +191,12 @@ public sealed class RecordingForm : Form
         if (_state == State.Selecting && _isDragging && e.Button == MouseButtons.Left)
         {
             _isDragging = false;
+            var oldSel = _selection;
             _selection = NormRect(_dragStart, e.Location);
             if (_selection.Width > 10 && _selection.Height > 10)
                 StartRecording();
             else
-                Invalidate();
+                Invalidate(oldSel);
         }
     }
 
@@ -250,10 +253,10 @@ public sealed class RecordingForm : Form
                 StopRecording();
                 return;
             }
-            Invalidate();
+            Invalidate(_toolbarRect);
         };
         _tickTimer.Start();
-        Invalidate();
+        Invalidate(Rectangle.Union(_selection, _toolbarRect));
     }
 
     private void StopRecording()
@@ -342,6 +345,13 @@ public sealed class RecordingForm : Form
 
     private void PaintSelectionPhase(Graphics g)
     {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.CompositingMode = CompositingMode.SourceOver;
+        g.CompositingQuality = CompositingQuality.HighQuality;
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
         g.DrawImage(_screenshot, 0, 0);
         g.FillRectangle(_dimBrush, 0, 0, Width, Height);
 
@@ -376,6 +386,10 @@ public sealed class RecordingForm : Form
     {
         g.Clear(TransKey);
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.CompositingMode = CompositingMode.SourceOver;
+        g.CompositingQuality = CompositingQuality.HighQuality;
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
         var borderRect = Rectangle.Inflate(_recordRegion, 2, 2);
@@ -389,8 +403,19 @@ public sealed class RecordingForm : Form
 
         var shadowRect = RectangleF.Inflate(new RectangleF(_toolbarRect.X, _toolbarRect.Y, _toolbarRect.Width, _toolbarRect.Height), 3, 3);
         shadowRect.Offset(0, 2);
-        using (var shadowPath = RRect(shadowRect, 16))
-            g.FillPath(_shadowBrush, shadowPath);
+        var shadowPasses = new (float dx, float dy, int a)[]
+        {
+            (5f, 6f, 14),
+            (3f, 4f, 24),
+            (1.5f, 2.5f, 38),
+            (0f, 2f, 60),
+        };
+        foreach (var (dx, dy, a) in shadowPasses)
+        {
+            using var shadowPath = RRect(new RectangleF(shadowRect.X + dx, shadowRect.Y + dy, shadowRect.Width, shadowRect.Height), 16);
+            using var shadowBrush = new SolidBrush(Color.FromArgb(a, 0, 0, 0));
+            g.FillPath(shadowBrush, shadowPath);
+        }
         using (var tbPath = RRect(_toolbarRect, 14))
         {
             g.FillPath(_toolbarBgBrush, tbPath);
@@ -412,7 +437,7 @@ public sealed class RecordingForm : Form
         DrawBtn(g, _stopBtn, "\u25A0  Stop", _hoveredBtn == 0,
             Color.FromArgb(255, 239, 68, 68), Color.FromArgb(50, 239, 68, 68));
         DrawBtn(g, _discardBtn, "Discard", _hoveredBtn == 1,
-            Color.FromArgb(180, 255, 255, 255), Color.FromArgb(18, 255, 255, 255));
+            UiChrome.SurfaceTextPrimary, UiChrome.SurfaceHover);
 
         if (_state == State.Encoding)
         {
@@ -435,10 +460,11 @@ public sealed class RecordingForm : Form
         using var path = RRect(rect, 8);
         int alpha = hovered ? Math.Clamp((int)(bgColor.A * 2.5), 0, 255) : bgColor.A;
         using var bg = new SolidBrush(Color.FromArgb(alpha, bgColor.R, bgColor.G, bgColor.B));
+        g.SmoothingMode = SmoothingMode.AntiAlias;
         g.FillPath(bg, path);
         if (hovered)
         {
-            using var hBorder = new Pen(Color.FromArgb(40, 255, 255, 255), 1f);
+            using var hBorder = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
             g.DrawPath(hBorder, path);
         }
         using var brush = new SolidBrush(textColor);

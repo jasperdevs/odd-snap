@@ -61,11 +61,16 @@ public sealed class ToolbarForm : Form
 
         var g = _surfaceGraphics!;
         g.Clear(Color.Transparent);
+        g.CompositingMode = CompositingMode.SourceOver;
+        g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
         g.TranslateTransform(dx, dy);
         _owner.PaintToolbarTo(g, ClientRectangle, Point.Empty);
         g.ResetTransform();
+        g.Flush(System.Drawing.Drawing2D.FlushIntention.Sync);
 
         var screenPt = new Native.User32.POINT { X = Left, Y = Top };
         var size = new Native.User32.SIZE { cx = sz.Width, cy = sz.Height };
@@ -79,20 +84,26 @@ public sealed class ToolbarForm : Form
         };
 
         IntPtr hdcScreen = Native.User32.GetDC(IntPtr.Zero);
-        IntPtr hdcMem = Native.User32.CreateCompatibleDC(hdcScreen);
-        IntPtr hBmp = _surface!.GetHbitmap(Color.Empty);
-        IntPtr hOld = Native.User32.SelectObject(hdcMem, hBmp);
+        IntPtr hdcMem = IntPtr.Zero;
+        IntPtr hBmp = IntPtr.Zero;
+        IntPtr hOld = IntPtr.Zero;
 
         try
         {
+            hdcMem = Native.User32.CreateCompatibleDC(hdcScreen);
+            hBmp = _surface!.GetHbitmap(Color.FromArgb(0));
+            hOld = Native.User32.SelectObject(hdcMem, hBmp);
             Native.User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPt, ref size,
                 hdcMem, ref srcPt, 0, ref blend, 2 /* ULW_ALPHA */);
         }
         finally
         {
-            Native.User32.SelectObject(hdcMem, hOld);
-            Native.User32.DeleteObject(hBmp);
-            Native.User32.DeleteDC(hdcMem);
+            if (hdcMem != IntPtr.Zero && hOld != IntPtr.Zero)
+                Native.User32.SelectObject(hdcMem, hOld);
+            if (hBmp != IntPtr.Zero)
+                Native.User32.DeleteObject(hBmp);
+            if (hdcMem != IntPtr.Zero)
+                Native.User32.DeleteDC(hdcMem);
             Native.User32.ReleaseDC(IntPtr.Zero, hdcScreen);
         }
     }

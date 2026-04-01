@@ -97,29 +97,50 @@ public static class InstallService
     {
         var targetExe = Path.Combine(targetDir, "Yoink.exe");
         var args = showOnboarding ? "--post-install" : "";
-        try
+        TryLaunch(targetExe, targetDir, args);
+    }
+
+    private static void TryLaunch(string exePath, string workingDir, string args)
+    {
+        const int attempts = 6;
+        for (int i = 0; i < attempts; i++)
         {
-            Process.Start(new ProcessStartInfo
+            try
             {
-                FileName = targetExe,
-                Arguments = args,
-                UseShellExecute = true,
-                WorkingDirectory = targetDir,
-            });
+                if (!File.Exists(exePath))
+                {
+                    Thread.Sleep(150 * (i + 1));
+                    continue;
+                }
+
+                var proc = Process.Start(new ProcessStartInfo
+                {
+                    FileName = exePath,
+                    Arguments = args,
+                    UseShellExecute = true,
+                    WorkingDirectory = workingDir,
+                });
+
+                if (proc != null)
+                    return;
+            }
+            catch
+            {
+                Thread.Sleep(150 * (i + 1));
+            }
         }
-        catch { }
     }
 
     private static void CopyDirectory(string source, string target)
     {
         Directory.CreateDirectory(target);
-        foreach (var file in Directory.GetFiles(source))
+        foreach (var file in Directory.EnumerateFiles(source))
         {
             var destFile = Path.Combine(target, Path.GetFileName(file));
             try { File.Copy(file, destFile, true); }
             catch { } // skip locked files
         }
-        foreach (var dir in Directory.GetDirectories(source))
+        foreach (var dir in Directory.EnumerateDirectories(source))
         {
             var dirName = Path.GetFileName(dir);
             if (dirName.Equals("runtimes", StringComparison.OrdinalIgnoreCase)

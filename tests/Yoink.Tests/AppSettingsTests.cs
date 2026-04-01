@@ -1,5 +1,6 @@
 using Xunit;
 using Yoink.Models;
+using Yoink.Services;
 
 namespace Yoink.Tests;
 
@@ -36,5 +37,13 @@ public sealed class AppSettingsTests
         settings.SetToolHotkey("custom", 0x0002u, 0x43);
 
         Assert.Equal((0x0002u, 0x43u), settings.GetToolHotkey("custom"));
+    }
+
+    [Fact]
+    public void StickerDefaults_ToLocal()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(StickerProvider.LocalCpu, settings.StickerUploadSettings.Provider);
     }
 }

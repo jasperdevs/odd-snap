@@ -35,7 +35,7 @@ public static class ToolListBuilder
         var enabled = s.EnabledTools ?? ToolDef.DefaultEnabledIds();
         // Icon color for rendering lucide glyphs to bitmaps
         var iconColor = Theme.IsDark ? System.Drawing.Color.FromArgb(160, 255, 255, 255) : System.Drawing.Color.FromArgb(170, 0, 0, 0);
-        var segoe = new System.Windows.Media.FontFamily("Segoe UI Variable Text");
+        var segoe = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName);
 
         void AddHeader(string text)
         {

@@ -31,7 +31,7 @@ public enum StickerExecutionProvider
 
 public sealed class StickerSettings
 {
-    public StickerProvider Provider { get; set; } = StickerProvider.None;
+    public StickerProvider Provider { get; set; } = StickerProvider.LocalCpu;
     public string RemoveBgApiKey { get; set; } = "";
     public string PhotoroomApiKey { get; set; } = "";
     public LocalStickerEngine LocalEngine { get; set; } = LocalStickerEngine.U2Netp;

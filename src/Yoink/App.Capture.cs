@@ -221,8 +221,8 @@ public partial class App
         try
         {
             (bmp, _) = ScreenCapture.CaptureAllScreens();
-            HandleCaptureResult(new Bitmap(bmp));
-            bmp.Dispose();
+            HandleCaptureResult(bmp);
+            bmp = null;
         }
         catch (Exception ex)
         {
@@ -257,8 +257,8 @@ public partial class App
                 return;
             }
 
-            using var cropped = ScreenCapture.CropRegion(bmp, crop);
-            HandleCaptureResult(new Bitmap(cropped));
+            var cropped = ScreenCapture.CropRegion(bmp, crop);
+            HandleCaptureResult(cropped);
             bmp.Dispose();
         }
         catch (Exception ex)
@@ -299,9 +299,8 @@ public partial class App
                     {
                         overlay.Hide();
                         using var annotated = overlay.RenderAnnotatedBitmap();
-                        using var cropped = ScreenCapture.CropRegion(annotated, sel);
-                        var clone = new Bitmap(cropped);
-                        HandleCaptureResult(clone);
+                        var cropped = ScreenCapture.CropRegion(annotated, sel);
+                        HandleCaptureResult(cropped);
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
                     };
@@ -309,9 +308,7 @@ public partial class App
                     overlay.FreeformSelected += fbmp =>
                     {
                         overlay.Hide();
-                        var clone = new Bitmap(fbmp);
-                        HandleCaptureResult(clone);
-                        fbmp.Dispose();
+                        HandleCaptureResult(fbmp);
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
                     };
@@ -320,9 +317,8 @@ public partial class App
                     {
                         overlay.Hide();
                         using var annotated = overlay.RenderAnnotatedBitmap();
-                        using var cropped = ScreenCapture.CropRegion(annotated, sel);
-                        var clone = new Bitmap(cropped);
-                        HandleOcrResult(clone);
+                        var cropped = ScreenCapture.CropRegion(annotated, sel);
+                        HandleOcrResult(cropped);
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
                     };
@@ -332,13 +328,12 @@ public partial class App
                         overlay.Hide();
                         SoundService.PlayScanSound();
                         using var annotated = overlay.RenderAnnotatedBitmap();
-                        using var cropped = ScreenCapture.CropRegion(annotated, sel);
-                        var clone = new Bitmap(cropped);
+                        var scanned = ScreenCapture.CropRegion(annotated, sel);
                         Dispatcher.BeginInvoke(() =>
                         {
                             try
                             {
-                                var text = BarcodeService.Decode(clone);
+                                var text = BarcodeService.Decode(scanned);
                                 if (!string.IsNullOrWhiteSpace(text))
                                 {
                                     System.Windows.Clipboard.SetText(text);
@@ -356,7 +351,7 @@ public partial class App
                             }
                             finally
                             {
-                                clone.Dispose();
+                                scanned.Dispose();
                             }
                         });
                         overlay.Close();
@@ -367,8 +362,7 @@ public partial class App
                     {
                         overlay.Hide();
                         using var annotated = overlay.RenderAnnotatedBitmap();
-                        using var cropped = ScreenCapture.CropRegion(annotated, sel);
-                        var clone = new Bitmap(cropped);
+                        var sticker = ScreenCapture.CropRegion(annotated, sel);
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
 
@@ -376,7 +370,7 @@ public partial class App
                         {
                             try
                             {
-                                var processed = await StickerService.ProcessAsync(clone, _settingsService!.Settings.StickerUploadSettings);
+                                var processed = await StickerService.ProcessAsync(sticker, _settingsService!.Settings.StickerUploadSettings);
                                 if (processed.Success && processed.Image is not null)
                                 {
                                     HandleStickerResult(processed.Image, processed.ProviderName);
@@ -392,7 +386,7 @@ public partial class App
                             }
                             finally
                             {
-                                clone.Dispose();
+                                sticker.Dispose();
                             }
                         });
                     };

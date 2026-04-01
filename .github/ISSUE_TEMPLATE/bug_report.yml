@@ -39,7 +39,7 @@ body:
     id: version
     attributes:
       label: Yoink version
-      placeholder: v0.5.0
+      placeholder: v0.5.1
   - type: input
     id: windows
     attributes:

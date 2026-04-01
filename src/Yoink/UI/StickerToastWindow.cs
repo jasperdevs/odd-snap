@@ -8,6 +8,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Yoink.Helpers;
 
 namespace Yoink.UI;
 
@@ -258,48 +259,14 @@ public sealed class StickerToastWindow : Window
 
     private static BitmapSource ToBitmapSource(Bitmap bitmap)
     {
-        using var cleaned = CleanupForToast(bitmap, 110);
-        using var trimmed = TrimTransparentBounds(cleaned, 110);
+        using var cleaned = BitmapPerf.CleanupTransparentPixels(bitmap, 110);
+        using var trimmed = BitmapPerf.TrimTransparentBounds(cleaned, 110);
         using var ms = new MemoryStream();
         trimmed.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
         ms.Position = 0;
         var frame = BitmapFrame.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         frame.Freeze();
         return frame;
-    }
-
-    private static Bitmap CleanupForToast(Bitmap source, byte alphaThreshold)
-    {
-        var cleaned = new Bitmap(source.Width, source.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        for (int y = 0; y < source.Height; y++)
-        {
-            for (int x = 0; x < source.Width; x++)
-            {
-                var c = source.GetPixel(x, y);
-                if (c.A <= alphaThreshold)
-                    cleaned.SetPixel(x, y, System.Drawing.Color.Transparent);
-                else
-                    cleaned.SetPixel(x, y, System.Drawing.Color.FromArgb(c.A, c.R, c.G, c.B));
-            }
-        }
-        return cleaned;
-    }
-
-    private static Bitmap TrimTransparentBounds(Bitmap source, byte alphaThreshold)
-    {
-        int minX = source.Width, minY = source.Height, maxX = -1, maxY = -1;
-        for (int y = 0; y < source.Height; y++)
-        for (int x = 0; x < source.Width; x++)
-        {
-            if (source.GetPixel(x, y).A <= alphaThreshold) continue;
-            if (x < minX) minX = x;
-            if (y < minY) minY = y;
-            if (x > maxX) maxX = x;
-            if (y > maxY) maxY = y;
-        }
-        if (maxX < minX || maxY < minY) return new Bitmap(source);
-        var rect = Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1);
-        return source.Clone(rect, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
     }
 
 }

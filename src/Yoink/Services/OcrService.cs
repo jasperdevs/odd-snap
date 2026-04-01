@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using Yoink.Helpers;
 using Windows.Graphics.Imaging;
 using Windows.Globalization;
 using Windows.Media.Ocr;
@@ -150,15 +151,7 @@ public static class OcrService
         g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
         g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
         g.DrawImage(source, new Rectangle(0, 0, source.Width, source.Height));
-
-        for (int y = 0; y < prepared.Height; y++)
-        for (int x = 0; x < prepared.Width; x++)
-        {
-            var c = prepared.GetPixel(x, y);
-            int lum = (int)(c.R * 0.299 + c.G * 0.587 + c.B * 0.114);
-            int boosted = Math.Clamp((lum - 128) * 2 + 128, 0, 255);
-            prepared.SetPixel(x, y, System.Drawing.Color.FromArgb(255, boosted, boosted, boosted));
-        }
+        BitmapPerf.BoostGrayscaleInPlace(prepared);
 
         return prepared;
     }

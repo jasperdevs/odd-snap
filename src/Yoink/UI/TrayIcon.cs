@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Windows.Forms;
+using Yoink.Helpers;
 
 namespace Yoink.UI;
 
@@ -73,7 +74,7 @@ public sealed class TrayIcon : IDisposable
             ShowImageMargin = false,
             ShowCheckMargin = false,
             Padding = new Padding(2, 4, 2, 4),
-            Font = new Font("Segoe UI Variable Text", 9f),
+            Font = UiChrome.ChromeFont(9f),
             DropShadowEnabled = true,
         };
         menu.Renderer = new CleanMenuRenderer(bg, hov, sep, dark);

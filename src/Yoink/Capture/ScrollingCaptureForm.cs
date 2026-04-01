@@ -4,6 +4,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Yoink.Helpers;
 using Yoink.Native;
 using Yoink.Services;
 
@@ -50,9 +51,9 @@ public sealed class ScrollingCaptureForm : Form
     // Cached GDI objects for selection overlay
     private readonly SolidBrush _dimBrush = new(Color.FromArgb(100, 0, 0, 0));
     private readonly Pen _selPen = new(Color.FromArgb(220, 100, 149, 237), 2f) { DashStyle = DashStyle.Dash };
-    private readonly Font _labelFont = new("Segoe UI", 9f, FontStyle.Bold);
-    private readonly Font _hintFont = new("Segoe UI", 13f);
-    private readonly SolidBrush _hintBrush = new(Color.FromArgb(140, 255, 255, 255));
+    private readonly Font _labelFont = UiChrome.ChromeFont(9f, FontStyle.Bold);
+    private readonly Font _hintFont = UiChrome.ChromeFont(UiChrome.ChromeHintSize);
+    private readonly SolidBrush _hintBrush = new(UiChrome.SurfaceTextMuted);
     private readonly SolidBrush _bgLabelBrush = new(Color.FromArgb(220, 24, 24, 24));
     private readonly SolidBrush _textLabelBrush = new(Color.FromArgb(220, 100, 149, 237));
 
@@ -67,7 +68,7 @@ public sealed class ScrollingCaptureForm : Form
         StartPosition = FormStartPosition.Manual;
         Bounds = new Rectangle(virtualBounds.X, virtualBounds.Y, virtualBounds.Width, virtualBounds.Height);
         Cursor = Cursors.Cross;
-        BackColor = Color.Black;
+        BackColor = UiChrome.SurfaceWindowBackground;
         KeyPreview = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                  ControlStyles.OptimizedDoubleBuffer | ControlStyles.Opaque, true);
@@ -120,8 +121,9 @@ public sealed class ScrollingCaptureForm : Form
     {
         if (_state == State.Selecting && _isDragging)
         {
+            var oldSel = _selection;
             _selection = NormRect(_dragStart, e.Location);
-            Invalidate();
+            Invalidate(Rectangle.Union(InflateForRepaint(oldSel, 4), InflateForRepaint(_selection, 4)));
         }
     }
 
@@ -130,11 +132,12 @@ public sealed class ScrollingCaptureForm : Form
         if (_state == State.Selecting && _isDragging && e.Button == MouseButtons.Left)
         {
             _isDragging = false;
+            var oldSel = _selection;
             _selection = NormRect(_dragStart, e.Location);
             if (_selection.Width > 20 && _selection.Height > 20)
                 ShowControlBar();
             else
-                Invalidate();
+                Invalidate(InflateForRepaint(oldSel, 4));
         }
     }
 
@@ -229,10 +232,11 @@ public sealed class ScrollingCaptureForm : Form
 
         if (_frames.Count == 1)
         {
-            var clone = new Bitmap(_frames[0]);
+            var frame = _frames[0];
+            _frames.RemoveAt(0);
             DisposeFrames();
             SoundService.PlayCaptureSound();
-            CaptureCompleted?.Invoke(clone);
+            CaptureCompleted?.Invoke(frame);
             _state = State.Done;
             Close();
             return;
@@ -305,43 +309,50 @@ public sealed class ScrollingCaptureForm : Form
         if (_frames.Count == 0) return null;
         if (_frames.Count == 1) return new Bitmap(_frames[0]);
 
-        int frameW = _frames[0].Width;
-        int frameH = _frames[0].Height;
-        int stripH = Math.Min(MatchStripHeight, frameH / 4);
-
-        var yPositions = new List<int> { 0 };
-        int runningY = 0;
-
-        for (int i = 1; i < _frames.Count; i++)
+        try
         {
-            int overlap = FindOverlap(_frames[i - 1], _frames[i], stripH);
-            int newContent = frameH - overlap;
-            if (newContent <= 0) newContent = 1;
-            runningY += newContent;
-            yPositions.Add(runningY);
+            int frameW = _frames[0].Width;
+            int frameH = _frames[0].Height;
+            int stripH = Math.Min(MatchStripHeight, frameH / 4);
+
+            var yPositions = new List<int> { 0 };
+            int runningY = 0;
+
+            for (int i = 1; i < _frames.Count; i++)
+            {
+                int overlap = FindOverlap(_frames[i - 1], _frames[i], stripH);
+                int newContent = frameH - overlap;
+                if (newContent <= 0) newContent = 1;
+                runningY += newContent;
+                yPositions.Add(runningY);
+            }
+
+            int totalHeight = runningY + frameH;
+
+            // Cap at 32000 pixels tall (GDI+ limit safety)
+            if (totalHeight > 32000)
+                totalHeight = 32000;
+
+            var result = new Bitmap(frameW, totalHeight, PixelFormat.Format32bppArgb);
+            using var g = Graphics.FromImage(result);
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.None;
+
+            for (int i = 0; i < _frames.Count; i++)
+            {
+                int y = yPositions[i];
+                if (y >= totalHeight) break;
+                int drawH = Math.Min(frameH, totalHeight - y);
+                g.DrawImage(_frames[i], new Rectangle(0, y, frameW, drawH),
+                    new Rectangle(0, 0, frameW, drawH), GraphicsUnit.Pixel);
+            }
+
+            return result;
         }
-
-        int totalHeight = runningY + frameH;
-
-        // Cap at 32000 pixels tall (GDI+ limit safety)
-        if (totalHeight > 32000)
-            totalHeight = 32000;
-
-        var result = new Bitmap(frameW, totalHeight, PixelFormat.Format32bppArgb);
-        using var g = Graphics.FromImage(result);
-        g.InterpolationMode = InterpolationMode.NearestNeighbor;
-        g.PixelOffsetMode = PixelOffsetMode.None;
-
-        for (int i = 0; i < _frames.Count; i++)
+        finally
         {
-            int y = yPositions[i];
-            if (y >= totalHeight) break;
-            int drawH = Math.Min(frameH, totalHeight - y);
-            g.DrawImage(_frames[i], new Rectangle(0, y, frameW, drawH),
-                new Rectangle(0, 0, frameW, drawH), GraphicsUnit.Pixel);
+            DisposeFrames();
         }
-
-        return result;
     }
 
     /// <summary>
@@ -430,9 +441,10 @@ public sealed class ScrollingCaptureForm : Form
 
         int matches = 0;
         int total = 0;
-        int step = Math.Max(1, width / 80);
+        int rowStep = Math.Max(1, height / 24);
+        int step = Math.Max(4, width / 64);
 
-        for (int row = 0; row < height; row++)
+        for (int row = 0; row < height; row += rowStep)
         {
             int py = prevY + row;
             int cy = currY + row;
@@ -534,6 +546,13 @@ public sealed class ScrollingCaptureForm : Form
         return new Rectangle(x, y, Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
     }
 
+    private static Rectangle InflateForRepaint(Rectangle rect, int pad = 8)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0) return Rectangle.Empty;
+        rect.Inflate(pad, pad);
+        return rect;
+    }
+
     private void DisposeFrames()
     {
         foreach (var f in _frames) f.Dispose();
@@ -581,13 +600,14 @@ public sealed class ScrollingCaptureForm : Form
         private string _status = "Scroll now";
 
         // Cached GDI objects
-        private readonly Font _statusFont = new("Segoe UI Variable Text", 10f, FontStyle.Bold);
-        private readonly Font _btnFont = new("Segoe UI Variable Text", 9.5f, FontStyle.Bold);
+        private readonly Font _statusFont = UiChrome.ChromeFont(10f, FontStyle.Bold);
+        private readonly Font _btnFont = UiChrome.ChromeFont(9.5f, FontStyle.Bold);
 
         // Button hit-test rects
         private Rectangle _actionBtnRect;
         private Rectangle _cancelBtnRect;
         private Rectangle? _hoveredBtn;
+        private Rectangle _statusRect;
 
         public CaptureControlBar(Rectangle captureRegion)
         {
@@ -596,7 +616,7 @@ public sealed class ScrollingCaptureForm : Form
             TopMost = true;
             StartPosition = FormStartPosition.Manual;
             Size = new Size(BarWidth, BarHeight);
-            BackColor = Color.FromArgb(28, 28, 28);
+            BackColor = UiChrome.SurfaceWindowBackground;
             KeyPreview = true;
             DoubleBuffered = true;
             Cursor = Cursors.Default;
@@ -611,12 +631,13 @@ public sealed class ScrollingCaptureForm : Form
             // Button layout
             _cancelBtnRect = new Rectangle(BarWidth - 82, 10, 68, 28);
             _actionBtnRect = new Rectangle(BarWidth - 156, 10, 68, 28);
+            _statusRect = new Rectangle(16, 0, _actionBtnRect.X - 24, BarHeight);
         }
 
         public void SetCapturing(bool capturing)
         {
             _status = "Scroll now";
-            Invalidate();
+            Invalidate(_statusRect);
         }
 
         public void SetFrameCount(int count)
@@ -624,14 +645,14 @@ public sealed class ScrollingCaptureForm : Form
             if (InvokeRequired) { BeginInvoke(() => SetFrameCount(count)); return; }
             _frameCount = count;
             _status = $"{count} frames";
-            Invalidate();
+            Invalidate(_statusRect);
         }
 
         public void SetStatus(string text)
         {
             if (InvokeRequired) { BeginInvoke(() => SetStatus(text)); return; }
             _status = text;
-            Invalidate();
+            Invalidate(_statusRect);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -641,28 +662,36 @@ public sealed class ScrollingCaptureForm : Form
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
             // Shadow (dark rect behind, offset)
-            using (var shadowBrush = new SolidBrush(Color.FromArgb(60, 0, 0, 0)))
+            var shadowPasses = new (float dx, float dy, int a)[]
             {
-                using var shadowPath = CreateRoundedPath(new RectangleF(2, 4, Width - 4, Height - 2), CornerR);
+                (5f, 7f, 14),
+                (3f, 5f, 24),
+                (1.5f, 3f, 38),
+                (0f, 2f, 60),
+            };
+            foreach (var (dx, dy, a) in shadowPasses)
+            {
+                using var shadowPath = CreateRoundedPath(new RectangleF(2 + dx, 4 + dy, Width - 4, Height - 2), CornerR);
+                using var shadowBrush = new SolidBrush(Color.FromArgb(a, 0, 0, 0));
                 g.FillPath(shadowBrush, shadowPath);
             }
 
             // Background
-            using (var bgBrush = new SolidBrush(Color.FromArgb(252, 28, 28, 28)))
+            using (var bgBrush = new SolidBrush(UiChrome.SurfacePill))
             {
                 using var bgPath = CreateRoundedPath(new RectangleF(0, 0, Width, Height), CornerR);
                 g.FillPath(bgBrush, bgPath);
             }
 
             // Subtle white border
-            using (var borderPen = new Pen(Color.FromArgb(30, 255, 255, 255), 1f))
+            using (var borderPen = new Pen(UiChrome.SurfaceBorder, 1f))
             {
                 using var borderPath = CreateRoundedPath(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), CornerR);
                 g.DrawPath(borderPen, borderPath);
             }
 
             // Status text — clip before buttons
-            using var statusBrush = new SolidBrush(Color.FromArgb(220, 255, 255, 255));
+            using var statusBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
             int maxTextW = _actionBtnRect.X - 24;
             var statusRect = new RectangleF(16, 0, maxTextW, Height);
             var statusFmt = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
@@ -670,9 +699,9 @@ public sealed class ScrollingCaptureForm : Form
 
             // Draw buttons — always Stop + Discard (starts instantly like recording)
             DrawBtn(g, _actionBtnRect, "Stop",
-                Color.FromArgb(239, 68, 68), Color.White, _hoveredBtn == _actionBtnRect);
+                Color.FromArgb(239, 68, 68), UiChrome.SurfaceTextPrimary, _hoveredBtn == _actionBtnRect);
             DrawBtn(g, _cancelBtnRect, "Discard",
-                Color.FromArgb(18, 255, 255, 255), Color.FromArgb(180, 255, 255, 255), _hoveredBtn == _cancelBtnRect);
+                UiChrome.SurfaceHover, UiChrome.SurfaceTextPrimary, _hoveredBtn == _cancelBtnRect);
         }
 
         private void DrawBtn(Graphics g, Rectangle r, string text, Color bg, Color fg, bool hovered)
@@ -685,7 +714,7 @@ public sealed class ScrollingCaptureForm : Form
 
             if (hovered)
             {
-                using var hoverBorder = new Pen(Color.FromArgb(40, 255, 255, 255), 1f);
+                using var hoverBorder = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
                 g.DrawPath(hoverBorder, path);
             }
 
@@ -706,13 +735,22 @@ public sealed class ScrollingCaptureForm : Form
                 _hoveredBtn = null;
 
             Cursor = _hoveredBtn != null ? Cursors.Hand : Cursors.Default;
-            if (_hoveredBtn != prev) Invalidate();
+            if (_hoveredBtn != prev)
+            {
+                if (prev.HasValue) Invalidate(prev.Value);
+                if (_hoveredBtn.HasValue) Invalidate(_hoveredBtn.Value);
+            }
         }
 
         protected override void OnMouseLeave(EventArgs e)
         {
             base.OnMouseLeave(e);
-            if (_hoveredBtn != null) { _hoveredBtn = null; Invalidate(); }
+            if (_hoveredBtn != null)
+            {
+                var prev = _hoveredBtn.Value;
+                _hoveredBtn = null;
+                Invalidate(prev);
+            }
         }
 
         protected override void OnMouseClick(MouseEventArgs e)

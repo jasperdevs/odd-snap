@@ -10,43 +10,61 @@ namespace Yoink.Capture;
 /// </summary>
 public static class SketchRenderer
 {
-    // Simple drop shadow: single pass, offset down-right
-    private const int ShadowOff = 2;
-    private static readonly Color ShadowColor = Color.FromArgb(50, 0, 0, 0);
+    private static readonly (int dx, int dy, int alpha)[] SoftShadowSteps =
+    {
+        (5, 5, 14),
+        (3, 3, 24),
+        (1, 1, 42),
+        (0, 0, 58),
+    };
+    private static readonly Color ShadowColor = Color.FromArgb(60, 0, 0, 0);
 
     private static void DrawSoftLineShadow(Graphics g, PointF from, PointF to, float thickness)
     {
-        using var pen = new Pen(ShadowColor, thickness + 1f)
+        foreach (var step in SoftShadowSteps)
+        {
+            using var pen = new Pen(Color.FromArgb(step.alpha, 0, 0, 0), thickness + (step.dx > 0 ? 1.2f : 0.5f))
             { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-        g.DrawLine(pen, from.X + ShadowOff, from.Y + ShadowOff,
-            to.X + ShadowOff, to.Y + ShadowOff);
+            g.DrawLine(pen, from.X + step.dx, from.Y + step.dy, to.X + step.dx, to.Y + step.dy);
+        }
     }
 
     private static void DrawSoftCurveShadow(Graphics g, Point[] points, float thickness, bool asCurve)
     {
-        var shadowPts = points.Select(p => new Point(p.X + ShadowOff, p.Y + ShadowOff)).ToArray();
-        using var pen = new Pen(ShadowColor, thickness + 1f)
-            { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-        if (asCurve && shadowPts.Length >= 4)
-            g.DrawCurve(pen, shadowPts, 0.5f);
-        else
-            g.DrawLines(pen, shadowPts);
+        foreach (var step in SoftShadowSteps)
+        {
+            var shadowPts = points.Select(p => new Point(p.X + step.dx, p.Y + step.dy)).ToArray();
+            using var pen = new Pen(Color.FromArgb(step.alpha, 0, 0, 0), thickness + (step.dx > 0 ? 1.2f : 0.5f))
+                { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+            if (asCurve && shadowPts.Length >= 4)
+                g.DrawCurve(pen, shadowPts, 0.5f);
+            else
+                g.DrawLines(pen, shadowPts);
+        }
     }
 
     public static void DrawSoftPathShadow(Graphics g, GraphicsPath path, float extraSpread = 0f)
     {
-        using var brush = new SolidBrush(ShadowColor);
-        var m = new System.Drawing.Drawing2D.Matrix();
-        m.Translate(ShadowOff, ShadowOff);
-        using var shadowPath = (GraphicsPath)path.Clone();
-        shadowPath.Transform(m);
-        g.FillPath(brush, shadowPath);
+        foreach (var step in SoftShadowSteps)
+        {
+            using var brush = new SolidBrush(Color.FromArgb(step.alpha, 0, 0, 0));
+            var m = new System.Drawing.Drawing2D.Matrix();
+            m.Translate(step.dx, step.dy);
+            if (step.dx > 0)
+                m.Scale(1f + extraSpread * 0.02f, 1f + extraSpread * 0.02f);
+            using var shadowPath = (GraphicsPath)path.Clone();
+            shadowPath.Transform(m);
+            g.FillPath(brush, shadowPath);
+        }
     }
 
     public static void DrawSoftEllipseShadow(Graphics g, float x, float y, float w, float h)
     {
-        using var brush = new SolidBrush(ShadowColor);
-        g.FillEllipse(brush, x + ShadowOff, y + ShadowOff, w, h);
+        foreach (var step in SoftShadowSteps)
+        {
+            using var brush = new SolidBrush(Color.FromArgb(step.alpha, 0, 0, 0));
+            g.FillEllipse(brush, x + step.dx, y + step.dy, w, h);
+        }
     }
 
     /// <summary>Draw a wobbly line between two points (like rough.js).</summary>
@@ -113,7 +131,7 @@ public static class SketchRenderer
     }
 
     /// <summary>Draw a clean arrow with proportional arrowhead (Excalidraw style).</summary>
-    public static void DrawArrow(Graphics g, PointF from, PointF to, Color color, int seed, float roughness = 0.5f)
+    public static void DrawArrow(Graphics g, PointF from, PointF to, Color color, int seed, float roughness = 0.5f, bool includeShadow = true)
     {
         float dx = to.X - from.X, dy = to.Y - from.Y;
         float len = MathF.Sqrt(dx * dx + dy * dy);
@@ -123,8 +141,11 @@ public static class SketchRenderer
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Soft shadow
-        DrawSoftLineShadow(g, from, to, thickness);
+        if (includeShadow)
+        {
+            // Soft shadow
+            DrawSoftLineShadow(g, from, to, thickness);
+        }
 
         // Main pass
         using var pen = new Pen(color, thickness)

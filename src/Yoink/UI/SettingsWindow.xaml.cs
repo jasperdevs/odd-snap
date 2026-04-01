@@ -26,6 +26,8 @@ public partial class SettingsWindow : Window
     private static readonly LinkedList<string> ThumbCacheOrder = new();
     private static readonly Dictionary<string, LinkedListNode<string>> ThumbCacheNodes = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, BitmapImage> LogoCache = new();
+    private static readonly SemaphoreSlim ThumbDecodeGate = new(4);
+    private static readonly HashSet<string> ThumbInflight = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly SettingsService _settingsService;
     private readonly HistoryService _historyService;
@@ -301,9 +303,7 @@ public partial class SettingsWindow : Window
         var videoDir = Path.Combine(baseDir, "Videos");
         var dirs = new[] { videoDir, baseDir }.Where(Directory.Exists).ToArray();
         if (dirs.Length == 0) { ShowVideoEmpty(); return; }
-        var files = dirs.SelectMany(d => Directory.GetFiles(d, "yoink_*.mp4")
-                .Concat(Directory.GetFiles(d, "yoink_*.webm"))
-                .Concat(Directory.GetFiles(d, "yoink_*.mkv")))
+        var files = dirs.SelectMany(EnumerateVideoFiles)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(File.GetCreationTime)
             .Take(50)
@@ -325,7 +325,7 @@ public partial class SettingsWindow : Window
             var thumbPath = GetVideoThumbnailPath(file);
             img.Loaded += (_, _) =>
             {
-                LoadThumbAsync(img, thumbPath);
+                LoadThumbAsync(img, thumbPath, file);
                 img.BeginAnimation(OpacityProperty,
                     new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(250)));
             };
@@ -346,7 +346,7 @@ public partial class SettingsWindow : Window
                 {
                     Text = $"{label} · {sizeStr}",
                     FontSize = 9, Foreground = Theme.Brush(Theme.TextPrimary),
-                    FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                    FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
                 }
             };
 
@@ -365,13 +365,13 @@ public partial class SettingsWindow : Window
             infoPanel.Children.Add(new TextBlock
             {
                 Text = info.Name, FontSize = 11,
-                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
             infoPanel.Children.Add(new TextBlock
             {
                 Text = timeAgo, FontSize = 10,
-                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
                 Opacity = 0.3
             });
             Grid.SetRow(infoPanel, 1);
@@ -387,6 +387,7 @@ public partial class SettingsWindow : Window
                 Cursor = System.Windows.Input.Cursors.Hand,
                 Child = grid,
             };
+            bool isDraggingFile = false;
             card.SizeChanged += (s, _) =>
             {
                 var b = (Border)s!;
@@ -394,14 +395,33 @@ public partial class SettingsWindow : Window
                     new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight), 10, 10);
             };
             var filePath = file;
-            card.MouseLeftButtonDown += (_, _) =>
+            if (File.Exists(filePath))
+                AttachFileDragHandlers(card, card, filePath, () => !_selectMode, v => isDraggingFile = v);
+
+            card.MouseLeftButtonUp += (_, _) =>
             {
+                if (_selectMode || isDraggingFile)
+                    return;
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = filePath, UseShellExecute = true }); }
                 catch { }
             };
             wrap.Children.Add(card);
         }
         VideoStack.Children.Add(wrap);
+    }
+
+    private static IEnumerable<string> EnumerateVideoFiles(string dir)
+    {
+        foreach (var file in Directory.EnumerateFiles(dir))
+        {
+            var ext = Path.GetExtension(file);
+            if (ext.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return file;
+            }
+        }
     }
 
     private void ShowVideoEmpty()
@@ -419,29 +439,39 @@ public partial class SettingsWindow : Window
     {
         var thumbDir = Path.Combine(Path.GetDirectoryName(videoPath)!, ".thumbs");
         Directory.CreateDirectory(thumbDir);
-        var thumbPath = Path.Combine(thumbDir, Path.GetFileNameWithoutExtension(videoPath) + ".jpg");
-        if (File.Exists(thumbPath)) return thumbPath;
+        return Path.Combine(thumbDir, Path.GetFileNameWithoutExtension(videoPath) + ".jpg");
+    }
 
-        // Try to extract first frame with FFmpeg
+    private static async Task<string> EnsureVideoThumbnailAsync(string videoPath, string thumbPath)
+    {
+        if (File.Exists(thumbPath))
+            return thumbPath;
+
         var ffmpeg = Capture.VideoRecorder.FindFfmpeg();
-        if (ffmpeg != null)
+        if (ffmpeg == null)
+            return videoPath;
+
+        try
         {
-            try
+            var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
-                var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = ffmpeg,
-                    Arguments = $"-y -i \"{videoPath}\" -vframes 1 -q:v 4 \"{thumbPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardError = true,
-                });
-                proc?.WaitForExit(5000);
-                if (File.Exists(thumbPath)) return thumbPath;
-            }
-            catch { }
+                FileName = ffmpeg,
+                Arguments = $"-y -i \"{videoPath}\" -vframes 1 -q:v 4 \"{thumbPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+            });
+
+            if (proc == null)
+                return videoPath;
+
+            await proc.WaitForExitAsync();
+            return File.Exists(thumbPath) ? thumbPath : videoPath;
         }
-        return videoPath; // fallback - LoadThumbAsync will handle gracefully
+        catch
+        {
+            return videoPath;
+        }
     }
 
     private Border CreateFileLocationButton(string filePath)
@@ -1406,31 +1436,66 @@ public partial class SettingsWindow : Window
     }
 
     private static void LoadThumbAsync(Image img, string path)
+        => LoadThumbAsync(img, path, null);
+
+    private static void LoadThumbAsync(Image img, string path, string? sourcePath)
     {
         if (img.Source != null) return;
 
-        if (TryGetThumbFromCache(path, out var cached))
+        var cacheKey = sourcePath ?? path;
+
+        if (TryGetThumbFromCache(cacheKey, out var cached))
         {
             img.Source = cached;
             return;
         }
 
-        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+        lock (ThumbInflight)
+        {
+            if (!ThumbInflight.Add(cacheKey))
+                return;
+        }
+
+        _ = Task.Run(async () =>
         {
             try
             {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.UriSource = new Uri(path);
-                bmp.DecodePixelWidth = 240;
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.EndInit();
-                bmp.Freeze();
+                await ThumbDecodeGate.WaitAsync();
+                try
+                {
+                    var loadPath = path;
+                    if (!File.Exists(loadPath) && sourcePath != null)
+                        loadPath = await EnsureVideoThumbnailAsync(sourcePath, path);
 
-                StoreThumbInCache(path, bmp);
-                img.Dispatcher.BeginInvoke(() => img.Source = bmp);
+                    if (!File.Exists(loadPath))
+                        return;
+
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(loadPath);
+                    bmp.DecodePixelWidth = 240;
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.EndInit();
+                    bmp.Freeze();
+
+                    StoreThumbInCache(cacheKey, bmp);
+                    _ = img.Dispatcher.BeginInvoke(() =>
+                    {
+                        if (img.Source == null)
+                            img.Source = bmp;
+                    });
+                }
+                finally
+                {
+                    ThumbDecodeGate.Release();
+                }
             }
             catch { }
+            finally
+            {
+                lock (ThumbInflight)
+                    ThumbInflight.Remove(cacheKey);
+            }
         });
     }
 

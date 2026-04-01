@@ -20,6 +20,7 @@ public sealed class HistoryEntry
     public DateTime CapturedAt { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
+    public long FileSizeBytes { get; set; }
     public HistoryKind Kind { get; set; } = HistoryKind.Image;
     public string? UploadUrl { get; set; }
     public string? UploadProvider { get; set; }
@@ -145,6 +146,7 @@ public sealed class HistoryService
                         CapturedAt = fi.CreationTime,
                         Width = 0,
                         Height = 0,
+                        FileSizeBytes = fi.Length,
                         Kind = ext == ".gif" ? HistoryKind.Gif : HistoryKind.Image
                     });
                     tracked.Add(file);
@@ -177,6 +179,7 @@ public sealed class HistoryService
             CapturedAt = DateTime.Now,
             Width = 0,
             Height = 0,
+            FileSizeBytes = fi.Length,
             Kind = HistoryKind.Gif
         };
         _entries.Insert(0, entry);
@@ -201,6 +204,7 @@ public sealed class HistoryService
             CapturedAt = now,
             Width = sticker.Width,
             Height = sticker.Height,
+            FileSizeBytes = new FileInfo(filePath).Length,
             Kind = HistoryKind.Sticker,
             UploadProvider = providerName
         };
@@ -224,6 +228,7 @@ public sealed class HistoryService
         {
             FileName = fileName, FilePath = filePath, CapturedAt = now,
             Width = screenshot.Width, Height = screenshot.Height,
+            FileSizeBytes = new FileInfo(filePath).Length,
             Kind = HistoryKind.Image
         };
         _entries.Insert(0, entry);

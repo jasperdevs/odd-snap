@@ -73,6 +73,9 @@ public sealed class SettingsService
                         Settings.StickerUploadSettings.LocalEngine = legacyEngine;
                     }
                 }
+
+                if (Settings.StickerUploadSettings.Provider == StickerProvider.None)
+                    Settings.StickerUploadSettings.Provider = StickerProvider.LocalCpu;
             }
         }
         catch

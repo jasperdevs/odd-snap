@@ -4,6 +4,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Yoink.Helpers;
 using Yoink.Models;
 
 namespace Yoink.Capture;
@@ -30,14 +31,12 @@ public sealed partial class RegionOverlayForm : Form
     private ToolDef[] _visibleTools = ToolDef.AllTools;
     private int BtnCount => _visibleTools.Length + 3; // +3 for color, gear, close
     private Rectangle[] _toolbarButtons = Array.Empty<Rectangle>();
+    private string[] _toolbarIcons = Array.Empty<string>();
+    private string[] _toolbarLabels = Array.Empty<string>();
+    private CaptureMode?[] _toolbarModes = Array.Empty<CaptureMode?>();
     private int _hoveredButton = -1;
     private bool _showToolNumberBadges = true;
     private Rectangle _toolbarRect;
-    private const int ToolbarHeight = 44;
-    private const int ButtonSize = 32;
-    private const int ButtonSpacing = 2;
-    private const int ToolbarTopMargin = 16;
-
     private float _toolbarAnim;
     private Point _lastCursorPos;
     private Point _prevCursorPos; // crosshair ghosting fix
@@ -54,8 +53,8 @@ public sealed partial class RegionOverlayForm : Form
     private readonly Bitmap _magBitmap;
     private readonly int[] _magPixels;
     private readonly Graphics _magGfx;
-    private readonly Font _hexFont = new("Segoe UI", 11f, FontStyle.Bold);
-    private readonly Font _rgbFont = new("Segoe UI", 9f);
+    private readonly Font _hexFont = UiChrome.ChromeFont(11f, FontStyle.Bold);
+    private readonly Font _rgbFont = UiChrome.ChromeFont(9f);
     private readonly SolidBrush _mutedBrush = new(Color.FromArgb(140, 255, 255, 255));
     private readonly Pen _crossPen = new(Color.FromArgb(210, 255, 255, 255), 1f);
     private Point _pickerCursorPos;
@@ -78,6 +77,9 @@ public sealed partial class RegionOverlayForm : Form
     private List<Point>? _currentStroke;
     private Point _blurStart;
     private bool _isBlurring;
+    private Bitmap? _blurPreviewBitmap;
+    private Graphics? _blurPreviewGraphics;
+    private Size _blurPreviewSize;
 
     private Point _arrowStart;
     private bool _isArrowDragging;
@@ -139,7 +141,7 @@ public sealed partial class RegionOverlayForm : Form
     private bool _textItalic;
     private bool _textStroke = true; // outline stroke enabled by default
     private bool _textShadow = true; // shadow enabled by default
-    private string _textFontFamily = "Segoe UI";
+    private string _textFontFamily = UiChrome.FallbackFamilyName;
     private TextBox? _textBox; // real textbox for native text editing
 
     // Inline text formatting toolbar hit rects (computed during paint)
@@ -157,6 +159,7 @@ public sealed partial class RegionOverlayForm : Form
     private bool _textDragging;
     private Point _textDragOffset;
     private RectangleF _activeTextRectCache;
+    private float _activeTextMeasureWidth;
     private readonly RectangleF[] _activeTextHandleCache = new RectangleF[4];
     private bool _activeTextLayoutDirty = true;
 
@@ -385,14 +388,15 @@ public sealed partial class RegionOverlayForm : Form
         SetupForm();
         CalcToolbar();
 
-        // Timer only for toolbar slide-in animation (~100ms), then stops
+        // Timer only for toolbar slide-in animation (~180ms), then stops
         _animTimer = new System.Windows.Forms.Timer { Interval = 16 };
         _animTimer.Tick += (_, _) =>
         {
             float elapsed = (float)(DateTime.UtcNow - _showTime).TotalMilliseconds;
-            _toolbarAnim = Math.Min(1f, elapsed / 100f);
-            Invalidate(new Rectangle(_toolbarRect.X - 10, _toolbarRect.Y - 40,
-                _toolbarRect.Width + 20, _toolbarRect.Height + 80));
+            _toolbarAnim = Math.Min(1f, elapsed / 180f);
+            RefreshToolbar();
+            Invalidate(new Rectangle(_toolbarRect.X - 12, _toolbarRect.Y - 48,
+                _toolbarRect.Width + 24, _toolbarRect.Height + 96));
             if (_toolbarAnim >= 1f)
                 _animTimer.Stop();
         };
@@ -422,7 +426,7 @@ public sealed partial class RegionOverlayForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        _toolbarAnim = 1f;
+        _toolbarAnim = 0f;
         WindowDetector.RegisterIgnoredWindow(Handle);
         Native.User32.SetWindowPos(Handle, Native.User32.HWND_TOPMOST,
             0, 0, 0, 0,
@@ -443,11 +447,15 @@ public sealed partial class RegionOverlayForm : Form
 
         _toolbarForm = new ToolbarForm(this);
         PositionToolbarForm();
-        _toolbarForm.Show(this);
+        var _ = _toolbarForm.Handle;
         WindowDetector.RegisterIgnoredWindow(_toolbarForm.Handle);
         _toolbarForm.UpdateSurface();
+        _toolbarForm.Show(this);
         Focus();
-        Invalidate();
+        Invalidate(new Rectangle(_toolbarRect.X - 12, _toolbarRect.Y - 48,
+            _toolbarRect.Width + 24, _toolbarRect.Height + 96));
+        _showTime = DateTime.UtcNow;
+        _animTimer.Start();
     }
 
     protected override void OnDeactivate(EventArgs e)
@@ -471,14 +479,15 @@ public sealed partial class RegionOverlayForm : Form
     internal void PositionToolbarForm()
     {
         if (_toolbarForm is null) return;
-        // Cover the toolbar + tooltip + popup area
-        int margin = 20;
-        int popupH = 300; // enough for emoji/font/color pickers below toolbar
+        // Keep enough horizontal room for tooltips, but avoid a giant full-screen layered surface.
+        int marginX = 220;
+        int marginY = 24;
+        int popupH = 320;
         var bounds = new Rectangle(
-            _toolbarRect.X - margin + _virtualBounds.X,
-            _toolbarRect.Y - margin + _virtualBounds.Y,
-            _toolbarRect.Width + margin * 2,
-            _toolbarRect.Height + popupH + margin * 2);
+            _toolbarRect.X - marginX + _virtualBounds.X,
+            _toolbarRect.Y - marginY + _virtualBounds.Y,
+            _toolbarRect.Width + marginX * 2,
+            _toolbarRect.Height + popupH + marginY * 2);
         _toolbarForm.Bounds = bounds;
     }
 
@@ -497,7 +506,15 @@ public sealed partial class RegionOverlayForm : Form
             _textBox.KeyDown += (_, e) =>
             {
                 if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; CommitText(); }
-                if (e.KeyCode == Keys.Escape) { e.SuppressKeyPress = true; _textBuffer = ""; _isTyping = false; HideTextBox(); Invalidate(); }
+                if (e.KeyCode == Keys.Escape)
+                {
+                    e.SuppressKeyPress = true;
+                    _textBuffer = "";
+                    _isTyping = false;
+                    HideTextBox();
+                    InvalidateActiveTextLayout();
+                    Invalidate();
+                }
             };
             _textBox.TextChanged += (_, _) =>
             {
@@ -556,7 +573,8 @@ public sealed partial class RegionOverlayForm : Form
                     e.SuppressKeyPress = true;
                     _emojiPickerOpen = false;
                     HideEmojiSearchBox();
-                    Invalidate(); RefreshToolbar();
+                    Invalidate(InflateForRepaint(GetEmojiPickerBounds(), 12));
+                    RefreshToolbar();
                 }
             };
             Controls.Add(_emojiSearchBox);
@@ -608,7 +626,8 @@ public sealed partial class RegionOverlayForm : Form
                     _fontPickerOpen = false;
                     _fontSearch = ""; _filteredFonts = null;
                     HideFontSearchBox();
-                    Invalidate(); RefreshToolbar();
+                    Invalidate(InflateForRepaint(GetFontPickerBounds(), 12));
+                    RefreshToolbar();
                 }
             };
             Controls.Add(_fontSearchBox);
@@ -629,7 +648,32 @@ public sealed partial class RegionOverlayForm : Form
         _toolbarForm?.UpdateSurface();
     }
 
-    private const int GroupGap = 16; // spacing between tool groups (includes separator line)
+    private Rectangle GetOverlayUiBounds()
+    {
+        Rectangle bounds = Rectangle.Empty;
+        static Rectangle InflateIfNeeded(Rectangle r, int pad)
+        {
+            if (r.Width <= 0 || r.Height <= 0) return Rectangle.Empty;
+            r.Inflate(pad, pad);
+            return r;
+        }
+
+        void Add(Rectangle r)
+        {
+            if (r.IsEmpty) return;
+            bounds = bounds.IsEmpty ? r : Rectangle.Union(bounds, r);
+        }
+
+        Add(InflateIfNeeded(_toolbarRect, 12));
+        Add(InflateForRepaint(Rectangle.Round(_textToolbarRect)));
+        Add(InflateForRepaint(Rectangle.Round(GetActiveTextRect())));
+        Add(InflateIfNeeded(GetColorPickerBounds(), 12));
+        Add(InflateIfNeeded(GetFontPickerBounds(), 12));
+        Add(InflateIfNeeded(GetEmojiPickerBounds(), 12));
+        return bounds;
+    }
+
+    private const int GroupGap = UiChrome.ToolbarGroupGap; // spacing between tool groups (includes separator line)
 
     // Separator indices (computed dynamically based on visible tools)
     private int[] _sepAfter = Array.Empty<int>();
@@ -637,6 +681,26 @@ public sealed partial class RegionOverlayForm : Form
     private void CalcToolbar()
     {
         _toolbarButtons = new Rectangle[BtnCount];
+        _toolbarIcons = new string[BtnCount];
+        _toolbarLabels = new string[BtnCount];
+        _toolbarModes = new CaptureMode?[BtnCount];
+
+        for (int i = 0; i < _visibleTools.Length; i++)
+        {
+            _toolbarIcons[i] = _visibleTools[i].Id;
+            _toolbarLabels[i] = _visibleTools[i].Label;
+            _toolbarModes[i] = _visibleTools[i].Mode;
+        }
+        int toolCount = _visibleTools.Length;
+        _toolbarIcons[toolCount] = "color";
+        _toolbarLabels[toolCount] = "Color";
+        _toolbarModes[toolCount] = null;
+        _toolbarIcons[toolCount + 1] = "gear";
+        _toolbarLabels[toolCount + 1] = "Settings";
+        _toolbarModes[toolCount + 1] = null;
+        _toolbarIcons[toolCount + 2] = "close";
+        _toolbarLabels[toolCount + 2] = "Close (Esc)";
+        _toolbarModes[toolCount + 2] = null;
 
         // Compute group gaps: between tool groups
         var gaps = new List<int>();
@@ -647,16 +711,16 @@ public sealed partial class RegionOverlayForm : Form
         _sepAfter = gaps.ToArray();
 
         int pad = 10;
-        int w = ButtonSize * BtnCount + ButtonSpacing * (BtnCount - 1) + pad * 2 + _sepAfter.Length * GroupGap;
+        int w = UiChrome.ToolbarButtonSize * BtnCount + UiChrome.ToolbarButtonSpacing * (BtnCount - 1) + pad * 2 + _sepAfter.Length * UiChrome.ToolbarGroupGap;
         int x = (ClientSize.Width - w) / 2;
-        _toolbarRect = new Rectangle(x, ToolbarTopMargin, w, ToolbarHeight);
+        _toolbarRect = new Rectangle(x, UiChrome.ToolbarTopMargin, w, UiChrome.ToolbarHeight);
         int cx = _toolbarRect.X + pad;
         for (int i = 0; i < BtnCount; i++)
         {
             _toolbarButtons[i] = new Rectangle(
-                cx, _toolbarRect.Y + (ToolbarHeight - ButtonSize) / 2,
-                ButtonSize, ButtonSize);
-            cx += ButtonSize + ButtonSpacing;
+                cx, _toolbarRect.Y + (UiChrome.ToolbarHeight - UiChrome.ToolbarButtonSize) / 2,
+                UiChrome.ToolbarButtonSize, UiChrome.ToolbarButtonSize);
+            cx += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
             if (Array.IndexOf(_sepAfter, i) >= 0) cx += GroupGap;
         }
     }

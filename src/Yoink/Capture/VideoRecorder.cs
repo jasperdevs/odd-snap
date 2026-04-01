@@ -32,6 +32,7 @@ public sealed class VideoRecorder : IDisposable
     private Thread? _captureThread;
     private Process? _ffmpeg;
     private Stream? _ffmpegStdin;
+    private BufferedStream? _ffmpegBufferedStdin;
     private LimitedTextBuffer? _ffmpegStderr;
     private int _frameCount;
     private DateTime _startTime;
@@ -161,6 +162,7 @@ public sealed class VideoRecorder : IDisposable
         _ffmpeg.Start();
         _ffmpeg.BeginErrorReadLine();
         _ffmpegStdin = _ffmpeg.StandardInput.BaseStream;
+        _ffmpegBufferedStdin = new BufferedStream(_ffmpegStdin, 1 << 20);
 
         _captureThread = new Thread(CaptureLoop) { IsBackground = true, Name = "VideoCapture" };
         _captureThread.Start();
@@ -269,7 +271,7 @@ public sealed class VideoRecorder : IDisposable
                     if (buffer == null || buffer.Length != byteCount)
                         buffer = new byte[byteCount];
                     System.Runtime.InteropServices.Marshal.Copy(data.Scan0, buffer, 0, byteCount);
-                    _ffmpegStdin?.Write(buffer, 0, byteCount);
+                    _ffmpegBufferedStdin?.Write(buffer, 0, byteCount);
                 }
                 finally { bmp.UnlockBits(data); }
 
@@ -299,6 +301,7 @@ public sealed class VideoRecorder : IDisposable
         StopAudioCapture();
 
         // Close stdin to signal EOF to FFmpeg
+        try { _ffmpegBufferedStdin?.Flush(); } catch { }
         try { _ffmpegStdin?.Close(); } catch { }
 
         if (_ffmpeg == null)
@@ -339,9 +342,9 @@ public sealed class VideoRecorder : IDisposable
     {
         // Determine which audio files exist
         var audioFiles = new List<string>();
-        if (_desktopWavPath != null && File.Exists(_desktopWavPath) && new FileInfo(_desktopWavPath).Length > 44)
+        if (_desktopWavPath != null && HasMeaningfulAudio(_desktopWavPath))
             audioFiles.Add(_desktopWavPath);
-        if (_micWavPath != null && File.Exists(_micWavPath) && new FileInfo(_micWavPath).Length > 44)
+        if (_micWavPath != null && HasMeaningfulAudio(_micWavPath))
             audioFiles.Add(_micWavPath);
 
         if (audioFiles.Count == 0) return;
@@ -386,7 +389,7 @@ public sealed class VideoRecorder : IDisposable
             proc.StandardError.ReadToEnd();
             proc.WaitForExit(30000);
 
-            if (File.Exists(tempOut) && new FileInfo(tempOut).Length > 0)
+            if (HasNonEmptyFile(tempOut))
             {
                 File.Delete(videoPath);
                 File.Move(tempOut, videoPath);
@@ -431,9 +434,22 @@ public sealed class VideoRecorder : IDisposable
         _cts.Cancel();
         lock (_pauseLock) { _isPaused = false; Monitor.PulseAll(_pauseLock); }
         StopAudioCapture();
+        try { _ffmpegBufferedStdin?.Dispose(); } catch { }
         try { _ffmpegStdin?.Dispose(); } catch { }
         try { _ffmpeg?.Dispose(); } catch { }
         _cts.Dispose();
+    }
+
+    private static bool HasMeaningfulAudio(string path)
+    {
+        try { return File.Exists(path) && new FileInfo(path).Length > 44; }
+        catch { return false; }
+    }
+
+    private static bool HasNonEmptyFile(string path)
+    {
+        try { return File.Exists(path) && new FileInfo(path).Length > 0; }
+        catch { return false; }
     }
 
     private sealed class LimitedTextBuffer(int maxChars)

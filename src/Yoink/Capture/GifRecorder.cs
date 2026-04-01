@@ -121,7 +121,7 @@ public sealed class GifRecorder : IDisposable
 
         try
         {
-            var frameFiles = Directory.GetFiles(_tempDir, "frame_*.bmp");
+            var frameFiles = Directory.EnumerateFiles(_tempDir, "frame_*.bmp").ToArray();
             Array.Sort(frameFiles, StringComparer.Ordinal);
 
             if (frameFiles.Length == 0)
@@ -247,8 +247,8 @@ public sealed class GifRecorder : IDisposable
     {
         try
         {
-            var first = Directory.GetFiles(_tempDir, "frame_000000.bmp").FirstOrDefault();
-            return first != null ? new Bitmap(first) : null;
+            var first = Path.Combine(_tempDir, "frame_000000.bmp");
+            return File.Exists(first) ? new Bitmap(first) : null;
         }
         catch { return null; }
     }
