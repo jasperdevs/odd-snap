@@ -11,6 +11,7 @@ public sealed class TrayIcon : IDisposable
     public event Action? OnOcr;
     public event Action? OnColorPicker;
     public event Action? OnGifRecord;
+    public event Action? OnScrollCapture;
     public event Action? OnSettings;
     public event Action? OnHistory;
     public event Action? OnQuit;
@@ -36,60 +37,83 @@ public sealed class TrayIcon : IDisposable
     private ContextMenuStrip CreateThemedMenu()
     {
         Theme.Refresh();
-        bool isDark = Theme.IsDark;
-        var bg = isDark ? Color.FromArgb(44, 44, 44) : Color.FromArgb(249, 249, 249);
-        var fg = isDark ? Color.FromArgb(240, 240, 240) : Color.FromArgb(20, 20, 20);
-        var hoverBg = isDark ? Color.FromArgb(60, 60, 60) : Color.FromArgb(230, 230, 230);
-        var sepColor = isDark ? Color.FromArgb(65, 65, 65) : Color.FromArgb(215, 215, 215);
+        bool dark = Theme.IsDark;
+
+        // Win11 flyout colors
+        var bg   = dark ? Color.FromArgb(44, 44, 44)  : Color.FromArgb(252, 252, 252);
+        var fg   = dark ? Color.FromArgb(240, 240, 240) : Color.FromArgb(22, 22, 22);
+        var hov  = dark ? Color.FromArgb(60, 60, 60)  : Color.FromArgb(238, 238, 238);
+        var sep  = dark ? Color.FromArgb(55, 55, 55)  : Color.FromArgb(226, 226, 226);
+        var quit = dark ? Color.FromArgb(200, 200, 200) : Color.FromArgb(100, 100, 100);
 
         var menu = new ContextMenuStrip
         {
             BackColor = bg,
             ForeColor = fg,
             ShowImageMargin = false,
-            Padding = new Padding(4),
-            Font = new Font("Segoe UI", 9f),
+            Padding = new Padding(2, 3, 2, 3),
+            Font = new Font("Segoe UI Variable Text", 9f),
+            DropShadowEnabled = true,
+        };
+        menu.Renderer = new ThemedMenuRenderer(bg, hov, sep, dark);
+
+        // Apply Win11 rounded corners via DWM
+        menu.HandleCreated += (s, _) =>
+        {
+            try
+            {
+                var h = ((ContextMenuStrip)s!).Handle;
+                int round = Native.Dwm.DWMWCP_ROUND;
+                Native.Dwm.DwmSetWindowAttribute(h, Native.Dwm.DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+                int dm = dark ? 1 : 0;
+                Native.Dwm.DwmSetWindowAttribute(h, Native.Dwm.DWMWA_USE_IMMERSIVE_DARK_MODE, ref dm, sizeof(int));
+            }
+            catch { }
         };
 
-        // Custom renderer for rounded feel and hover colors
-        menu.Renderer = new ThemedMenuRenderer(bg, hoverBg, sepColor, isDark);
+        // Helper to create uniform menu items
+        ToolStripMenuItem Item(string text, Color? color = null) => new(text)
+        {
+            ForeColor = color ?? fg,
+            Padding = new Padding(8, 5, 14, 5),
+        };
 
-        var captureItem = new ToolStripMenuItem("Screenshot") { ForeColor = fg };
-        captureItem.Click += (_, _) => OnCapture?.Invoke();
-
-        var ocrItem = new ToolStripMenuItem("Text capture (OCR)") { ForeColor = fg };
-        ocrItem.Click += (_, _) => OnOcr?.Invoke();
-
-        var pickerItem = new ToolStripMenuItem("Color picker") { ForeColor = fg };
-        pickerItem.Click += (_, _) => OnColorPicker?.Invoke();
-
-        var gifItem = new ToolStripMenuItem("Record GIF") { ForeColor = fg };
-        gifItem.Click += (_, _) => OnGifRecord?.Invoke();
-
-        var settingsItem = new ToolStripMenuItem("Settings") { ForeColor = fg };
-        settingsItem.Click += (_, _) => OnSettings?.Invoke();
-
-        var historyItem = new ToolStripMenuItem("History") { ForeColor = fg };
-        historyItem.Click += (_, _) => OnHistory?.Invoke();
-
-        var quitItem = new ToolStripMenuItem("Quit") { ForeColor = fg };
-        quitItem.Click += (_, _) => OnQuit?.Invoke();
+        var captureItem = Item("Screenshot");     captureItem.Click += (_, _) => OnCapture?.Invoke();
+        var ocrItem     = Item("Text capture");   ocrItem.Click     += (_, _) => OnOcr?.Invoke();
+        var pickerItem  = Item("Color picker");   pickerItem.Click  += (_, _) => OnColorPicker?.Invoke();
+        bool isRecording = Capture.RecordingForm.Current != null;
+        var gifItem = Item(isRecording ? "Stop Recording" : "Record",
+                          isRecording ? Color.FromArgb(239, 68, 68) : (Color?)null);
+        gifItem.Click += (_, _) =>
+        {
+            if (Capture.RecordingForm.Current != null)
+                Capture.RecordingForm.Current.RequestStop();
+            else
+                OnGifRecord?.Invoke();
+        };
+        var scrollItem  = Item("Scroll capture"); scrollItem.Click  += (_, _) => OnScrollCapture?.Invoke();
+        var settingsItem = Item("Settings");      settingsItem.Click += (_, _) => OnSettings?.Invoke();
+        var historyItem = Item("History");        historyItem.Click += (_, _) => OnHistory?.Invoke();
+        var quitItem    = Item("Quit", quit);     quitItem.Click    += (_, _) => OnQuit?.Invoke();
 
         menu.Items.AddRange(new ToolStripItem[] {
-            captureItem, ocrItem, pickerItem, gifItem,
+            captureItem, ocrItem, pickerItem, gifItem, scrollItem,
             new ToolStripSeparator(),
             settingsItem, historyItem,
             new ToolStripSeparator(),
-            quitItem });
-
+            quitItem
+        });
         return menu;
     }
+
 
     private void ShowMenu()
     {
         // Recreate the whole menu each time to pick up theme changes
         var fresh = CreateThemedMenu();
+        var previous = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = fresh;
+        previous?.Dispose();
 
         var showMethod = typeof(NotifyIcon).GetMethod("ShowContextMenu",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
@@ -152,39 +176,36 @@ public sealed class TrayIcon : IDisposable
 /// <summary>
 /// Custom renderer that gives the context menu a modern, themed look.
 /// </summary>
+/// <summary>Win11-style context menu renderer.</summary>
 internal sealed class ThemedMenuRenderer : ToolStripProfessionalRenderer
 {
-    private readonly Color _bg;
-    private readonly Color _hover;
-    private readonly Color _sep;
-    private readonly bool _isDark;
+    private readonly Color _bg, _hover, _sep;
 
     public ThemedMenuRenderer(Color bg, Color hover, Color sep, bool isDark)
-        : base(new ThemedColorTable(bg, hover))
-    {
-        _bg = bg;
-        _hover = hover;
-        _sep = sep;
-        _isDark = isDark;
-    }
+        : base(new Win11ColorTable(bg))
+    { _bg = bg; _hover = hover; _sep = sep; }
 
     protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
     {
+        if (!e.Item.Selected) return;
         var r = new Rectangle(4, 1, e.Item.Width - 8, e.Item.Height - 2);
-        if (e.Item.Selected)
-        {
-            using var brush = new SolidBrush(_hover);
-            using var gp = RoundedRect(r, 4);
-            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            e.Graphics.FillPath(brush, gp);
-        }
+        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using var brush = new SolidBrush(_hover);
+        using var path = new System.Drawing.Drawing2D.GraphicsPath();
+        int d = 8;
+        path.AddArc(r.X, r.Y, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        e.Graphics.FillPath(brush, path);
     }
 
     protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
     {
-        int y = e.Item.Height / 2;
         using var pen = new Pen(_sep);
-        e.Graphics.DrawLine(pen, 8, y, e.Item.Width - 8, y);
+        int y = e.Item.Height / 2;
+        e.Graphics.DrawLine(pen, 10, y, e.Item.Width - 10, y);
     }
 
     protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
@@ -193,41 +214,15 @@ internal sealed class ThemedMenuRenderer : ToolStripProfessionalRenderer
         e.Graphics.FillRectangle(brush, e.AffectedBounds);
     }
 
-    protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
-    {
-        var borderColor = _isDark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(200, 200, 200);
-        using var pen = new Pen(borderColor);
-        var rect = new Rectangle(0, 0, e.AffectedBounds.Width - 1, e.AffectedBounds.Height - 1);
-        using var gp = RoundedRect(rect, 8);
-        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        e.Graphics.DrawPath(pen, gp);
-    }
-
-    private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle r, int radius)
-    {
-        var path = new System.Drawing.Drawing2D.GraphicsPath();
-        int d = radius * 2;
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
-    }
+    protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e) { /* DWM */ }
 }
 
-internal sealed class ThemedColorTable : ProfessionalColorTable
+internal sealed class Win11ColorTable : ProfessionalColorTable
 {
     private readonly Color _bg;
-    private readonly Color _hover;
-
-    public ThemedColorTable(Color bg, Color hover) { _bg = bg; _hover = hover; }
-
+    public Win11ColorTable(Color bg) { _bg = bg; }
     public override Color MenuBorder => Color.Transparent;
     public override Color MenuItemBorder => Color.Transparent;
-    public override Color MenuItemSelected => _hover;
-    public override Color MenuStripGradientBegin => _bg;
-    public override Color MenuStripGradientEnd => _bg;
     public override Color ToolStripDropDownBackground => _bg;
     public override Color ImageMarginGradientBegin => _bg;
     public override Color ImageMarginGradientMiddle => _bg;

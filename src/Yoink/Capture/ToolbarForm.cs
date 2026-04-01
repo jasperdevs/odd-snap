@@ -83,13 +83,18 @@ public sealed class ToolbarForm : Form
         IntPtr hBmp = _surface!.GetHbitmap(Color.Empty);
         IntPtr hOld = Native.User32.SelectObject(hdcMem, hBmp);
 
-        Native.User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPt, ref size,
-            hdcMem, ref srcPt, 0, ref blend, 2 /* ULW_ALPHA */);
-
-        Native.User32.SelectObject(hdcMem, hOld);
-        Native.User32.DeleteObject(hBmp);
-        Native.User32.DeleteDC(hdcMem);
-        Native.User32.ReleaseDC(IntPtr.Zero, hdcScreen);
+        try
+        {
+            Native.User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPt, ref size,
+                hdcMem, ref srcPt, 0, ref blend, 2 /* ULW_ALPHA */);
+        }
+        finally
+        {
+            Native.User32.SelectObject(hdcMem, hOld);
+            Native.User32.DeleteObject(hBmp);
+            Native.User32.DeleteDC(hdcMem);
+            Native.User32.ReleaseDC(IntPtr.Zero, hdcScreen);
+        }
     }
 
     protected override void Dispose(bool disposing)

@@ -193,4 +193,11 @@ internal static partial class User32
     [LibraryImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool DeleteDC(IntPtr hdc);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ReleaseCapture();
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
 }

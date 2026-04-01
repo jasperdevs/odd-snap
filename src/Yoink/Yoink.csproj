@@ -12,11 +12,16 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>yoink.ico</ApplicationIcon>
-    <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
     <Version>0.4.2</Version>
     <Authors>Yoink Contributors</Authors>
     <Description>Fast screenshot and color picker for Windows</Description>
     <RepositoryUrl>https://github.com/yoink-tool/yoink</RepositoryUrl>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -59,11 +64,19 @@
     <PackageReference Include="AnimatedGif" Version="1.0.5" />
     <PackageReference Include="FluentFTP" Version="52.1.0" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.21.0" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="SSH.NET" Version="2024.2.0" />
     <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="ZXing.Net" Version="0.16.10" />
     <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.10" />
   </ItemGroup>
+
+  <Target Name="RemovePublishImportLibraries" AfterTargets="Publish">
+    <ItemGroup>
+      <PublishImportLibraries Include="$(PublishDir)**\*.lib" />
+    </ItemGroup>
+    <Delete Files="@(PublishImportLibraries)" TreatErrorsAsWarnings="true" />
+  </Target>
 
 </Project>

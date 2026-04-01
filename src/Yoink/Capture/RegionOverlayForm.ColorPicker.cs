@@ -104,28 +104,10 @@ public sealed partial class RegionOverlayForm
             SetMagPx(bx - 1, by + i, w); SetMagPx(bx + Cell, by + i, w);
         }
 
-        // Color swatch
-        int swY = PPad + Mag + 8;
-        int swArgb = _pickedColor.ToArgb();
-        for (int py = 0; py < 26; py++)
-        {
-            int row = (swY + py) * PW + PPad;
-            for (int px = 0; px < 26; px++)
-                _magPixels[row + px] = swArgb;
-        }
-
         var bitsLock = _magBitmap.LockBits(new Rectangle(0, 0, PW, PH),
             ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
         Marshal.Copy(_magPixels, 0, bitsLock.Scan0, _magPixels.Length);
         _magBitmap.UnlockBits(bitsLock);
-
-        // Draw the text layer AFTER copying the pixel buffer, every frame.
-        // The buffer copy overwrites the lower info area, so conditional redraw caused blank panels.
-        int ty = PPad + Mag + 8;
-        using var clearBrush = new SolidBrush(Color.FromArgb(255, 32, 32, 32));
-        _magGfx.FillRectangle(clearBrush, PPad + 30, ty - 4, PW - PPad - 32, InfoH);
-        _magGfx.DrawString(_hexStr, _hexFont, Brushes.White, PPad + 32, ty - 2);
-        _magGfx.DrawString(_rgbStr, _rgbFont, _mutedBrush, PPad + 32, ty + 15);
     }
 
     // Overlay no longer paints the color picker or its crosshair.
@@ -146,9 +128,11 @@ public sealed partial class RegionOverlayForm
 
     private (int, int) MagPos(Point c)
     {
+        // Form is larger than the bitmap now (circle + pill below)
+        int formW = 152, formH = 196;
         int px = c.X + MagOff, py = c.Y + MagOff;
-        if (px + PW > ClientSize.Width) px = c.X - MagOff - PW;
-        if (py + PH > ClientSize.Height) py = c.Y - MagOff - PH;
+        if (px + formW > ClientSize.Width) px = c.X - MagOff - formW;
+        if (py + formH > ClientSize.Height) py = c.Y - MagOff - formH;
         return (Math.Max(4, px), Math.Max(4, py));
     }
 }

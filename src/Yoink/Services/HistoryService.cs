@@ -53,13 +53,18 @@ public sealed class HistoryService
     private List<HistoryEntry> _entries = new();
     private List<OcrHistoryEntry> _ocrEntries = new();
     private List<ColorHistoryEntry> _colorEntries = new();
+    private IReadOnlyList<HistoryEntry>? _imageEntries;
+    private IReadOnlyList<HistoryEntry>? _gifEntries;
+    private IReadOnlyList<HistoryEntry>? _stickerEntries;
 
     public IReadOnlyList<HistoryEntry> Entries => _entries;
-    public IReadOnlyList<HistoryEntry> ImageEntries => _entries.Where(e => e.Kind == HistoryKind.Image).ToList();
-    public IReadOnlyList<HistoryEntry> GifEntries => _entries.Where(e => e.Kind == HistoryKind.Gif).ToList();
-    public IReadOnlyList<HistoryEntry> StickerEntries => _entries.Where(e => e.Kind == HistoryKind.Sticker).ToList();
+    public IReadOnlyList<HistoryEntry> ImageEntries => _imageEntries ??= _entries.Where(e => e.Kind == HistoryKind.Image).ToList();
+    public IReadOnlyList<HistoryEntry> GifEntries => _gifEntries ??= _entries.Where(e => e.Kind == HistoryKind.Gif).ToList();
+    public IReadOnlyList<HistoryEntry> StickerEntries => _stickerEntries ??= _entries.Where(e => e.Kind == HistoryKind.Sticker).ToList();
     public IReadOnlyList<OcrHistoryEntry> OcrEntries => _ocrEntries;
     public IReadOnlyList<ColorHistoryEntry> ColorEntries => _colorEntries;
+
+    private void InvalidateFilteredCache() { _imageEntries = null; _gifEntries = null; _stickerEntries = null; }
 
     public void Load()
     {
@@ -84,6 +89,7 @@ public sealed class HistoryService
                 }
             }
             catch { _entries = new(); }
+            InvalidateFilteredCache();
         }
 
         if (File.Exists(OcrIndexPath))
@@ -151,6 +157,7 @@ public sealed class HistoryService
         if (changed)
         {
             _entries = _entries.OrderByDescending(e => e.CapturedAt).ToList();
+            InvalidateFilteredCache();
             SaveIndex();
         }
     }
@@ -173,6 +180,7 @@ public sealed class HistoryService
             Kind = HistoryKind.Gif
         };
         _entries.Insert(0, entry);
+        InvalidateFilteredCache();
         SaveIndex();
         return entry;
     }
@@ -197,6 +205,7 @@ public sealed class HistoryService
             UploadProvider = providerName
         };
         _entries.Insert(0, entry);
+        InvalidateFilteredCache();
         SaveIndex();
         return entry;
     }
@@ -218,6 +227,7 @@ public sealed class HistoryService
             Kind = HistoryKind.Image
         };
         _entries.Insert(0, entry);
+        InvalidateFilteredCache();
         SaveIndex();
         return entry;
     }
@@ -233,6 +243,7 @@ public sealed class HistoryService
     public void DeleteEntry(HistoryEntry entry)
     {
         _entries.Remove(entry);
+        InvalidateFilteredCache();
         try { File.Delete(entry.FilePath); } catch { }
         SaveIndex();
     }
@@ -265,6 +276,7 @@ public sealed class HistoryService
             try { File.Delete(e.FilePath); } catch { }
             _entries.Remove(e);
         }
+        InvalidateFilteredCache();
         SaveIndex();
     }
 
@@ -276,6 +288,7 @@ public sealed class HistoryService
             try { File.Delete(e.FilePath); } catch { }
             _entries.Remove(e);
         }
+        InvalidateFilteredCache();
         SaveIndex();
     }
 
@@ -296,6 +309,7 @@ public sealed class HistoryService
         foreach (var e in _entries)
             try { File.Delete(e.FilePath); } catch { }
         _entries.Clear();
+        InvalidateFilteredCache();
         SaveIndex();
     }
 
@@ -307,6 +321,7 @@ public sealed class HistoryService
             try { File.Delete(e.FilePath); } catch { }
             _entries.Remove(e);
         }
+        InvalidateFilteredCache();
         SaveIndex();
     }
 
@@ -329,6 +344,7 @@ public sealed class HistoryService
             _entries.Remove(e);
             try { File.Delete(e.FilePath); } catch { }
         }
+        InvalidateFilteredCache();
         _ocrEntries.RemoveAll(e => e.CapturedAt < cutoff);
         _colorEntries.RemoveAll(e => e.CapturedAt < cutoff);
         SaveIndex();
@@ -337,11 +353,25 @@ public sealed class HistoryService
     }
 
     public void SaveIndex() =>
-        File.WriteAllText(IndexPath, JsonSerializer.Serialize(_entries, JsonOpts));
+        SafeWriteAllText(IndexPath, JsonSerializer.Serialize(_entries, JsonOpts));
 
     private void SaveOcrIndex() =>
-        File.WriteAllText(OcrIndexPath, JsonSerializer.Serialize(_ocrEntries, JsonOpts));
+        SafeWriteAllText(OcrIndexPath, JsonSerializer.Serialize(_ocrEntries, JsonOpts));
 
     private void SaveColorIndex() =>
-        File.WriteAllText(ColorIndexPath, JsonSerializer.Serialize(_colorEntries, JsonOpts));
+        SafeWriteAllText(ColorIndexPath, JsonSerializer.Serialize(_colorEntries, JsonOpts));
+
+    private static void SafeWriteAllText(string path, string contents)
+    {
+        var tmpPath = path + ".tmp";
+        try
+        {
+            File.WriteAllText(tmpPath, contents);
+            File.Move(tmpPath, path, overwrite: true);
+        }
+        catch
+        {
+            File.WriteAllText(path, contents);
+        }
+    }
 }

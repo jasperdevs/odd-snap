@@ -20,6 +20,9 @@ public sealed class DetectedWindow
 /// </summary>
 public static class WindowDetector
 {
+    private static readonly HashSet<IntPtr> IgnoredHandles = new();
+    private static readonly object IgnoredHandleLock = new();
+
     /// <summary>
     /// Pre-enumerate all visible windows and (optionally) their child controls.
     /// Run on a background thread before/during overlay display.
@@ -197,16 +200,15 @@ public static class WindowDetector
         return Rectangle.Empty;
     }
 
-    /// <summary>
-    /// Legacy single-point lookup (fallback when pre-enumeration is disabled).
-    /// Only detects top-level windows.
-    /// </summary>
-    public static Rectangle GetWindowRectAtPoint(Point screenPoint, Rectangle virtualBounds)
+    public static void RegisterIgnoredWindow(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) return;
         lock (IgnoredHandleLock)
             IgnoredHandles.Add(hwnd);
     }
+
+    public static Rectangle GetWindowRectAtPoint(Point screenPoint, Rectangle virtualBounds)
+        => GetTopLevelWindowRectAtPoint(screenPoint, virtualBounds);
 
     public static void UnregisterIgnoredWindow(IntPtr hwnd)
     {

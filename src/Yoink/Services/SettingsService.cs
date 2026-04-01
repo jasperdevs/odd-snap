@@ -16,7 +16,7 @@ public sealed class SettingsService
         WriteIndented = true
     };
 
-    public AppSettings Settings { get; private set; } = new();
+    public AppSettings Settings { get; internal set; } = new();
 
     public void Load()
     {
@@ -53,6 +53,15 @@ public sealed class SettingsService
     {
         Directory.CreateDirectory(SettingsDir);
         var json = JsonSerializer.Serialize(Settings, JsonOptions);
-        File.WriteAllText(SettingsPath, json);
+        var tmpPath = SettingsPath + ".tmp";
+        try
+        {
+            File.WriteAllText(tmpPath, json);
+            File.Move(tmpPath, SettingsPath, overwrite: true);
+        }
+        catch
+        {
+            File.WriteAllText(SettingsPath, json);
+        }
     }
 }

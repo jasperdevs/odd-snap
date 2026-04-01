@@ -25,6 +25,9 @@ bld/
 *.sln.iml
 .vscode/
 
+## Release artifacts
+release-hdr/
+
 ## OS
 Thumbs.db
 .DS_Store

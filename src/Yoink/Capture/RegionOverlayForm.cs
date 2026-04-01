@@ -64,13 +64,15 @@ public sealed partial class RegionOverlayForm : Form
     private string _rgbStr = "0, 0, 0";
     private readonly System.Windows.Forms.Timer _pickerTimer;
 
-    private const int Grid = 9, Cell = 14, Mag = Grid * Cell;
-    private const int InfoH = 48, PPad = 10;
-    private const int PW = Mag + PPad * 2, PH = Mag + InfoH + PPad * 2;
-    private const int MagOff = 12, MagMargin = 4;
+    private const int Grid = 11, Cell = 14, Mag = Grid * Cell;
+    private const int InfoH = 0, PPad = 0;
+    private const int PW = Mag, PH = Mag;
+    private const int MagOff = 16, MagMargin = 4;
 
     // Typed undo stack: all annotations in creation order
     private readonly List<Annotation> _undoStack = new();
+    private Bitmap? _committedAnnotationsBitmap;
+    private bool _committedAnnotationsDirty = true;
 
     // Draw / Blur / Arrow state
     private List<Point>? _currentStroke;
@@ -115,6 +117,17 @@ public sealed partial class RegionOverlayForm : Form
     private bool _colorPickerOpen;
     private Rectangle _colorPickerRect;
 
+    // Select tool state
+    private int _selectedAnnotationIndex = -1;
+    private bool _isSelectDragging;
+    private bool _isSelectResizing;
+    private int _selectResizeHandle = -1; // 0=TL,1=TR,2=BL,3=BR
+    private Point _selectDragStart;
+    private Point _selectDragOffset;
+    private Rectangle _selectHandleBounds; // cached bounds for handle hit-testing
+    private const int SelectHandleSize = 8;
+    private const int SelectHandleHitSize = 14; // larger hit area for easier clicking
+
     // Smart eraser state
     private Point _eraserStart;
     private Color _eraserColor;
@@ -144,6 +157,9 @@ public sealed partial class RegionOverlayForm : Form
     private Point _textResizeStart;
     private bool _textDragging;
     private Point _textDragOffset;
+    private RectangleF _activeTextRectCache;
+    private readonly RectangleF[] _activeTextHandleCache = new RectangleF[4];
+    private bool _activeTextLayoutDirty = true;
 
     // Font picker popup
     private bool _fontPickerOpen;
@@ -431,8 +447,6 @@ public sealed partial class RegionOverlayForm : Form
         _toolbarForm.Show(this);
         WindowDetector.RegisterIgnoredWindow(_toolbarForm.Handle);
         _toolbarForm.UpdateSurface();
-
-        // Ensure overlay keeps keyboard focus after showing toolbar
         Focus();
         Invalidate();
     }
@@ -490,6 +504,7 @@ public sealed partial class RegionOverlayForm : Form
             {
                 if (_textBox == null) return;
                 _textBuffer = _textBox.Text;
+                InvalidateActiveTextLayout();
                 Invalidate();
             };
             Controls.Add(_textBox);
@@ -513,6 +528,11 @@ public sealed partial class RegionOverlayForm : Form
 
     private void UpdateTextBoxStyle() { }
     private void SyncTextBoxSize() { }
+
+    private void InvalidateActiveTextLayout()
+    {
+        _activeTextLayoutDirty = true;
+    }
 
     private void ShowEmojiSearchBox()
     {
@@ -681,6 +701,187 @@ public sealed partial class RegionOverlayForm : Form
         return p;
     }
 
+    private void MarkCommittedAnnotationsDirty()
+    {
+        _committedAnnotationsDirty = true;
+    }
+
+    private void AddAnnotation(Annotation annotation)
+    {
+        _undoStack.Add(annotation);
+        MarkCommittedAnnotationsDirty();
+    }
+
+    /// <summary>Returns the bounding rectangle for any annotation type, for hit-testing.</summary>
+    private static Rectangle GetAnnotationBounds(Annotation a) => a switch
+    {
+        ArrowAnnotation arr => RectFromPoints(arr.From, arr.To, 8),
+        CurvedArrowAnnotation ca => BoundsOfPoints(ca.Points, 8),
+        LineAnnotation ln => RectFromPoints(ln.From, ln.To, 6),
+        RulerAnnotation ru => RectFromPoints(ru.From, ru.To, 10),
+        DrawStroke ds => BoundsOfPoints(ds.Points, 4),
+        BlurRect br => br.Rect,
+        HighlightAnnotation hl => hl.Rect,
+        RectShapeAnnotation rs => rs.Rect,
+        CircleShapeAnnotation cs => cs.Rect,
+        EraserFill ef => ef.Rect,
+        StepNumberAnnotation sn => new Rectangle(sn.Pos.X - 14, sn.Pos.Y - 14, 28, 28),
+        EmojiAnnotation em => new Rectangle(em.Pos.X, em.Pos.Y, (int)em.Size, (int)em.Size),
+        MagnifierAnnotation mg => new Rectangle(mg.Pos.X - 40, mg.Pos.Y - 40, 80, 80),
+        TextAnnotation ta => GetTextBounds(ta),
+        _ => Rectangle.Empty
+    };
+
+    private static Rectangle RectFromPoints(Point a, Point b, int pad)
+    {
+        int x = Math.Min(a.X, b.X) - pad;
+        int y = Math.Min(a.Y, b.Y) - pad;
+        int w = Math.Abs(b.X - a.X) + pad * 2;
+        int h = Math.Abs(b.Y - a.Y) + pad * 2;
+        return new Rectangle(x, y, w, h);
+    }
+
+    private static Rectangle BoundsOfPoints(List<Point> pts, int pad)
+    {
+        if (pts.Count == 0) return Rectangle.Empty;
+        int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+        foreach (var p in pts) { minX = Math.Min(minX, p.X); minY = Math.Min(minY, p.Y); maxX = Math.Max(maxX, p.X); maxY = Math.Max(maxY, p.Y); }
+        return new Rectangle(minX - pad, minY - pad, maxX - minX + pad * 2, maxY - minY + pad * 2);
+    }
+
+    private static Rectangle GetTextBounds(TextAnnotation ta)
+    {
+        using var font = new Font(ta.FontFamily, ta.FontSize,
+            (ta.Bold ? FontStyle.Bold : 0) | (ta.Italic ? FontStyle.Italic : 0));
+        var sz = System.Windows.Forms.TextRenderer.MeasureText(ta.Text, font);
+        return new Rectangle(ta.Pos.X, ta.Pos.Y, sz.Width + 10, sz.Height + 6);
+    }
+
+    /// <summary>Hit-tests all annotations in reverse order (top-most first). Returns index or -1.</summary>
+    private int HitTestAnnotation(Point p)
+    {
+        for (int i = _undoStack.Count - 1; i >= 0; i--)
+        {
+            var bounds = GetAnnotationBounds(_undoStack[i]);
+            if (bounds.Contains(p))
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Moves an annotation by a delta. Returns a new annotation with updated position.</summary>
+    private static Annotation MoveAnnotation(Annotation a, int dx, int dy) => a switch
+    {
+        ArrowAnnotation arr => arr with { From = Offset(arr.From, dx, dy), To = Offset(arr.To, dx, dy) },
+        CurvedArrowAnnotation ca => ca with { Points = ca.Points.Select(p => Offset(p, dx, dy)).ToList() },
+        LineAnnotation ln => ln with { From = Offset(ln.From, dx, dy), To = Offset(ln.To, dx, dy) },
+        RulerAnnotation ru => ru with { From = Offset(ru.From, dx, dy), To = Offset(ru.To, dx, dy) },
+        DrawStroke ds => ds with { Points = ds.Points.Select(p => Offset(p, dx, dy)).ToList() },
+        BlurRect br => br with { Rect = OffsetRect(br.Rect, dx, dy) },
+        HighlightAnnotation hl => hl with { Rect = OffsetRect(hl.Rect, dx, dy) },
+        RectShapeAnnotation rs => rs with { Rect = OffsetRect(rs.Rect, dx, dy) },
+        CircleShapeAnnotation cs => cs with { Rect = OffsetRect(cs.Rect, dx, dy) },
+        EraserFill ef => ef with { Rect = OffsetRect(ef.Rect, dx, dy) },
+        StepNumberAnnotation sn => sn with { Pos = Offset(sn.Pos, dx, dy) },
+        EmojiAnnotation em => em with { Pos = Offset(em.Pos, dx, dy) },
+        MagnifierAnnotation mg => mg with { Pos = Offset(mg.Pos, dx, dy) },
+        TextAnnotation ta => ta with { Pos = Offset(ta.Pos, dx, dy) },
+        _ => a
+    };
+
+    private static Point Offset(Point p, int dx, int dy) => new(p.X + dx, p.Y + dy);
+    private static Rectangle OffsetRect(Rectangle r, int dx, int dy) => new(r.X + dx, r.Y + dy, r.Width, r.Height);
+
+    /// <summary>Returns the handle index (0=TL,1=TR,2=BL,3=BR) at point, or -1.</summary>
+    private int GetSelectHandle(Point p)
+    {
+        if (_selectedAnnotationIndex < 0 || _selectedAnnotationIndex >= _undoStack.Count)
+            return -1;
+        var bounds = GetAnnotationBounds(_undoStack[_selectedAnnotationIndex]);
+        var selRect = Rectangle.Inflate(bounds, 4, 4);
+        var corners = new[] {
+            new Point(selRect.X, selRect.Y),
+            new Point(selRect.Right, selRect.Y),
+            new Point(selRect.X, selRect.Bottom),
+            new Point(selRect.Right, selRect.Bottom),
+        };
+        for (int i = 0; i < 4; i++)
+        {
+            var hr = new Rectangle(corners[i].X - SelectHandleHitSize / 2, corners[i].Y - SelectHandleHitSize / 2,
+                SelectHandleHitSize, SelectHandleHitSize);
+            if (hr.Contains(p)) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>Scales an annotation by adjusting its bounds from a corner handle drag.</summary>
+    private static Annotation ScaleAnnotation(Annotation a, Rectangle oldBounds, Rectangle newBounds)
+    {
+        if (oldBounds.Width <= 0 || oldBounds.Height <= 0) return a;
+        double sx = (double)newBounds.Width / oldBounds.Width;
+        double sy = (double)newBounds.Height / oldBounds.Height;
+        int ox = newBounds.X - (int)(oldBounds.X * sx);
+        int oy = newBounds.Y - (int)(oldBounds.Y * sy);
+
+        Point ScalePt(Point p) => new((int)(p.X * sx) + ox, (int)(p.Y * sy) + oy);
+        Rectangle ScaleRect(Rectangle r) => new((int)(r.X * sx) + ox, (int)(r.Y * sy) + oy,
+            Math.Max(1, (int)(r.Width * sx)), Math.Max(1, (int)(r.Height * sy)));
+
+        return a switch
+        {
+            ArrowAnnotation arr => arr with { From = ScalePt(arr.From), To = ScalePt(arr.To) },
+            LineAnnotation ln => ln with { From = ScalePt(ln.From), To = ScalePt(ln.To) },
+            RulerAnnotation ru => ru with { From = ScalePt(ru.From), To = ScalePt(ru.To) },
+            BlurRect br => br with { Rect = ScaleRect(br.Rect) },
+            HighlightAnnotation hl => hl with { Rect = ScaleRect(hl.Rect) },
+            RectShapeAnnotation rs => rs with { Rect = ScaleRect(rs.Rect) },
+            CircleShapeAnnotation cs => cs with { Rect = ScaleRect(cs.Rect) },
+            EraserFill ef => ef with { Rect = ScaleRect(ef.Rect) },
+            EmojiAnnotation em => em with { Pos = ScalePt(em.Pos), Size = Math.Max(8f, em.Size * (float)Math.Max(sx, sy)) },
+            TextAnnotation ta => ta with { Pos = ScalePt(ta.Pos), FontSize = Math.Clamp(ta.FontSize * (float)Math.Max(sx, sy), 10f, 120f) },
+            StepNumberAnnotation sn => sn with { Pos = ScalePt(sn.Pos) },
+            DrawStroke ds => ds with { Points = ds.Points.Select(p => ScalePt(p)).ToList() },
+            CurvedArrowAnnotation ca => ca with { Points = ca.Points.Select(p => ScalePt(p)).ToList() },
+            _ => a
+        };
+    }
+
+    private bool RemoveAnnotation(Annotation annotation)
+    {
+        bool removed = _undoStack.Remove(annotation);
+        if (removed)
+            MarkCommittedAnnotationsDirty();
+        return removed;
+    }
+
+    private Annotation RemoveLastAnnotation()
+    {
+        var last = _undoStack[^1];
+        _undoStack.RemoveAt(_undoStack.Count - 1);
+        MarkCommittedAnnotationsDirty();
+        return last;
+    }
+
+    private Bitmap GetCommittedAnnotationsBitmap()
+    {
+        if (!_committedAnnotationsDirty && _committedAnnotationsBitmap is not null)
+            return _committedAnnotationsBitmap;
+
+        _committedAnnotationsBitmap?.Dispose();
+        var bitmap = new Bitmap(_bmpW, _bmpH, PixelFormat.Format32bppPArgb);
+        using (var g = Graphics.FromImage(bitmap))
+        {
+            g.CompositingMode = CompositingMode.SourceCopy;
+            g.DrawImageUnscaled(_screenshot, 0, 0);
+            g.CompositingMode = CompositingMode.SourceOver;
+            RenderAnnotationsTo(g);
+        }
+
+        _committedAnnotationsBitmap = bitmap;
+        _committedAnnotationsDirty = false;
+        return bitmap;
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -695,10 +896,15 @@ public sealed partial class RegionOverlayForm : Form
             _pickerTimer.Dispose();
             _magGfx.Dispose();
             _magBitmap.Dispose();
+            _committedAnnotationsBitmap?.Dispose();
             _hexFont.Dispose();
             _rgbFont.Dispose();
             _mutedBrush.Dispose();
             _crossPen.Dispose();
+            foreach (var f in _fontCache.Values) f?.Dispose();
+            _fontCache.Clear();
+            foreach (var f in _annotationFontCache.Values) f?.Dispose();
+            _annotationFontCache.Clear();
         }
         base.Dispose(disposing);
     }

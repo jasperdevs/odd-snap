@@ -22,14 +22,12 @@ public sealed partial class RegionOverlayForm
         g.PixelOffsetMode = PixelOffsetMode.None;
         g.SmoothingMode = SmoothingMode.None;
 
-        // Direct screenshot blit
+        // Blit the cached screenshot + committed annotations layer.
         var clip = e.ClipRectangle;
+        var committed = GetCommittedAnnotationsBitmap();
         g.CompositingMode = CompositingMode.SourceCopy;
-        g.DrawImage(_screenshot, clip, clip, GraphicsUnit.Pixel);
+        g.DrawImage(committed, clip, clip, GraphicsUnit.Pixel);
         g.CompositingMode = CompositingMode.SourceOver;
-
-        // Draw committed annotations directly on top
-        RenderAnnotationsTo(g);
 
         bool isOcr = _mode == CaptureMode.Ocr;
         bool isScan = _mode == CaptureMode.Scan;
@@ -53,10 +51,52 @@ public sealed partial class RegionOverlayForm
             g.FillRectangle(dimOverlay, clip);
         }
 
+        // Toolbar backdrop fade — pre-cached brushes, zero allocation per frame
+        if (_toolbarRect.Width > 0)
+        {
+            int fadeEnd = _toolbarRect.Bottom + 50;
+            int w = ClientSize.Width;
+            if (fadeEnd > 0 && fadeEnd < ClientSize.Height)
+            {
+                EnsureFadeBrushes();
+                int bands = _fadeBrushes!.Length;
+                int bandH = Math.Max(2, fadeEnd / bands);
+                for (int i = 0; i < bands; i++)
+                {
+                    if (_fadeBrushes[i] == null) break;
+                    g.FillRectangle(_fadeBrushes[i]!, 0, i * bandH, w, bandH);
+                }
+            }
+        }
+
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         // Live tool previews (active drawing in progress)
         PaintAnnotations(g);
+
+        // Select tool: draw selection highlight and handles
+        if (_mode == CaptureMode.Select && _selectedAnnotationIndex >= 0 && _selectedAnnotationIndex < _undoStack.Count)
+        {
+            var bounds = GetAnnotationBounds(_undoStack[_selectedAnnotationIndex]);
+            if (bounds.Width > 0 && bounds.Height > 0)
+            {
+                var selRect = Rectangle.Inflate(bounds, 4, 4);
+                using var selPen = new Pen(Color.FromArgb(200, 100, 149, 237), 1.5f) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash };
+                g.DrawRectangle(selPen, selRect);
+
+                // Corner handles
+                int hs = 6;
+                using var hBrush = new SolidBrush(Color.White);
+                using var hPen = new Pen(Color.FromArgb(200, 100, 149, 237), 1f);
+                var corners = new[] {
+                    new Rectangle(selRect.X - hs / 2, selRect.Y - hs / 2, hs, hs),
+                    new Rectangle(selRect.Right - hs / 2, selRect.Y - hs / 2, hs, hs),
+                    new Rectangle(selRect.X - hs / 2, selRect.Bottom - hs / 2, hs, hs),
+                    new Rectangle(selRect.Right - hs / 2, selRect.Bottom - hs / 2, hs, hs),
+                };
+                foreach (var c in corners) { g.FillRectangle(hBrush, c); g.DrawRectangle(hPen, c); }
+            }
+        }
 
         if (_mode == CaptureMode.ColorPicker)
             return; // magnifier is its own layered window, overlay stays static
@@ -298,8 +338,7 @@ public sealed partial class RegionOverlayForm
         g.FillPath(brush, path);
     }
 
-    // Annotations are now rendered into the cached base bitmap.
-    // This method is kept for the active-tool previews (live drawing).
+    // This method only renders live previews for the in-progress tool state.
     private void PaintAnnotations(Graphics g)
     {
 
@@ -384,7 +423,7 @@ public sealed partial class RegionOverlayForm
             var fontStyle = FontStyle.Regular;
             if (_textBold) fontStyle |= FontStyle.Bold;
             if (_textItalic) fontStyle |= FontStyle.Italic;
-            using var font = new Font(_textFontFamily, _textFontSize, fontStyle);
+            var font = GetAnnotationFont(_textFontFamily, _textFontSize, fontStyle);
             string display = _textBuffer.Length > 0 ? _textBuffer : "Type here...";
             var textSize = g.MeasureString(display, font);
 
@@ -450,11 +489,7 @@ public sealed partial class RegionOverlayForm
         var style = FontStyle.Regular;
         if (bold) style |= FontStyle.Bold;
         if (italic) style |= FontStyle.Italic;
-        Font font;
-        try { font = new Font(fontFamily, fontSize, style); }
-        catch { font = new Font("Segoe UI", fontSize, style); }
-
-        using (font)
+        var font = GetAnnotationFont(fontFamily, fontSize, style);
         {
             // Shadow: draw text offset in dark color at multiple offsets for soft effect
             if (shadow)
@@ -496,7 +531,7 @@ public sealed partial class RegionOverlayForm
         using var borderPen = new Pen(Color.White, 2f);
         g.DrawEllipse(borderPen, pos.X - radius, pos.Y - radius, radius * 2, radius * 2);
         // Number
-        using var font = new Font("Segoe UI", 12f, FontStyle.Bold);
+        var font = GetAnnotationFont("Segoe UI", 12f, FontStyle.Bold);
         string text = num.ToString();
         var sz = g.MeasureString(text, font);
         using var textBrush = new SolidBrush(Color.White);
@@ -605,7 +640,7 @@ public sealed partial class RegionOverlayForm
         string searchDisplay = _fontSearch.Length > 0 ? _fontSearch : "Search fonts...";
         using var searchBrush = new SolidBrush(_fontSearch.Length > 0
             ? Color.FromArgb(230, 255, 255, 255) : Color.FromArgb(70, 255, 255, 255));
-        using var searchFont = new Font("Segoe UI", 10f);
+        var searchFont = GetAnnotationFont("Segoe UI", 10f, FontStyle.Regular);
         g.DrawString(searchDisplay, searchFont, searchBrush, searchRect.X + 8, searchRect.Y + 5);
         if (_fontSearch.Length > 0)
         {
@@ -724,7 +759,7 @@ public sealed partial class RegionOverlayForm
             g.DrawPath(focusBorder, searchPath);
         }
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-        using var searchFont = new Font("Segoe UI", 10f);
+        var searchFont = GetAnnotationFont("Segoe UI", 10f, FontStyle.Regular);
         string searchDisplay = _emojiSearch.Length > 0 ? _emojiSearch : "Search emoji...";
         using var searchBrush = new SolidBrush(_emojiSearch.Length > 0
             ? Color.FromArgb(230, 255, 255, 255)
@@ -739,7 +774,7 @@ public sealed partial class RegionOverlayForm
             g.DrawLine(cursorPen, cursorX, searchRect.Y + 7, cursorX, searchRect.Bottom - 7);
         }
 
-        using var searchHintFont = new Font("Segoe UI", 8f);
+        var searchHintFont = GetAnnotationFont("Segoe UI", 8f, FontStyle.Regular);
         using var searchHintBrush = new SolidBrush(Color.FromArgb(70, 255, 255, 255));
         g.DrawString("Type to search", searchHintFont, searchHintBrush, searchRect.Right - 78, searchRect.Y + 7);
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
@@ -903,7 +938,7 @@ public sealed partial class RegionOverlayForm
         {
             string label = labels[_hoveredButton];
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            using var tipFont = new Font("Segoe UI Semibold", 8.25f, FontStyle.Regular);
+            var tipFont = GetAnnotationFont("Segoe UI Semibold", 8.25f, FontStyle.Regular);
             var sz = g.MeasureString(label, tipFont);
             var btnRect = _toolbarButtons[_hoveredButton];
             float tx = btnRect.X + btnRect.Width / 2f - sz.Width / 2f;
@@ -938,7 +973,7 @@ public sealed partial class RegionOverlayForm
                 using var badgeBg = new SolidBrush(Color.FromArgb(235, 24, 24, 24));
                 using var badgeBorder = new Pen(Color.FromArgb(30, 255, 255, 255), 1f);
                 using var badgeText = new SolidBrush(Color.FromArgb(185, 255, 255, 255));
-                using var badgeFont = new Font("Segoe UI", 6.5f, FontStyle.Bold);
+                var badgeFont = GetAnnotationFont("Segoe UI", 6.5f, FontStyle.Bold);
                 g.FillEllipse(badgeBg, badgeRect);
                 g.DrawEllipse(badgeBorder, badgeRect);
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
@@ -963,7 +998,34 @@ public sealed partial class RegionOverlayForm
         if (_fontPickerOpen) PaintFontPicker(g);
     }
 
-    // PaintTopFade removed - always-on dim provides sufficient contrast for toolbar
+    // Pre-cached annotation fonts (allocated once, reused every frame)
+    private static readonly Dictionary<(string, float, FontStyle), Font> _annotationFontCache = new();
+    private static Font GetAnnotationFont(string family, float size, FontStyle style)
+    {
+        var key = (family, size, style);
+        if (_annotationFontCache.TryGetValue(key, out var cached))
+            return cached;
+        Font font;
+        try { font = new Font(family, size, style); }
+        catch { font = new Font("Segoe UI", size, style); }
+        _annotationFontCache[key] = font;
+        return font;
+    }
+
+    // Pre-cached fade brushes (allocated once, reused every frame)
+    private static SolidBrush?[]? _fadeBrushes;
+    private static void EnsureFadeBrushes()
+    {
+        if (_fadeBrushes != null) return;
+        const int bands = 30;
+        _fadeBrushes = new SolidBrush?[bands];
+        for (int i = 0; i < bands; i++)
+        {
+            float t = (float)i / bands;
+            int alpha = Math.Min(140, (int)((1f - t * t) * 140f));
+            _fadeBrushes[i] = alpha >= 1 ? new SolidBrush(Color.FromArgb(alpha, 0, 0, 0)) : null;
+        }
+    }
 
     // Fixed button glyphs (not in ToolDef)
     private static readonly Dictionary<string, char> FixedGlyphs = new()
@@ -994,6 +1056,7 @@ public sealed partial class RegionOverlayForm
             ? _iconFontCollection.Families[0]
             : new FontFamily("Segoe UI");
         _iconFontCached = new Font(family, 14f, FontStyle.Regular, GraphicsUnit.Point);
+        _iconFontData = null; // Free the byte array — font is loaded, data no longer needed
         return _iconFontCached;
     }
 
@@ -1090,7 +1153,7 @@ public sealed partial class RegionOverlayForm
             : isScan ? $"SCAN  {rect.Width} x {rect.Height}"
             : $"{rect.Width} x {rect.Height}";
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        using var font = new Font("Segoe UI", 10f);
+        var font = GetAnnotationFont("Segoe UI", 10f, FontStyle.Regular);
         var sz = g.MeasureString(text, font);
         float lx = rect.X, ly = rect.Bottom + 8;
         if (ly + sz.Height > ClientSize.Height) ly = rect.Y - sz.Height - 8;
@@ -1116,10 +1179,10 @@ public sealed partial class RegionOverlayForm
 
         float btnH = 26, btnPad = 3, pad = 5, sepW = 6;
 
-        using var uiFont = new Font("Segoe UI", 9f);
-        using var uiFontBold = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-        using var uiFontItalic = new Font("Segoe UI", 9.5f, FontStyle.Italic);
-        using var uiFontSmall = new Font("Segoe UI", 7.5f);
+        var uiFont = GetAnnotationFont("Segoe UI", 9f, FontStyle.Regular);
+        var uiFontBold = GetAnnotationFont("Segoe UI", 9.5f, FontStyle.Bold);
+        var uiFontItalic = GetAnnotationFont("Segoe UI", 9.5f, FontStyle.Italic);
+        var uiFontSmall = GetAnnotationFont("Segoe UI", 7.5f, FontStyle.Regular);
 
         string fontLabel = _textFontFamily.Length > 14 ? _textFontFamily[..13] + ".." : _textFontFamily;
         var fontLabelSize = g.MeasureString(fontLabel, uiFont);
@@ -1204,7 +1267,7 @@ public sealed partial class RegionOverlayForm
                 2 => _textStrokeBtnRect, 3 => _textShadowBtnRect,
                 _ => _textFontBtnRect
             };
-            using var tipFont = new Font("Segoe UI", 8f);
+            var tipFont = GetAnnotationFont("Segoe UI", 8f, FontStyle.Regular);
             var tipSize = g.MeasureString(_textBtnTooltip, tipFont);
             float tipX = hovRect.X + hovRect.Width / 2f - tipSize.Width / 2f - 6;
             float tipY = _textToolbarRect.Y - tipSize.Height - 10;
@@ -1242,7 +1305,7 @@ public sealed partial class RegionOverlayForm
         g.FillEllipse(dotBrush, to.X - 3, to.Y - 3, 6, 6);
 
         string text = $"{(int)dist}px   {Math.Abs(dx):0}px x {Math.Abs(dy):0}px   {angle:0.#} deg";
-        using var font = new Font("Segoe UI", 10f, FontStyle.Regular);
+        var font = GetAnnotationFont("Segoe UI", 10f, FontStyle.Regular);
         var sz = g.MeasureString(text, font);
         var mid = new PointF((from.X + to.X) / 2f, (from.Y + to.Y) / 2f);
         var label = new RectangleF(mid.X - sz.Width / 2f - 8, mid.Y - sz.Height - 16, sz.Width + 16, sz.Height + 8);

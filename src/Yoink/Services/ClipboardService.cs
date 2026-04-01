@@ -33,6 +33,16 @@ public static class ClipboardService
         }
         dataObject.SetData("PNG", false, new MemoryStream(pngStream.ToArray()));
 
-        System.Windows.Forms.Clipboard.SetDataObject(dataObject, true);
+        try
+        {
+            System.Windows.Forms.Clipboard.SetDataObject(dataObject, true);
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            // Clipboard may be locked by another application - retry once
+            Thread.Sleep(50);
+            try { System.Windows.Forms.Clipboard.SetDataObject(dataObject, true); }
+            catch { }
+        }
     }
 }

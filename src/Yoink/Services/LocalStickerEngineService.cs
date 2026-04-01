@@ -20,10 +20,17 @@ public sealed record LocalStickerModelInstallResult(bool Success, string Message
 public static class LocalStickerEngineService
 {
     private sealed record ModelDef(string Id, string Label, string Description, string Url, string ReferenceUrl, int Resolution, string FileName, string InputName = "input");
+    private sealed class SessionEntry(InferenceSession session)
+    {
+        public InferenceSession Session { get; } = session;
+        public DateTime LastUsedUtc { get; set; } = DateTime.UtcNow;
+    }
 
     private static readonly HttpClient Http = CreateHttpClient();
-    private static readonly Dictionary<string, InferenceSession> Sessions = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, SessionEntry> Sessions = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Lock SessionLock = new();
+    private static readonly TimeSpan SessionIdleTimeout = TimeSpan.FromSeconds(30);
+    private static readonly System.Threading.Timer SessionCleanupTimer = new(_ => CleanupIdleSessions(), null, SessionIdleTimeout, SessionIdleTimeout);
 
     private static readonly IReadOnlyDictionary<LocalStickerEngine, ModelDef> Models = new Dictionary<LocalStickerEngine, ModelDef>
     {
@@ -64,8 +71,8 @@ public static class LocalStickerEngineService
         {
             lock (SessionLock)
             {
-                if (Sessions.Remove(modelPath, out var session))
-                    session.Dispose();
+                if (Sessions.Remove(modelPath, out var entry))
+                    entry.Session.Dispose();
             }
 
             if (File.Exists(modelPath))
@@ -183,14 +190,61 @@ public static class LocalStickerEngineService
         lock (SessionLock)
         {
             if (Sessions.TryGetValue(modelPath, out var existing))
-                return existing;
+            {
+                existing.LastUsedUtc = DateTime.UtcNow;
+                DisposeOtherSessions(modelPath);
+                return existing.Session;
+            }
 
             var options = new SessionOptions();
             options.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-            var session = new InferenceSession(modelPath, options);
-            Sessions[modelPath] = session;
-            return session;
+            var entry = new SessionEntry(new InferenceSession(modelPath, options));
+            Sessions[modelPath] = entry;
+            DisposeOtherSessions(modelPath);
+            return entry.Session;
         }
+    }
+
+    private static void DisposeOtherSessions(string activeModelPath)
+    {
+        foreach (var key in Sessions.Keys.Where(key => !string.Equals(key, activeModelPath, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            var entry = Sessions[key];
+            Sessions.Remove(key);
+            entry.Session.Dispose();
+        }
+    }
+
+    private static void CleanupIdleSessions()
+    {
+        lock (SessionLock)
+        {
+            var cutoff = DateTime.UtcNow - SessionIdleTimeout;
+            foreach (var key in Sessions.Where(pair => pair.Value.LastUsedUtc < cutoff).Select(pair => pair.Key).ToList())
+            {
+                var entry = Sessions[key];
+                Sessions.Remove(key);
+                entry.Session.Dispose();
+            }
+        }
+    }
+
+    /// <summary>Release all loaded ONNX sessions to free memory. Timer keeps running for future use.</summary>
+    public static void ReleaseSessions()
+    {
+        lock (SessionLock)
+        {
+            foreach (var entry in Sessions.Values)
+                try { entry.Session.Dispose(); } catch { }
+            Sessions.Clear();
+        }
+    }
+
+    /// <summary>Full shutdown — disposes timer and sessions. Call only on app exit.</summary>
+    public static void Shutdown()
+    {
+        try { SessionCleanupTimer.Dispose(); } catch { }
+        ReleaseSessions();
     }
 
     private static DenseTensor<float> CreateInputTensor(Bitmap bitmap)

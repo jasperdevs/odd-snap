@@ -1,4 +1,6 @@
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Yoink.Native;
 
@@ -39,6 +41,12 @@ public static class ScreenCapture
 
         return CaptureRegionLegacy(region);
     }
+
+    /// <summary>
+    /// Uses BitBlt directly for sustained frame capture workloads. The current DXGI path
+    /// recreates device/duplication resources per call, which is too expensive for recording.
+    /// </summary>
+    public static Bitmap CaptureRegionForRecording(Rectangle region) => CaptureRegionLegacy(region);
 
     private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensLegacy()
     {
@@ -96,22 +104,36 @@ public static class ScreenCapture
         if (bitmap.Width <= 0 || bitmap.Height <= 0)
             return true;
 
-        int samples = 0;
-        int darkSamples = 0;
         int stepX = Math.Max(1, bitmap.Width / 12);
         int stepY = Math.Max(1, bitmap.Height / 12);
 
-        for (int y = 0; y < bitmap.Height; y += stepY)
+        var rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
+        var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
         {
-            for (int x = 0; x < bitmap.Width; x += stepX)
-            {
-                var pixel = bitmap.GetPixel(x, y);
-                samples++;
-                if (pixel.A <= 4 || (pixel.R <= 6 && pixel.G <= 6 && pixel.B <= 6))
-                    darkSamples++;
-            }
-        }
+            int stride = data.Stride;
+            int samples = 0;
+            int darkSamples = 0;
+            var row = new byte[bitmap.Width * 4];
 
-        return samples > 0 && darkSamples >= (int)(samples * 0.9);
+            for (int y = 0; y < bitmap.Height; y += stepY)
+            {
+                Marshal.Copy(IntPtr.Add(data.Scan0, y * stride), row, 0, row.Length);
+                for (int x = 0; x < bitmap.Width; x += stepX)
+                {
+                    int i = x * 4;
+                    byte b = row[i], g = row[i + 1], r = row[i + 2], a = row[i + 3];
+                    samples++;
+                    if (a <= 4 || (r <= 6 && g <= 6 && b <= 6))
+                        darkSamples++;
+                }
+            }
+
+            return samples > 0 && darkSamples >= (int)(samples * 0.9);
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
     }
 }

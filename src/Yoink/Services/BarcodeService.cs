@@ -96,17 +96,33 @@ public static class BarcodeService
         return TryDecode(scaledThreshold, true, true);
     }
 
-    private static Bitmap ToThreshold(Bitmap input, byte threshold)
+    private static unsafe Bitmap ToThreshold(Bitmap input, byte threshold)
     {
-        var output = new Bitmap(input.Width, input.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        for (int y = 0; y < input.Height; y++)
+        int w = input.Width, h = input.Height;
+        var output = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var srcData = input.LockBits(new Rectangle(0, 0, w, h),
+            System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var dstData = output.LockBits(new Rectangle(0, 0, w, h),
+            System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        try
         {
-            for (int x = 0; x < input.Width; x++)
+            for (int y = 0; y < h; y++)
             {
-                var c = input.GetPixel(x, y);
-                int l = (c.R * 299 + c.G * 587 + c.B * 114) / 1000;
-                output.SetPixel(x, y, l >= threshold ? Color.White : Color.Black);
+                byte* src = (byte*)srcData.Scan0 + y * srcData.Stride;
+                byte* dst = (byte*)dstData.Scan0 + y * dstData.Stride;
+                for (int x = 0; x < w; x++)
+                {
+                    int off = x * 4;
+                    int l = (src[off + 2] * 299 + src[off + 1] * 587 + src[off] * 114) / 1000;
+                    uint pixel = l >= threshold ? 0xFFFFFFFFu : 0xFF000000u;
+                    *(uint*)(dst + off) = pixel;
+                }
             }
+        }
+        finally
+        {
+            input.UnlockBits(srcData);
+            output.UnlockBits(dstData);
         }
         return output;
     }

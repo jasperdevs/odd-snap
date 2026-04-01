@@ -86,7 +86,7 @@ public sealed partial class RegionOverlayForm
         if (_mode == CaptureMode.Emoji && _isPlacingEmoji && _selectedEmoji != null)
         {
             var pos = new Point(e.Location.X - (int)(_emojiPlaceSize / 2), e.Location.Y - (int)(_emojiPlaceSize / 2));
-            _undoStack.Add(new EmojiAnnotation(pos, _selectedEmoji, _emojiPlaceSize));
+            AddAnnotation(new EmojiAnnotation(pos, _selectedEmoji, _emojiPlaceSize));
             Invalidate();
             return;
         }
@@ -98,6 +98,7 @@ public sealed partial class RegionOverlayForm
             if (_textBoldBtnRect.Contains(e.Location))
             {
                 _textBold = !_textBold;
+                InvalidateActiveTextLayout();
                 UpdateTextBoxStyle(); SyncTextBoxSize();
                 Invalidate();
                 return;
@@ -105,6 +106,7 @@ public sealed partial class RegionOverlayForm
             if (_textItalicBtnRect.Contains(e.Location))
             {
                 _textItalic = !_textItalic;
+                InvalidateActiveTextLayout();
                 UpdateTextBoxStyle(); SyncTextBoxSize();
                 Invalidate();
                 return;
@@ -162,7 +164,7 @@ public sealed partial class RegionOverlayForm
             if (hitIdx >= 0)
             {
                 var ta = GetTextAnnotations()[hitIdx];
-                _undoStack.Remove(ta);
+                RemoveAnnotation(ta);
                 _isTyping = true;
                 _textPos = ta.Pos;
                 _textBuffer = ta.Text;
@@ -173,10 +175,42 @@ public sealed partial class RegionOverlayForm
                 _textStroke = ta.Stroke;
                 _textShadow = ta.Shadow;
                 _textFontFamily = ta.FontFamily;
+                InvalidateActiveTextLayout();
                 ShowTextBox();
                 Invalidate();
                 return;
             }
+        }
+
+        // Select tool: check resize handles first, then hit-test annotations
+        if (_mode == CaptureMode.Select)
+        {
+            // Check resize handles on already-selected annotation
+            int handle = GetSelectHandle(e.Location);
+            if (handle >= 0 && _selectedAnnotationIndex >= 0)
+            {
+                _isSelectResizing = true;
+                _selectResizeHandle = handle;
+                _selectDragStart = e.Location;
+                _selectHandleBounds = GetAnnotationBounds(_undoStack[_selectedAnnotationIndex]);
+                Invalidate();
+                return;
+            }
+
+            int hit = HitTestAnnotation(e.Location);
+            if (hit >= 0)
+            {
+                _selectedAnnotationIndex = hit;
+                _isSelectDragging = true;
+                _selectDragStart = e.Location;
+                Invalidate();
+            }
+            else
+            {
+                _selectedAnnotationIndex = -1;
+                Invalidate();
+            }
+            return;
         }
 
         if (_mode == CaptureMode.ColorPicker)
@@ -218,6 +252,7 @@ public sealed partial class RegionOverlayForm
                 _isTyping = true;
                 _textPos = e.Location;
                 _textBuffer = "";
+                InvalidateActiveTextLayout();
                 ShowTextBox();
                 Invalidate();
                 break;
@@ -234,7 +269,7 @@ public sealed partial class RegionOverlayForm
                 _shapeStart = e.Location;
                 break;
             case CaptureMode.StepNumber:
-                _undoStack.Add(new StepNumberAnnotation(e.Location, _nextStepNumber, _toolColor));
+                AddAnnotation(new StepNumberAnnotation(e.Location, _nextStepNumber, _toolColor));
                 _nextStepNumber++;
                 Invalidate();
                 break;
@@ -243,7 +278,7 @@ public sealed partial class RegionOverlayForm
                 int srcSz = 40;
                 int sx2 = Math.Clamp(e.Location.X - srcSz / 2, 0, _bmpW - srcSz);
                 int sy2 = Math.Clamp(e.Location.Y - srcSz / 2, 0, _bmpH - srcSz);
-                _undoStack.Add(new MagnifierAnnotation(e.Location, new Rectangle(sx2, sy2, srcSz, srcSz)));
+                AddAnnotation(new MagnifierAnnotation(e.Location, new Rectangle(sx2, sy2, srcSz, srcSz)));
                 Invalidate();
                 break;
             case CaptureMode.Draw:
@@ -281,7 +316,7 @@ public sealed partial class RegionOverlayForm
         if (hitIdx >= 0)
         {
             var ta = GetTextAnnotations()[hitIdx];
-            _undoStack.Remove(ta);
+            RemoveAnnotation(ta);
             _mode = CaptureMode.Text;
             _isTyping = true;
             _textPos = ta.Pos;
@@ -293,6 +328,7 @@ public sealed partial class RegionOverlayForm
             _textStroke = ta.Stroke;
             _textShadow = ta.Shadow;
             _textFontFamily = ta.FontFamily;
+            InvalidateActiveTextLayout();
             ShowTextBox();
             Invalidate();
         }
@@ -307,6 +343,7 @@ public sealed partial class RegionOverlayForm
         if (_textDragging && _isTyping)
         {
             _textPos = new Point(e.Location.X - _textDragOffset.X, e.Location.Y - _textDragOffset.Y);
+            InvalidateActiveTextLayout();
             Invalidate();
             return;
         }
@@ -327,6 +364,7 @@ public sealed partial class RegionOverlayForm
             };
             _textFontSize = Math.Clamp(_textFontSize + delta, 10f, 120f);
             _textResizeStart = e.Location;
+            InvalidateActiveTextLayout();
             Invalidate();
             return;
         }
@@ -358,6 +396,48 @@ public sealed partial class RegionOverlayForm
             needsRepaint = true;
         }
 
+        // Select tool resize
+        if (_isSelectResizing && _selectedAnnotationIndex >= 0 && _selectedAnnotationIndex < _undoStack.Count)
+        {
+            int dx = e.Location.X - _selectDragStart.X;
+            int dy = e.Location.Y - _selectDragStart.Y;
+            var ob = _selectHandleBounds;
+            Rectangle nb = _selectResizeHandle switch
+            {
+                0 => Rectangle.FromLTRB(ob.Left + dx, ob.Top + dy, ob.Right, ob.Bottom),  // TL
+                1 => Rectangle.FromLTRB(ob.Left, ob.Top + dy, ob.Right + dx, ob.Bottom),  // TR
+                2 => Rectangle.FromLTRB(ob.Left + dx, ob.Top, ob.Right, ob.Bottom + dy),  // BL
+                3 => Rectangle.FromLTRB(ob.Left, ob.Top, ob.Right + dx, ob.Bottom + dy),  // BR
+                _ => ob
+            };
+            if (nb.Width > 5 && nb.Height > 5)
+            {
+                var scaled = ScaleAnnotation(_undoStack[_selectedAnnotationIndex], ob, nb);
+                _undoStack[_selectedAnnotationIndex] = scaled;
+                _selectHandleBounds = nb;
+                _selectDragStart = e.Location;
+                MarkCommittedAnnotationsDirty();
+                Invalidate();
+            }
+            return;
+        }
+
+        // Select tool move drag
+        if (_isSelectDragging && _selectedAnnotationIndex >= 0 && _selectedAnnotationIndex < _undoStack.Count)
+        {
+            int dx = e.Location.X - _selectDragStart.X;
+            int dy = e.Location.Y - _selectDragStart.Y;
+            if (Math.Abs(dx) > 1 || Math.Abs(dy) > 1)
+            {
+                var moved = MoveAnnotation(_undoStack[_selectedAnnotationIndex], dx, dy);
+                _undoStack[_selectedAnnotationIndex] = moved;
+                MarkCommittedAnnotationsDirty();
+                _selectDragStart = e.Location;
+                Invalidate();
+            }
+            return;
+        }
+
         // Cursor: show appropriate cursor for context
         System.Windows.Forms.Cursor target;
         if (_isTyping && _hoveredTextBtn >= 0)
@@ -384,6 +464,18 @@ public sealed partial class RegionOverlayForm
         }
         else if (_colorPickerOpen && _colorPickerRect.Contains(e.Location))
             target = Cursors.Hand;
+        else if (_mode == CaptureMode.Select)
+        {
+            int sh = GetSelectHandle(e.Location);
+            if (sh >= 0) target = sh is 0 or 3 ? Cursors.SizeNWSE : Cursors.SizeNESW;
+            else if (_selectedAnnotationIndex >= 0 && GetAnnotationBounds(_undoStack[_selectedAnnotationIndex]).Contains(e.Location))
+                target = Cursors.SizeAll;
+            else
+            {
+                int h = HitTestAnnotation(e.Location);
+                target = h >= 0 ? Cursors.Hand : Cursors.Default;
+            }
+        }
         else if (_mode == CaptureMode.Text && !_isTyping)
             target = Cursors.IBeam;
         else if (btn >= 0)
@@ -524,6 +616,9 @@ public sealed partial class RegionOverlayForm
     {
         if (e.Button != MouseButtons.Left) return;
 
+        // End select drag/resize
+        if (_isSelectResizing) { _isSelectResizing = false; _selectResizeHandle = -1; return; }
+        if (_isSelectDragging) { _isSelectDragging = false; return; }
         // End text move/resize
         if (_textDragging) { _textDragging = false; return; }
         if (_textResizing) { _textResizing = false; _textResizeHandle = -1; return; }
@@ -533,21 +628,21 @@ public sealed partial class RegionOverlayForm
                 _isHighlighting = false;
                 var hlRect = NormRect(_highlightStart, e.Location);
                 if (hlRect.Width > 2 && hlRect.Height > 2)
-                    _undoStack.Add(new HighlightAnnotation(hlRect, DefaultHighlightColor));
+                    AddAnnotation(new HighlightAnnotation(hlRect, DefaultHighlightColor));
                 Invalidate();
                 break;
             case CaptureMode.RectShape when _isRectShapeDragging:
                 _isRectShapeDragging = false;
                 var rectShape = GetShapeRect(e.Location);
                 if (rectShape.Width > 2 && rectShape.Height > 2)
-                    _undoStack.Add(new RectShapeAnnotation(rectShape, _toolColor));
+                    AddAnnotation(new RectShapeAnnotation(rectShape, _toolColor));
                 Invalidate();
                 break;
             case CaptureMode.CircleShape when _isCircleShapeDragging:
                 _isCircleShapeDragging = false;
                 var circleShape = GetShapeRect(e.Location);
                 if (circleShape.Width > 2 && circleShape.Height > 2)
-                    _undoStack.Add(new CircleShapeAnnotation(circleShape, _toolColor));
+                    AddAnnotation(new CircleShapeAnnotation(circleShape, _toolColor));
                 Invalidate();
                 break;
             case CaptureMode.Magnifier:
@@ -565,7 +660,7 @@ public sealed partial class RegionOverlayForm
                         _currentStroke.Add(start);
                         _currentStroke.Add(constrainedEnd);
                     }
-                    _undoStack.Add(new DrawStroke(_currentStroke));
+                    AddAnnotation(new DrawStroke(_currentStroke, _toolColor));
                 }
                 _currentStroke = null;
                 break;
@@ -575,7 +670,7 @@ public sealed partial class RegionOverlayForm
                 float ldx = lineEnd.X - _lineStart.X;
                 float ldy = lineEnd.Y - _lineStart.Y;
                 if (MathF.Sqrt(ldx * ldx + ldy * ldy) > 5)
-                    _undoStack.Add(new LineAnnotation(_lineStart, lineEnd));
+                    AddAnnotation(new LineAnnotation(_lineStart, lineEnd, _toolColor));
                 Invalidate();
                 break;
             case CaptureMode.Ruler when _isRulerDragging:
@@ -584,7 +679,7 @@ public sealed partial class RegionOverlayForm
                 float rdx = rulerEnd.X - _rulerStart.X;
                 float rdy = rulerEnd.Y - _rulerStart.Y;
                 if (MathF.Sqrt(rdx * rdx + rdy * rdy) > 3)
-                    _undoStack.Add(new RulerAnnotation(_rulerStart, rulerEnd));
+                    AddAnnotation(new RulerAnnotation(_rulerStart, rulerEnd));
                 Invalidate();
                 break;
             case CaptureMode.Arrow when _isArrowDragging:
@@ -593,13 +688,13 @@ public sealed partial class RegionOverlayForm
                 float dx = end.X - _arrowStart.X;
                 float dy = end.Y - _arrowStart.Y;
                 if (MathF.Sqrt(dx * dx + dy * dy) > 5)
-                    _undoStack.Add(new ArrowAnnotation(_arrowStart, end));
+                    AddAnnotation(new ArrowAnnotation(_arrowStart, end, _toolColor));
                 Invalidate();
                 break;
             case CaptureMode.CurvedArrow when _isCurvedArrowDragging:
                 _isCurvedArrowDragging = false;
                 if (_currentCurvedArrow is { Count: >= 2 })
-                    _undoStack.Add(new CurvedArrowAnnotation(_currentCurvedArrow));
+                    AddAnnotation(new CurvedArrowAnnotation(_currentCurvedArrow, _toolColor));
                 _currentCurvedArrow = null;
                 Invalidate();
                 break;
@@ -607,14 +702,14 @@ public sealed partial class RegionOverlayForm
                 _isBlurring = false;
                 var blurRect = NormRect(_blurStart, e.Location);
                 if (blurRect.Width > 3 && blurRect.Height > 3)
-                    _undoStack.Add(new BlurRect(blurRect));
+                    AddAnnotation(new BlurRect(blurRect));
                 Invalidate();
                 break;
             case CaptureMode.Eraser when _isEraserDragging:
                 _isEraserDragging = false;
                 var eraserRect = NormRect(_eraserStart, e.Location);
                 if (eraserRect.Width > 1 && eraserRect.Height > 1)
-                    _undoStack.Add(new EraserFill(eraserRect, _eraserColor));
+                    AddAnnotation(new EraserFill(eraserRect, _eraserColor));
                 Invalidate();
                 break;
             case CaptureMode.Rectangle when _isSelecting:
@@ -676,6 +771,34 @@ public sealed partial class RegionOverlayForm
     {
         if (keyData == Keys.Escape)
         {
+            // Close all popups and transient state in one pass
+            bool anyClosed = false;
+            if (_mode == CaptureMode.ColorPicker) { CloseMagWindow(); anyClosed = true; }
+            if (_emojiPickerOpen) { _emojiPickerOpen = false; HideEmojiSearchBox(); anyClosed = true; }
+            if (_fontPickerOpen) { _fontPickerOpen = false; _fontSearch = ""; _filteredFonts = null; HideFontSearchBox(); anyClosed = true; }
+            if (_colorPickerOpen) { _colorPickerOpen = false; anyClosed = true; }
+            if (_isPlacingEmoji) { _isPlacingEmoji = false; _selectedEmoji = null; anyClosed = true; }
+            if (_isRulerDragging) { _isRulerDragging = false; anyClosed = true; }
+            if (_isSelecting) { _isSelecting = false; _hasSelection = false; anyClosed = true; }
+            if (_isArrowDragging) { _isArrowDragging = false; anyClosed = true; }
+            if (_isLineDragging) { _isLineDragging = false; anyClosed = true; }
+            if (_isCurvedArrowDragging) { _isCurvedArrowDragging = false; anyClosed = true; }
+            if (_isBlurring) { _isBlurring = false; anyClosed = true; }
+            if (_isEraserDragging) { _isEraserDragging = false; anyClosed = true; }
+            if (_isHighlighting) { _isHighlighting = false; anyClosed = true; }
+            if (_isRectShapeDragging) { _isRectShapeDragging = false; anyClosed = true; }
+            if (_isCircleShapeDragging) { _isCircleShapeDragging = false; anyClosed = true; }
+            if (_isSelectDragging) { _isSelectDragging = false; anyClosed = true; }
+            if (_isSelectResizing) { _isSelectResizing = false; _selectResizeHandle = -1; anyClosed = true; }
+            if (_selectedAnnotationIndex >= 0) { _selectedAnnotationIndex = -1; anyClosed = true; }
+            if (_isTyping)
+            {
+                _isTyping = false;
+                _textBuffer = "";
+                HideTextBox();
+                anyClosed = true;
+            }
+            if (anyClosed) { Invalidate(); RefreshToolbar(); return true; }
             Cancel();
             return true;
         }
@@ -705,10 +828,19 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
+        // Delete selected annotation
+        if (e.KeyCode == Keys.Delete && _mode == CaptureMode.Select && _selectedAnnotationIndex >= 0 && _selectedAnnotationIndex < _undoStack.Count)
+        {
+            _undoStack.RemoveAt(_selectedAnnotationIndex);
+            MarkCommittedAnnotationsDirty();
+            _selectedAnnotationIndex = -1;
+            Invalidate();
+            return;
+        }
+
         if (e.KeyCode == Keys.Z && e.Control && _undoStack.Count > 0)
         {
-            var last = _undoStack[^1];
-            _undoStack.RemoveAt(_undoStack.Count - 1);
+            var last = RemoveLastAnnotation();
             // Update step counter when undoing a step number
             if (last is StepNumberAnnotation)
             {
@@ -727,39 +859,49 @@ public sealed partial class RegionOverlayForm
         if (_textBox != null && _textBox.Visible)
             _textBuffer = _textBox.Text;
         if (_isTyping && _textBuffer.Length > 0)
-            _undoStack.Add(new TextAnnotation(_textPos, _textBuffer, _textFontSize, _toolColor, _textBold, _textItalic, _textStroke, _textShadow, _textFontFamily));
+            AddAnnotation(new TextAnnotation(_textPos, _textBuffer, _textFontSize, _toolColor, _textBold, _textItalic, _textStroke, _textShadow, _textFontFamily));
         _isTyping = false;
         _textBuffer = "";
+        InvalidateActiveTextLayout();
         _fontPickerOpen = false;
         HideTextBox();
         Invalidate();
     }
 
+    private RectangleF MeasureTextRect(Point pos, string text, float fontSize, string fontFamily, bool bold, bool italic)
+    {
+        var style = FontStyle.Regular;
+        if (bold) style |= FontStyle.Bold;
+        if (italic) style |= FontStyle.Italic;
+        var font = GetAnnotationFont(fontFamily, fontSize, style);
+        string display = text.Length > 0 ? text : "Type here...";
+        var size = TextRenderer.MeasureText(display, font, Size.Empty,
+            TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
+        return new RectangleF(pos.X - 6, pos.Y - 4, Math.Max(size.Width + 12, 100), size.Height + 8);
+    }
+
     private RectangleF GetActiveTextRect()
     {
         if (!_isTyping) return RectangleF.Empty;
-        using var font = new Font(_textFontFamily, _textFontSize, _textBold ? FontStyle.Bold : FontStyle.Regular);
-        string display = _textBuffer.Length > 0 ? _textBuffer : "Type here...";
-        SizeF sz;
-        using (var g = CreateGraphics())
-            sz = g.MeasureString(display, font);
-        return new RectangleF(_textPos.X - 6, _textPos.Y - 4,
-            Math.Max(sz.Width + 12, 100), sz.Height + 8);
+        if (_activeTextLayoutDirty)
+        {
+            _activeTextRectCache = MeasureTextRect(_textPos, _textBuffer, _textFontSize, _textFontFamily, _textBold, _textItalic);
+            const int hs = 10;
+            _activeTextHandleCache[0] = new RectangleF(_activeTextRectCache.X - hs / 2f, _activeTextRectCache.Y - hs / 2f, hs, hs);
+            _activeTextHandleCache[1] = new RectangleF(_activeTextRectCache.Right - hs / 2f, _activeTextRectCache.Y - hs / 2f, hs, hs);
+            _activeTextHandleCache[2] = new RectangleF(_activeTextRectCache.X - hs / 2f, _activeTextRectCache.Bottom - hs / 2f, hs, hs);
+            _activeTextHandleCache[3] = new RectangleF(_activeTextRectCache.Right - hs / 2f, _activeTextRectCache.Bottom - hs / 2f, hs, hs);
+            _activeTextLayoutDirty = false;
+        }
+        return _activeTextRectCache;
     }
 
     private int GetTextHandle(Point p)
     {
         if (!_isTyping) return -1;
-        var r = GetActiveTextRect();
-        int hs = 10; // hit area size (larger than visual 6px for easier grabbing)
-        var handles = new RectangleF[] {
-            new(r.X - hs/2, r.Y - hs/2, hs, hs),
-            new(r.Right - hs/2, r.Y - hs/2, hs, hs),
-            new(r.X - hs/2, r.Bottom - hs/2, hs, hs),
-            new(r.Right - hs/2, r.Bottom - hs/2, hs, hs),
-        };
-        for (int i = 0; i < handles.Length; i++)
-            if (handles[i].Contains(p)) return i;
+        _ = GetActiveTextRect();
+        for (int i = 0; i < _activeTextHandleCache.Length; i++)
+            if (_activeTextHandleCache[i].Contains(p)) return i;
         return -1;
     }
 
@@ -772,12 +914,7 @@ public sealed partial class RegionOverlayForm
         for (int i = texts.Count - 1; i >= 0; i--)
         {
             var ta = texts[i];
-            var style = ta.Bold ? FontStyle.Bold : FontStyle.Regular;
-            using var font = new Font(ta.FontFamily, ta.FontSize, style);
-            SizeF sz;
-            using (var g = CreateGraphics())
-                sz = g.MeasureString(ta.Text, font);
-            var rect = new RectangleF(ta.Pos.X - 6, ta.Pos.Y - 4, sz.Width + 12, sz.Height + 8);
+            var rect = MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic);
             if (rect.Contains(p)) return i;
         }
         return -1;
@@ -830,6 +967,7 @@ public sealed partial class RegionOverlayForm
             _textFontFamily = fonts[idx];
             _fontPickerOpen = false;
             _fontSearch = ""; _filteredFonts = null;
+            InvalidateActiveTextLayout();
             UpdateTextBoxStyle(); SyncTextBoxSize();
             Invalidate();
             RefreshToolbar();
@@ -1023,9 +1161,8 @@ public sealed partial class RegionOverlayForm
         }
         if (index < 0) return false;
 
-        // Map to visible annotation tools only (Group 1: Ruler through Emoji)
         var modes = _visibleTools
-            .Where(t => t.Mode.HasValue && t.Group == 1)
+            .Where(t => t.Mode.HasValue && t.Group == 1 && t.Mode != CaptureMode.Select)
             .Select(t => t.Mode!.Value)
             .ToList();
 

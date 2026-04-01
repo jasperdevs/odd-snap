@@ -98,6 +98,13 @@ public static class UploadService
         return $"{service} error: {resp.StatusCode}";
     }
 
+    private static StreamContent CreateFileStreamContent(string filePath, string contentType = "application/octet-stream")
+    {
+        var content = new StreamContent(File.OpenRead(filePath));
+        content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+        return content;
+    }
+
     /// <summary>Human-readable name for a destination.</summary>
     public static string GetName(UploadDestination dest) => dest switch
     {
@@ -249,10 +256,7 @@ public static class UploadService
             : s.ImgurClientId;
 
         using var content = new MultipartFormDataContent();
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, "image", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), "image", Path.GetFileName(filePath));
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.imgur.com/3/image");
         if (!string.IsNullOrWhiteSpace(s.ImgurAccessToken))
@@ -318,10 +322,7 @@ public static class UploadService
     {
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent("fileupload"), "reqtype");
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, "fileToUpload", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), "fileToUpload", Path.GetFileName(filePath));
 
         var resp = await Http.PostAsync("https://catbox.moe/user/api.php", content);
         var url = (await resp.Content.ReadAsStringAsync()).Trim();
@@ -342,10 +343,7 @@ public static class UploadService
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent("fileupload"), "reqtype");
         content.Add(new StringContent("72h"), "time");
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, "fileToUpload", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), "fileToUpload", Path.GetFileName(filePath));
 
         var resp = await Http.PostAsync("https://litterbox.catbox.moe/resources/internals/api.php", content);
         var url = (await resp.Content.ReadAsStringAsync()).Trim();
@@ -368,10 +366,7 @@ public static class UploadService
 
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(s.GyazoAccessToken), "access_token");
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, "imagedata", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), "imagedata", Path.GetFileName(filePath));
 
         var resp = await Http.PostAsync("https://upload.gyazo.com/api/upload", content);
         var json = await resp.Content.ReadAsStringAsync();
@@ -389,10 +384,7 @@ public static class UploadService
     private static async Task<UploadResult> UploadFileIo(string filePath)
     {
         using var content = new MultipartFormDataContent();
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, "file", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), "file", Path.GetFileName(filePath));
 
         var resp = await Http.PostAsync("https://file.io", content);
         var json = await resp.Content.ReadAsStringAsync();
@@ -415,10 +407,7 @@ public static class UploadService
     private static async Task<UploadResult> UploadUguu(string filePath)
     {
         using var content = new MultipartFormDataContent();
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, "files[]", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), "files[]", Path.GetFileName(filePath));
 
         var resp = await Http.PostAsync("https://uguu.se/upload.php?output=text", content);
         var url = (await resp.Content.ReadAsStringAsync()).Trim();
@@ -434,10 +423,7 @@ public static class UploadService
     private static async Task<UploadResult> UploadTransferSh(string filePath)
     {
         using var content = new MultipartFormDataContent();
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, "file", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), "file", Path.GetFileName(filePath));
 
         var resp = await Http.PostAsync("https://transfer.sh", content);
         var url = (await resp.Content.ReadAsStringAsync()).Trim();
@@ -454,13 +440,12 @@ public static class UploadService
             return new UploadResult { Error = "Dropbox access token not configured" };
 
         string remotePath = $"/{(string.IsNullOrWhiteSpace(s.DropboxPathPrefix) ? "Yoink" : s.DropboxPathPrefix.Trim('/'))}/{Path.GetFileName(filePath)}";
-        var bytes = await File.ReadAllBytesAsync(filePath);
 
         using var uploadReq = new HttpRequestMessage(HttpMethod.Post, "https://content.dropboxapi.com/2/files/upload");
         uploadReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.DropboxAccessToken);
         uploadReq.Headers.TryAddWithoutValidation("Dropbox-API-Arg", JsonSerializer.Serialize(new { path = remotePath, mode = "add", autorename = true, mute = false }));
         uploadReq.Headers.TryAddWithoutValidation("Content-Type", "application/octet-stream");
-        uploadReq.Content = new ByteArrayContent(bytes);
+        uploadReq.Content = CreateFileStreamContent(filePath);
         var uploadResp = await Http.SendAsync(uploadReq);
         if (!uploadResp.IsSuccessStatusCode)
             return new UploadResult { Error = $"Dropbox upload failed: {uploadResp.StatusCode}" };
@@ -513,10 +498,7 @@ public static class UploadService
 
         using var content = new MultipartFormDataContent("foo_bar_baz");
         content.Add(new StringContent(metadata.ToJsonString(), Encoding.UTF8, "application/json"), "metadata");
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);
-        content.Add(fileContent, "file", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath, mimeType), "file", Path.GetFileName(filePath));
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.GoogleDriveAccessToken);
@@ -546,11 +528,10 @@ public static class UploadService
 
         string folder = string.IsNullOrWhiteSpace(s.OneDriveFolder) ? "Yoink" : s.OneDriveFolder.Trim('/');
         string url = $"https://graph.microsoft.com/v1.0/me/drive/root:/{folder}/{Path.GetFileName(filePath)}:/content";
-        var bytes = await File.ReadAllBytesAsync(filePath);
 
         using var req = new HttpRequestMessage(HttpMethod.Put, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.OneDriveAccessToken);
-        req.Content = new ByteArrayContent(bytes);
+        req.Content = CreateFileStreamContent(filePath);
         var resp = await Http.SendAsync(req);
         var body = await resp.Content.ReadAsStringAsync();
         if (!resp.IsSuccessStatusCode)
@@ -582,10 +563,9 @@ public static class UploadService
 
         string baseUrl = s.AzureBlobSasUrl.TrimEnd('/');
         string url = $"{baseUrl}/{Path.GetFileName(filePath)}";
-        var bytes = await File.ReadAllBytesAsync(filePath);
         using var req = new HttpRequestMessage(HttpMethod.Put, url);
         req.Headers.TryAddWithoutValidation("x-ms-blob-type", "BlockBlob");
-        req.Content = new ByteArrayContent(bytes);
+        req.Content = CreateFileStreamContent(filePath);
         var resp = await Http.SendAsync(req);
         if (!resp.IsSuccessStatusCode)
             return new UploadResult { Error = $"Azure Blob upload failed: {resp.StatusCode}" };
@@ -628,10 +608,7 @@ public static class UploadService
             return new UploadResult { Error = "Immich base URL or API key not configured" };
 
         using var content = new MultipartFormDataContent();
-        var bytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(bytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, "assetData", Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), "assetData", Path.GetFileName(filePath));
 
         using var req = new HttpRequestMessage(HttpMethod.Post, s.ImmichBaseUrl.TrimEnd('/') + "/api/assets");
         req.Headers.TryAddWithoutValidation("x-api-key", s.ImmichApiKey);
@@ -707,7 +684,7 @@ public static class UploadService
         using var req = new HttpRequestMessage(HttpMethod.Put, url);
         var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{s.WebDavUsername}:{s.WebDavPassword}"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Basic", auth);
-        req.Content = new ByteArrayContent(await File.ReadAllBytesAsync(filePath));
+        req.Content = CreateFileStreamContent(filePath);
         var resp = await Http.SendAsync(req);
         if (!resp.IsSuccessStatusCode)
             return new UploadResult { Error = $"WebDAV upload failed: {resp.StatusCode}" };
@@ -722,7 +699,6 @@ public static class UploadService
             string.IsNullOrWhiteSpace(s.S3AccessKey) || string.IsNullOrWhiteSpace(s.S3SecretKey))
             return new UploadResult { Error = "S3 configuration incomplete (endpoint, bucket, access key, secret key required)" };
 
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
         string ext = Path.GetExtension(filePath).ToLowerInvariant();
         string contentType = ext switch
         {
@@ -750,7 +726,9 @@ public static class UploadService
         // AWS Signature v4
         string dateStamp = DateTime.UtcNow.ToString("yyyyMMdd");
         string amzDate = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
-        string payloadHash = HashHex(fileBytes);
+        string payloadHash;
+        using (var hashStream = File.OpenRead(filePath))
+            payloadHash = HashHex(hashStream);
 
         string canonicalUri = $"/{s.S3Bucket}/{key}";
         string canonicalQueryString = "";
@@ -773,7 +751,7 @@ public static class UploadService
             $"AWS4-HMAC-SHA256 Credential={s.S3AccessKey}/{credentialScope}, SignedHeaders={signedHeaders}, Signature={signature}";
 
         using var request = new HttpRequestMessage(HttpMethod.Put, objectUrl);
-        request.Content = new ByteArrayContent(fileBytes);
+        request.Content = CreateFileStreamContent(filePath, contentType);
         request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
         request.Headers.TryAddWithoutValidation("x-amz-date", amzDate);
         request.Headers.TryAddWithoutValidation("x-amz-content-sha256", payloadHash);
@@ -796,6 +774,12 @@ public static class UploadService
     private static string HashHex(byte[] data)
     {
         var hash = SHA256.HashData(data);
+        return Convert.ToHexStringLower(hash);
+    }
+
+    private static string HashHex(Stream stream)
+    {
+        var hash = SHA256.HashData(stream);
         return Convert.ToHexStringLower(hash);
     }
 
@@ -825,10 +809,7 @@ public static class UploadService
 
         using var content = new MultipartFormDataContent();
         string fieldName = string.IsNullOrWhiteSpace(s.CustomFileFormName) ? "file" : s.CustomFileFormName;
-        var fileBytes = await File.ReadAllBytesAsync(filePath);
-        var fileContent = new ByteArrayContent(fileBytes);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
-        content.Add(fileContent, fieldName, Path.GetFileName(filePath));
+        content.Add(CreateFileStreamContent(filePath), fieldName, Path.GetFileName(filePath));
 
         using var request = new HttpRequestMessage(HttpMethod.Post, s.CustomUploadUrl);
         if (!string.IsNullOrWhiteSpace(s.CustomHeaders))

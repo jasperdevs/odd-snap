@@ -14,6 +14,29 @@ public enum ToastPosition
     TopRight
 }
 
+public enum SoundPack
+{
+    Default,
+    Soft,
+    Retro
+}
+
+public enum RecordingFormat
+{
+    GIF,
+    MP4,
+    WebM,
+    MKV
+}
+
+public enum RecordingQuality
+{
+    Original,
+    P1080,
+    P720,
+    P480
+}
+
 public enum HistoryRetentionPeriod
 {
     Never,
@@ -61,11 +84,14 @@ public sealed class AppSettings
     public uint RulerHotkeyModifiers { get; set; }
     public uint RulerHotkeyKey { get; set; }
 
+    // Scrolling capture hotkey (disabled by default)
+    public uint ScrollCaptureHotkeyModifiers { get; set; }
+    public uint ScrollCaptureHotkeyKey { get; set; }
+
     // GIF recording hotkey (disabled by default)
     public uint GifHotkeyModifiers { get; set; }
     public uint GifHotkeyKey { get; set; }
     public int GifFps { get; set; } = 15;
-    public int GifMaxDuration { get; set; } = 30;
 
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.ShowPreview;
     public bool SaveToFile { get; set; } = true;
@@ -78,6 +104,7 @@ public sealed class AppSettings
     public bool AutoCheckForUpdates { get; set; } = true;
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
     public WindowDetectionMode WindowDetection { get; set; } = WindowDetectionMode.WindowOnly;
+    public int CaptureDelaySeconds { get; set; }
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }
     public bool ShowCrosshairGuides { get; set; } // off by default
@@ -97,6 +124,19 @@ public sealed class AppSettings
     public Services.UploadSettings ImageUploadSettings { get; set; } = new();
     public Services.StickerSettings StickerUploadSettings { get; set; } = new();
 
+    public double ToastDurationSeconds { get; set; } = 2.5;
+    public bool AutoPinPreviews { get; set; }
+    public SoundPack SoundPack { get; set; } = SoundPack.Default;
+
+    // Video recording
+    public RecordingFormat RecordingFormat { get; set; } = RecordingFormat.GIF;
+    public RecordingQuality RecordingQuality { get; set; } = RecordingQuality.Original;
+    public int RecordingFps { get; set; } = 30;
+    public bool RecordMicrophone { get; set; }
+    public bool RecordDesktopAudio { get; set; }
+    public string? MicrophoneDeviceId { get; set; }
+    public string? DesktopAudioDeviceId { get; set; }
+
     // Toolbar customization: which tools appear in the dock
     // null = all tools enabled (default). List of tool IDs from ToolDef.AllTools.
     public List<string>? EnabledTools { get; set; }
@@ -110,26 +150,27 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
     {
         new("rect",        "Rectangle Select", '\uE257', CaptureMode.Rectangle, 0), // scan-line
         new("free",        "Freeform Select",  '\uE1CE', CaptureMode.Freeform,  0), // lasso-select
-        new("picker",      "Color Picker", '\uE13E', CaptureMode.ColorPicker, 0), // pipette
         new("ocr",         "OCR",          '\uE53C', CaptureMode.Ocr,         0), // scan-text
-        new("scan",        "QR/Barcode",   '\uE1DE', CaptureMode.Scan,        0), // qr-code
         new("sticker",     "Sticker",      '\uE7C5', CaptureMode.Sticker,     0), // sticker
-        new("ruler",       "Ruler",        '\uE14E', CaptureMode.Ruler,       1), // ruler
-        new("highlight",   "Highlight",    '\uE0F7', CaptureMode.Highlight,   1), // highlighter
-        new("rectShape",   "Rectangle",    '\uE16A', CaptureMode.RectShape,   1), // square
-        new("circleShape", "Circle",       '\uE07A', CaptureMode.CircleShape, 1), // circle
-        new("draw",        "Draw",         '\uE1F8', CaptureMode.Draw,        1), // pencil
-        new("line",        "Line",         '\uE11F', CaptureMode.Line,        1), // minus
+        new("picker",      "Color Picker", '\uE13E', CaptureMode.ColorPicker, 0), // pipette
+        new("scan",        "QR/Barcode",   '\uE1DE', CaptureMode.Scan,        0), // qr-code
+        new("select",      "Select",       '\uE1E3', CaptureMode.Select,      1), // cursor-click
         new("arrow",       "Arrow",        '\uE051', CaptureMode.Arrow,       1), // arrow-up-right
         new("curvedArrow", "Curved Arrow", '\uE146', CaptureMode.CurvedArrow, 1), // redo
         new("text",        "Text",         '\uE197', CaptureMode.Text,        1), // type
-        new("step",        "Step Number",  '\uE1D0', CaptureMode.StepNumber,  1), // list-ordered
+        new("highlight",   "Highlight",    '\uE0F7', CaptureMode.Highlight,   1), // highlighter
         new("blur",        "Blur",         '\uE5A0', CaptureMode.Blur,        1), // blend
-        new("eraser",      "Eraser",       '\uE28E', CaptureMode.Eraser,      1), // eraser
+        new("step",        "Step Number",  '\uE1D0', CaptureMode.StepNumber,  1), // list-ordered
+        new("draw",        "Draw",         '\uE1F8', CaptureMode.Draw,        1), // pencil
+        new("line",        "Line",         '\uE11F', CaptureMode.Line,        1), // minus
+        new("ruler",       "Ruler",        '\uE14E', CaptureMode.Ruler,       1), // ruler
+        new("rectShape",   "Rectangle",    '\uE16A', CaptureMode.RectShape,   1), // square
+        new("circleShape", "Circle",       '\uE07A', CaptureMode.CircleShape, 1), // circle
         new("magnifier",   "Magnifier",    '\uE154', CaptureMode.Magnifier,   1), // search
         new("emoji",       "Emoji",        '\uE167', CaptureMode.Emoji,       1), // smile
+        new("eraser",      "Eraser",       '\uE28E', CaptureMode.Eraser,      1), // eraser
     };
 
     public static List<string> DefaultEnabledIds() =>
-        AllTools.Where(t => t.Id != "sticker").Select(t => t.Id).ToList();
+        AllTools.Select(t => t.Id).ToList();
 }

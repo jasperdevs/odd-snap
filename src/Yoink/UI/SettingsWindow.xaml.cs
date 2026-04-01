@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -18,7 +19,10 @@ namespace Yoink.UI;
 
 public partial class SettingsWindow : Window
 {
-    private static readonly Dictionary<string, BitmapImage> ThumbCache = new();
+    private const int MaxThumbCacheEntries = 32;
+    private static readonly Dictionary<string, BitmapImage> ThumbCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly LinkedList<string> ThumbCacheOrder = new();
+    private static readonly Dictionary<string, LinkedListNode<string>> ThumbCacheNodes = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, BitmapImage> LogoCache = new();
 
     private readonly SettingsService _settingsService;
@@ -36,9 +40,9 @@ public partial class SettingsWindow : Window
         WindowChrome.SetWindowChrome(this, new WindowChrome
         {
             CaptionHeight = 0,
-            CornerRadius = new CornerRadius(16),
+            CornerRadius = new CornerRadius(12),
             GlassFrameThickness = new Thickness(0),
-            ResizeBorderThickness = new Thickness(6),
+            ResizeBorderThickness = new Thickness(8),
             UseAeroCaptionButtons = false
         });
         WireHotkeyBoxes();
@@ -51,6 +55,7 @@ public partial class SettingsWindow : Window
             if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
             UpdateLocalEngineUi();
         };
+        Closed += (_, _) => ClearThumbCache();
     }
 
     private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
@@ -95,6 +100,7 @@ public partial class SettingsWindow : Window
         Resources["ThemeInputBorderBrush"] = Theme.Brush(Theme.BorderSubtle);
         Resources["ThemeWindowBorderBrush"] = Theme.Brush(Theme.WindowBorder);
         Resources["ThemeAccentBrush"] = Theme.Brush(Theme.Accent);
+        Resources["ThemeSeparatorBrush"] = Theme.Brush(Theme.Separator);
         OuterBorder.Background = Theme.Brush(Theme.BgPrimary);
         OuterBorder.BorderBrush = Theme.Brush(Theme.WindowBorder);
         TitleBarBorder.Background = Theme.Brush(Theme.TitleBar);
@@ -146,6 +152,7 @@ public partial class SettingsWindow : Window
         StickerHotkeyBox.Text = HotkeyFormatter.Format(s.StickerHotkeyModifiers, s.StickerHotkeyKey);
         FullscreenHotkeyBox.Text = HotkeyFormatter.Format(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey);
         ActiveWindowHotkeyBox.Text = HotkeyFormatter.Format(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey);
+        ScrollCaptureHotkeyBox.Text = HotkeyFormatter.Format(s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey);
         GifHotkeyBox.Text = HotkeyFormatter.Format(s.GifHotkeyModifiers, s.GifHotkeyKey);
 
         DefaultCaptureModeCombo.SelectedIndex = s.DefaultCaptureMode == Yoink.Models.CaptureMode.Freeform ? 1 : 0;
@@ -184,6 +191,20 @@ public partial class SettingsWindow : Window
         AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
         WindowDetectionCombo.SelectedIndex = (int)s.WindowDetection;
+        CaptureDelayCombo.SelectedIndex = s.CaptureDelaySeconds switch { 3 => 1, 5 => 2, 10 => 3, _ => 0 };
+        AutoPinPreviewsCheck.IsChecked = s.AutoPinPreviews;
+        SoundPackCombo.SelectedIndex = (int)s.SoundPack;
+        RecordingFormatCombo.SelectedIndex = (int)s.RecordingFormat;
+        RecordingQualityCombo.SelectedIndex = (int)s.RecordingQuality;
+        RecordingFpsCombo.SelectedIndex = s.RecordingFps switch { 15 => 0, 24 => 1, 30 => 2, 60 => 3, _ => 2 };
+        RecordMicCheck.IsChecked = s.RecordMicrophone;
+        RecordDesktopAudioCheck.IsChecked = s.RecordDesktopAudio;
+        PopulateAudioDevices();
+
+        // Toast duration combo
+        double dur = s.ToastDurationSeconds;
+        int durIdx = dur switch { 1.5 => 0, 2.0 => 1, 2.5 => 2, 3.0 => 3, 4.0 => 4, 5.0 => 5, _ => 2 };
+        ToastDurationCombo.SelectedIndex = durIdx;
 
         // Upload settings
         UploadDestCombo.SelectedIndex = (int)s.ImageUploadDestination;
@@ -261,16 +282,36 @@ public partial class SettingsWindow : Window
     {
         ToolTogglePanel.Children.Clear();
         var enabled = _settingsService.Settings.EnabledTools ?? ToolDef.DefaultEnabledIds();
-        foreach (var tool in ToolDef.AllTools)
+        var captureTools = ToolDef.AllTools.Where(t => t.Group == 0).ToArray();
+        var annotationTools = ToolDef.AllTools.Where(t => t.Group == 1).ToArray();
+
+        AddToolSection("Capture tools", captureTools, enabled);
+        AddToolSection("Annotation tools", annotationTools, enabled);
+    }
+
+    private void AddToolSection(string header, ToolDef[] tools, List<string> enabled)
+    {
+        ToolTogglePanel.Children.Add(new TextBlock
+        {
+            Text = header,
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            Opacity = 0.45,
+            Margin = new Thickness(0, 6, 0, 6),
+        });
+        foreach (var tool in tools)
         {
             var cb = new CheckBox
             {
-                Content = tool.Label,
-                FontSize = 12,
                 IsChecked = enabled.Contains(tool.Id),
                 Tag = tool.Id,
-                Margin = new Thickness(0, 0, 14, 6),
+                Content = tool.Label,
+                FontSize = 12.5,
+                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
                 Cursor = System.Windows.Input.Cursors.Hand,
+                Margin = new Thickness(0, 0, 0, 2),
+                Padding = new Thickness(4, 2, 0, 2),
             };
             cb.Checked += ToolToggle_Changed;
             cb.Unchecked += ToolToggle_Changed;
@@ -282,9 +323,11 @@ public partial class SettingsWindow : Window
     {
         if (!IsLoaded) return;
         var enabledIds = new List<string>();
-        foreach (CheckBox cb in ToolTogglePanel.Children)
-            if (cb.IsChecked == true)
-                enabledIds.Add((string)cb.Tag);
+        foreach (var child in ToolTogglePanel.Children)
+        {
+            if (child is CheckBox cb && cb.Tag is string id && cb.IsChecked == true)
+                enabledIds.Add(id);
+        }
         // Must have at least one capture tool
         if (!enabledIds.Any(id => ToolDef.AllTools.Any(t => t.Id == id && t.Group == 0)))
         {
@@ -307,8 +350,13 @@ public partial class SettingsWindow : Window
     private void TabChanged(object sender, RoutedEventArgs e)
     {
         SettingsPanel.Visibility = SettingsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        HotkeysPanel.Visibility = HotkeysTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        CapturePanel.Visibility = CaptureTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        RecordingPanel.Visibility = RecordingTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        ToolbarPanel.Visibility = ToolbarTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         HistoryPanel.Visibility = HistoryTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         UploadsPanel.Visibility = UploadsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        AboutPanel.Visibility = AboutTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
 
         if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
         if (UploadsTab.IsChecked == true) UpdateUploadTabVisibility();
@@ -331,6 +379,7 @@ public partial class SettingsWindow : Window
         TextPanel.Visibility = Visibility.Collapsed;
         ColorsPanel.Visibility = Visibility.Collapsed;
         StickersPanel.Visibility = Visibility.Collapsed;
+        VideosPanel.Visibility = Visibility.Collapsed;
 
         if (ImagesSubTab.IsChecked == true)
         {
@@ -357,6 +406,206 @@ public partial class SettingsWindow : Window
             StickersPanel.Visibility = Visibility.Visible;
             LoadStickerHistory();
         }
+        else if (VideosSubTab.IsChecked == true)
+        {
+            VideosPanel.Visibility = Visibility.Visible;
+            LoadVideoHistory();
+        }
+    }
+
+    private void LoadVideoHistory()
+    {
+        VideoStack.Children.Clear();
+        var baseDir = _settingsService.Settings.SaveDirectory;
+        var videoDir = Path.Combine(baseDir, "Videos");
+        var dirs = new[] { videoDir, baseDir }.Where(Directory.Exists).ToArray();
+        if (dirs.Length == 0) { ShowVideoEmpty(); return; }
+        var files = dirs.SelectMany(d => Directory.GetFiles(d, "yoink_*.mp4")
+                .Concat(Directory.GetFiles(d, "yoink_*.webm"))
+                .Concat(Directory.GetFiles(d, "yoink_*.mkv")))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(File.GetCreationTime)
+            .Take(50)
+            .ToArray();
+        if (files.Length == 0) { ShowVideoEmpty(); return; }
+
+        var wrap = new System.Windows.Controls.WrapPanel();
+        foreach (var file in files)
+        {
+            var info = new FileInfo(file);
+            string sizeStr = info.Length > 1024 * 1024
+                ? $"{info.Length / 1024.0 / 1024.0:F1} MB"
+                : $"{info.Length / 1024:N0} KB";
+            string label = info.Extension.TrimStart('.').ToUpper();
+            string timeAgo = FormatTimeAgo(info.CreationTime);
+
+            var img = new Image { Stretch = Stretch.UniformToFill, Opacity = 0 };
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+            var thumbPath = GetVideoThumbnailPath(file);
+            img.Loaded += (_, _) =>
+            {
+                LoadThumbAsync(img, thumbPath);
+                img.BeginAnimation(OpacityProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(250)));
+            };
+
+            // File location button overlay
+            var locBtn = CreateFileLocationButton(file);
+
+            // Duration/format badge
+            var badge = new Border
+            {
+                Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 0, 0, 0)),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(6, 2, 6, 2),
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                VerticalAlignment = System.Windows.VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, 6, 6),
+                Child = new TextBlock
+                {
+                    Text = $"{label} · {sizeStr}",
+                    FontSize = 9, Foreground = System.Windows.Media.Brushes.White,
+                    FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                }
+            };
+
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var imgContainer = new Grid();
+            imgContainer.Children.Add(img);
+            imgContainer.Children.Add(badge);
+            imgContainer.Children.Add(locBtn);
+            Grid.SetRow(imgContainer, 0);
+            grid.Children.Add(imgContainer);
+
+            var infoPanel = new StackPanel { Margin = new Thickness(10, 6, 10, 8) };
+            infoPanel.Children.Add(new TextBlock
+            {
+                Text = info.Name, FontSize = 11,
+                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            infoPanel.Children.Add(new TextBlock
+            {
+                Text = timeAgo, FontSize = 10,
+                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                Opacity = 0.3
+            });
+            Grid.SetRow(infoPanel, 1);
+            grid.Children.Add(infoPanel);
+
+            var card = new Border
+            {
+                Width = 168, Margin = new Thickness(3),
+                CornerRadius = new CornerRadius(8),
+                Background = Theme.Brush(Theme.BgCard),
+                BorderBrush = Theme.Brush(Theme.BorderSubtle),
+                BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Child = grid,
+            };
+            card.SizeChanged += (s, _) =>
+            {
+                var b = (Border)s!;
+                b.Clip = new System.Windows.Media.RectangleGeometry(
+                    new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight), 10, 10);
+            };
+            var filePath = file;
+            card.MouseLeftButtonDown += (_, _) =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = filePath, UseShellExecute = true }); }
+                catch { }
+            };
+            wrap.Children.Add(card);
+        }
+        VideoStack.Children.Add(wrap);
+    }
+
+    private void ShowVideoEmpty()
+    {
+        VideoStack.Children.Add(new TextBlock
+        {
+            Text = "No video recordings yet",
+            FontSize = 13, Opacity = 0.2,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            Margin = new Thickness(0, 40, 0, 0),
+        });
+    }
+
+    private static string GetVideoThumbnailPath(string videoPath)
+    {
+        var thumbDir = Path.Combine(Path.GetDirectoryName(videoPath)!, ".thumbs");
+        Directory.CreateDirectory(thumbDir);
+        var thumbPath = Path.Combine(thumbDir, Path.GetFileNameWithoutExtension(videoPath) + ".jpg");
+        if (File.Exists(thumbPath)) return thumbPath;
+
+        // Try to extract first frame with FFmpeg
+        var ffmpeg = Capture.VideoRecorder.FindFfmpeg();
+        if (ffmpeg != null)
+        {
+            try
+            {
+                var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = ffmpeg,
+                    Arguments = $"-y -i \"{videoPath}\" -vframes 1 -q:v 4 \"{thumbPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                });
+                proc?.WaitForExit(5000);
+                if (File.Exists(thumbPath)) return thumbPath;
+            }
+            catch { }
+        }
+        return videoPath; // fallback - LoadThumbAsync will handle gracefully
+    }
+
+    private Border CreateFileLocationButton(string filePath)
+    {
+        var btn = new Border
+        {
+            Width = 24, Height = 24, CornerRadius = new CornerRadius(5),
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(160, 0, 0, 0)),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+            VerticalAlignment = System.Windows.VerticalAlignment.Top,
+            Margin = new Thickness(6, 6, 0, 0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Opacity = 0, IsHitTestVisible = true,
+            ToolTip = "Show in folder",
+            Child = new TextBlock
+            {
+                Text = "\uE838", // folder icon
+                FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
+                FontSize = 11,
+                Foreground = System.Windows.Media.Brushes.White,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+            }
+        };
+        btn.MouseLeftButtonDown += (s, e) =>
+        {
+            e.Handled = true;
+            if (File.Exists(filePath))
+                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+        };
+        btn.MouseEnter += (s, _) => ((Border)s!).BeginAnimation(OpacityProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(100)));
+        btn.MouseLeave += (s, _) => ((Border)s!).BeginAnimation(OpacityProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(100)));
+        return btn;
+    }
+
+    private static string FormatTimeAgo(DateTime dt)
+    {
+        var span = DateTime.Now - dt;
+        if (span.TotalMinutes < 1) return "Just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
+        return dt.ToString("MMM d");
     }
 
     private void UpdateUploadTabVisibility()
@@ -439,6 +688,9 @@ public partial class SettingsWindow : Window
         RecordHotkey(ActiveWindowHotkeyBox,
             s => s.ActiveWindowHotkeyModifiers, s => s.ActiveWindowHotkeyKey,
             (s, m, k) => { s.ActiveWindowHotkeyModifiers = m; s.ActiveWindowHotkeyKey = k; });
+        RecordHotkey(ScrollCaptureHotkeyBox,
+            s => s.ScrollCaptureHotkeyModifiers, s => s.ScrollCaptureHotkeyKey,
+            (s, m, k) => { s.ScrollCaptureHotkeyModifiers = m; s.ScrollCaptureHotkeyKey = k; });
         RecordHotkey(GifHotkeyBox,
             s => s.GifHotkeyModifiers, s => s.GifHotkeyKey,
             (s, m, k) => { s.GifHotkeyModifiers = m; s.GifHotkeyKey = k; });
@@ -501,6 +753,9 @@ public partial class SettingsWindow : Window
     private void ActiveWindowHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
     private void ActiveWindowHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
     private void ActiveWindowHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
+    private void ScrollCaptureHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
+    private void ScrollCaptureHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
+    private void ScrollCaptureHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
     private void GifHotkeyBox_GotFocus(object sender, RoutedEventArgs e) { }
     private void GifHotkeyBox_LostFocus(object sender, RoutedEventArgs e) { }
     private void GifHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e) { }
@@ -574,6 +829,15 @@ public partial class SettingsWindow : Window
         _settingsService.Settings.ActiveWindowHotkeyKey = 0;
         _settingsService.Save();
         ActiveWindowHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
+        HotkeyChanged?.Invoke();
+    }
+
+    private void ClearScrollCaptureHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsService.Settings.ScrollCaptureHotkeyModifiers = 0;
+        _settingsService.Settings.ScrollCaptureHotkeyKey = 0;
+        _settingsService.Save();
+        ScrollCaptureHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
         HotkeyChanged?.Invoke();
     }
 
@@ -797,6 +1061,103 @@ public partial class SettingsWindow : Window
         SoundService.Muted = _settingsService.Settings.MuteSounds;
     }
 
+    private void SoundPackCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.SoundPack = (SoundPack)SoundPackCombo.SelectedIndex;
+        _settingsService.Save();
+        SoundService.SetPack(_settingsService.Settings.SoundPack);
+        // Play a sample so user hears the change
+        SoundService.PlayCaptureSound();
+    }
+
+    private void RecordingFormatCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.RecordingFormat = (RecordingFormat)RecordingFormatCombo.SelectedIndex;
+        _settingsService.Save();
+    }
+
+    private void RecordingQualityCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.RecordingQuality = (RecordingQuality)RecordingQualityCombo.SelectedIndex;
+        _settingsService.Save();
+    }
+
+    private void RecordingFpsCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (RecordingFpsCombo.SelectedItem is System.Windows.Controls.ComboBoxItem item && item.Tag is string tag)
+            if (int.TryParse(tag, out int fps))
+            {
+                _settingsService.Settings.RecordingFps = fps;
+                _settingsService.Save();
+            }
+    }
+
+    private void PopulateAudioDevices()
+    {
+        MicDeviceCombo.Items.Clear();
+        var mics = AudioService.GetMicrophones();
+        foreach (var mic in mics)
+        {
+            var item = new System.Windows.Controls.ComboBoxItem { Content = mic.Name, Tag = mic.Id };
+            MicDeviceCombo.Items.Add(item);
+            if (mic.Id == _settingsService.Settings.MicrophoneDeviceId)
+                MicDeviceCombo.SelectedItem = item;
+        }
+        if (MicDeviceCombo.SelectedIndex < 0 && MicDeviceCombo.Items.Count > 0)
+            MicDeviceCombo.SelectedIndex = 0;
+
+        DesktopAudioDeviceCombo.Items.Clear();
+        var outputs = AudioService.GetDesktopAudioDevices();
+        foreach (var dev in outputs)
+        {
+            var item = new System.Windows.Controls.ComboBoxItem { Content = dev.Name, Tag = dev.Id };
+            DesktopAudioDeviceCombo.Items.Add(item);
+            if (dev.Id == _settingsService.Settings.DesktopAudioDeviceId)
+                DesktopAudioDeviceCombo.SelectedItem = item;
+        }
+        if (DesktopAudioDeviceCombo.SelectedIndex < 0 && DesktopAudioDeviceCombo.Items.Count > 0)
+            DesktopAudioDeviceCombo.SelectedIndex = 0;
+    }
+
+    private void RecordMicCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.RecordMicrophone = RecordMicCheck.IsChecked == true;
+        _settingsService.Save();
+    }
+
+    private void RecordDesktopAudioCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.RecordDesktopAudio = RecordDesktopAudioCheck.IsChecked == true;
+        _settingsService.Save();
+    }
+
+    private void MicDeviceCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (MicDeviceCombo.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+        {
+            _settingsService.Settings.MicrophoneDeviceId = item.Tag as string;
+            _settingsService.Save();
+        }
+    }
+
+    private void DesktopAudioDeviceCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (DesktopAudioDeviceCombo.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+        {
+            _settingsService.Settings.DesktopAudioDeviceId = item.Tag as string;
+            _settingsService.Save();
+        }
+    }
+
+
     private void Hyperlink_Navigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
     {
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
@@ -805,6 +1166,56 @@ public partial class SettingsWindow : Window
             UseShellExecute = true
         });
         e.Handled = true;
+    }
+
+    private void ExportSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json",
+                FileName = "yoink-settings.json"
+            };
+            if (dlg.ShowDialog(this) != true) return;
+
+            var json = JsonSerializer.Serialize(_settingsService.Settings, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(dlg.FileName, json);
+            ToastWindow.Show("Settings exported", dlg.FileName);
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError("Export failed", ex.Message);
+        }
+    }
+
+    private void ImportSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "JSON files (*.json)|*.json"
+            };
+            if (dlg.ShowDialog(this) != true) return;
+
+            var json = File.ReadAllText(dlg.FileName);
+            var imported = JsonSerializer.Deserialize<AppSettings>(json);
+            if (imported is null)
+            {
+                ToastWindow.ShowError("Import failed", "Invalid settings file.");
+                return;
+            }
+
+            _settingsService.Settings = imported;
+            _settingsService.Save();
+            LoadSettings();
+            ToastWindow.Show("Settings imported", "Settings have been applied.");
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError("Import failed", ex.Message);
+        }
     }
 
     private void UninstallButton_Click(object sender, RoutedEventArgs e)
@@ -849,11 +1260,39 @@ public partial class SettingsWindow : Window
         PreviewWindow.SetPosition(_settingsService.Settings.ToastPosition);
     }
 
+    private void ToastDurationCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (ToastDurationCombo.SelectedItem is System.Windows.Controls.ComboBoxItem item && item.Tag is string tag)
+        {
+            if (double.TryParse(tag, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double secs))
+            {
+                _settingsService.Settings.ToastDurationSeconds = secs;
+                _settingsService.Save();
+                ToastWindow.SetDuration(secs);
+            }
+        }
+    }
+
+    private void AutoPinPreviewsCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.AutoPinPreviews = AutoPinPreviewsCheck.IsChecked == true;
+        _settingsService.Save();
+    }
+
     private void WindowDetectionCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
         if (WindowDetectionCombo.SelectedIndex < 0) WindowDetectionCombo.SelectedIndex = 1;
         _settingsService.Settings.WindowDetection = (WindowDetectionMode)WindowDetectionCombo.SelectedIndex;
+        _settingsService.Save();
+    }
+
+    private void CaptureDelayCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.CaptureDelaySeconds = CaptureDelayCombo.SelectedIndex switch { 1 => 3, 2 => 5, 3 => 10, _ => 0 };
         _settingsService.Save();
     }
 
@@ -1282,7 +1721,9 @@ public partial class SettingsWindow : Window
             HistoryStack.Children.Add(new TextBlock
             {
                 Text = label, FontSize = 12, FontWeight = FontWeights.SemiBold,
-                Opacity = 0.45, Margin = new Thickness(6, 10, 0, 4)
+                FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+                Foreground = Theme.Brush(Theme.TextPrimary),
+                Opacity = 0.45, Margin = new Thickness(6, 12, 0, 6)
             });
 
             var wrap = new WrapPanel();
@@ -1327,11 +1768,14 @@ public partial class SettingsWindow : Window
             Cursor = System.Windows.Input.Cursors.Hand,
             Opacity = 0, IsHitTestVisible = true,
             ToolTip = "Copy to clipboard",
-            Child = new TextBlock
+            Child = new System.Windows.Shapes.Path
             {
-                Text = "\U0001F4CB", FontSize = 13,
+                Data = System.Windows.Media.Geometry.Parse("M16,1H4C2.9,1,2,1.9,2,3v10h2V3h12V1z M19,5H8C6.9,5,6,5.9,6,7v10c0,1.1,0.9,2,2,2h11c1.1,0,2-0.9,2-2V7C21,5.9,20.1,5,19,5z M19,17H8V7h11V17z"),
+                Fill = System.Windows.Media.Brushes.White,
+                Stretch = System.Windows.Media.Stretch.Uniform,
+                Width = 13, Height = 13,
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
             }
         };
         copyBtn.MouseLeftButtonDown += (s, e) =>
@@ -1350,7 +1794,7 @@ public partial class SettingsWindow : Window
         };
 
         var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(95) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var imgContainer = new Grid();
@@ -1360,27 +1804,35 @@ public partial class SettingsWindow : Window
             var badge = CreateProviderBadge(vm.Entry.UploadProvider);
             if (badge != null) imgContainer.Children.Add(badge);
         }
+        var locBtn = CreateFileLocationButton(vm.Entry.FilePath);
+        imgContainer.Children.Add(locBtn);
         imgContainer.Children.Add(copyBtn);
         Grid.SetRow(imgContainer, 0);
         grid.Children.Add(imgContainer);
 
-        var info = new StackPanel { Margin = new Thickness(8, 5, 8, 6) };
+        var info = new StackPanel { Margin = new Thickness(10, 6, 10, 8) };
         info.Children.Add(new TextBlock
         {
             Text = vm.Entry.FileName,
-            FontSize = 10.5,
+            FontSize = 11,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
             TextTrimming = TextTrimming.CharacterEllipsis
         });
-        info.Children.Add(new TextBlock { Text = vm.TimeAgo, FontSize = 9.5, Opacity = 0.3 });
+        info.Children.Add(new TextBlock
+        {
+            Text = vm.TimeAgo, FontSize = 10,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            Opacity = 0.3
+        });
         Grid.SetRow(info, 1);
         grid.Children.Add(info);
 
         var card = new Border
         {
-            Width = 152, Margin = new Thickness(4),
-            CornerRadius = new CornerRadius(10),
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 255, 255, 255)),
+            Width = 168, Margin = new Thickness(3),
+            CornerRadius = new CornerRadius(8),
+            Background = Theme.Brush(Theme.BgCard),
+            BorderBrush = Theme.Brush(Theme.BorderSubtle),
             BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
             Child = grid, Tag = vm,
@@ -1400,7 +1852,7 @@ public partial class SettingsWindow : Window
         card.MouseEnter += (s, _) =>
         {
             var b = (Border)s!;
-            b.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(35, 255, 255, 255));
+            b.BorderBrush = Theme.Brush(Theme.Border);
             var st = (ScaleTransform)b.RenderTransform;
             st.BeginAnimation(ScaleTransform.ScaleXProperty,
                 new System.Windows.Media.Animation.DoubleAnimation(1.03, TimeSpan.FromMilliseconds(120)));
@@ -1415,7 +1867,7 @@ public partial class SettingsWindow : Window
             if (vm.IsSelected)
                 b.BorderBrush = Theme.StrokeBrush();
             else
-                b.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 255, 255, 255));
+                b.BorderBrush = Theme.Brush(Theme.BorderSubtle);
             var st = (ScaleTransform)b.RenderTransform;
             st.BeginAnimation(ScaleTransform.ScaleXProperty,
                 new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
@@ -1714,11 +2166,14 @@ public partial class SettingsWindow : Window
             Cursor = System.Windows.Input.Cursors.Hand,
             Opacity = 0, IsHitTestVisible = true,
             ToolTip = "Copy to clipboard",
-            Child = new TextBlock
+            Child = new System.Windows.Shapes.Path
             {
-                Text = "\U0001F4CB", FontSize = 13,
+                Data = System.Windows.Media.Geometry.Parse("M16,1H4C2.9,1,2,1.9,2,3v10h2V3h12V1z M19,5H8C6.9,5,6,5.9,6,7v10c0,1.1,0.9,2,2,2h11c1.1,0,2-0.9,2-2V7C21,5.9,20.1,5,19,5z M19,17H8V7h11V17z"),
+                Fill = System.Windows.Media.Brushes.White,
+                Stretch = System.Windows.Media.Stretch.Uniform,
+                Width = 13, Height = 13,
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
             }
         };
 
@@ -1744,7 +2199,7 @@ public partial class SettingsWindow : Window
 
         // Layout: image area (95px) + info row below — matches image cards
         var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(95) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var imgContainer = new Grid();
@@ -1763,23 +2218,29 @@ public partial class SettingsWindow : Window
         string sizeStr = "";
         try { sizeStr = FormatStorageSize(new FileInfo(filePath).Length); } catch { }
 
-        var info = new StackPanel { Margin = new Thickness(8, 5, 8, 6) };
+        var info = new StackPanel { Margin = new Thickness(10, 6, 10, 8) };
         info.Children.Add(new TextBlock
         {
             Text = vm.Entry.FileName,
-            FontSize = 10.5,
+            FontSize = 11,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
             TextTrimming = TextTrimming.CharacterEllipsis
         });
-        info.Children.Add(new TextBlock { Text = vm.TimeAgo, FontSize = 9.5, Opacity = 0.3 });
+        info.Children.Add(new TextBlock
+        {
+            Text = vm.TimeAgo, FontSize = 10,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            Opacity = 0.3
+        });
         Grid.SetRow(info, 1);
         grid.Children.Add(info);
 
         var card = new Border
         {
-            Width = 152, Margin = new Thickness(4),
-            CornerRadius = new CornerRadius(10),
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 255, 255, 255)),
+            Width = 168, Margin = new Thickness(3),
+            CornerRadius = new CornerRadius(8),
+            Background = Theme.Brush(Theme.BgCard),
+            BorderBrush = Theme.Brush(Theme.BorderSubtle),
             BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
             Child = grid, Tag = vm,
@@ -1799,7 +2260,7 @@ public partial class SettingsWindow : Window
         card.MouseEnter += (s, _) =>
         {
             var b = (Border)s!;
-            b.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(35, 255, 255, 255));
+            b.BorderBrush = Theme.Brush(Theme.Border);
             var st = (ScaleTransform)b.RenderTransform;
             st.BeginAnimation(ScaleTransform.ScaleXProperty,
                 new System.Windows.Media.Animation.DoubleAnimation(1.03, TimeSpan.FromMilliseconds(120)));
@@ -1814,7 +2275,7 @@ public partial class SettingsWindow : Window
             if (vm.IsSelected)
                 b.BorderBrush = Theme.StrokeBrush();
             else
-                b.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0, 255, 255, 255));
+                b.BorderBrush = Theme.Brush(Theme.BorderSubtle);
             var st = (ScaleTransform)b.RenderTransform;
             st.BeginAnimation(ScaleTransform.ScaleXProperty,
                 new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
@@ -2027,13 +2488,10 @@ public partial class SettingsWindow : Window
         // Already loaded (e.g. re-layout)
         if (img.Source != null) return;
 
-        lock (ThumbCache)
+        if (TryGetThumbFromCache(path, out var cached))
         {
-            if (ThumbCache.TryGetValue(path, out var cached))
-            {
-                img.Source = cached;
-                return;
-            }
+            img.Source = cached;
+            return;
         }
 
         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
@@ -2043,16 +2501,71 @@ public partial class SettingsWindow : Window
                 var bmp = new BitmapImage();
                 bmp.BeginInit();
                 bmp.UriSource = new Uri(path);
-                bmp.DecodePixelWidth = 320;
+                bmp.DecodePixelWidth = 240;
                 bmp.CacheOption = BitmapCacheOption.OnLoad;
                 bmp.EndInit();
                 bmp.Freeze();
 
-                lock (ThumbCache) ThumbCache[path] = bmp;
+                StoreThumbInCache(path, bmp);
                 img.Dispatcher.BeginInvoke(() => img.Source = bmp);
             }
             catch { }
         });
+    }
+
+    private static bool TryGetThumbFromCache(string path, out BitmapImage? image)
+    {
+        lock (ThumbCache)
+        {
+            if (!ThumbCache.TryGetValue(path, out var cached))
+            {
+                image = null;
+                return false;
+            }
+
+            TouchThumbCache(path);
+            image = cached;
+            return true;
+        }
+    }
+
+    private static void StoreThumbInCache(string path, BitmapImage image)
+    {
+        lock (ThumbCache)
+        {
+            ThumbCache[path] = image;
+            TouchThumbCache(path);
+
+            while (ThumbCacheOrder.Count > MaxThumbCacheEntries)
+            {
+                var oldest = ThumbCacheOrder.Last;
+                if (oldest is null)
+                    break;
+
+                ThumbCacheOrder.RemoveLast();
+                ThumbCacheNodes.Remove(oldest.Value);
+                ThumbCache.Remove(oldest.Value);
+            }
+        }
+    }
+
+    private static void TouchThumbCache(string path)
+    {
+        if (ThumbCacheNodes.TryGetValue(path, out var existing))
+            ThumbCacheOrder.Remove(existing);
+
+        ThumbCacheNodes[path] = ThumbCacheOrder.AddFirst(path);
+    }
+
+    internal static void ClearThumbCache()
+    {
+        lock (ThumbCache)
+        {
+            ThumbCache.Clear();
+            ThumbCacheOrder.Clear();
+            ThumbCacheNodes.Clear();
+        }
+        LogoCache.Clear();
     }
 
     private static BitmapImage? LoadPackImage(string relativePath)
@@ -2158,16 +2671,6 @@ public partial class SettingsWindow : Window
         if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
         if (bytes < 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
         return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
-    }
-
-    private static string FormatTimeAgo(DateTime dt)
-    {
-        var diff = DateTime.Now - dt;
-        if (diff.TotalSeconds < 60) return "Just now";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
-        return dt.ToString("MMM d, yyyy");
     }
 
 }

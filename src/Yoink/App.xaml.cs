@@ -1,9 +1,11 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Runtime;
 using System.Windows;
 using System.Windows.Threading;
 using Yoink.Capture;
+using Yoink.Native;
 using Yoink.Models;
 using Yoink.Services;
 using Yoink.Helpers;
@@ -19,9 +21,20 @@ public partial class App : Application
     private HotkeyService? _hotkeyService;
     private SettingsService? _settingsService;
     private HistoryService? _historyService;
+    private readonly object _historyGate = new();
     private TrayIcon? _trayIcon;
     private SettingsWindow? _settingsWindow;
-    private bool _isCapturing;
+    private DispatcherTimer? _idleTrimTimer;
+    private int _activeUploadCount;
+    private volatile bool _isCapturing;
+    private bool _historyRecovered;
+
+    private sealed class PersistedCaptureResult
+    {
+        public required Bitmap Output { get; init; }
+        public string? FilePath { get; init; }
+        public Services.HistoryEntry? HistoryEntry { get; init; }
+    }
 
 
     protected override void OnStartup(StartupEventArgs e)
@@ -48,20 +61,15 @@ public partial class App : Application
 
         _settingsService = new SettingsService();
         _settingsService.Load();
+        System.Windows.Forms.Application.EnableVisualStyles();
         SoundService.Muted = _settingsService.Settings.MuteSounds;
+        SoundService.SetPack(_settingsService.Settings.SoundPack);
         ToastWindow.SetPosition(_settingsService.Settings.ToastPosition);
-        PreviewWindow.SetPosition(_settingsService.Settings.ToastPosition);
+        ToastWindow.SetDuration(_settingsService.Settings.ToastDurationSeconds);
 
-        _historyService = new HistoryService();
-        _historyService.Load();
-        // Recover captures from save directory + history dir that aren't in the index
-        _historyService.RecoverFromDirectories(
-            _settingsService.Settings.SaveDirectory,
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history"));
-        _historyService.CompressHistory = _settingsService.Settings.CompressHistory;
-        _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
-        _historyService.CaptureImageFormat = _settingsService.Settings.CaptureImageFormat;
-        _historyService.PruneByRetention(_settingsService.Settings.HistoryRetention);
+        _idleTrimTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
+        _idleTrimTimer.Tick += (_, _) => TrimIdleMemory();
+        ScheduleIdleMemoryTrim();
 
         // Show setup wizard on first run
         if (!_settingsService.Settings.HasCompletedSetup)
@@ -75,6 +83,7 @@ public partial class App : Application
         _trayIcon.OnOcr += () => OnOcrHotkeyPressed();
         _trayIcon.OnColorPicker += () => OnPickerHotkeyPressed();
         _trayIcon.OnGifRecord += () => OnGifHotkeyPressed();
+        _trayIcon.OnScrollCapture += () => OnScrollCaptureHotkeyPressed();
         _trayIcon.OnSettings += ShowSettings;
         _trayIcon.OnHistory += ShowHistory;
         _trayIcon.OnQuit += () => Shutdown();
@@ -83,6 +92,7 @@ public partial class App : Application
 
         if (_settingsService.Settings.AutoCheckForUpdates)
             _ = CheckForUpdatesOnStartupAsync();
+
     }
 
     public void RegisterHotkeys()
@@ -98,24 +108,39 @@ public partial class App : Application
         _hotkeyService.GifHotkeyPressed += OnGifHotkeyPressed;
         _hotkeyService.FullscreenHotkeyPressed += OnFullscreenHotkeyPressed;
         _hotkeyService.ActiveWindowHotkeyPressed += OnActiveWindowHotkeyPressed;
+        _hotkeyService.ScrollCaptureHotkeyPressed += OnScrollCaptureHotkeyPressed;
 
         var s = _settingsService!.Settings;
-        bool ok = _hotkeyService.Register(s.HotkeyModifiers, s.HotkeyKey);
-        _hotkeyService.RegisterOcr(s.OcrHotkeyModifiers, s.OcrHotkeyKey);
-        _hotkeyService.RegisterPicker(s.PickerHotkeyModifiers, s.PickerHotkeyKey);
-        _hotkeyService.RegisterScan(s.ScanHotkeyModifiers, s.ScanHotkeyKey);
-        _hotkeyService.RegisterSticker(s.StickerHotkeyModifiers, s.StickerHotkeyKey);
-        _hotkeyService.RegisterRuler(s.RulerHotkeyModifiers, s.RulerHotkeyKey);
-        _hotkeyService.RegisterGif(s.GifHotkeyModifiers, s.GifHotkeyKey);
-        _hotkeyService.RegisterFullscreen(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey);
-        _hotkeyService.RegisterActiveWindow(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey);
+        var failed = new List<string>();
 
+        if (!_hotkeyService.Register(s.HotkeyModifiers, s.HotkeyKey))
+            failed.Add("Capture");
+        if (!_hotkeyService.RegisterOcr(s.OcrHotkeyModifiers, s.OcrHotkeyKey))
+            failed.Add("OCR");
+        if (!_hotkeyService.RegisterPicker(s.PickerHotkeyModifiers, s.PickerHotkeyKey))
+            failed.Add("Color Picker");
+        if (!_hotkeyService.RegisterScan(s.ScanHotkeyModifiers, s.ScanHotkeyKey))
+            failed.Add("Scanner");
+        if (!_hotkeyService.RegisterSticker(s.StickerHotkeyModifiers, s.StickerHotkeyKey))
+            failed.Add("Sticker");
+        if (!_hotkeyService.RegisterRuler(s.RulerHotkeyModifiers, s.RulerHotkeyKey))
+            failed.Add("Ruler");
+        if (!_hotkeyService.RegisterGif(s.GifHotkeyModifiers, s.GifHotkeyKey))
+            failed.Add("GIF");
+        if (!_hotkeyService.RegisterFullscreen(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey))
+            failed.Add("Fullscreen");
+        if (!_hotkeyService.RegisterActiveWindow(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey))
+            failed.Add("Active Window");
+        if (!_hotkeyService.RegisterScrollCapture(s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey))
+            failed.Add("Scroll Capture");
 
-        var name = HotkeyFormatter.Format(s.HotkeyModifiers, s.HotkeyKey);
-        if (!ok)
-            ToastWindow.Show("Hotkey failed", $"Could not register {name}. Try a different combo.");
+        if (failed.Count > 0)
+            ToastWindow.ShowError("Hotkey conflicts", $"Could not register: {string.Join(", ", failed)}. Try different combos.");
         else
+        {
+            var name = HotkeyFormatter.Format(s.HotkeyModifiers, s.HotkeyKey);
             ToastWindow.Show("Yoink ready", $"{name} to capture, Alt+C for colors");
+        }
     }
 
     // ─── Hotkeys (all open unified overlay with different initial tool) ──
@@ -124,8 +149,6 @@ public partial class App : Application
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        PreviewWindow.DismissCurrent();
-        ToastWindow.DismissCurrent();
         Dispatcher.BeginInvoke(() => LaunchOverlay(_settingsService!.Settings.DefaultCaptureMode));
     }
 
@@ -133,8 +156,6 @@ public partial class App : Application
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        PreviewWindow.DismissCurrent();
-        ToastWindow.DismissCurrent();
         Dispatcher.BeginInvoke(() => LaunchOverlay(mode));
     }
 
@@ -142,8 +163,6 @@ public partial class App : Application
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        PreviewWindow.DismissCurrent();
-        ToastWindow.DismissCurrent();
         Dispatcher.BeginInvoke(() => LaunchOverlay(CaptureMode.Ocr));
     }
 
@@ -151,8 +170,6 @@ public partial class App : Application
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        PreviewWindow.DismissCurrent();
-        ToastWindow.DismissCurrent();
         Dispatcher.BeginInvoke(() => LaunchOverlay(CaptureMode.ColorPicker));
     }
 
@@ -160,34 +177,62 @@ public partial class App : Application
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        PreviewWindow.DismissCurrent();
-        ToastWindow.DismissCurrent();
         Dispatcher.BeginInvoke(LaunchGifRecording);
+    }
+
+    private void OnScrollCaptureHotkeyPressed()
+    {
+        if (_isCapturing) return;
+        _isCapturing = true;
+        Dispatcher.BeginInvoke(LaunchScrollingCapture);
     }
 
     private void OnFullscreenHotkeyPressed()
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        PreviewWindow.DismissCurrent();
-        ToastWindow.DismissCurrent();
-        Dispatcher.BeginInvoke(CaptureFullscreenNow);
+        Dispatcher.BeginInvoke(() => LaunchWithDelay(CaptureFullscreenNow));
     }
 
     private void OnActiveWindowHotkeyPressed()
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        PreviewWindow.DismissCurrent();
-        ToastWindow.DismissCurrent();
-        Dispatcher.BeginInvoke(CaptureActiveWindowNow);
+        Dispatcher.BeginInvoke(() => LaunchWithDelay(CaptureActiveWindowNow));
+    }
+
+    /// <summary>Applies capture delay (if set) before running the action.</summary>
+    private void LaunchWithDelay(Action action)
+    {
+        int delay = _settingsService!.Settings.CaptureDelaySeconds;
+        if (delay > 0)
+        {
+            int remaining = delay;
+            ToastWindow.Show($"Capturing in {remaining}...", "");
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            timer.Tick += (_, _) =>
+            {
+                remaining--;
+                if (remaining > 0)
+                    ToastWindow.Show($"Capturing in {remaining}...", "");
+                else
+                {
+                    timer.Stop();
+                    ToastWindow.DismissCurrent();
+                    action();
+                }
+            };
+            timer.Start();
+            return;
+        }
+        action();
     }
 
     // ─── GIF recording launch ───────────────────────────────────────
 
     private void LaunchGifRecording()
     {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
@@ -195,39 +240,63 @@ public partial class App : Application
             {
                 try
                 {
-                    System.Windows.Forms.Application.EnableVisualStyles();
                     var (bmp, bounds) = ScreenCapture.CaptureAllScreens();
                     var s = _settingsService!.Settings;
+                    var fmt = s.RecordingFormat;
 
-                    string saveDir = s.SaveDirectory;
+                    string baseDir = s.SaveDirectory;
+                    string ext = fmt switch { RecordingFormat.MP4 => ".mp4", RecordingFormat.WebM => ".webm", RecordingFormat.MKV => ".mkv", _ => ".gif" };
+                    string saveDir = fmt == RecordingFormat.GIF ? baseDir : Path.Combine(baseDir, "Videos");
                     Directory.CreateDirectory(saveDir);
-                    string fileName = $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.gif";
+                    string fileName = $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}{ext}";
                     string savePath = Path.Combine(saveDir, fileName);
+                    int maxH = s.RecordingQuality switch { RecordingQuality.P1080 => 1080, RecordingQuality.P720 => 720, RecordingQuality.P480 => 480, _ => 0 };
+                    int fps = fmt == RecordingFormat.GIF ? s.GifFps : s.RecordingFps;
 
-                    var form = new RecordingForm(bmp, bounds, s.GifFps, s.GifMaxDuration, savePath);
+                    bool recMic = fmt != RecordingFormat.GIF && s.RecordMicrophone;
+                    bool recDesktop = fmt != RecordingFormat.GIF && s.RecordDesktopAudio;
+                    var form = new RecordingForm(bmp, bounds, fps, savePath, fmt, maxH,
+                        recMic, s.MicrophoneDeviceId, recDesktop, s.DesktopAudioDeviceId);
 
-                    form.RecordingCompleted += path =>
+                    form.RecordingCompleted += (path, firstFrame) =>
                     {
                         Dispatcher.BeginInvoke(() =>
                         {
-                            _isCapturing = false;
-                            Services.HistoryEntry? historyEntry = null;
+                            try { EnsureHistoryService().SaveGifEntry(path); } catch { }
 
-                            // Save to history
+                            // Always copy file to clipboard
                             try
                             {
-                                historyEntry = _historyService?.SaveGifEntry(path);
+                                var files = new System.Collections.Specialized.StringCollection { path };
+                                System.Windows.Clipboard.SetFileDropList(files);
                             }
                             catch { }
 
-                            // Show preview (copies to clipboard, supports drag & drop)
-                            var preview = new PreviewWindow(path);
-                            preview.Show();
+                            // Show toast with first-frame preview if available
+                            if (firstFrame != null)
+                            {
+                                ToastWindow.ShowImagePreview(firstFrame, path, false);
+                            }
+                            else
+                            {
+                                var fi = new FileInfo(path);
+                                string label = fi.Extension.TrimStart('.').ToUpper();
+                                string size = fi.Length > 1024 * 1024
+                                    ? $"{fi.Length / 1024.0 / 1024.0:F1} MB"
+                                    : $"{fi.Length / 1024:N0} KB";
+                                ToastWindow.Show($"{label} recorded", $"{fi.Name} · {size}");
+                            }
 
+                            ScheduleIdleMemoryTrim();
                         });
                     };
 
                     form.RecordingCancelled += () =>
+                    {
+                        Dispatcher.BeginInvoke(() => _isCapturing = false);
+                    };
+
+                    form.FormClosed += (_, _) =>
                     {
                         Dispatcher.BeginInvoke(() => _isCapturing = false);
                     };
@@ -239,7 +308,59 @@ public partial class App : Application
                     Dispatcher.BeginInvoke(() =>
                     {
                         _isCapturing = false;
-                        ToastWindow.Show("GIF error", "Recording failed");
+                        ToastWindow.ShowError("Recording error", "Recording failed");
+                    });
+                }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.IsBackground = true;
+            thread.Start();
+        };
+        timer.Start();
+    }
+
+    // ─── Scrolling capture launch ──────────────────────────────────
+
+    private void LaunchScrollingCapture()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var (bmp, bounds) = ScreenCapture.CaptureAllScreens();
+                    var form = new ScrollingCaptureForm(bmp, bounds);
+
+                    form.CaptureCompleted += result =>
+                    {
+                        Dispatcher.BeginInvoke(() =>
+                        {
+                            HandleCaptureResult(result);
+                            ScheduleIdleMemoryTrim();
+                        });
+                    };
+
+                    form.CaptureCancelled += () =>
+                    {
+                        Dispatcher.BeginInvoke(() => _isCapturing = false);
+                    };
+
+                    form.FormClosed += (_, _) =>
+                    {
+                        Dispatcher.BeginInvoke(() => _isCapturing = false);
+                    };
+
+                    System.Windows.Forms.Application.Run(form);
+                }
+                catch
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        _isCapturing = false;
+                        ToastWindow.ShowError("Scroll capture error", "Scrolling capture failed");
                     });
                 }
             });
@@ -252,30 +373,33 @@ public partial class App : Application
 
     private void CaptureFullscreenNow()
     {
+        Bitmap? bmp = null;
         try
         {
-            var (bmp, _) = ScreenCapture.CaptureAllScreens();
+            (bmp, _) = ScreenCapture.CaptureAllScreens();
             HandleCaptureResult(new Bitmap(bmp));
             bmp.Dispose();
         }
         catch (Exception ex)
         {
+            bmp?.Dispose();
             _isCapturing = false;
-            ToastWindow.Show("Capture error", ex.Message);
+            ToastWindow.ShowError("Capture error", ex.Message);
         }
     }
 
     private void CaptureActiveWindowNow()
     {
+        Bitmap? bmp = null;
         try
         {
-            var (bmp, bounds) = ScreenCapture.CaptureAllScreens();
+            (bmp, var bounds) = ScreenCapture.CaptureAllScreens();
             var hwnd = Native.User32.GetForegroundWindow();
             if (hwnd == IntPtr.Zero || !Native.User32.GetWindowRect(hwnd, out var rect))
             {
                 bmp.Dispose();
                 _isCapturing = false;
-                ToastWindow.Show("Capture error", "Couldn't find the active window.");
+                ToastWindow.ShowError("Capture error", "Couldn't find the active window.");
                 return;
             }
 
@@ -285,7 +409,7 @@ public partial class App : Application
             {
                 bmp.Dispose();
                 _isCapturing = false;
-                ToastWindow.Show("Capture error", "Active window is out of bounds.");
+                ToastWindow.ShowError("Capture error", "Active window is out of bounds.");
                 return;
             }
 
@@ -295,8 +419,9 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+            bmp?.Dispose();
             _isCapturing = false;
-            ToastWindow.Show("Capture error", ex.Message);
+            ToastWindow.ShowError("Capture error", ex.Message);
         }
     }
 
@@ -304,16 +429,19 @@ public partial class App : Application
 
     private void LaunchOverlay(CaptureMode initialMode)
     {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
-        timer.Tick += (_, _) =>
+        LaunchWithDelay(() => LaunchOverlayNow(initialMode));
+    }
+
+    private void LaunchOverlayNow(CaptureMode initialMode)
+    {
+        // Use Background priority to yield to input processing, then launch immediately
+        Dispatcher.BeginInvoke(() =>
         {
-            timer.Stop();
             var thread = new Thread(() =>
             {
                 Bitmap? screenshot = null;
                 try
                 {
-                    System.Windows.Forms.Application.EnableVisualStyles();
                     var (bmp, bounds) = ScreenCapture.CaptureAllScreens();
                     screenshot = bmp;
 
@@ -384,6 +512,10 @@ public partial class App : Application
                                     ToastWindow.Show("Scan", "No QR/barcode found");
                                 }
                             }
+                            catch (Exception ex)
+                            {
+                                ToastWindow.ShowError("Scan failed", ex.Message);
+                            }
                             finally
                             {
                                 clone.Dispose();
@@ -417,7 +549,7 @@ public partial class App : Application
                             }
                             catch (Exception ex)
                             {
-                                ToastWindow.Show("Sticker error", ex.Message);
+                                ToastWindow.ShowError("Sticker error", ex.Message);
                             }
                             finally
                             {
@@ -443,7 +575,7 @@ public partial class App : Application
                                 System.Windows.Media.Color.FromRgb(r, g, b));
 
                             if (_settingsService!.Settings.SaveHistory)
-                                _historyService!.SaveColorEntry(bare);
+                                EnsureHistoryService().SaveColorEntry(bare);
                         });
                         overlay.Close();
                         System.Windows.Forms.Application.ExitThread();
@@ -491,15 +623,14 @@ public partial class App : Application
                     Dispatcher.BeginInvoke(() =>
                     {
                         _isCapturing = false;
-                        ToastWindow.Show("Capture error", ex.Message);
+                        ToastWindow.ShowError("Capture error", ex.Message);
                     });
                 }
             });
             thread.SetApartmentState(ApartmentState.STA);
             thread.IsBackground = true;
             thread.Start();
-        };
-        timer.Start();
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     // ─── Result handlers ────────────────────────────────────────────
@@ -508,111 +639,172 @@ public partial class App : Application
     {
         SoundService.PlayCaptureSound();
 
-        Dispatcher.BeginInvoke(() =>
+        var settings = _settingsService!.Settings;
+        var ext = CaptureOutputService.GetExtension(settings.CaptureImageFormat);
+        var defaultPath = Path.Combine(settings.SaveDirectory, $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}");
+        string? requestedPath = settings.AskForFileNameOnSave
+            ? ResolveSavePath(defaultPath, settings.CaptureImageFormat)
+            : defaultPath;
+        if (requestedPath is null)
         {
-            var output = CaptureOutputService.PrepareBitmap(result, _settingsService!.Settings.CaptureMaxLongEdge);
             result.Dispose();
-            string? filePath = null;
-            Services.HistoryEntry? historyEntry = null;
+            _isCapturing = false;
+            return;
+        }
 
-            if (_settingsService.Settings.SaveToFile)
+        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: false, providerName: null)
+            .ContinueWith(task =>
             {
-                var ext = CaptureOutputService.GetExtension(_settingsService.Settings.CaptureImageFormat);
-                var requestedPath = ResolveSavePath(
-                    Path.Combine(_settingsService.Settings.SaveDirectory, $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}"),
-                    _settingsService.Settings.CaptureImageFormat);
-                if (requestedPath is null)
+                if (task.IsFaulted)
                 {
-                    output.Dispose();
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        _isCapturing = false;
+                        ToastWindow.ShowError("Capture error", task.Exception?.GetBaseException().Message ?? "Capture failed");
+                        ScheduleIdleMemoryTrim();
+                    });
                     return;
                 }
-                filePath = requestedPath;
-            }
 
-            if (_settingsService!.Settings.SaveHistory)
-            {
-                historyEntry = _historyService!.SaveCapture(output);
-                filePath ??= historyEntry.FilePath;
-            }
+                var persisted = task.Result;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    // Always copy to clipboard
+                    ClipboardService.CopyToClipboard(persisted.Output);
 
-            if (_settingsService.Settings.SaveToFile)
-                SaveToFile(output, filePath!);
+                    var action = settings.AfterCapture;
+                    if (action == AfterCaptureAction.ShowPreview)
+                    {
+                        ToastWindow.ShowImagePreview(persisted.Output, persisted.FilePath, settings.AutoPinPreviews);
+                    }
+                    else
+                    {
+                        var dims = $"{persisted.Output.Width}x{persisted.Output.Height}";
+                        persisted.Output.Dispose();
+                        ToastWindow.Show("Copied to clipboard", dims);
+                    }
 
-            var action = _settingsService.Settings.AfterCapture;
-            if (action == AfterCaptureAction.ShowPreview)
-            {
-                var preview = new PreviewWindow(output, filePath);
-                preview.Show();
-            }
-            else
-            {
-                ClipboardService.CopyToClipboard(output);
-                output.Dispose();
-            }
+                    if (persisted.FilePath != null && settings.AutoUploadScreenshots
+                        && settings.ImageUploadDestination != UploadDestination.None)
+                    {
+                        _ = UploadFileAsync(persisted.FilePath, "Screenshot", persisted.HistoryEntry);
+                    }
 
-            // Auto-upload screenshot
-            if (filePath != null && _settingsService.Settings.AutoUploadScreenshots
-                && _settingsService.Settings.ImageUploadDestination != UploadDestination.None)
-            {
-                _ = UploadFileAsync(filePath, "Screenshot", historyEntry);
-            }
-
-            _isCapturing = false;
-        });
+                    _isCapturing = false;
+                    ScheduleIdleMemoryTrim();
+                });
+            }, TaskScheduler.Default);
     }
 
     private void HandleStickerResult(Bitmap result, string providerName)
     {
         SoundService.PlayCaptureSound();
 
-        Dispatcher.BeginInvoke(() =>
+        var settings = _settingsService!.Settings;
+        var defaultStickerPath = Path.Combine(settings.SaveDirectory, $"yoink_sticker_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+        string? requestedPath = settings.AskForFileNameOnSave
+            ? ResolveSavePath(defaultStickerPath, CaptureImageFormat.Png)
+            : defaultStickerPath;
+        if (requestedPath is null)
         {
-            var output = CaptureOutputService.PrepareBitmap(result, _settingsService!.Settings.CaptureMaxLongEdge);
             result.Dispose();
-            string? filePath = null;
-            Services.HistoryEntry? historyEntry = null;
+            _isCapturing = false;
+            return;
+        }
 
-            if (_settingsService.Settings.SaveToFile)
+        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: true, providerName: providerName)
+            .ContinueWith(task =>
             {
-                var requestedPath = ResolveSavePath(
-                    Path.Combine(_settingsService.Settings.SaveDirectory, $"yoink_sticker_{DateTime.Now:yyyyMMdd_HHmmss}.png"),
-                    CaptureImageFormat.Png);
-                if (requestedPath is null)
+                if (task.IsFaulted)
                 {
-                    output.Dispose();
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        _isCapturing = false;
+                        ToastWindow.ShowError("Sticker error", task.Exception?.GetBaseException().Message ?? "Sticker processing failed");
+                        ScheduleIdleMemoryTrim();
+                    });
                     return;
                 }
-                filePath = requestedPath;
-            }
 
-            if (_settingsService!.Settings.SaveHistory)
+                var persisted = task.Result;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    ClipboardService.CopyToClipboard(persisted.Output);
+
+                    var action = settings.AfterCapture;
+                    if (action == AfterCaptureAction.ShowPreview)
+                    {
+                        ToastWindow.ShowImagePreview(persisted.Output, persisted.FilePath, settings.AutoPinPreviews);
+                    }
+                    else
+                    {
+                        persisted.Output.Dispose();
+                        ToastWindow.Show("Sticker copied");
+                    }
+
+                    if (persisted.FilePath != null && settings.AutoUploadScreenshots
+                        && settings.ImageUploadDestination != UploadDestination.None)
+                    {
+                        _ = UploadFileAsync(persisted.FilePath, "Sticker", persisted.HistoryEntry);
+                    }
+
+                    _isCapturing = false;
+                    ScheduleIdleMemoryTrim();
+                });
+            }, TaskScheduler.Default);
+    }
+
+    private Task<PersistedCaptureResult> PersistCaptureAsync(
+        Bitmap source,
+        string? requestedPath,
+        bool saveHistory,
+        bool isSticker,
+        string? providerName)
+    {
+        var settings = _settingsService!.Settings;
+        int maxLongEdge = settings.CaptureMaxLongEdge;
+        var captureFormat = settings.CaptureImageFormat;
+        int jpegQuality = settings.JpegQuality;
+
+        return Task.Run(() =>
+        {
+            using (source)
             {
-                historyEntry = _historyService!.SaveStickerEntry(output, providerName);
-                filePath ??= historyEntry.FilePath;
-            }
+                var output = CaptureOutputService.PrepareBitmap(source, maxLongEdge);
+                string? filePath = requestedPath;
+                Services.HistoryEntry? historyEntry = null;
 
-            if (_settingsService.Settings.SaveToFile)
-                SaveStickerToFile(output, filePath!);
+                if (saveHistory)
+                {
+                    lock (_historyGate)
+                    {
+                        historyEntry = isSticker
+                            ? EnsureHistoryService().SaveStickerEntry(output, providerName)
+                            : EnsureHistoryService().SaveCapture(output);
+                    }
+                    filePath ??= historyEntry.FilePath;
+                }
 
-            var action = _settingsService.Settings.AfterCapture;
-            if (action == AfterCaptureAction.ShowPreview)
-            {
-                var preview = new PreviewWindow(output, filePath);
-                preview.Show();
-            }
-            else
-            {
-                ClipboardService.CopyToClipboard(output);
-                output.Dispose();
-            }
+                if (requestedPath != null)
+                {
+                    var directory = Path.GetDirectoryName(filePath!);
+                    if (string.IsNullOrWhiteSpace(directory))
+                        throw new InvalidOperationException("Save path must include a directory.");
 
-            if (filePath != null && _settingsService.Settings.AutoUploadScreenshots
-                && _settingsService.Settings.ImageUploadDestination != UploadDestination.None)
-            {
-                _ = UploadFileAsync(filePath, "Sticker", historyEntry);
-            }
+                    Directory.CreateDirectory(directory);
+                    if (isSticker)
+                        output.Save(filePath!, ImageFormat.Png);
+                    else
+                        CaptureOutputService.SaveBitmap(output, filePath!, captureFormat, jpegQuality);
+                }
 
-            _isCapturing = false;
+                return new PersistedCaptureResult
+                {
+                    Output = output,
+                    FilePath = filePath,
+                    HistoryEntry = historyEntry
+                };
+            }
         });
     }
 
@@ -631,7 +823,7 @@ public partial class App : Application
                     ToastWindow.Show("Text copied", prev);
 
                     if (_settingsService!.Settings.SaveHistory)
-                        _historyService!.SaveOcrEntry(text);
+                        EnsureHistoryService().SaveOcrEntry(text);
                 }
                 else
                 {
@@ -640,14 +832,16 @@ public partial class App : Application
             }
             catch (Exception ex)
             {
-                ToastWindow.Show("OCR error", ex.Message);
+                ToastWindow.ShowError("OCR error", ex.Message);
             }
             finally { result.Dispose(); }
+            ScheduleIdleMemoryTrim();
         });
     }
 
     private async Task UploadFileAsync(string filePath, string label, Services.HistoryEntry? historyEntry = null)
     {
+        Interlocked.Increment(ref _activeUploadCount);
         try
         {
             SoundService.PlayUploadStartSound();
@@ -660,51 +854,65 @@ public partial class App : Application
             {
                 SoundService.PlayUploadDoneSound();
                 System.Windows.Clipboard.SetText(result.Url);
-                PreviewWindow.AttachUploadedLink(filePath, result.Url, UploadService.GetName(dest));
 
                 // Store upload URL in history entry
                 var entry = historyEntry ?? _historyService?.Entries.FirstOrDefault(e =>
                     string.Equals(e.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
                 if (entry != null)
                 {
-                    entry.UploadUrl = result.Url;
-                    if (string.IsNullOrWhiteSpace(entry.UploadProvider))
+                    lock (_historyGate)
                     {
-                        entry.UploadProvider = UploadService.GetName(dest);
-                        var currentName = Path.GetFileName(entry.FilePath);
-                        var prefix = UploadService.GetName(dest).ToLowerInvariant() + "_";
-                        entry.FileName = currentName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                            ? currentName
-                            : prefix + currentName;
+                        entry.UploadUrl = result.Url;
+                        if (string.IsNullOrWhiteSpace(entry.UploadProvider))
+                        {
+                            entry.UploadProvider = UploadService.GetName(dest);
+                            var currentName = Path.GetFileName(entry.FilePath);
+                            var prefix = UploadService.GetName(dest).ToLowerInvariant() + "_";
+                            entry.FileName = currentName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                                ? currentName
+                                : prefix + currentName;
+                        }
+                        EnsureHistoryService().SaveIndex();
                     }
-                    _historyService!.SaveIndex();
                 }
             }
             else
             {
-                SoundService.PlayErrorSound();
-                ToastWindow.Show(
+                ToastWindow.ShowError(
                     result.IsRateLimit ? $"{label} upload rate-limited" : $"{label} upload failed",
                     result.Error);
             }
         }
         catch (Exception ex)
         {
-            SoundService.PlayErrorSound();
-            ToastWindow.Show($"{label} upload error", ex.Message);
+            ToastWindow.ShowError($"{label} upload error", ex.Message);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeUploadCount);
+            ScheduleIdleMemoryTrim();
         }
     }
 
     private string SaveToFile(Bitmap bmp, string path)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        CaptureOutputService.SaveBitmap(bmp, path, _settingsService.Settings.CaptureImageFormat, _settingsService.Settings.JpegQuality);
+        var settings = _settingsService!.Settings;
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new InvalidOperationException("Save path must include a directory.");
+
+        Directory.CreateDirectory(directory);
+        CaptureOutputService.SaveBitmap(bmp, path, settings.CaptureImageFormat, settings.JpegQuality);
         return path;
     }
 
     private string SaveStickerToFile(Bitmap bmp, string path)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new InvalidOperationException("Save path must include a directory.");
+
+        Directory.CreateDirectory(directory);
         bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
         return path;
     }
@@ -736,10 +944,20 @@ public partial class App : Application
     private void ShowSettings()
     {
         if (_settingsWindow is { IsVisible: true }) { _settingsWindow.Activate(); return; }
-        _settingsWindow = new SettingsWindow(_settingsService!, _historyService!);
-        _settingsWindow.HotkeyChanged += () => RegisterHotkeys();
-        _settingsWindow.UninstallRequested += BeginUninstall;
-        _settingsWindow.Show();
+        var win = new SettingsWindow(_settingsService!, EnsureHistoryService());
+        Action hotkeyHandler = () => RegisterHotkeys();
+        Action uninstallHandler = BeginUninstall;
+        win.HotkeyChanged += hotkeyHandler;
+        win.UninstallRequested += uninstallHandler;
+        win.Closed += (_, _) =>
+        {
+            win.HotkeyChanged -= hotkeyHandler;
+            win.UninstallRequested -= uninstallHandler;
+            _settingsWindow = null;
+            ScheduleIdleMemoryTrim();
+        };
+        _settingsWindow = win;
+        win.Show();
     }
 
     private void ShowHistory()
@@ -803,9 +1021,70 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _idleTrimTimer?.Stop();
         _hotkeyService?.Dispose();
         _trayIcon?.Dispose();
         _settingsWindow?.Close();
+        try { Services.LocalStickerEngineService.Shutdown(); } catch { }
         base.OnExit(e);
+    }
+
+    private HistoryService EnsureHistoryService()
+    {
+        lock (_historyGate)
+        {
+            if (_historyService is null)
+            {
+                _historyService = new HistoryService();
+                _historyService.Load();
+                if (!_historyRecovered)
+                {
+                    _historyService.RecoverFromDirectories(
+                        _settingsService!.Settings.SaveDirectory,
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history"));
+                    _historyRecovered = true;
+                }
+                _historyService.PruneByRetention(_settingsService!.Settings.HistoryRetention);
+            }
+
+            _historyService.CompressHistory = _settingsService!.Settings.CompressHistory;
+            _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
+            _historyService.CaptureImageFormat = _settingsService.Settings.CaptureImageFormat;
+            return _historyService;
+        }
+    }
+
+    private void ScheduleIdleMemoryTrim()
+    {
+        if (_idleTrimTimer is null)
+            return;
+
+        _idleTrimTimer.Stop();
+        _idleTrimTimer.Start();
+    }
+
+    private void TrimIdleMemory()
+    {
+        _idleTrimTimer?.Stop();
+
+        if (_isCapturing || Volatile.Read(ref _activeUploadCount) > 0)
+        {
+            ScheduleIdleMemoryTrim();
+            return;
+        }
+
+        // Release all caches and optional services
+        _historyService = null;
+        UI.SettingsWindow.ClearThumbCache();
+
+        // Release ONNX inference sessions (can be 100-500MB per model)
+        try { Services.LocalStickerEngineService.ReleaseSessions(); } catch { }
+
+        // Aggressive GC + LOH compaction + working set trim
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        ProcessMemory.TrimCurrentProcessWorkingSet();
     }
 }

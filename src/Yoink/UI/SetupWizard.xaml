@@ -3,106 +3,185 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
-        Width="480" Height="520" Topmost="True"
-        SourceInitialized="OnSourceInit">
+        Width="500" Height="540" Topmost="True"
+        SourceInitialized="OnSourceInit"
+        MouseLeftButtonDown="Window_MouseDown">
 
     <Window.Resources>
+        <SolidColorBrush x:Key="WizBg" Color="#1F1F1F"/>
+        <SolidColorBrush x:Key="WizCardBg" Color="#2D2D2D"/>
+        <SolidColorBrush x:Key="WizFg" Color="#F0F0F0"/>
+        <SolidColorBrush x:Key="WizFgMuted" Color="#99F0F0F0"/>
+        <SolidColorBrush x:Key="WizBorder" Color="#12FFFFFF"/>
+        <SolidColorBrush x:Key="WizInputBg" Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="WizBtnPrimaryBg" Color="#F0F0F0"/>
+        <SolidColorBrush x:Key="WizBtnPrimaryFg" Color="#1A1A1A"/>
+        <SolidColorBrush x:Key="WizBtnSecondaryBg" Color="#15FFFFFF"/>
+        <SolidColorBrush x:Key="WizBtnSecondaryFg" Color="#CCF0F0F0"/>
+
         <Style x:Key="WizBtn" TargetType="Button">
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="20,8"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
+            <Setter Property="Padding" Value="24,10"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="100"/>
+        </Style>
+        <Style x:Key="WizBtnPrimary" TargetType="Button" BasedOn="{StaticResource WizBtn}">
+            <Setter Property="Background" Value="{DynamicResource WizBtnPrimaryBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource WizBtnPrimaryFg}"/>
+            <Setter Property="BorderBrush" Value="#20000000"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WizBtnSecondary" TargetType="Button" BasedOn="{StaticResource WizBtn}">
+            <Setter Property="Background" Value="{DynamicResource WizBtnSecondaryBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource WizBtnSecondaryFg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource WizBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
     <Border Margin="16" CornerRadius="12">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.5" Color="Black"/>
+            <DropShadowEffect BlurRadius="28" ShadowDepth="4" Opacity="0.5" Color="Black"/>
         </Border.Effect>
-    <Border CornerRadius="12" ClipToBounds="True" Background="#202020"
-            BorderBrush="#18FFFFFF" BorderThickness="1">
+    <Border x:Name="WizardBorder" CornerRadius="12" ClipToBounds="True"
+            Background="{DynamicResource WizBg}" BorderBrush="{DynamicResource WizBorder}" BorderThickness="1">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Pages -->
+        <!-- Page 1: Hotkeys -->
         <Grid x:Name="Page1" Grid.Row="0" Margin="32,28,32,0">
             <StackPanel VerticalAlignment="Center">
+                <Image Source="pack://application:,,,/yoink.ico" Width="40" Height="40"
+                       RenderOptions.BitmapScalingMode="HighQuality"
+                       HorizontalAlignment="Center" Margin="0,0,0,16"/>
                 <TextBlock Text="Welcome to Yoink" FontSize="24" FontWeight="SemiBold"
-                           Foreground="White" HorizontalAlignment="Center"/>
-                <TextBlock Text="A fast screenshot tool for Windows." FontSize="13"
-                           Foreground="White" Opacity="0.4" HorizontalAlignment="Center" Margin="0,6,0,28"/>
+                           FontFamily="Segoe UI Variable Display"
+                           Foreground="{DynamicResource WizFg}" HorizontalAlignment="Center"/>
+                <TextBlock Text="Set up your hotkeys to get started." FontSize="13"
+                           FontFamily="Segoe UI Variable Text"
+                           Foreground="{DynamicResource WizFgMuted}" HorizontalAlignment="Center" Margin="0,6,0,28"/>
 
-                <TextBlock Text="Hotkeys" FontSize="14" FontWeight="SemiBold" Foreground="White" Opacity="0.7" Margin="0,0,0,10"/>
-
-                <Border Background="#282828" CornerRadius="6" Padding="14,10" Margin="0,0,0,6">
+                <Border Background="{DynamicResource WizCardBg}" CornerRadius="8" Padding="16,12" Margin="0,0,0,4"
+                        BorderBrush="{DynamicResource WizBorder}" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Screenshot" FontSize="13" Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="Screenshot" FontSize="13" FontFamily="Segoe UI Variable Text"
+                                   Foreground="{DynamicResource WizFg}" VerticalAlignment="Center"/>
                         <TextBox x:Name="SetupHotkeyBox" Grid.Column="1" IsReadOnly="True"
-                                 FontSize="12" Padding="10,5" MinWidth="120" TextAlignment="Center"
+                                 FontSize="12" FontFamily="Segoe UI Variable Text"
+                                 Background="{DynamicResource WizInputBg}" Foreground="{DynamicResource WizFg}"
+                                 BorderBrush="{DynamicResource WizBorder}"
+                                 Padding="10,6" MinWidth="130" TextAlignment="Center"
                                  PreviewKeyDown="SetupHotkey_PreviewKeyDown"/>
                     </Grid>
                 </Border>
 
-                <Border Background="#282828" CornerRadius="6" Padding="14,10" Margin="0,0,0,6">
+                <Border Background="{DynamicResource WizCardBg}" CornerRadius="8" Padding="16,12" Margin="0,0,0,4"
+                        BorderBrush="{DynamicResource WizBorder}" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="OCR Text Capture" FontSize="13" Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="OCR Text Capture" FontSize="13" FontFamily="Segoe UI Variable Text"
+                                   Foreground="{DynamicResource WizFg}" VerticalAlignment="Center"/>
                         <TextBox x:Name="SetupOcrHotkeyBox" Grid.Column="1" IsReadOnly="True"
-                                 FontSize="12" Padding="10,5" MinWidth="120" TextAlignment="Center"
+                                 FontSize="12" FontFamily="Segoe UI Variable Text"
+                                 Background="{DynamicResource WizInputBg}" Foreground="{DynamicResource WizFg}"
+                                 BorderBrush="{DynamicResource WizBorder}"
+                                 Padding="10,6" MinWidth="130" TextAlignment="Center"
                                  PreviewKeyDown="SetupOcrHotkey_PreviewKeyDown"/>
                     </Grid>
                 </Border>
 
-                <Border Background="#282828" CornerRadius="6" Padding="14,10">
+                <Border Background="{DynamicResource WizCardBg}" CornerRadius="8" Padding="16,12"
+                        BorderBrush="{DynamicResource WizBorder}" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Color Picker" FontSize="13" Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="Color Picker" FontSize="13" FontFamily="Segoe UI Variable Text"
+                                   Foreground="{DynamicResource WizFg}" VerticalAlignment="Center"/>
                         <TextBox x:Name="SetupPickerHotkeyBox" Grid.Column="1" IsReadOnly="True"
-                                 FontSize="12" Padding="10,5" MinWidth="120" TextAlignment="Center"
+                                 FontSize="12" FontFamily="Segoe UI Variable Text"
+                                 Background="{DynamicResource WizInputBg}" Foreground="{DynamicResource WizFg}"
+                                 BorderBrush="{DynamicResource WizBorder}"
+                                 Padding="10,6" MinWidth="130" TextAlignment="Center"
                                  PreviewKeyDown="SetupPickerHotkey_PreviewKeyDown"/>
                     </Grid>
                 </Border>
             </StackPanel>
         </Grid>
 
+        <!-- Page 2: Toolbar -->
         <Grid x:Name="Page2" Grid.Row="0" Margin="32,28,32,0" Visibility="Collapsed">
-            <StackPanel VerticalAlignment="Center">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0">
                 <TextBlock Text="Toolbar" FontSize="24" FontWeight="SemiBold"
-                           Foreground="White" HorizontalAlignment="Center"/>
+                           FontFamily="Segoe UI Variable Display"
+                           Foreground="{DynamicResource WizFg}" HorizontalAlignment="Center"/>
                 <TextBlock Text="Choose which tools appear in the capture toolbar." FontSize="13"
-                           Foreground="White" Opacity="0.4" HorizontalAlignment="Center" Margin="0,6,0,24"/>
-                <WrapPanel x:Name="SetupToolPanel" Orientation="Horizontal" HorizontalAlignment="Center"/>
-
-                <TextBlock Text="You can change these later in settings." FontSize="11"
-                           Foreground="White" Opacity="0.2" HorizontalAlignment="Center" Margin="0,20,0,0"/>
+                           FontFamily="Segoe UI Variable Text"
+                           Foreground="{DynamicResource WizFgMuted}" HorizontalAlignment="Center" Margin="0,6,0,16"/>
             </StackPanel>
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
+                <StackPanel x:Name="SetupToolPanel"/>
+            </ScrollViewer>
         </Grid>
 
         <!-- Bottom bar -->
-        <Border Grid.Row="1" Padding="24,12,24,20">
+        <Border Grid.Row="1" Padding="28,14,28,22">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="PageIndicator" Text="1 / 2" FontSize="12" Foreground="White"
-                           Opacity="0.25" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="8" Height="8" CornerRadius="4" x:Name="Dot1"
+                            Background="{DynamicResource WizFg}" Opacity="0.7" Margin="0,0,6,0"/>
+                    <Border Width="8" Height="8" CornerRadius="4" x:Name="Dot2"
+                            Background="{DynamicResource WizFg}" Opacity="0.2"/>
+                </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="BackBtn" Content="Back" Style="{StaticResource WizBtn}"
+                    <Button x:Name="BackBtn" Content="Back" Style="{StaticResource WizBtnSecondary}"
                             Click="Back_Click" Visibility="Collapsed" Margin="0,0,8,0"/>
-                    <Button x:Name="NextBtn" Content="Next" Style="{StaticResource WizBtn}"
+                    <Button x:Name="NextBtn" Content="Next" Style="{StaticResource WizBtnPrimary}"
                             Click="Next_Click"/>
                 </StackPanel>
             </Grid>

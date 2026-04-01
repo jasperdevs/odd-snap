@@ -14,6 +14,7 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_GIF = 9007;
     private const int HOTKEY_FULLSCREEN = 9008;
     private const int HOTKEY_ACTIVE_WINDOW = 9009;
+    private const int HOTKEY_SCROLL_CAPTURE = 9010;
     private bool _captureRegistered;
     private bool _ocrRegistered;
     private bool _pickerRegistered;
@@ -23,6 +24,7 @@ public sealed class HotkeyService : IDisposable
     private bool _gifRegistered;
     private bool _fullscreenRegistered;
     private bool _activeWindowRegistered;
+    private bool _scrollCaptureRegistered;
 
     public event Action? HotkeyPressed;
     public event Action? OcrHotkeyPressed;
@@ -33,6 +35,7 @@ public sealed class HotkeyService : IDisposable
     public event Action? GifHotkeyPressed;
     public event Action? FullscreenHotkeyPressed;
     public event Action? ActiveWindowHotkeyPressed;
+    public event Action? ScrollCaptureHotkeyPressed;
 
     public bool Register(uint modifiers, uint key)
     {
@@ -107,6 +110,14 @@ public sealed class HotkeyService : IDisposable
         return _activeWindowRegistered;
     }
 
+    public bool RegisterScrollCapture(uint modifiers, uint key)
+    {
+        if (key == 0) { _scrollCaptureRegistered = false; return true; }
+        _scrollCaptureRegistered = User32.RegisterHotKey(
+            IntPtr.Zero, HOTKEY_SCROLL_CAPTURE, modifiers | User32.MOD_NOREPEAT, key);
+        return _scrollCaptureRegistered;
+    }
+
     public void Unregister()
     {
         if (_captureRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_CAPTURE); _captureRegistered = false; }
@@ -118,6 +129,7 @@ public sealed class HotkeyService : IDisposable
         if (_gifRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_GIF); _gifRegistered = false; }
         if (_fullscreenRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_FULLSCREEN); _fullscreenRegistered = false; }
         if (_activeWindowRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_ACTIVE_WINDOW); _activeWindowRegistered = false; }
+        if (_scrollCaptureRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCROLL_CAPTURE); _scrollCaptureRegistered = false; }
         ComponentDispatcher.ThreadPreprocessMessage -= OnMsg;
     }
 
@@ -134,6 +146,7 @@ public sealed class HotkeyService : IDisposable
         else if (id == HOTKEY_GIF) { GifHotkeyPressed?.Invoke(); handled = true; }
         else if (id == HOTKEY_FULLSCREEN) { FullscreenHotkeyPressed?.Invoke(); handled = true; }
         else if (id == HOTKEY_ACTIVE_WINDOW) { ActiveWindowHotkeyPressed?.Invoke(); handled = true; }
+        else if (id == HOTKEY_SCROLL_CAPTURE) { ScrollCaptureHotkeyPressed?.Invoke(); handled = true; }
     }
 
     public void Dispose() => Unregister();

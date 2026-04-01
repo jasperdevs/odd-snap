@@ -135,13 +135,15 @@ internal static class DxgiScreenCapture
             var bitmapData = bitmap.LockBits(destination, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
             try
             {
-                var rowBuffer = new byte[destination.Width * 4];
-                for (int row = 0; row < destination.Height; row++)
+                int rowBytes = destination.Width * 4;
+                unsafe
                 {
-                    IntPtr sourceRow = IntPtr.Add(map.DataPointer, (int)(((row + sourceY) * map.RowPitch) + (sourceX * 4L)));
-                    IntPtr targetRow = bitmapData.Scan0 + row * bitmapData.Stride;
-                    Marshal.Copy(sourceRow, rowBuffer, 0, rowBuffer.Length);
-                    Marshal.Copy(rowBuffer, 0, targetRow, rowBuffer.Length);
+                    for (int row = 0; row < destination.Height; row++)
+                    {
+                        byte* src = (byte*)map.DataPointer + ((row + sourceY) * (long)map.RowPitch) + (sourceX * 4L);
+                        byte* dst = (byte*)bitmapData.Scan0 + row * bitmapData.Stride;
+                        Buffer.MemoryCopy(src, dst, rowBytes, rowBytes);
+                    }
                 }
             }
             finally

@@ -2,6 +2,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
@@ -15,6 +16,8 @@ public sealed class StickerToastWindow : Window
     private bool _isHovered;
     private bool _isDismissing;
     private readonly Yoink.Models.ToastPosition _position;
+    private readonly Border _progressBar;
+    private readonly ScaleTransform _progressScale;
 
     public StickerToastWindow(Bitmap sticker, Yoink.Models.ToastPosition position)
     {
@@ -30,32 +33,65 @@ public sealed class StickerToastWindow : Window
         SizeToContent = SizeToContent.WidthAndHeight;
         Opacity = 0;
 
-        Content = new Grid
+        Theme.Refresh();
+
+        _progressScale = new ScaleTransform(1, 1);
+        _progressBar = new Border
         {
-            Background = System.Windows.Media.Brushes.Transparent,
-            Children =
+            Height = 3,
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(80, 255, 255, 255)),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            RenderTransform = _progressScale,
+            RenderTransformOrigin = new System.Windows.Point(0, 0.5),
+        };
+
+        var stickerImage = new System.Windows.Controls.Image
+        {
+            Source = ToBitmapSource(sticker),
+            Stretch = System.Windows.Media.Stretch.None,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Effect = new DropShadowEffect
             {
-                new System.Windows.Controls.Image
-                {
-                    Source = ToBitmapSource(sticker),
-                    Stretch = System.Windows.Media.Stretch.None,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Effect = new DropShadowEffect
-                    {
-                        BlurRadius = 18,
-                        ShadowDepth = 3,
-                        Opacity = 0.28,
-                        Color = System.Windows.Media.Colors.Black
-                    }
-                }
+                BlurRadius = 18,
+                ShadowDepth = 3,
+                Opacity = 0.28,
+                Color = Colors.Black
             }
         };
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+        var container = new Grid();
+        container.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        container.Children.Add(stickerImage);
+        Grid.SetRow(_progressBar, 1);
+        container.Children.Add(_progressBar);
+
+        Content = container;
+
+        double duration = ToastWindow.GetDuration();
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(duration) };
         _timer.Tick += (_, _) => { _timer.Stop(); if (!_isHovered) SlideAway(); };
-        MouseEnter += (_, _) => { _isHovered = true; _timer.Stop(); };
-        MouseLeave += (_, _) => { _isHovered = false; _timer.Start(); };
+        MouseEnter += (_, _) =>
+        {
+            _isHovered = true;
+            _timer.Stop();
+            _progressScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            _progressScale.ScaleX = _progressScale.ScaleX;
+        };
+        MouseLeave += (_, _) =>
+        {
+            _isHovered = false;
+            var remaining = _progressScale.ScaleX * duration;
+            if (remaining > 0.05)
+            {
+                _progressScale.BeginAnimation(ScaleTransform.ScaleXProperty,
+                    new DoubleAnimation { To = 0, Duration = TimeSpan.FromSeconds(remaining) });
+            }
+            _timer.Interval = TimeSpan.FromSeconds(remaining);
+            _timer.Start();
+        };
         MouseLeftButtonDown += (_, _) => SlideAway();
         Loaded += OnLoaded;
     }
@@ -82,6 +118,14 @@ public sealed class StickerToastWindow : Window
                 BeginAnimation(LeftProperty, new DoubleAnimation { To = targetLeft, Duration = dur, EasingFunction = ease });
             else
                 BeginAnimation(TopProperty, new DoubleAnimation { To = targetTop, Duration = dur, EasingFunction = ease });
+
+            // Progress bar
+            double duration = ToastWindow.GetDuration();
+            _progressBar.Width = ActualWidth > 0 ? ActualWidth : 200;
+            _progressScale.ScaleX = 1;
+            _progressScale.BeginAnimation(ScaleTransform.ScaleXProperty,
+                new DoubleAnimation { To = 0, Duration = TimeSpan.FromSeconds(duration) });
+
             _timer.Start();
         }, DispatcherPriority.Render);
     }
@@ -132,13 +176,9 @@ public sealed class StickerToastWindow : Window
             {
                 var c = source.GetPixel(x, y);
                 if (c.A <= alphaThreshold)
-                {
                     cleaned.SetPixel(x, y, System.Drawing.Color.Transparent);
-                }
                 else
-                {
                     cleaned.SetPixel(x, y, System.Drawing.Color.FromArgb(c.A, c.R, c.G, c.B));
-                }
             }
         }
         return cleaned;
@@ -146,11 +186,7 @@ public sealed class StickerToastWindow : Window
 
     private static Bitmap TrimTransparentBounds(Bitmap source, byte alphaThreshold)
     {
-        int minX = source.Width;
-        int minY = source.Height;
-        int maxX = -1;
-        int maxY = -1;
-
+        int minX = source.Width, minY = source.Height, maxX = -1, maxY = -1;
         for (int y = 0; y < source.Height; y++)
         for (int x = 0; x < source.Width; x++)
         {
@@ -160,10 +196,7 @@ public sealed class StickerToastWindow : Window
             if (x > maxX) maxX = x;
             if (y > maxY) maxY = y;
         }
-
-        if (maxX < minX || maxY < minY)
-            return new Bitmap(source);
-
+        if (maxX < minX || maxY < minY) return new Bitmap(source);
         var rect = Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1);
         return source.Clone(rect, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
     }

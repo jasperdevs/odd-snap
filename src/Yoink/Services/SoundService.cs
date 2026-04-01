@@ -1,5 +1,6 @@
 using System.IO;
 using System.Media;
+using Yoink.Models;
 
 namespace Yoink.Services;
 
@@ -17,68 +18,33 @@ public static class SoundService
 
     public static bool Muted { get; set; }
 
-    public static void PlayCaptureSound()
+    private static SoundPack _currentPack = SoundPack.Default;
+    public static void SetPack(SoundPack pack) { _currentPack = pack; ClearCache(); }
+    public static SoundPack CurrentPack => _currentPack;
+
+    // Pack parameters: (pitch multiplier, decay multiplier, volume)
+    private static (double pitch, double decay, double vol) PackParams => _currentPack switch
     {
-        if (Muted) return;
-        _captureWav ??= GenerateCaptureWav();
-        PlayAsync(_captureWav);
+        SoundPack.Soft => (0.8, 0.7, 0.3),   // lower pitched, slower decay, quieter
+        SoundPack.Retro => (1.3, 1.5, 0.5),   // higher pitched, snappier, chiptune feel
+        _ => (1.0, 1.0, 0.4),                  // default
+    };
+
+    private static void ClearCache()
+    {
+        _captureWav = _colorWav = _textWav = _scanWav = null;
+        _recordStartWav = _recordStopWav = _uploadStartWav = _uploadDoneWav = _errorWav = null;
     }
 
-    public static void PlayColorSound()
-    {
-        if (Muted) return;
-        _colorWav ??= GenerateColorWav();
-        PlayAsync(_colorWav);
-    }
-
-    public static void PlayTextSound()
-    {
-        if (Muted) return;
-        _textWav ??= GenerateTextWav();
-        PlayAsync(_textWav);
-    }
-
-    public static void PlayScanSound()
-    {
-        if (Muted) return;
-        _scanWav ??= GenerateScanWav();
-        PlayAsync(_scanWav);
-    }
-
-    public static void PlayRecordStartSound()
-    {
-        if (Muted) return;
-        _recordStartWav ??= GenerateRecordStartWav();
-        PlayAsync(_recordStartWav);
-    }
-
-    public static void PlayRecordStopSound()
-    {
-        if (Muted) return;
-        _recordStopWav ??= GenerateRecordStopWav();
-        PlayAsync(_recordStopWav);
-    }
-
-    public static void PlayUploadStartSound()
-    {
-        if (Muted) return;
-        _uploadStartWav ??= GenerateUploadStartWav();
-        PlayAsync(_uploadStartWav);
-    }
-
-    public static void PlayUploadDoneSound()
-    {
-        if (Muted) return;
-        _uploadDoneWav ??= GenerateUploadDoneWav();
-        PlayAsync(_uploadDoneWav);
-    }
-
-    public static void PlayErrorSound()
-    {
-        if (Muted) return;
-        _errorWav ??= GenerateErrorWav();
-        PlayAsync(_errorWav);
-    }
+    public static void PlayCaptureSound() { if (!Muted) PlayAsync(_captureWav ??= GenerateCaptureWav()); }
+    public static void PlayColorSound() { if (!Muted) PlayAsync(_colorWav ??= GenerateColorWav()); }
+    public static void PlayTextSound() { if (!Muted) PlayAsync(_textWav ??= GenerateTextWav()); }
+    public static void PlayScanSound() { if (!Muted) PlayAsync(_scanWav ??= GenerateScanWav()); }
+    public static void PlayRecordStartSound() { if (!Muted) PlayAsync(_recordStartWav ??= GenerateRecordStartWav()); }
+    public static void PlayRecordStopSound() { if (!Muted) PlayAsync(_recordStopWav ??= GenerateRecordStopWav()); }
+    public static void PlayUploadStartSound() { if (!Muted) PlayAsync(_uploadStartWav ??= GenerateUploadStartWav()); }
+    public static void PlayUploadDoneSound() { if (!Muted) PlayAsync(_uploadDoneWav ??= GenerateUploadDoneWav()); }
+    public static void PlayErrorSound() { if (!Muted) PlayAsync(_errorWav ??= GenerateErrorWav()); }
 
     private static void PlayAsync(byte[] wav)
     {
@@ -99,6 +65,7 @@ public static class SoundService
     /// <summary>Capture: crisp camera-shutter click (short noise burst + resonant tap)</summary>
     private static byte[] GenerateCaptureWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 80;
         int numSamples = sampleRate * durationMs / 1000;
@@ -111,14 +78,11 @@ public static class SoundService
         for (int i = 0; i < numSamples; i++)
         {
             double t = (double)i / sampleRate;
-            // Short noise burst (mechanical click)
-            double noise = (rng.NextDouble() * 2 - 1) * Math.Exp(-t * 200) * 0.25;
-            // Resonant body tap
-            double tone = Math.Sin(2 * Math.PI * 1200 * t) * Math.Exp(-t * 100) * 0.4;
-            // Sub-thump for weight
-            double sub = Math.Sin(2 * Math.PI * 300 * t) * Math.Exp(-t * 60) * 0.2;
-            double sample = Math.Clamp(noise + tone + sub, -1.0, 1.0);
-            bw.Write((short)(sample * short.MaxValue));
+            double noise = (rng.NextDouble() * 2 - 1) * Math.Exp(-t * 200 * d) * 0.25;
+            double tone = Math.Sin(2 * Math.PI * 1200 * p * t) * Math.Exp(-t * 100 * d) * 0.4;
+            double sub = Math.Sin(2 * Math.PI * 300 * p * t) * Math.Exp(-t * 60 * d) * 0.2;
+            double sample = Math.Clamp(noise + tone + sub, -1.0, 1.0) * v / 0.4;
+            bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
         }
         return ms.ToArray();
     }
@@ -126,6 +90,7 @@ public static class SoundService
     /// <summary>Color pick: gentle two-note pip (ascending, glassy)</summary>
     private static byte[] GenerateColorWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 140;
         int numSamples = sampleRate * durationMs / 1000;
@@ -140,13 +105,13 @@ public static class SoundService
             double t = (double)i / sampleRate;
             // Two notes: E6 then A6 with soft crossfade
             double split = dur * 0.4;
-            double freq = t < split ? 1319 : 1760;
+            double freq = t < split ? 1319 * p : 1760 * p;
             double env = t < split
-                ? Math.Exp(-(t) * 20)
-                : Math.Exp(-(t - split) * 25);
+                ? Math.Exp(-(t) * 20 * d)
+                : Math.Exp(-(t - split) * 25 * d);
             // Pure sine + soft harmonic for glassy quality
             double sample = (Math.Sin(2 * Math.PI * freq * t) * 0.6
-                           + Math.Sin(2 * Math.PI * freq * 2 * t) * 0.15) * env * 0.4;
+                           + Math.Sin(2 * Math.PI * freq * 2 * t) * 0.15) * env * v;
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
         }
         return ms.ToArray();
@@ -155,6 +120,7 @@ public static class SoundService
     /// <summary>Text/OCR copy: soft descending chime</summary>
     private static byte[] GenerateTextWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 110;
         int numSamples = sampleRate * durationMs / 1000;
@@ -167,11 +133,11 @@ public static class SoundService
         for (int i = 0; i < numSamples; i++)
         {
             double t = (double)i / sampleRate;
-            double env = Math.Exp(-t * 35);
+            double env = Math.Exp(-t * 35 * d);
             // Gentle descending sweep (B5 to G5)
-            double freq = 988 - (396 * t / dur);
+            double freq = (988 - (396 * t / dur)) * p;
             double sample = (Math.Sin(2 * Math.PI * freq * t) * 0.55
-                           + Math.Sin(2 * Math.PI * freq * 1.5 * t) * 0.2) * env * 0.4;
+                           + Math.Sin(2 * Math.PI * freq * 1.5 * t) * 0.2) * env * v;
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
         }
         return ms.ToArray();
@@ -180,6 +146,7 @@ public static class SoundService
     /// <summary>QR/Barcode scan: quick triple-beep like a barcode scanner</summary>
     private static byte[] GenerateScanWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 180;
         int numSamples = sampleRate * durationMs / 1000;
@@ -201,9 +168,9 @@ public static class SoundService
                 double local = t - start;
                 if (local >= 0 && local < beepLen)
                 {
-                    double freq = 1400 + b * 200; // 1400, 1600, 1800 Hz
+                    double freq = (1400 + b * 200) * p;
                     double env = Math.Sin(Math.PI * local / beepLen); // smooth on/off
-                    sample += Math.Sin(2 * Math.PI * freq * local) * env * 0.3;
+                    sample += Math.Sin(2 * Math.PI * freq * local) * env * v * 0.75;
                 }
             }
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
@@ -214,6 +181,7 @@ public static class SoundService
     /// <summary>Record start: quick ascending double-beep (low to high)</summary>
     private static byte[] GenerateRecordStartWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 200;
         int numSamples = sampleRate * durationMs / 1000;
@@ -229,7 +197,7 @@ public static class SoundService
             double t = (double)i / sampleRate;
             double sample = 0;
             // Two ascending beeps: C5 then E5
-            double[] freqs = [523, 659];
+            double[] freqs = [523 * p, 659 * p];
             for (int b = 0; b < 2; b++)
             {
                 double start = b * beepLen * 1.3;
@@ -237,7 +205,7 @@ public static class SoundService
                 if (local >= 0 && local < beepLen)
                 {
                     double env = Math.Sin(Math.PI * local / beepLen);
-                    sample += Math.Sin(2 * Math.PI * freqs[b] * local) * env * 0.35;
+                    sample += Math.Sin(2 * Math.PI * freqs[b] * local) * env * v * 0.875;
                 }
             }
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
@@ -248,6 +216,7 @@ public static class SoundService
     /// <summary>Record stop: quick descending double-beep (high to low)</summary>
     private static byte[] GenerateRecordStopWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 200;
         int numSamples = sampleRate * durationMs / 1000;
@@ -263,7 +232,7 @@ public static class SoundService
             double t = (double)i / sampleRate;
             double sample = 0;
             // Two descending beeps: E5 then C5
-            double[] freqs = [659, 523];
+            double[] freqs = [659 * p, 523 * p];
             for (int b = 0; b < 2; b++)
             {
                 double start = b * beepLen * 1.3;
@@ -271,7 +240,7 @@ public static class SoundService
                 if (local >= 0 && local < beepLen)
                 {
                     double env = Math.Sin(Math.PI * local / beepLen);
-                    sample += Math.Sin(2 * Math.PI * freqs[b] * local) * env * 0.35;
+                    sample += Math.Sin(2 * Math.PI * freqs[b] * local) * env * v * 0.875;
                 }
             }
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
@@ -281,6 +250,7 @@ public static class SoundService
 
     private static byte[] GenerateUploadStartWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 90;
         int numSamples = sampleRate * durationMs / 1000;
@@ -292,9 +262,9 @@ public static class SoundService
         for (int i = 0; i < numSamples; i++)
         {
             double t = (double)i / sampleRate;
-            double env = Math.Exp(-t * 26);
-            double sample = (Math.Sin(2 * Math.PI * 820 * t) * 0.42
-                           + Math.Sin(2 * Math.PI * 1120 * t) * 0.18) * env;
+            double env = Math.Exp(-t * 26 * d);
+            double sample = (Math.Sin(2 * Math.PI * 820 * p * t) * 0.42
+                           + Math.Sin(2 * Math.PI * 1120 * p * t) * 0.18) * env * v / 0.4;
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
         }
         return ms.ToArray();
@@ -302,6 +272,7 @@ public static class SoundService
 
     private static byte[] GenerateUploadDoneWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 170;
         int numSamples = sampleRate * durationMs / 1000;
@@ -310,7 +281,7 @@ public static class SoundService
         using var bw = new BinaryWriter(ms);
         WriteWavHeader(bw, numSamples, sampleRate);
 
-        double[] freqs = [740, 988];
+        double[] freqs = [740 * p, 988 * p];
         double beepLen = durationMs / 1000.0 / 2.5;
         for (int i = 0; i < numSamples; i++)
         {
@@ -323,7 +294,7 @@ public static class SoundService
                 if (local >= 0 && local < beepLen)
                 {
                     double env = Math.Sin(Math.PI * local / beepLen);
-                    sample += Math.Sin(2 * Math.PI * freqs[b] * local) * env * 0.34;
+                    sample += Math.Sin(2 * Math.PI * freqs[b] * local) * env * v * 0.85;
                 }
             }
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
@@ -334,6 +305,7 @@ public static class SoundService
     /// <summary>Error: short descending alert tone</summary>
     private static byte[] GenerateErrorWav()
     {
+        var (p, d, v) = PackParams;
         const int sampleRate = 44100;
         const int durationMs = 170;
         int numSamples = sampleRate * durationMs / 1000;
@@ -345,9 +317,9 @@ public static class SoundService
         for (int i = 0; i < numSamples; i++)
         {
             double t = (double)i / sampleRate;
-            double env = Math.Exp(-t * 18);
-            double freq = 780 - (260 * t / (durationMs / 1000.0));
-            double sample = Math.Sin(2 * Math.PI * freq * t) * env * 0.45;
+            double env = Math.Exp(-t * 18 * d);
+            double freq = (780 - (260 * t / (durationMs / 1000.0))) * p;
+            double sample = Math.Sin(2 * Math.PI * freq * t) * env * v * 1.125;
             bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
         }
         return ms.ToArray();

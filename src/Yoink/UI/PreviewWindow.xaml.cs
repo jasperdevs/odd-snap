@@ -32,6 +32,9 @@ public partial class PreviewWindow : Window
 
     private static PreviewWindow? _current;
     private static Yoink.Models.ToastPosition _position = Yoink.Models.ToastPosition.Right;
+    private static bool _autoPin;
+
+    public static void SetAutoPin(bool autoPin) => _autoPin = autoPin;
 
     public static void DismissCurrent()
     {
@@ -64,7 +67,6 @@ public partial class PreviewWindow : Window
 
         _screenshot = screenshot;
         _savedFilePath = savedFilePath;
-        ClipboardService.CopyToClipboard(screenshot);
 
         InitializeComponent();
         ApplyTheme();
@@ -97,9 +99,24 @@ public partial class PreviewWindow : Window
         InitCommon();
     }
 
+    private double _duration = ToastWindow.GetDuration() + 0.5; // slightly longer than toast
+
     private void InitCommon()
     {
-        _fadeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        if (_autoPin)
+        {
+            _isPinned = true;
+            // Match manual pin visual: white bg, dark icon
+            PinBtn.Background = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromArgb(180, 255, 255, 255));
+            PinIcon.Fill = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(20, 20, 20));
+            PinBtn.Opacity = 1;
+            PinIcon.Opacity = 1;
+            ProgressBar.Visibility = System.Windows.Visibility.Collapsed;
+        }
+
+        _fadeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_duration) };
         _fadeTimer.Tick += (_, _) => { _fadeTimer.Stop(); if (!_isHovered && !_isPinned) AnimateDismiss(); };
 
         SourceInitialized += (_, _) =>
@@ -135,13 +152,14 @@ public partial class PreviewWindow : Window
     {
         if (ThumbnailImage.Source is not BitmapSource src) return;
 
-        double maxW = 280, maxH = 180, minW = 120, minH = 80;
+        double maxW = 280, maxH = 180;
         double imgW = src.PixelWidth, imgH = src.PixelHeight;
+        if (imgW <= 0 || imgH <= 0) return;
 
         double scale = Math.Min(maxW / imgW, maxH / imgH);
         scale = Math.Min(scale, 1.0);
-        double fitW = Math.Clamp(imgW * scale, minW, maxW);
-        double fitH = Math.Clamp(imgH * scale, minH, maxH);
+        double fitW = Math.Max(100, imgW * scale);
+        double fitH = Math.Max(60, imgH * scale);
 
         ImageBorder.Width = fitW;
         ImageBorder.Height = fitH;
@@ -217,6 +235,14 @@ public partial class PreviewWindow : Window
             }
 
             _fadeTimer.Start();
+
+            // Progress bar animation
+            if (!_isPinned)
+            {
+                ProgressScale.ScaleX = 1;
+                ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
+                    new DoubleAnimation { To = 0, Duration = TimeSpan.FromSeconds(_duration) });
+            }
         }, System.Windows.Threading.DispatcherPriority.Render);
     }
 
@@ -228,6 +254,12 @@ public partial class PreviewWindow : Window
         _fadeTimer.Stop();
         if (_isFading) CancelFade();
         AnimateButtons(1);
+        // Pause progress bar
+        if (!_isPinned)
+        {
+            ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+            ProgressScale.ScaleX = ProgressScale.ScaleX;
+        }
     }
 
     private void OnMouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
@@ -235,7 +267,21 @@ public partial class PreviewWindow : Window
         _isHovered = false;
         _mouseIsDown = false;
         AnimateButtons(0);
-        _fadeTimer.Interval = TimeSpan.FromSeconds(3);
+        // Resume progress bar and timer from current position
+        if (!_isPinned)
+        {
+            var remaining = ProgressScale.ScaleX * _duration;
+            if (remaining > 0.1)
+            {
+                ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
+                    new DoubleAnimation { To = 0, Duration = TimeSpan.FromSeconds(remaining) });
+            }
+            _fadeTimer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, remaining));
+        }
+        else
+        {
+            _fadeTimer.Interval = TimeSpan.FromSeconds(_duration);
+        }
         _fadeTimer.Start();
     }
 
@@ -455,13 +501,21 @@ public partial class PreviewWindow : Window
             PinIcon.Fill = new System.Windows.Media.SolidColorBrush(
                 System.Windows.Media.Color.FromRgb(20, 20, 20));
             PinBtn.Opacity = 1;
+            // Stop and hide progress bar
+            ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+            ProgressBar.Visibility = System.Windows.Visibility.Collapsed;
         }
         else
         {
             PinBtn.Background = new System.Windows.Media.SolidColorBrush(
                 System.Windows.Media.Color.FromArgb(112, 0, 0, 0));
             PinIcon.Fill = System.Windows.Media.Brushes.White;
-            _fadeTimer.Interval = TimeSpan.FromSeconds(3);
+            // Restart progress bar and timer
+            ProgressBar.Visibility = System.Windows.Visibility.Visible;
+            ProgressScale.ScaleX = 1;
+            ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
+                new DoubleAnimation { To = 0, Duration = TimeSpan.FromSeconds(_duration) });
+            _fadeTimer.Interval = TimeSpan.FromSeconds(_duration);
             _fadeTimer.Start();
         }
     }

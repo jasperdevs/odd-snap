@@ -9,6 +9,7 @@ public enum CaptureMode
     Scan,
     Sticker,
 
+    Select,
     Ruler,
     Draw,
     Highlight,
