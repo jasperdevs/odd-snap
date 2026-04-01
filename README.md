@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  Capture, annotate, OCR, drag out, save locally, and move on.
+  Capture, annotate, OCR, drag out, record, save locally, and move on.
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@
 <img width="947" height="490" alt="image" src="assets/banner3333.png" />
 </p>
 
-Yoink is a free, open-source screenshot tool that stays out of the way until you need it. Capture part of the screen, mark it up, copy it, save it, drag it out, or upload it without breaking your flow.
+Yoink is a free, open-source screenshot tool that stays out of the way until you need it. Capture part of the screen, mark it up, copy it, save it, drag it out, record it, or upload it without breaking your flow.
 
 ## Download
 
@@ -46,11 +46,11 @@ Grab the latest release from the [**Releases page**](https://github.com/jasperde
 
 ## Why Yoink
 
-- Fast region, fullscreen, and active-window capture with window snapping and a tray-first workflow
-- Built-in annotation tools for quick explanations and feedback
-- OCR, color picking, QR/barcode scanning, stickers, and local GIF recording
-- Drag-and-drop preview plus local history that stays easy to browse
-- Optional screenshot uploads to public hosts, cloud storage, or self-hosted targets
+- Fast region, fullscreen, active-window, and scroll capture with window snapping and a tray-first workflow
+- Built-in annotation tools and configurable toolbar hotkeys for quick explanations and feedback
+- OCR, color picking, QR/barcode scanning, stickers, and screen recording with GIF/MP4/WebM/MKV output
+- Drag-and-drop preview plus local history for images, text, colors, stickers, and recordings
+- Optional uploads for screenshots, stickers, and recordings to public hosts, cloud storage, or self-hosted targets
 - More to come (and more i didnt mention lol)
 
 ## Stickers
@@ -72,12 +72,16 @@ Yoink can turn captures into stickers by removing the background, then saving, p
 | Screenshot | `Alt + `` ` |
 | OCR | `Alt + Shift + `` ` |
 | Color picker | `Alt + C` |
-| QR/barcode scanner | `N/A` |
-| Sticker | `N/A` |
-| Fullscreen capture | `N/A` |
-| Active window capture | `N/A` |
-| Ruler | `N/A` |
-| GIF recording | `N/A` |
+| QR/barcode scanner | `Unassigned` |
+| Sticker | `Unassigned` |
+| Fullscreen capture | `Unassigned` |
+| Active window capture | `Unassigned` |
+| Scroll capture | `Unassigned` |
+| Ruler | `Unassigned` |
+| Record | `Unassigned` |
+| Annotation tools | `1-9`, `0`, `-`, `=`, `[`, `]`, `\` |
+
+Annotation tool hotkeys are assigned in toolbar order, so the exact tool on each key depends on which tools are enabled.
 
 Hotkeys can be changed in settings.
 
@@ -93,7 +97,7 @@ Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
 
 ## Uploads
 
-Yoink can upload screenshots after capture. Upload targets include:
+Yoink can upload screenshots, stickers, and recordings after capture. Upload targets include:
 
 - Public hosts like `Imgur`, `ImgBB`, `Catbox`, `Litterbox`, `Gyazo`, `file.io`, and `Uguu`
 - Cloud targets like `Dropbox`, `Google Drive`, `OneDrive`, `Azure Blob`, and `S3-compatible storage`
