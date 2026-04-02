@@ -44,11 +44,7 @@ Yoink is a free, open-source screenshot tool that stays out of the way until you
 
 Grab the latest release from the [**Releases page**](https://github.com/jasperdevs/yoink/releases/latest)
 
-Release downloads include both direct `.exe` assets and portable `.zip` assets.
-
 ### Install with winget
-
-Yoink is published on winget with the package ID `JasperDevs.Yoink`.
 
 ```powershell
 winget install --id JasperDevs.Yoink -e
@@ -57,7 +53,7 @@ winget upgrade --id JasperDevs.Yoink -e
 
 ## Winget
 
-Yoink's release pipeline now generates winget manifest files alongside the Windows release archives. If `winget` does not find the package right away, refresh its sources and try again:
+If `winget` does not find the package right away, refresh its sources and try again:
 
 ```powershell
 winget source update
