@@ -44,6 +44,13 @@ Yoink is a free, open-source screenshot tool that stays out of the way until you
 
 Grab the latest release from the [**Releases page**](https://github.com/jasperdevs/yoink/releases/latest)
 
+## Winget
+
+```powershell
+winget install --id JasperDevs.Yoink -e
+winget upgrade --id JasperDevs.Yoink -e
+```
+
 ## Why Yoink
 
 - Fast region, fullscreen, active-window, and scroll capture with window snapping and a tray-first workflow
