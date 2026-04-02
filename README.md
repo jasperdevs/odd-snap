@@ -46,13 +46,22 @@ Grab the latest release from the [**Releases page**](https://github.com/jasperde
 
 Release downloads include both direct `.exe` assets and portable `.zip` assets.
 
-## Winget
+### Install with winget
 
-Yoink's release pipeline now generates winget manifest files alongside the Windows release archives. Once the package is published to the winget community repository, install and update with:
+Yoink is published on winget with the package ID `JasperDevs.Yoink`.
 
 ```powershell
 winget install --id JasperDevs.Yoink -e
 winget upgrade --id JasperDevs.Yoink -e
+```
+
+## Winget
+
+Yoink's release pipeline now generates winget manifest files alongside the Windows release archives. If `winget` does not find the package right away, refresh its sources and try again:
+
+```powershell
+winget source update
+winget search --id JasperDevs.Yoink -e
 ```
 
 The release ZIPs also include a `portable.txt` marker so winget-managed portable installs skip the app's first-run installer flow.

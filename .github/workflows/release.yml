@@ -53,16 +53,10 @@ jobs:
           $zipPath = Join-Path $PWD $zipName
           if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
           Compress-Archive -Path (Join-Path $PWD 'publish\*') -DestinationPath $zipPath -Force
-          $hash = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLowerInvariant()
-          $checksumPath = "$zipPath.sha256.txt"
-          Set-Content -Path $checksumPath -Value "$hash  $zipName" -NoNewline
 
           $exeName = "Yoink-${{ matrix.rid }}.exe"
           $exePath = Join-Path $PWD $exeName
           Copy-Item -Path (Join-Path $PWD 'publish\Yoink.exe') -Destination $exePath -Force
-          $exeHash = (Get-FileHash -Algorithm SHA256 $exePath).Hash.ToLowerInvariant()
-          $exeChecksumPath = "$exePath.sha256.txt"
-          Set-Content -Path $exeChecksumPath -Value "$exeHash  $exeName" -NoNewline
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -70,9 +64,7 @@ jobs:
           name: Yoink-${{ matrix.rid }}
           path: |
             Yoink-${{ matrix.rid }}.exe
-            Yoink-${{ matrix.rid }}.exe.sha256.txt
             Yoink-${{ matrix.rid }}.zip
-            Yoink-${{ matrix.rid }}.zip.sha256.txt
           if-no-files-found: error
 
   publish:
@@ -123,8 +115,5 @@ jobs:
         with:
           files: |
             dist/**/*.exe
-            dist/**/*.exe.sha256.txt
             dist/**/*.zip
-            dist/**/*.sha256.txt
-            dist/winget-manifests/**/*.yaml
           body_path: RELEASE_NOTES.md
