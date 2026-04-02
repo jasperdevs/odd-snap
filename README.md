@@ -44,32 +44,6 @@ Yoink is a free, open-source screenshot tool that stays out of the way until you
 
 Grab the latest release from the [**Releases page**](https://github.com/jasperdevs/yoink/releases/latest)
 
-### Install with winget
-
-```powershell
-winget install --id JasperDevs.Yoink -e
-winget upgrade --id JasperDevs.Yoink -e
-```
-
-## Winget
-
-If `winget` does not find the package right away, refresh its sources and try again:
-
-```powershell
-winget source update
-winget search --id JasperDevs.Yoink -e
-```
-
-The release ZIPs also include a `portable.txt` marker so winget-managed portable installs skip the app's first-run installer flow.
-
-The repo is also wired to open a `winget-pkgs` pull request automatically when you publish a GitHub release. To enable that, add a repository secret named `WINGET_TOKEN` containing a classic GitHub PAT with `public_repo` scope, and make sure your account has a fork of `microsoft/winget-pkgs`.
-
-If your fork lives under a different account, update `fork-user` in [`.github/workflows/publish-winget.yml`](.github/workflows/publish-winget.yml).
-
-This automation only works after Yoink has at least one version accepted into `winget-pkgs` once.
-
-For the first submission, use the helper script in [`scripts/winget/Publish-FirstWingetRelease.ps1`](scripts/winget/Publish-FirstWingetRelease.ps1). It generates the manifests, validates them, and submits them with `wingetcreate`.
-
 ## Why Yoink
 
 - Fast region, fullscreen, active-window, and scroll capture with window snapping and a tray-first workflow
