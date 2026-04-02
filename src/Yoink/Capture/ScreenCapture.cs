@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
@@ -21,9 +22,11 @@ public static class ScreenCapture
             }
 
             capture.Bitmap.Dispose();
+            DxgiScreenCapture.ResetCache();
         }
         catch
         {
+            DxgiScreenCapture.ResetCache();
         }
 
         return CaptureAllScreensLegacy(includeCursor);
@@ -42,9 +45,11 @@ public static class ScreenCapture
             }
 
             capture.Dispose();
+            DxgiScreenCapture.ResetCache();
         }
         catch
         {
+            DxgiScreenCapture.ResetCache();
         }
 
         return CaptureRegionLegacy(region, includeCursor);
@@ -159,16 +164,17 @@ public static class ScreenCapture
 
         var rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
         var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        int rowLength = bitmap.Width * 4;
+        var row = ArrayPool<byte>.Shared.Rent(rowLength);
         try
         {
             int stride = data.Stride;
             int samples = 0;
             int darkSamples = 0;
-            var row = new byte[bitmap.Width * 4];
 
             for (int y = 0; y < bitmap.Height; y += stepY)
             {
-                Marshal.Copy(IntPtr.Add(data.Scan0, y * stride), row, 0, row.Length);
+                Marshal.Copy(IntPtr.Add(data.Scan0, y * stride), row, 0, rowLength);
                 for (int x = 0; x < bitmap.Width; x += stepX)
                 {
                     int i = x * 4;
@@ -183,6 +189,7 @@ public static class ScreenCapture
         }
         finally
         {
+            ArrayPool<byte>.Shared.Return(row);
             bitmap.UnlockBits(data);
         }
     }

@@ -219,6 +219,7 @@ public partial class App : Application
         _hotkeyService?.Dispose();
         _trayIcon?.Dispose();
         _settingsWindow?.Close();
+        try { Yoink.Capture.DxgiScreenCapture.ResetCache(); } catch { }
         try { LocalStickerEngineService.Shutdown(); } catch { }
         base.OnExit(e);
     }

@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using Yoink.Native;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -10,54 +11,78 @@ namespace Yoink.Capture;
 
 internal static class DxgiScreenCapture
 {
+    private static readonly object CacheLock = new();
+    private static DeviceBundle? _cachedBundle;
+
     public static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreens()
     {
-        int left = int.MaxValue;
-        int top = int.MaxValue;
-        int right = int.MinValue;
-        int bottom = int.MinValue;
+        int left = User32.GetSystemMetrics(User32.SM_XVIRTUALSCREEN);
+        int top = User32.GetSystemMetrics(User32.SM_YVIRTUALSCREEN);
+        int width = User32.GetSystemMetrics(User32.SM_CXVIRTUALSCREEN);
+        int height = User32.GetSystemMetrics(User32.SM_CYVIRTUALSCREEN);
 
-        foreach (var screen in Screen.AllScreens)
-        {
-            left = Math.Min(left, screen.Bounds.Left);
-            top = Math.Min(top, screen.Bounds.Top);
-            right = Math.Max(right, screen.Bounds.Right);
-            bottom = Math.Max(bottom, screen.Bounds.Bottom);
-        }
-
-        var bounds = Rectangle.FromLTRB(left, top, right, bottom);
+        var bounds = new Rectangle(left, top, width, height);
         return (CaptureRegion(bounds), bounds);
     }
 
     public static Bitmap CaptureRegion(Rectangle region)
     {
-        using var deviceBundle = CreateDeviceBundle();
-        var result = new Bitmap(region.Width, region.Height, PixelFormat.Format32bppArgb);
-
-        using var graphics = Graphics.FromImage(result);
-        graphics.Clear(Color.Transparent);
-
-        foreach (var output in EnumerateOutputs(deviceBundle.Adapter))
+        var deviceBundle = GetOrCreateDeviceBundle();
+        try
         {
-            var outputBounds = ToRectangle(output.Description.DesktopCoordinates);
-            var overlap = Rectangle.Intersect(region, outputBounds);
-            if (overlap.Width <= 0 || overlap.Height <= 0)
-                continue;
+            var result = new Bitmap(region.Width, region.Height, PixelFormat.Format32bppArgb);
 
-            using var duplication = output.Output.DuplicateOutput(deviceBundle.Device);
-            using var frame = AcquireFrame(duplication);
-            using var desktopTexture = frame.Resource.QueryInterface<ID3D11Texture2D>();
-            using var staging = CreateStagingTexture(deviceBundle.Device, outputBounds.Width, outputBounds.Height);
+            using var graphics = Graphics.FromImage(result);
+            graphics.Clear(Color.Transparent);
 
-            int sourceX = overlap.Left - outputBounds.Left;
-            int sourceY = overlap.Top - outputBounds.Top;
-            deviceBundle.Context.CopyResource(staging, desktopTexture);
+            foreach (var output in EnumerateOutputs(deviceBundle.Adapter))
+            {
+                var outputBounds = ToRectangle(output.Description.DesktopCoordinates);
+                var overlap = Rectangle.Intersect(region, outputBounds);
+                if (overlap.Width <= 0 || overlap.Height <= 0)
+                    continue;
 
-            var target = new Rectangle(overlap.Left - region.Left, overlap.Top - region.Top, overlap.Width, overlap.Height);
-            CopyTextureToBitmap(deviceBundle.Context, staging, result, target, sourceX, sourceY);
+                using var duplication = output.Output.DuplicateOutput(deviceBundle.Device);
+                using var frame = AcquireFrame(duplication);
+                using var desktopTexture = frame.Resource.QueryInterface<ID3D11Texture2D>();
+                var staging = deviceBundle.GetOrCreateStagingTexture(outputBounds.Width, outputBounds.Height);
+
+                int sourceX = overlap.Left - outputBounds.Left;
+                int sourceY = overlap.Top - outputBounds.Top;
+                deviceBundle.Context.CopyResource(staging, desktopTexture);
+
+                var target = new Rectangle(overlap.Left - region.Left, overlap.Top - region.Top, overlap.Width, overlap.Height);
+                CopyTextureToBitmap(deviceBundle.Context, staging, result, target, sourceX, sourceY);
+            }
+
+            return result;
         }
+        catch
+        {
+            ResetCache();
+            throw;
+        }
+    }
 
-        return result;
+    public static void ResetCache()
+    {
+        lock (CacheLock)
+        {
+            _cachedBundle?.Dispose();
+            _cachedBundle = null;
+        }
+    }
+
+    private static DeviceBundle GetOrCreateDeviceBundle()
+    {
+        lock (CacheLock)
+        {
+            if (_cachedBundle is not null)
+                return _cachedBundle;
+
+            _cachedBundle = CreateDeviceBundle();
+            return _cachedBundle;
+        }
     }
 
     private static DeviceBundle CreateDeviceBundle()
@@ -161,8 +186,24 @@ internal static class DxgiScreenCapture
 
     private sealed record DeviceBundle(ID3D11Device Device, ID3D11DeviceContext Context, IDXGIAdapter Adapter) : IDisposable
     {
+        private readonly Dictionary<Size, ID3D11Texture2D> _stagingTextures = new();
+
+        public ID3D11Texture2D GetOrCreateStagingTexture(int width, int height)
+        {
+            var key = new Size(width, height);
+            if (_stagingTextures.TryGetValue(key, out var cached))
+                return cached;
+
+            var created = CreateStagingTexture(Device, width, height);
+            _stagingTextures[key] = created;
+            return created;
+        }
+
         public void Dispose()
         {
+            foreach (var texture in _stagingTextures.Values)
+                texture.Dispose();
+            _stagingTextures.Clear();
             Adapter.Dispose();
             Context.Dispose();
             Device.Dispose();

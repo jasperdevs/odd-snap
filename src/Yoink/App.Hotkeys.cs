@@ -61,56 +61,56 @@ public partial class App
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        Dispatcher.BeginInvoke(() => LaunchOverlay(_settingsService!.Settings.DefaultCaptureMode));
+        LaunchOverlay(_settingsService!.Settings.DefaultCaptureMode);
     }
 
     private void OnToolHotkeyPressed(CaptureMode mode)
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        Dispatcher.BeginInvoke(() => LaunchOverlay(mode));
+        LaunchOverlay(mode);
     }
 
     private void OnOcrHotkeyPressed()
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        Dispatcher.BeginInvoke(() => LaunchOverlay(CaptureMode.Ocr));
+        LaunchOverlay(CaptureMode.Ocr);
     }
 
     private void OnPickerHotkeyPressed()
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        Dispatcher.BeginInvoke(() => LaunchOverlay(CaptureMode.ColorPicker));
+        LaunchOverlay(CaptureMode.ColorPicker);
     }
 
     private void OnGifHotkeyPressed()
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        Dispatcher.BeginInvoke(LaunchGifRecording);
+        LaunchGifRecording();
     }
 
     private void OnScrollCaptureHotkeyPressed()
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        Dispatcher.BeginInvoke(LaunchScrollingCapture);
+        LaunchScrollingCapture();
     }
 
     private void OnFullscreenHotkeyPressed()
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        Dispatcher.BeginInvoke(() => LaunchWithDelay(CaptureFullscreenNow));
+        LaunchWithDelay(CaptureFullscreenNow);
     }
 
     private void OnActiveWindowHotkeyPressed()
     {
         if (_isCapturing) return;
         _isCapturing = true;
-        Dispatcher.BeginInvoke(() => LaunchWithDelay(CaptureActiveWindowNow));
+        LaunchWithDelay(CaptureActiveWindowNow);
     }
 
     private void LaunchWithDelay(Action action)

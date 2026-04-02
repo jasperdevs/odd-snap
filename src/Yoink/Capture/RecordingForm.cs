@@ -26,7 +26,7 @@ public sealed class RecordingForm : Form
 
     private enum State { Selecting, Recording, Encoding }
 
-    private readonly Bitmap _screenshot;
+    private Bitmap? _screenshot;
     private readonly Rectangle _virtualBounds;
     private State _state = State.Selecting;
 
@@ -111,7 +111,7 @@ public sealed class RecordingForm : Form
         StartPosition = FormStartPosition.Manual;
         Bounds = new Rectangle(virtualBounds.X, virtualBounds.Y, virtualBounds.Width, virtualBounds.Height);
         Cursor = Cursors.Cross;
-            BackColor = UiChrome.SurfaceWindowBackground;
+        BackColor = UiChrome.SurfaceWindowBackground;
         KeyPreview = true;
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                  ControlStyles.OptimizedDoubleBuffer | ControlStyles.Opaque, true);
@@ -234,6 +234,10 @@ public sealed class RecordingForm : Form
         _state = State.Recording;
         Cursor = Cursors.Default;
 
+        // The selection screenshot is only needed before recording starts.
+        _screenshot?.Dispose();
+        _screenshot = null;
+
         // Switch to transparent mode: form stays fullscreen but only the
         // dashed border + toolbar are visible. Everything else is see-through.
         BackColor = TransKey;
@@ -355,12 +359,16 @@ public sealed class RecordingForm : Form
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
-        g.DrawImage(_screenshot, 0, 0);
+        var screenshot = _screenshot;
+        if (screenshot is null)
+            return;
+
+        g.DrawImage(screenshot, 0, 0);
         g.FillRectangle(_dimBrush, 0, 0, Width, Height);
 
         if (_selection.Width > 2 && _selection.Height > 2)
         {
-            g.DrawImage(_screenshot, _selection, _selection, GraphicsUnit.Pixel);
+            g.DrawImage(screenshot, _selection, _selection, GraphicsUnit.Pixel);
             g.DrawRectangle(_selPen, _selection);
 
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -508,7 +516,8 @@ public sealed class RecordingForm : Form
             _tickTimer?.Dispose();
             _recorder?.Dispose();
             _videoRecorder?.Dispose();
-            _screenshot.Dispose();
+            _screenshot?.Dispose();
+            _screenshot = null;
             _dimBrush.Dispose(); _selPen.Dispose(); _labelFont.Dispose();
             _hintFont.Dispose(); _hintBrush.Dispose(); _bgLabelBrush.Dispose();
             _textLabelBrush.Dispose(); _borderPen.Dispose(); _cornerBrush.Dispose();

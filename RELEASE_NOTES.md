@@ -1,11 +1,10 @@
-# Yoink v0.5.2
+# Yoink v0.5.2.1
 
 ## Highlights
-- Added a `Show cursor in captures` setting so screenshots, GIFs, videos, and scroll captures can include or hide the cursor consistently.
-- Split the large settings window into smaller partial files so the UI code stays modular and easier to maintain.
-- Added a `Show in folder` action to history items that have a real file location.
-- Cleaned up the capture and overlay flow after removing the experimental window-elements detection path.
-- Improved release packaging so GitHub releases include both direct `.exe` assets and portable `.zip` assets.
+- Optimized the hotkey-to-overlay path so capture starts faster with less dispatcher overhead.
+- Reused DXGI capture resources and tightened capture-path allocation churn for better steady-state performance.
+- Freed recording selection memory earlier so screenshots and recordings keep less data resident.
+- Kept the existing UI, features, and release packaging behavior intact.
 
 ## Notes
 - ZIP assets remain the format used for winget and portable installs.
