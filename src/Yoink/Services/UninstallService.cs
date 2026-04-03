@@ -59,7 +59,7 @@ public static class UninstallService
             return;
 
         var installDir = GetInstallDirectory();
-        var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.0.0";
+        var version = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(4) ?? "1.0.0";
         var sizeKb = (int)Math.Max(1, new FileInfo(exe).Length / 1024);
 
         using var key = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Yoink");

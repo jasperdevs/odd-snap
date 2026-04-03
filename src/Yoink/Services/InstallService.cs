@@ -69,45 +69,51 @@ public static class InstallService
         catch { return false; }
     }
 
-    /// <summary>Check if we should show the installer (not installed, not portable mode).</summary>
+    /// <summary>Check if we should show the installer.</summary>
     public static bool ShouldShowInstaller()
     {
-        var appDir = GetAppDirectory();
-
-        if (LooksLikeBuildOutputPath(appDir))
+        if (LooksLikeBuildOutputPath(GetAppDirectory()))
             return true;
 
-        // If the exe has been renamed (e.g. Yoink-win-x64.exe from a release download),
-        // it's clearly not running from an installed location — show the installer.
-        var exeName = Path.GetFileName(Environment.ProcessPath ?? "");
-        if (!string.IsNullOrEmpty(exeName) &&
-            !exeName.Equals("Yoink.exe", StringComparison.OrdinalIgnoreCase))
-            return true;
+        // Running from the installed location — no installer needed.
+        if (IsInstalled())
+            return false;
 
-        if (IsInstalled()) return false;
-        // Portable mode: if a portable.txt file exists next to the exe, skip installer
-        var portableFlag = Path.Combine(appDir, "portable.txt");
-        if (File.Exists(portableFlag)) return false;
+        // Everything else (downloaded exe, random folder, etc.) should show the installer.
         return true;
+    }
+
+    /// <summary>Kill any running Yoink processes (other than this one).</summary>
+    public static void KillRunningInstances()
+    {
+        var currentPid = Environment.ProcessId;
+        foreach (var proc in Process.GetProcessesByName("Yoink"))
+        {
+            if (proc.Id == currentPid) continue;
+            try { proc.Kill(); proc.WaitForExit(5000); } catch { }
+        }
     }
 
     /// <summary>Install Yoink to the target directory.</summary>
     public static void Install(string targetDir, bool desktopShortcut, bool startMenuShortcut, bool startWithWindows, Action<string>? onProgress = null)
     {
+        onProgress?.Invoke("Closing any running Yoink instances...");
+        KillRunningInstances();
+
         onProgress?.Invoke("Creating directory...");
         Directory.CreateDirectory(targetDir);
 
-        // Copy all files from current directory to target
-        var sourceDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
         var targetDirNorm = targetDir.TrimEnd('\\', '/');
 
-        if (string.Equals(sourceDir, targetDirNorm, StringComparison.OrdinalIgnoreCase))
-            return; // already in the right place
-
         onProgress?.Invoke("Copying files...");
-        CopyDirectory(sourceDir, targetDirNorm);
+
+        // Copy the running exe to the target as Yoink.exe
+        var currentExe = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(currentExe) || !File.Exists(currentExe))
+            throw new InvalidOperationException("Unable to locate the running Yoink executable.");
 
         var targetExe = Path.Combine(targetDirNorm, "Yoink.exe");
+        CopyFileWithRetry(currentExe, targetExe);
 
         // Start menu shortcut
         if (startMenuShortcut)
@@ -176,7 +182,7 @@ public static class InstallService
             var installedTarget = IsInstalledLocation(targetDirNorm);
 
             onProgress?.Invoke("Copying update files...");
-            CopyTree(extractedRoot, targetDirNorm, skipPortableFlag: installedTarget);
+            CopyTree(extractedRoot, targetDirNorm);
 
             var targetExe = Path.Combine(targetDirNorm, "Yoink.exe");
             if (installedTarget)
@@ -252,15 +258,13 @@ public static class InstallService
         }
     }
 
-    private static void CopyTree(string source, string target, bool skipPortableFlag)
+    private static void CopyTree(string source, string target)
     {
         Directory.CreateDirectory(target);
 
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(source, file);
-            if (skipPortableFlag && relativePath.Equals("portable.txt", StringComparison.OrdinalIgnoreCase))
-                continue;
 
             var destination = Path.Combine(target, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
@@ -380,7 +384,7 @@ public static class InstallService
                 return;
 
             var version = string.IsNullOrWhiteSpace(versionLabel)
-                ? System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.0.0"
+                ? System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(4) ?? "1.0.0"
                 : versionLabel.Trim().TrimStart('v', 'V');
             using var key = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Yoink");
             if (key is null) return;

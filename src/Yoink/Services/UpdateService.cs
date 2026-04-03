@@ -37,7 +37,7 @@ public static class UpdateService
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         return version is null
             ? new Version(0, 0, 0)
-            : new Version(version.Major, version.Minor, Math.Max(version.Build, 0));
+            : new Version(version.Major, version.Minor, Math.Max(version.Build, 0), Math.Max(version.Revision, 0));
     }
 
     public static string GetCurrentVersionLabel() => $"v{GetCurrentVersion()}";

@@ -17,7 +17,8 @@ public partial class InstallWizard : Window
         Theme.Refresh();
         InitializeComponent();
         ApplyTheme();
-        InstallPathBox.Text = InstallService.DefaultInstallPath;
+        // Use existing install location if upgrading, otherwise default
+        InstallPathBox.Text = InstallService.GetInstalledLocation() ?? InstallService.DefaultInstallPath;
     }
 
     private void OnSourceInit(object? sender, EventArgs e)

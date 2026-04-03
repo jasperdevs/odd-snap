@@ -52,13 +52,7 @@ jobs:
           $zipName = "Yoink-${{ matrix.rid }}.zip"
           $zipPath = Join-Path $PWD $zipName
           if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-          $portableDir = Join-Path $PWD 'portable'
-          if (Test-Path $portableDir) { Remove-Item $portableDir -Recurse -Force }
-          New-Item -ItemType Directory -Path $portableDir | Out-Null
-          Copy-Item -Path (Join-Path $PWD 'publish\*') -Destination $portableDir -Recurse -Force
-          $portableFlag = Join-Path $portableDir 'portable.txt'
-          if (-not (Test-Path $portableFlag)) { Set-Content -Path $portableFlag -Value '' -NoNewline }
-          Compress-Archive -Path (Join-Path $portableDir '*') -DestinationPath $zipPath -Force
+          Compress-Archive -Path (Join-Path $PWD 'publish\*') -DestinationPath $zipPath -Force
 
           $exeName = "Yoink-${{ matrix.rid }}.exe"
           $exePath = Join-Path $PWD $exeName
