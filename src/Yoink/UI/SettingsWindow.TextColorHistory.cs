@@ -160,15 +160,6 @@ public partial class SettingsWindow
                     stack.Tag = selected ? entry : null;
                 };
             }
-            else
-            {
-                swatch.MouseLeftButtonDown += (_, e) =>
-                {
-                    e.Handled = true;
-                    ClipboardService.CopyTextToClipboard(entry.Hex);
-                    ToastWindow.Show("Copied", entry.Hex);
-                };
-            }
 
             var copyColorBtn = new Button
             {

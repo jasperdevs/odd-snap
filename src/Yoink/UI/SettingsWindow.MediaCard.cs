@@ -153,44 +153,12 @@ public partial class SettingsWindow
                 return;
             }
 
-            if (_selectMode)
-            {
-                vm.IsSelected = !vm.IsSelected;
-                UpdateCardSelection(vm);
-                e.Handled = true;
+            if (!_selectMode)
                 return;
-            }
 
-            if (!string.IsNullOrEmpty(vm.Entry.UploadUrl))
-            {
-                try
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = vm.Entry.UploadUrl,
-                        UseShellExecute = true
-                    });
-                }
-                catch
-                {
-                    if (File.Exists(vm.Entry.FilePath))
-                    {
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = vm.Entry.FilePath,
-                            UseShellExecute = true
-                        });
-                    }
-                }
-            }
-            else if (File.Exists(vm.Entry.FilePath))
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = vm.Entry.FilePath,
-                    UseShellExecute = true
-                });
-            }
+            vm.IsSelected = !vm.IsSelected;
+            UpdateCardSelection(vm);
+            e.Handled = true;
         };
 
         // Drag-and-drop support: drag the file out of the history card
