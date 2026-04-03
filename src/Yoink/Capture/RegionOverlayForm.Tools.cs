@@ -23,16 +23,6 @@ public sealed partial class RegionOverlayForm
             var pts = _freeformPoints.Select(p => new Point(p.X - minX, p.Y - minY)).ToArray();
             using var cp = new GraphicsPath(); cp.AddPolygon(pts); g.SetClip(cp);
             g.DrawImage(annotated, new Rectangle(0, 0, bb.Width, bb.Height), bb, GraphicsUnit.Pixel);
-            g.ResetClip();
-            using var pen = new Pen(Color.FromArgb(220, 255, 255, 255), 2f)
-            {
-                DashStyle = DashStyle.Dash,
-                DashPattern = new[] { 6f, 4f }
-            };
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.DrawLines(pen, pts);
-            if (pts.Length > 2)
-                g.DrawLine(pen, pts[^1], pts[0]);
         }
         annotated.Dispose();
         FreeformSelected?.Invoke(r);

@@ -193,6 +193,34 @@ public partial class SettingsWindow
             }
         };
 
+        // Drag-and-drop support: drag the file out of the history card
+        System.Windows.Point? dragStart = null;
+        card.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            dragStart = e.GetPosition(card);
+        };
+        card.PreviewMouseMove += (_, e) =>
+        {
+            if (dragStart is null || e.LeftButton != MouseButtonState.Pressed)
+                return;
+
+            var pos = e.GetPosition(card);
+            var diff = pos - dragStart.Value;
+            if (Math.Abs(diff.X) < 5 && Math.Abs(diff.Y) < 5)
+                return;
+
+            var filePath = vm.Entry.FilePath;
+            if (!IsDraggableFile(filePath))
+                return;
+
+            dragStart = null;
+            suppressOpenAction = true;
+            var data = new System.Windows.DataObject();
+            data.SetFileDropList(new System.Collections.Specialized.StringCollection { filePath });
+            System.Windows.DragDrop.DoDragDrop(card, data, System.Windows.DragDropEffects.Copy | System.Windows.DragDropEffects.Move);
+        };
+        card.PreviewMouseLeftButtonUp += (_, _) => { dragStart = null; };
+
         vm.Card = card;
         vm.SelectionBadge = selectionBadge;
         UpdateCardSelection(vm);
