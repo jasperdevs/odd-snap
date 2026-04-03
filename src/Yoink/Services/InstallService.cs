@@ -113,7 +113,10 @@ public static class InstallService
             throw new InvalidOperationException("Unable to locate the running Yoink executable.");
 
         var targetExe = Path.Combine(targetDirNorm, "Yoink.exe");
-        CopyFileWithRetry(currentExe, targetExe);
+
+        // If we're already running from the target location, skip the copy
+        if (!string.Equals(Path.GetFullPath(currentExe), Path.GetFullPath(targetExe), StringComparison.OrdinalIgnoreCase))
+            CopyFileWithRetry(currentExe, targetExe);
 
         // Start menu shortcut
         if (startMenuShortcut)
