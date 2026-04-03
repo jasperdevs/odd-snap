@@ -119,9 +119,6 @@ public static class SketchRenderer
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Soft shadow
-        DrawSoftLineShadow(g, from, to, thickness);
-
         // Main pass
         using var pen = new Pen(color, thickness)
             { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
@@ -140,12 +137,6 @@ public static class SketchRenderer
         float thickness = Math.Clamp(2f + len / 80f, 2f, 4.5f);
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
-
-        if (includeShadow)
-        {
-            // Soft shadow
-            DrawSoftLineShadow(g, from, to, thickness);
-        }
 
         // Main pass
         using var pen = new Pen(color, thickness)
@@ -171,9 +162,6 @@ public static class SketchRenderer
         float thickness = Math.Clamp(2f + len / 80f, 2f, 4.5f);
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
-
-        // Soft shadow
-        DrawSoftCurveShadow(g, points.ToArray(), thickness, points.Count >= 4);
 
         // Main pass
         using var pen = new Pen(color, thickness)
@@ -221,15 +209,43 @@ public static class SketchRenderer
     {
         if (points.Count < 2) return;
         var floatPts = points.Select(p => new PointF(p.X, p.Y)).ToList();
+
+        // Shift-constrained draw uses only two points. That should render as a real line,
+        // not vanish because the freehand outline collapses to an empty path.
+        if (points.Count == 2)
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            DrawSoftLineShadow(g, floatPts[0], floatPts[1], size);
+            using var pen = new Pen(color, Math.Max(2f, size))
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            };
+            g.DrawLine(pen, floatPts[0], floatPts[1]);
+            g.SmoothingMode = SmoothingMode.Default;
+            return;
+        }
+
         var outline = GetStrokeOutline(floatPts, size, 0.5f, 0.5f, 0.5f);
-        if (outline.Length < 3) return;
+        if (outline.Length < 3)
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            DrawSoftLineShadow(g, floatPts[0], floatPts[^1], size);
+            using var pen = new Pen(color, Math.Max(2f, size))
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            };
+            g.DrawLine(pen, floatPts[0], floatPts[^1]);
+            g.SmoothingMode = SmoothingMode.Default;
+            return;
+        }
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Soft shadow
         using var path = OutlineToPath(outline);
-        DrawSoftPathShadow(g, path);
-
         // Main pass
         using var brush = new SolidBrush(color);
         g.FillPath(brush, path);
@@ -254,7 +270,6 @@ public static class SketchRenderer
         if (rect.Width < 1 || rect.Height < 1) return;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using var path = RoundedRect(rect, 3);
-        DrawSoftPathShadow(g, path);
         using var pen = new Pen(color, 2.2f) { LineJoin = LineJoin.Round };
         g.DrawPath(pen, path);
         g.SmoothingMode = SmoothingMode.Default;
@@ -264,7 +279,6 @@ public static class SketchRenderer
     {
         if (rect.Width < 1 || rect.Height < 1) return;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        DrawSoftEllipseShadow(g, rect.X, rect.Y, rect.Width, rect.Height);
         using var pen = new Pen(color, 2.2f) { LineJoin = LineJoin.Round };
         g.DrawEllipse(pen, rect);
         g.SmoothingMode = SmoothingMode.Default;

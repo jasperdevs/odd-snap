@@ -478,6 +478,7 @@ public partial class App
                 Dispatcher.BeginInvoke(() =>
                 {
                     ClipboardService.CopyToClipboard(persisted.Output);
+                    _isCapturing = false;
 
                     bool willUpload = persisted.FilePath != null
                         && settings.AutoUploadScreenshots
@@ -504,7 +505,6 @@ public partial class App
                         }
                     }
 
-                    _isCapturing = false;
                     ScheduleIdleMemoryTrim();
                 });
             }, TaskScheduler.Default);
@@ -548,6 +548,7 @@ public partial class App
                 Dispatcher.BeginInvoke(() =>
                 {
                     ClipboardService.CopyToClipboard(persisted.Output);
+                    _isCapturing = false;
 
                     var action = settings.AfterCapture;
                     if (action == AfterCaptureAction.ShowPreview)
@@ -566,7 +567,6 @@ public partial class App
                         _ = UploadFileAsync(persisted.FilePath, "Sticker", persisted.HistoryEntry);
                     }
 
-                    _isCapturing = false;
                     ScheduleIdleMemoryTrim();
                 });
             }, TaskScheduler.Default);
@@ -656,4 +656,5 @@ public partial class App
             ScheduleIdleMemoryTrim();
         });
     }
+
 }

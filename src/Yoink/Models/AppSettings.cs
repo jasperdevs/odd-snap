@@ -251,6 +251,12 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
         new("eraser",      "Eraser",       '\uE28E', CaptureMode.Eraser,      1), // eraser
     };
 
+    public static bool IsCaptureTool(CaptureMode mode) =>
+        AllTools.Any(t => t.Mode == mode && t.Group == 0);
+
+    public static bool IsAnnotationTool(CaptureMode mode) =>
+        AllTools.Any(t => t.Mode == mode && t.Group == 1);
+
     public static List<string> DefaultEnabledIds() =>
         AllTools.Select(t => t.Id).ToList();
 }

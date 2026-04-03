@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Yoink.Helpers;
 using Yoink.Services;
 using DataObject = System.Windows.DataObject;
 using DragDropEffects = System.Windows.DragDropEffects;
@@ -180,21 +181,7 @@ public partial class PreviewWindow : Window
 
     private static BitmapSource BitmapToSource(Bitmap bitmap)
     {
-        var hBitmap = bitmap.GetHbitmap();
-        try
-        {
-            var source = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
-                hBitmap,
-                IntPtr.Zero,
-                Int32Rect.Empty,
-                BitmapSizeOptions.FromEmptyOptions());
-            source.Freeze();
-            return source;
-        }
-        finally
-        {
-            Native.User32.DeleteObject(hBitmap);
-        }
+        return BitmapPerf.ToBitmapSource(bitmap);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)

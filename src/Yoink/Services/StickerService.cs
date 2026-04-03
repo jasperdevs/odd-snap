@@ -91,7 +91,9 @@ public static class StickerService
         {
             using var form = new MultipartFormDataContent();
             form.Add(new StringContent("auto"), "size");
-            form.Add(new ByteArrayContent(await File.ReadAllBytesAsync(temp)), "image_file", Path.GetFileName(temp));
+            var imageContent = new StreamContent(new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan));
+            imageContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/png");
+            form.Add(imageContent, "image_file", Path.GetFileName(temp));
 
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.remove.bg/v1.0/removebg")
             {
@@ -116,7 +118,9 @@ public static class StickerService
         try
         {
             using var form = new MultipartFormDataContent();
-            form.Add(new ByteArrayContent(await File.ReadAllBytesAsync(temp)), "image_file", Path.GetFileName(temp));
+            var imageContent = new StreamContent(new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan));
+            imageContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/png");
+            form.Add(imageContent, "image_file", Path.GetFileName(temp));
 
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://sdk.photoroom.com/v1/segment")
             {

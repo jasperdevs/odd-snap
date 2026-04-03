@@ -58,7 +58,12 @@ public partial class ToastWindow : Window
         }
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_durationSeconds) };
-        _timer.Tick += (_, _) => { _timer.Stop(); if (!_isHovered) SlideAway(); };
+        _timer.Tick += (_, _) =>
+        {
+            _timer.Stop();
+            if (ToastPinPolicy.CanAutoDismiss(_isPinned, _isHovered))
+                SlideAway();
+        };
 
         MouseEnter += (_, _) =>
         {
@@ -70,6 +75,11 @@ public partial class ToastWindow : Window
         MouseLeave += (_, _) =>
         {
             _isHovered = false;
+            if (_isPinned)
+            {
+                _timer.Stop();
+                return;
+            }
             var remaining = Math.Max(0.1, ProgressScale.ScaleX * _durationSeconds);
             ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
                 new DoubleAnimation { To = 0, Duration = TimeSpan.FromSeconds(remaining) });
@@ -277,7 +287,7 @@ public partial class ToastWindow : Window
                 Duration = dur,
                 EasingFunction = ease
             };
-            slide.Completed += (_, _) => ForceClose();
+            slide.Completed += (_, _) => TryForceClose();
             BeginAnimation(LeftProperty, (DoubleAnimation)slide);
         }
         else
@@ -288,7 +298,7 @@ public partial class ToastWindow : Window
                 Duration = dur,
                 EasingFunction = ease
             };
-            slide.Completed += (_, _) => ForceClose();
+            slide.Completed += (_, _) => TryForceClose();
             BeginAnimation(TopProperty, (DoubleAnimation)slide);
         }
 
@@ -298,11 +308,15 @@ public partial class ToastWindow : Window
         });
     }
 
-    private void ForceClose()
+    private bool TryForceClose()
     {
         _timer.Stop();
+        if (_isPinned)
+            return false;
+
         if (_current == this) _current = null;
         try { Close(); } catch { }
+        return true;
     }
 
     protected override void OnClosed(EventArgs e)
@@ -322,8 +336,11 @@ public partial class ToastWindow : Window
     public static void Show(string title, string body = "", string? filePath = null)
     {
         Services.SoundService.PlayCaptureSound();
+        if (_current is not null && !ToastPinPolicy.CanReplaceCurrent(_current._isPinned))
+            return;
+
         _currentSticker?.ForceClose(); _currentSticker = null;
-        _current?.ForceClose();
+        _current?.TryForceClose();
         var toast = new ToastWindow(title, body, null);
         if (filePath != null)
         {
@@ -337,7 +354,10 @@ public partial class ToastWindow : Window
 
     public static void ShowSticker(Bitmap sticker)
     {
-        _current?.ForceClose();
+        if (_current is not null && !ToastPinPolicy.CanReplaceCurrent(_current._isPinned))
+            return;
+
+        _current?.TryForceClose();
         _currentSticker?.ForceClose();
         var toast = new StickerToastWindow(sticker, _position);
         _currentSticker = toast;
@@ -348,8 +368,11 @@ public partial class ToastWindow : Window
     public static void ShowWithColor(string title, string body, Color color)
     {
         Services.SoundService.PlayCaptureSound();
+        if (_current is not null && !ToastPinPolicy.CanReplaceCurrent(_current._isPinned))
+            return;
+
         _currentSticker?.ForceClose(); _currentSticker = null;
-        _current?.ForceClose();
+        _current?.TryForceClose();
         var toast = new ToastWindow(title, body, color);
         _current = toast;
         toast.Show();
@@ -358,8 +381,11 @@ public partial class ToastWindow : Window
     public static void ShowError(string title, string body = "", string? filePath = null)
     {
         Services.SoundService.PlayErrorSound();
+        if (_current is not null && !ToastPinPolicy.CanReplaceCurrent(_current._isPinned))
+            return;
+
         _currentSticker?.ForceClose(); _currentSticker = null;
-        _current?.ForceClose();
+        _current?.TryForceClose();
         var toast = new ToastWindow(title, body, null);
 
         // Red-tinted error styling — clearly different from normal toasts
@@ -385,8 +411,11 @@ public partial class ToastWindow : Window
     /// <summary>Show a preview toast with an image thumbnail.</summary>
     public static void ShowImagePreview(Bitmap screenshot, string? filePath, bool autoPin)
     {
+        if (_current is not null && !ToastPinPolicy.CanReplaceCurrent(_current._isPinned))
+            return;
+
         _currentSticker?.ForceClose(); _currentSticker = null;
-        _current?.ForceClose();
+        _current?.TryForceClose();
         var toast = new ToastWindow(filePath != null ? System.IO.Path.GetFileName(filePath) : "Screenshot",
                                      $"{screenshot.Width}x{screenshot.Height}", null);
         toast._previewBitmap = screenshot;
@@ -400,16 +429,7 @@ public partial class ToastWindow : Window
         toast.Root.MaxWidth = toastW;
         toast.Root.MinWidth = Math.Min(200, toastW);
         toast.ImageArea.MaxHeight = (int)Math.Clamp(toastW / aspect, 80, 200);
-        var hBmp = screenshot.GetHbitmap();
-        try
-        {
-            var src = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
-                hBmp, IntPtr.Zero, System.Windows.Int32Rect.Empty,
-                BitmapSizeOptions.FromEmptyOptions());
-            src.Freeze();
-            toast.PreviewImage.Source = src;
-        }
-        finally { Native.User32.DeleteObject(hBmp); }
+        toast.PreviewImage.Source = ToBitmapSource(screenshot);
 
         // Clip Root to rounded corners after layout (WPF Border.ClipToBounds doesn't clip to CornerRadius)
         toast.Root.SizeChanged += (s, _) =>
@@ -518,7 +538,7 @@ public partial class ToastWindow : Window
 
     public static void DismissCurrent()
     {
-        _current?.ForceClose();
+        _current?.TryForceClose();
         _currentSticker?.ForceClose();
     }
 
@@ -526,13 +546,7 @@ public partial class ToastWindow : Window
 
     private static BitmapSource ToBitmapSource(Bitmap bitmap)
     {
-        using var trimmed = BitmapPerf.TrimTransparentBounds(bitmap, 18);
-        using var ms = new MemoryStream();
-        trimmed.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-        ms.Position = 0;
-        var frame = BitmapFrame.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        frame.Freeze();
-        return frame;
+        return BitmapPerf.ToBitmapSource(bitmap);
     }
 
 }

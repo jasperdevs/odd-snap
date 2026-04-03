@@ -34,16 +34,7 @@ public static class IconFont
             var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             g.DrawString(glyph.ToString(), font, brush, new RectangleF(0, 0, size, size), sf);
         }
-        var hBmp = bmp.GetHbitmap();
-        try
-        {
-            var src = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
-                hBmp, IntPtr.Zero, System.Windows.Int32Rect.Empty,
-                System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
-            src.Freeze();
-            return src;
-        }
-        finally { Native.User32.DeleteObject(hBmp); }
+        return BitmapPerf.ToBitmapSource(bmp);
     }
 
     private static FontFamily LoadFamily()

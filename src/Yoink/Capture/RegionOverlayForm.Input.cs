@@ -200,7 +200,6 @@ public sealed partial class RegionOverlayForm
             int handle = GetSelectHandle(e.Location);
             if (handle >= 0 && _selectedAnnotationIndex >= 0)
             {
-                HideToolbarImmediately();
                 _isSelectResizing = true;
                 _selectResizeHandle = handle;
                 _selectDragStart = e.Location;
@@ -212,7 +211,6 @@ public sealed partial class RegionOverlayForm
             int hit = HitTestAnnotation(e.Location);
             if (hit >= 0)
             {
-                HideToolbarImmediately();
                 _selectedAnnotationIndex = hit;
                 _isSelectDragging = true;
                 _selectDragStart = e.Location;
@@ -239,7 +237,7 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Ocr:
             case CaptureMode.Scan:
             case CaptureMode.Sticker:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _autoDetectRect = WindowDetector.GetDetectionRectAtPoint(
                     e.Location, _virtualBounds, _windowDetectionMode);
                 _autoDetectActive = _autoDetectRect.Width > 0 && _autoDetectRect.Height > 0;
@@ -248,13 +246,13 @@ public sealed partial class RegionOverlayForm
                 _hasSelection = false;
                 break;
             case CaptureMode.Freeform:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isSelecting = true;
                 _freeformPoints.Clear();
                 _freeformPoints.Add(e.Location);
                 break;
             case CaptureMode.Text:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isTyping = true;
                 _textPos = e.Location;
                 _textBuffer = "";
@@ -263,28 +261,28 @@ public sealed partial class RegionOverlayForm
                 Invalidate(InflateForRepaint(Rectangle.Round(MeasureTextRect(_textPos, "", _textFontSize, _textFontFamily, _textBold, _textItalic))));
                 break;
             case CaptureMode.Highlight:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isHighlighting = true;
                 _highlightStart = e.Location;
                 break;
             case CaptureMode.RectShape:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isRectShapeDragging = true;
                 _shapeStart = e.Location;
                 break;
             case CaptureMode.CircleShape:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isCircleShapeDragging = true;
                 _shapeStart = e.Location;
                 break;
             case CaptureMode.StepNumber:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 AddAnnotation(new StepNumberAnnotation(e.Location, _nextStepNumber, _toolColor));
                 _nextStepNumber++;
                 Invalidate(InflateForRepaint(new Rectangle(e.Location.X - 16, e.Location.Y - 16, 32, 32)));
                 break;
             case CaptureMode.Magnifier:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 // Place a persistent magnifier at click point
                 int srcSz = 40;
                 int sx2 = Math.Clamp(e.Location.X - srcSz / 2, 0, _bmpW - srcSz);
@@ -293,37 +291,37 @@ public sealed partial class RegionOverlayForm
                 Invalidate(InflateForRepaint(GetMagnifierPreviewRect(e.Location)));
                 break;
             case CaptureMode.Draw:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isSelecting = true;
                 _currentStroke = new List<Point> { e.Location };
                 break;
             case CaptureMode.Line:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isLineDragging = true;
                 _lineStart = e.Location;
                 break;
             case CaptureMode.Ruler:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isRulerDragging = true;
                 _rulerStart = e.Location;
                 break;
             case CaptureMode.Arrow:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isArrowDragging = true;
                 _arrowStart = e.Location;
                 break;
             case CaptureMode.CurvedArrow:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isCurvedArrowDragging = true;
                 _currentCurvedArrow = new List<Point> { e.Location };
                 break;
             case CaptureMode.Blur:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 _isBlurring = true;
                 _blurStart = e.Location;
                 break;
             case CaptureMode.Eraser:
-                HideToolbarImmediately();
+                HideToolbarForCaptureTool();
                 int cx = Math.Clamp(e.Location.X, 0, _bmpW - 1);
                 int cy = Math.Clamp(e.Location.Y, 0, _bmpH - 1);
                 _eraserColor = Color.FromArgb(_pixelData[cy * _bmpW + cx]);
@@ -1160,12 +1158,16 @@ public sealed partial class RegionOverlayForm
             int py = _toolbarRect.Bottom + 8;
             _emojiPickerRect = new Rectangle(px, py, pw, ph);
             ShowEmojiSearchBox();
-            PrimeVisibleEmojiCache();
+            _emojiWarmupIndex = 0;
+            _emojiWarmupPending = true;
+            _pickerTimer.Start();
         }
         else
         {
             _emojiPickerOpen = false;
             _isPlacingEmoji = false;
+            _emojiWarmupPending = false;
+            _emojiWarmupIndex = 0;
             HideEmojiSearchBox();
         }
 

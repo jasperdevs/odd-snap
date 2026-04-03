@@ -9,19 +9,30 @@ public static class InstallService
     public static string DefaultInstallPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Yoink");
 
+    private static string GetAppDirectory()
+    {
+        var exe = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(exe))
+            return Path.GetDirectoryName(exe) ?? AppContext.BaseDirectory;
+
+        return AppContext.BaseDirectory;
+    }
+
     /// <summary>Check if the app is running from a proper install location.</summary>
     public static bool IsInstalled()
     {
         try
         {
-            if (LooksLikeBuildOutputPath(AppContext.BaseDirectory))
+            var appDir = GetAppDirectory();
+
+            if (LooksLikeBuildOutputPath(appDir))
                 return false;
 
             using var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Yoink");
             if (key == null) return false;
             var installLoc = key.GetValue("InstallLocation") as string;
             if (string.IsNullOrWhiteSpace(installLoc)) return false;
-            var currentDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
+            var currentDir = appDir.TrimEnd('\\', '/');
             return string.Equals(currentDir, installLoc.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }
@@ -30,12 +41,14 @@ public static class InstallService
     /// <summary>Check if we should show the installer (not installed, not portable mode).</summary>
     public static bool ShouldShowInstaller()
     {
-        if (LooksLikeBuildOutputPath(AppContext.BaseDirectory))
+        var appDir = GetAppDirectory();
+
+        if (LooksLikeBuildOutputPath(appDir))
             return true;
 
         if (IsInstalled()) return false;
         // Portable mode: if a portable.txt file exists next to the exe, skip installer
-        var portableFlag = Path.Combine(AppContext.BaseDirectory, "portable.txt");
+        var portableFlag = Path.Combine(appDir, "portable.txt");
         if (File.Exists(portableFlag)) return false;
         return true;
     }

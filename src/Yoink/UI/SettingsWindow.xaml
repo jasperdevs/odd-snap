@@ -743,13 +743,13 @@
                                      Padding="10,3" Margin="4,0,0,0" Visibility="Collapsed" Click="DeleteSelectedClick"/>
                         </StackPanel>
                         <ComboBox x:Name="HistoryCategoryCombo" FontSize="12" Padding="8,5" MinWidth="130"
-                                  VerticalAlignment="Center" SelectionChanged="HistoryCategoryCombo_Changed">
+                                  VerticalAlignment="Center" SelectionChanged="HistoryCategoryCombo_Changed"
+                                  PreviewMouseLeftButtonDown="HistoryCategoryCombo_PreviewMouseLeftButtonDown">
                             <ComboBoxItem Content="Images" IsSelected="True"/>
                             <ComboBoxItem Content="Text"/>
-                            <ComboBoxItem Content="GIFs"/>
+                            <ComboBoxItem Content="Videos/GIFs"/>
                             <ComboBoxItem Content="Colors"/>
                             <ComboBoxItem Content="Stickers"/>
-                            <ComboBoxItem Content="Videos"/>
                         </ComboBox>
                     </DockPanel>
                 </Border>
@@ -760,7 +760,7 @@
                     <StackPanel x:Name="HistoryStack"/>
                 </ScrollViewer>
 
-                <!-- GIF history -->
+                <!-- Videos / GIF history -->
                 <ScrollViewer x:Name="GifsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10,2,10,4"
                               ScrollChanged="GifPanel_ScrollChanged"
                               Visibility="Collapsed">
@@ -784,12 +784,6 @@
                               Padding="10,2,10,4" Visibility="Collapsed"
                               ScrollChanged="StickerPanel_ScrollChanged">
                     <StackPanel x:Name="StickerStack"/>
-                </ScrollViewer>
-
-                <!-- Video history -->
-                <ScrollViewer x:Name="VideosPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                              Padding="10,2,10,4" Visibility="Collapsed">
-                    <StackPanel x:Name="VideoStack"/>
                 </ScrollViewer>
 
                 <!-- Empty states -->

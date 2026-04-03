@@ -64,6 +64,33 @@ internal static class DxgiScreenCapture
         }
     }
 
+    public static void WarmUp()
+    {
+        var deviceBundle = GetOrCreateDeviceBundle();
+        foreach (var output in EnumerateOutputs(deviceBundle.Adapter))
+        {
+            try
+            {
+                var outputBounds = ToRectangle(output.Description.DesktopCoordinates);
+                if (outputBounds.Width <= 0 || outputBounds.Height <= 0)
+                    continue;
+
+                using var duplication = output.Output.DuplicateOutput(deviceBundle.Device);
+                using var frame = AcquireFrame(duplication);
+                using var desktopTexture = frame.Resource.QueryInterface<ID3D11Texture2D>();
+                _ = deviceBundle.GetOrCreateStagingTexture(outputBounds.Width, outputBounds.Height);
+            }
+            catch
+            {
+                // Best-effort warmup only. A failure here should not block first capture.
+            }
+            finally
+            {
+                output.Dispose();
+            }
+        }
+    }
+
     public static void ResetCache()
     {
         lock (CacheLock)

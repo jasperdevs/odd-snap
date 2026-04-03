@@ -111,6 +111,11 @@ public partial class App : Application
 
         RegisterHotkeys();
 
+        _ = Task.Run(() =>
+        {
+            try { Yoink.Capture.DxgiScreenCapture.WarmUp(); } catch { }
+        });
+
         if (_settingsService.Settings.AutoCheckForUpdates)
             _ = CheckForUpdatesOnStartupAsync();
 
@@ -217,6 +222,7 @@ public partial class App : Application
     {
         _idleTrimTimer?.Stop();
         _hotkeyService?.Dispose();
+        try { _historyService?.FlushPendingWrites(); } catch { }
         _trayIcon?.Dispose();
         _settingsWindow?.Close();
         try { Yoink.Capture.DxgiScreenCapture.ResetCache(); } catch { }
@@ -234,9 +240,7 @@ public partial class App : Application
                 _historyService.Load();
                 if (!_historyRecovered)
                 {
-                    _historyService.RecoverFromDirectories(
-                        _settingsService!.Settings.SaveDirectory,
-                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history"));
+                    _historyService.RecoverFromDirectories(_settingsService!.Settings.SaveDirectory);
                     _historyRecovered = true;
                 }
                 _historyService.PruneByRetention(_settingsService!.Settings.HistoryRetention);
@@ -268,7 +272,11 @@ public partial class App : Application
             return;
         }
 
-        _historyService = null;
+        if (_settingsWindow is not { IsVisible: true })
+        {
+            _historyService = null;
+            _historyRecovered = false;
+        }
         SettingsWindow.ClearThumbCache();
 
         try { LocalStickerEngineService.ReleaseSessions(); } catch { }

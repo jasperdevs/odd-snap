@@ -9,162 +9,285 @@ using Image = System.Windows.Controls.Image;
 using FontFamily = System.Windows.Media.FontFamily;
 using Cursors = System.Windows.Input.Cursors;
 using Yoink.Helpers;
+using Yoink.Models;
 using Yoink.Services;
 
 namespace Yoink.UI;
 
 public partial class SettingsWindow
 {
-    private void LoadVideoHistory()
+    private void LoadMediaHistory()
     {
-        VideoStack.Children.Clear();
-        var baseDir = _settingsService.Settings.SaveDirectory;
-        var videoDir = Path.Combine(baseDir, "Videos");
-        var dirs = new[] { videoDir, baseDir }.Where(Directory.Exists).ToArray();
-        if (dirs.Length == 0) { ShowVideoEmpty(); return; }
-        var files = dirs.SelectMany(EnumerateVideoFiles)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderByDescending(File.GetCreationTime)
-            .Take(50)
-            .ToArray();
-        if (files.Length == 0) { ShowVideoEmpty(); return; }
+        GifStack.Children.Clear();
 
-        var wrap = new WrapPanel();
-        foreach (var file in files)
+        var entries = BuildCombinedMediaEntries();
+        CleanupOrphanVideoThumbnails(entries);
+        long totalBytes = 0;
+        foreach (var e in entries)
+            totalBytes += e.Entry.FileSizeBytes > 0 ? e.Entry.FileSizeBytes : TryGetFileLength(e.Entry.FilePath);
+
+        var sizeStr = FormatStorageSize(totalBytes);
+        HistoryCountText.Text = $"{entries.Count} video/GIF{(entries.Count == 1 ? "" : "s")} · {sizeStr}";
+        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        HistoryEmptyLabel.Text = "No videos or GIFs yet";
+
+        _allGifItems = entries;
+        _gifRenderCount = Math.Min(HistoryPageSize, _allGifItems.Count);
+        RenderMediaItems();
+        DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private List<HistoryItemVM> BuildCombinedMediaEntries()
+    {
+        var items = new List<HistoryItemVM>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in _historyService.GifEntries.OrderByDescending(e => e.CapturedAt))
         {
-            var info = new FileInfo(file);
-            string sizeStr = info.Length > 1024 * 1024
-                ? $"{info.Length / 1024.0 / 1024.0:F1} MB"
-                : $"{info.Length / 1024:N0} KB";
-            string label = info.Extension.TrimStart('.').ToUpper();
-            string timeAgo = FormatTimeAgo(info.CreationTime);
+            if (!seen.Add(entry.FilePath))
+                continue;
 
-            var img = new System.Windows.Controls.Image { Stretch = Stretch.UniformToFill, Opacity = 0 };
-            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
-            var thumbPath = GetVideoThumbnailPath(file);
-            img.Loaded += (_, _) =>
+            items.Add(new HistoryItemVM
             {
-                LoadThumbAsync(img, thumbPath, file);
-                img.BeginAnimation(OpacityProperty,
-                    new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(250)));
-            };
-
-            var locBtn = CreateFileLocationButton(file);
-
-            var badge = new Border
-            {
-                Background = Theme.Brush(Theme.SectionIconBg),
-                CornerRadius = new CornerRadius(4),
-                Padding = new Thickness(6, 2, 6, 2),
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Margin = new Thickness(0, 0, 6, 6),
-                Child = new TextBlock
-                {
-                    Text = $"{label} · {sizeStr}",
-                    FontSize = 9,
-                    Foreground = Theme.Brush(Theme.TextPrimary),
-                    FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
-                }
-            };
-
-            var grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            var imgContainer = new Grid();
-            imgContainer.Children.Add(img);
-            imgContainer.Children.Add(badge);
-            imgContainer.Children.Add(locBtn);
-            Grid.SetRow(imgContainer, 0);
-            grid.Children.Add(imgContainer);
-
-            var infoPanel = new StackPanel { Margin = new Thickness(10, 6, 10, 8) };
-            infoPanel.Children.Add(new TextBlock
-            {
-                Text = info.Name,
-                FontSize = 11,
-                FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
-                TextTrimming = TextTrimming.CharacterEllipsis
+                Entry = entry,
+                ThumbPath = entry.FilePath,
+                Dimensions = "",
+                TimeAgo = FormatTimeAgo(entry.CapturedAt)
             });
-            infoPanel.Children.Add(new TextBlock
+        }
+
+        var baseDir = _settingsService.Settings.SaveDirectory;
+        var videoDirs = new[] { Path.Combine(baseDir, "Videos"), baseDir }.Where(Directory.Exists);
+        foreach (var file in videoDirs.SelectMany(EnumerateVideoFiles).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!seen.Add(file))
+                continue;
+
+            try
             {
-                Text = timeAgo,
+                var info = new FileInfo(file);
+                items.Add(new HistoryItemVM
+                {
+                    Entry = new HistoryEntry
+                    {
+                        FileName = info.Name,
+                        FilePath = file,
+                        CapturedAt = info.CreationTime,
+                        Width = 0,
+                        Height = 0,
+                        FileSizeBytes = info.Length,
+                        Kind = Path.GetExtension(file).Equals(".gif", StringComparison.OrdinalIgnoreCase)
+                            ? HistoryKind.Gif
+                            : HistoryKind.Image
+                    },
+                    ThumbPath = Path.GetExtension(file).Equals(".gif", StringComparison.OrdinalIgnoreCase)
+                        ? file
+                        : GetVideoThumbnailPath(file),
+                    Dimensions = "",
+                    TimeAgo = FormatTimeAgo(info.CreationTime)
+                });
+            }
+            catch { }
+        }
+
+        return items
+            .OrderByDescending(i => i.Entry.CapturedAt)
+            .ToList();
+    }
+
+    private void CleanupOrphanVideoThumbnails(IEnumerable<HistoryItemVM> items)
+    {
+        var expectedThumbs = new HashSet<string>(
+            items.Where(i => i.Entry.Kind != HistoryKind.Gif)
+                 .Select(i => GetVideoThumbnailPath(i.Entry.FilePath)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var baseDir = _settingsService.Settings.SaveDirectory;
+        var videoDirs = new[] { baseDir, Path.Combine(baseDir, "Videos") }.Where(Directory.Exists);
+
+        foreach (var dir in videoDirs)
+        {
+            foreach (var thumb in Directory.EnumerateFiles(dir, "*.jpg", SearchOption.AllDirectories))
+            {
+                var parentDir = Path.GetFileName(Path.GetDirectoryName(thumb));
+                if (!parentDir.Equals(".thumbs", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (expectedThumbs.Contains(thumb))
+                    continue;
+
+                try { File.Delete(thumb); } catch { }
+            }
+        }
+    }
+
+    private void RenderMediaItems()
+    {
+        GifStack.Children.Clear();
+        _gifItems = _allGifItems.Take(_gifRenderCount).ToList();
+        var groups = _gifItems.GroupBy(i => i.Entry.CapturedAt.Date).OrderByDescending(g => g.Key);
+        foreach (var group in groups)
+        {
+            string label = group.Key == DateTime.Today ? "Today"
+                : group.Key == DateTime.Today.AddDays(-1) ? "Yesterday"
+                : group.Key.ToString("MMMM d, yyyy");
+
+            GifStack.Children.Add(new TextBlock
+            {
+                Text = label,
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Opacity = 0.45,
+                Margin = new Thickness(6, 10, 0, 4)
+            });
+
+            var wrap = new WrapPanel();
+            foreach (var item in group)
+                wrap.Children.Add(item.Entry.Kind == HistoryKind.Gif ? CreateGifCard(item) : CreateVideoCard(item));
+            GifStack.Children.Add(wrap);
+        }
+    }
+
+    private void GifPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 300) return;
+        if (_gifRenderCount >= _allGifItems.Count) return;
+        _gifRenderCount = Math.Min(_gifRenderCount + HistoryPageSize, _allGifItems.Count);
+        RenderMediaItems();
+    }
+
+    private Border CreateGifCard(HistoryItemVM vm)
+    {
+        var filePath = vm.Entry.FilePath;
+        var shell = BuildMediaCardShell(vm, () =>
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(vm.Entry.UploadUrl))
+                {
+                    System.Windows.Clipboard.SetText(vm.Entry.UploadUrl);
+                    ToastWindow.Show("Copied", vm.Entry.UploadUrl);
+                    return;
+                }
+
+                var files = new System.Collections.Specialized.StringCollection();
+                files.Add(filePath);
+                System.Windows.Clipboard.SetFileDropList(files);
+                ToastWindow.Show("Copied", "GIF copied to clipboard");
+            }
+            catch { }
+        });
+
+        if (!string.IsNullOrEmpty(vm.Entry.UploadProvider))
+        {
+            var badge = CreateProviderBadge(vm.Entry.UploadProvider);
+            if (badge != null) shell.ImageContainer.Children.Add(badge);
+        }
+
+        var gifBadge = new Border
+        {
+            Background = Theme.Brush(Theme.SectionIconBg),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(5, 2, 5, 2),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(6, 0, 0, 6),
+            Child = new TextBlock
+            {
+                Text = "GIF",
+                FontSize = 9,
+                FontWeight = FontWeights.Bold,
+                Foreground = Theme.Brush(Theme.TextPrimary)
+            }
+        };
+        shell.ImageContainer.Children.Add(gifBadge);
+        AddMediaInfo(shell.InfoPanel, vm.Entry.FileName, vm.TimeAgo, filePath);
+        return shell.Card;
+    }
+
+    private Border CreateVideoCard(HistoryItemVM vm)
+    {
+        var filePath = vm.Entry.FilePath;
+        var shell = BuildMediaCardShell(vm, () =>
+        {
+            try
+            {
+                var files = new System.Collections.Specialized.StringCollection();
+                files.Add(filePath);
+                System.Windows.Clipboard.SetFileDropList(files);
+                ToastWindow.Show("Copied", "Video copied to clipboard");
+            }
+            catch { }
+        });
+
+        AddMediaInfo(shell.InfoPanel, vm.Entry.FileName, vm.TimeAgo, filePath);
+        return shell.Card;
+    }
+
+    private static void AddMediaInfo(StackPanel panel, string fileName, string timeAgo, string filePath)
+    {
+        string sizeStr = "";
+        try { sizeStr = FormatStorageSize(new FileInfo(filePath).Length); } catch { }
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = fileName,
+            FontSize = 11,
+            FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+
+        if (!string.IsNullOrEmpty(sizeStr))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = sizeStr,
                 FontSize = 10,
                 FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
-                Opacity = 0.3
+                Opacity = 0.35
             });
-            Grid.SetRow(infoPanel, 1);
-            grid.Children.Add(infoPanel);
-
-            var card = new Border
-            {
-                Width = 168,
-                Margin = new Thickness(3),
-                CornerRadius = new CornerRadius(8),
-                Background = Theme.Brush(Theme.BgCard),
-                BorderBrush = Theme.Brush(Theme.BorderSubtle),
-                BorderThickness = new Thickness(1),
-                Cursor = Cursors.Hand,
-                Child = grid,
-            };
-            bool isDraggingFile = false;
-            card.SizeChanged += (s, _) =>
-            {
-                var b = (Border)s!;
-                b.Clip = new System.Windows.Media.RectangleGeometry(
-                    new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight), 10, 10);
-            };
-            card.MouseEnter += (_, _) =>
-            {
-                locBtn.BeginAnimation(OpacityProperty,
-                    new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
-            };
-            card.MouseLeave += (_, _) =>
-            {
-                locBtn.BeginAnimation(OpacityProperty,
-                    new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
-            };
-            var filePath = file;
-            if (File.Exists(filePath))
-                AttachFileDragHandlers(card, card, filePath, () => !_selectMode, v => isDraggingFile = v);
-
-            card.MouseLeftButtonUp += (_, _) =>
-            {
-                if (_selectMode || isDraggingFile)
-                    return;
-                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = filePath, UseShellExecute = true }); }
-                catch { }
-            };
-            wrap.Children.Add(card);
         }
-        VideoStack.Children.Add(wrap);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = timeAgo,
+            FontSize = 10,
+            FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+            Opacity = 0.3
+        });
     }
 
     private static IEnumerable<string> EnumerateVideoFiles(string dir)
     {
-        foreach (var file in Directory.EnumerateFiles(dir))
+        foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly))
         {
             var ext = Path.GetExtension(file);
             if (ext.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
                 ext.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase))
+                ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".gif", StringComparison.OrdinalIgnoreCase))
             {
                 yield return file;
             }
         }
     }
 
-    private void ShowVideoEmpty()
+    private void DeleteMediaItems(IEnumerable<HistoryItemVM> items)
     {
-        VideoStack.Children.Add(new TextBlock
+        var gifEntries = new List<HistoryEntry>();
+        foreach (var item in items)
         {
-            Text = "No video recordings yet",
-            FontSize = 13,
-            Opacity = 0.2,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 40, 0, 0),
-        });
+            if (item.Entry.Kind == HistoryKind.Gif)
+            {
+                gifEntries.Add(item.Entry);
+                continue;
+            }
+
+            try { File.Delete(item.Entry.FilePath); } catch { }
+            try { File.Delete(GetVideoThumbnailPath(item.Entry.FilePath)); } catch { }
+        }
+
+        _historyService.DeleteEntries(gifEntries);
     }
 
     private static string GetVideoThumbnailPath(string videoPath)
@@ -239,15 +362,28 @@ public partial class SettingsWindow
                         loadPath = await EnsureVideoThumbnailAsync(sourcePath, path);
 
                     if (!File.Exists(loadPath))
+                    {
+                        if (sourcePath != null)
+                        {
+                            var placeholder = VideoPlaceholder.Value;
+                            StoreThumbInCache(cacheKey, placeholder);
+                            _ = img.Dispatcher.BeginInvoke(() =>
+                            {
+                                if (img.Source == null)
+                                    img.Source = placeholder;
+                            });
+                        }
                         return;
+                    }
 
-                    var bmp = new BitmapImage();
-                    bmp.BeginInit();
-                    bmp.UriSource = new Uri(loadPath);
-                    bmp.DecodePixelWidth = 240;
-                    bmp.CacheOption = BitmapCacheOption.OnLoad;
-                    bmp.EndInit();
-                    bmp.Freeze();
+                    var bmp = LoadThumbSource(loadPath);
+                    if (bmp is null)
+                    {
+                        if (sourcePath == null)
+                            return;
+
+                        bmp = VideoPlaceholder.Value;
+                    }
 
                     StoreThumbInCache(cacheKey, bmp);
                     _ = img.Dispatcher.BeginInvoke(() =>

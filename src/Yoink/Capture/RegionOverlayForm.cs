@@ -220,6 +220,8 @@ public sealed partial class RegionOverlayForm : Form
     private string? _selectedEmoji;
     private bool _isPlacingEmoji;
     private float _emojiPlaceSize = 32f;
+    private int _emojiWarmupIndex;
+    private bool _emojiWarmupPending;
 
     // Full emoji palette (searchable by name - includes semantic tags after |)
     private static readonly (string emoji, string name)[] EmojiPalette = {
@@ -570,16 +572,28 @@ public sealed partial class RegionOverlayForm : Form
         if (_emojiSearchBox != null) { _emojiSearchBox.Visible = false; Focus(); }
     }
 
-    private void PrimeVisibleEmojiCache()
+    private void WarmEmojiPickerCacheBatch()
     {
-        try
+        if (!_emojiWarmupPending || !_emojiPickerOpen)
+            return;
+
+        var filtered = GetFilteredEmojiPalette();
+        if (_emojiWarmupIndex >= filtered.Length)
         {
-            var filtered = GetFilteredEmojiPalette();
-            int count = Math.Min(filtered.Length, 12);
-            for (int i = 0; i < count; i++)
-                _emojiRenderer.GetEmoji(filtered[i].emoji, 22f);
+            _emojiWarmupPending = false;
+            return;
         }
-        catch { }
+
+        int batchSize = 4;
+        int end = Math.Min(filtered.Length, _emojiWarmupIndex + batchSize);
+        for (int i = _emojiWarmupIndex; i < end; i++)
+            _emojiRenderer.GetEmoji(filtered[i].emoji, 22f);
+
+        _emojiWarmupIndex = end;
+        if (_emojiWarmupIndex >= filtered.Length)
+            _emojiWarmupPending = false;
+
+        Invalidate(InflateForRepaint(GetEmojiPickerBounds(), 12));
     }
 
     private void ShowFontSearchBox()
@@ -636,6 +650,12 @@ public sealed partial class RegionOverlayForm : Form
         _animTimer.Stop();
         _toolbarAnim = 1f;
         _toolbarForm.Hide();
+    }
+
+    private void HideToolbarForCaptureTool()
+    {
+        if (ToolDef.IsCaptureTool(_mode))
+            HideToolbarImmediately();
     }
 
     private Rectangle GetOverlayUiBounds()
@@ -702,8 +722,17 @@ public sealed partial class RegionOverlayForm : Form
 
         int pad = 10;
         int w = UiChrome.ToolbarButtonSize * BtnCount + UiChrome.ToolbarButtonSpacing * (BtnCount - 1) + pad * 2 + _sepAfter.Length * UiChrome.ToolbarGroupGap;
-        int x = (ClientSize.Width - w) / 2;
-        _toolbarRect = new Rectangle(x, UiChrome.ToolbarTopMargin, w, UiChrome.ToolbarHeight);
+        Rectangle screenBounds;
+        try
+        {
+            screenBounds = Screen.FromPoint(System.Windows.Forms.Cursor.Position).WorkingArea;
+        }
+        catch
+        {
+            screenBounds = Screen.PrimaryScreen?.WorkingArea ?? _virtualBounds;
+        }
+
+        _toolbarRect = ToolbarLayout.GetToolbarRect(_virtualBounds, screenBounds, w, UiChrome.ToolbarHeight);
         int cx = _toolbarRect.X + pad;
         for (int i = 0; i < BtnCount; i++)
         {

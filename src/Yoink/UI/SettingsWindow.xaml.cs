@@ -13,17 +13,21 @@ namespace Yoink.UI;
 public partial class SettingsWindow : Window
 {
     private const int MaxThumbCacheEntries = 32;
-    private static readonly Dictionary<string, BitmapImage> ThumbCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, BitmapSource> ThumbCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly LinkedList<string> ThumbCacheOrder = new();
     private static readonly Dictionary<string, LinkedListNode<string>> ThumbCacheNodes = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, BitmapImage> LogoCache = new();
     private static readonly SemaphoreSlim ThumbDecodeGate = new(4);
     private static readonly HashSet<string> ThumbInflight = new(StringComparer.OrdinalIgnoreCase);
-
+    private readonly System.Windows.Threading.DispatcherTimer _historyMonitorTimer = new()
+    {
+        Interval = TimeSpan.FromSeconds(2.5)
+    };
     private readonly SettingsService _settingsService;
     private readonly HistoryService _historyService;
     private UpdateCheckResult? _latestUpdate;
     private bool _updateCheckInFlight;
+    private string? _lastHistoryFingerprint;
 
     public event Action? HotkeyChanged;
     public event Action? UninstallRequested;
@@ -48,13 +52,74 @@ public partial class SettingsWindow : Window
         LoadSettings();
         Loaded += (_, _) => ApplyMicaBackdrop();
         Loaded += async (_, _) => await RefreshUpdateStatusAsync(false);
+        _historyService.Changed += HistoryService_Changed;
+        _historyMonitorTimer.Tick += (_, _) => PollHistoryChanges();
         Activated += (_, _) =>
         {
             ApplyThemeColors();
-            if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
             UpdateLocalEngineUi();
         };
-        Closed += (_, _) => ClearThumbCache();
+        Closed += (_, _) =>
+        {
+            _historyService.Changed -= HistoryService_Changed;
+            ClearThumbCache();
+        };
+    }
+
+    private void HistoryService_Changed()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!IsLoaded || HistoryTab.IsChecked != true)
+                return;
+
+            LoadCurrentHistoryTab();
+            PrimeHistoryFingerprint();
+        });
+    }
+
+    private void PollHistoryChanges()
+    {
+        if (!IsLoaded || HistoryTab.IsChecked != true)
+        {
+            _historyMonitorTimer.Stop();
+            return;
+        }
+
+        var fingerprint = _historyService.GetDiskFingerprint(_settingsService.Settings.SaveDirectory);
+        if (fingerprint == _lastHistoryFingerprint)
+            return;
+
+        RefreshHistoryFromDisk();
+    }
+
+    private void RefreshHistoryFromDisk()
+    {
+        _historyService.Load();
+        _historyService.RecoverFromDirectories(_settingsService.Settings.SaveDirectory);
+        _historyService.PruneByRetention(_settingsService.Settings.HistoryRetention);
+        LoadCurrentHistoryTab();
+        PrimeHistoryFingerprint();
+    }
+
+    private void PrimeHistoryFingerprint()
+    {
+        _lastHistoryFingerprint = _historyService.GetDiskFingerprint(_settingsService.Settings.SaveDirectory);
+    }
+
+    private void UpdateHistoryMonitorState()
+    {
+        if (HistoryTab.IsChecked == true)
+        {
+            PrimeHistoryFingerprint();
+            if (!_historyMonitorTimer.IsEnabled)
+                _historyMonitorTimer.Start();
+        }
+        else
+        {
+            _historyMonitorTimer.Stop();
+            _lastHistoryFingerprint = null;
+        }
     }
 
     private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)

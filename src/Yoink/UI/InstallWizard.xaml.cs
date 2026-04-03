@@ -93,6 +93,7 @@ public partial class InstallWizard : Window
         Page1.Visibility = Visibility.Collapsed;
         Page2.Visibility = Visibility.Visible;
         InstallBtn.IsEnabled = false;
+        InstallBtn.Visibility = Visibility.Collapsed;
         CancelBtn.IsEnabled = false;
 
         try
@@ -130,6 +131,7 @@ public partial class InstallWizard : Window
                 System.Windows.Media.Color.FromRgb(239, 68, 68));
             CancelBtn.IsEnabled = true;
             CancelBtn.Content = "Close";
+            InstallBtn.Visibility = Visibility.Collapsed;
         }
     }
 

@@ -170,12 +170,25 @@ public partial class SettingsWindow
 
         if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
         if (UploadsTab.IsChecked == true) UpdateUploadTabVisibility();
+        UpdateHistoryMonitorState();
     }
 
     private void HistoryCategoryCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
         LoadCurrentHistoryTab();
+    }
+
+    private void HistoryCategoryCombo_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.ComboBox comboBox)
+            return;
+
+        if (comboBox.IsDropDownOpen)
+            return;
+
+        comboBox.IsDropDownOpen = true;
+        e.Handled = true;
     }
 
     private void UploadSubTabChanged(object sender, RoutedEventArgs e)
@@ -190,16 +203,16 @@ public partial class SettingsWindow
         TextPanel.Visibility = Visibility.Collapsed;
         ColorsPanel.Visibility = Visibility.Collapsed;
         StickersPanel.Visibility = Visibility.Collapsed;
-        VideosPanel.Visibility = Visibility.Collapsed;
 
         switch (HistoryCategoryCombo.SelectedIndex)
         {
             case 0: ImagesPanel.Visibility = Visibility.Visible; LoadHistory(); break;
             case 1: TextPanel.Visibility = Visibility.Visible; LoadOcrHistory(); break;
-            case 2: GifsPanel.Visibility = Visibility.Visible; LoadGifHistory(); break;
+            case 2: GifsPanel.Visibility = Visibility.Visible; LoadMediaHistory(); break;
             case 3: ColorsPanel.Visibility = Visibility.Visible; LoadColorHistory(); break;
             case 4: StickersPanel.Visibility = Visibility.Visible; LoadStickerHistory(); break;
-            case 5: VideosPanel.Visibility = Visibility.Visible; LoadVideoHistory(); break;
         }
+
+        UpdateHistoryMonitorState();
     }
 }

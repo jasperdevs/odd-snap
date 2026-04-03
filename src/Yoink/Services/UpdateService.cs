@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace Yoink.Services;
 
@@ -20,12 +21,14 @@ public sealed record UpdateCheckResult(
 
 public static class UpdateService
 {
-    private const string Owner = "jasperdevs";
-    private const string Repo = "yoink";
     private const string LatestReleaseApiUrl = "https://api.github.com/repos/jasperdevs/yoink/releases/latest";
     private const string ReleasesPageUrl = "https://github.com/jasperdevs/yoink/releases/latest";
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15);
 
     private static readonly HttpClient Http = CreateHttpClient();
+    private static readonly SemaphoreSlim CheckGate = new(1, 1);
+    private static UpdateCheckResult? _cachedResult;
+    private static DateTimeOffset _cachedAt;
 
     public static Version GetCurrentVersion()
     {
@@ -37,46 +40,76 @@ public static class UpdateService
 
     public static string GetCurrentVersionLabel() => $"v{GetCurrentVersion()}";
 
-    public static async Task<UpdateCheckResult> CheckForUpdatesAsync(CancellationToken cancellationToken = default)
+    public static async Task<UpdateCheckResult> CheckForUpdatesAsync(bool forceRefresh = false, CancellationToken cancellationToken = default)
     {
-        var currentVersion = GetCurrentVersion();
+        if (!forceRefresh)
+        {
+            var cached = _cachedResult;
+            if (cached is not null && DateTimeOffset.UtcNow - _cachedAt < CacheDuration)
+                return cached;
+        }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseApiUrl);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        await CheckGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!forceRefresh)
+            {
+                var cached = _cachedResult;
+                if (cached is not null && DateTimeOffset.UtcNow - _cachedAt < CacheDuration)
+                    return cached;
+            }
 
-        using var response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+            var currentVersion = GetCurrentVersion();
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        var release = await JsonSerializer.DeserializeAsync<GitHubRelease>(stream, cancellationToken: cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("GitHub returned an empty release response.");
+            using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseApiUrl);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 
-        var latestVersion = ParseVersion(release.TagName);
-        var latestLabel = string.IsNullOrWhiteSpace(release.TagName) ? $"v{latestVersion}" : release.TagName.Trim();
-        var releaseUrl = string.IsNullOrWhiteSpace(release.HtmlUrl) ? ReleasesPageUrl : release.HtmlUrl;
-        var asset = PickBestInstallerAsset(release.Assets);
-        var isUpdateAvailable = latestVersion > currentVersion;
-        var status = isUpdateAvailable
-            ? $"Update available: {latestLabel}"
-            : $"You're up to date on {GetCurrentVersionLabel()}";
+            using var response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
 
-        return new UpdateCheckResult(
-            currentVersion,
-            latestVersion,
-            latestLabel,
-            releaseUrl,
-            asset?.BrowserDownloadUrl,
-            asset?.Name,
-            release.PublishedAt,
-            isUpdateAvailable,
-            status);
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var release = await JsonSerializer.DeserializeAsync<GitHubRelease>(stream, cancellationToken: cancellationToken).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("GitHub returned an empty release response.");
+
+            var latestVersion = ParseVersion(release.TagName);
+            var latestLabel = string.IsNullOrWhiteSpace(release.TagName) ? $"v{latestVersion}" : release.TagName.Trim();
+            var releaseUrl = string.IsNullOrWhiteSpace(release.HtmlUrl) ? ReleasesPageUrl : release.HtmlUrl;
+            var asset = PickBestInstallerAsset(release.Assets);
+            var isUpdateAvailable = latestVersion > currentVersion;
+            var status = isUpdateAvailable
+                ? $"Update available: {latestLabel}"
+                : $"You're up to date on {GetCurrentVersionLabel()}";
+
+            var result = new UpdateCheckResult(
+                currentVersion,
+                latestVersion,
+                latestLabel,
+                releaseUrl,
+                asset?.BrowserDownloadUrl,
+                asset?.Name,
+                release.PublishedAt,
+                isUpdateAvailable,
+                status);
+
+            _cachedResult = result;
+            _cachedAt = DateTimeOffset.UtcNow;
+            return result;
+        }
+        finally
+        {
+            CheckGate.Release();
+        }
     }
 
     private static HttpClient CreateHttpClient()
     {
-        var client = new HttpClient();
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(8)
+        };
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"Yoink/{GetCurrentVersion()}");
         client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
         return client;
     }
 
@@ -86,8 +119,15 @@ public static class UpdateService
         if (raw.StartsWith("v", StringComparison.OrdinalIgnoreCase))
             raw = raw[1..];
 
-        if (Version.TryParse(raw, out var version))
-            return new Version(version.Major, version.Minor, Math.Max(version.Build, 0));
+        var match = Regex.Match(raw, @"^(?<major>\d+)(?:\.(?<minor>\d+))?(?:\.(?<build>\d+))?(?:\.(?<rev>\d+))?");
+        if (match.Success)
+        {
+            int major = int.Parse(match.Groups["major"].Value);
+            int minor = match.Groups["minor"].Success ? int.Parse(match.Groups["minor"].Value) : 0;
+            int build = match.Groups["build"].Success ? int.Parse(match.Groups["build"].Value) : 0;
+            int revision = match.Groups["rev"].Success ? int.Parse(match.Groups["rev"].Value) : 0;
+            return new Version(major, minor, build, revision);
+        }
 
         return new Version(0, 0, 0);
     }

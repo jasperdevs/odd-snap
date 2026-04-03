@@ -29,12 +29,6 @@ public partial class SettingsWindow
                 Cursor = System.Windows.Input.Cursors.Hand
             };
 
-            if (_selectMode)
-            {
-                card.BorderThickness = new Thickness(Theme.StrokeThickness);
-                card.BorderBrush = Theme.StrokeBrush();
-            }
-
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -69,25 +63,26 @@ public partial class SettingsWindow
             copyBtn.Click += (_, _) => System.Windows.Clipboard.SetText(capturedText);
             grid.Children.Add(copyBtn);
 
-            card.Child = grid;
+            var badge = CreateSelectionBadge(false);
+            var root = new Grid();
+            root.Children.Add(grid);
+            root.Children.Add(badge);
+            card.Child = root;
+
+            bool selected = false;
             if (_selectMode)
             {
-                card.MouseLeftButtonDown += (_, _) =>
+                card.BorderThickness = new Thickness(0);
+                card.MouseLeftButtonDown += (_, e) =>
                 {
-                    if (card.Tag as bool? == true)
-                    {
-                        card.Tag = false;
-                        card.BorderThickness = new Thickness(0);
-                    }
-                    else
-                    {
-                        card.Tag = true;
-                        card.BorderThickness = new Thickness(Theme.StrokeThickness);
-                        card.BorderBrush = Theme.StrokeBrush();
-                    }
+                    e.Handled = true;
+                    selected = !selected;
+                    card.Tag = selected;
+                    UpdateSelectableCardSelection(card, badge, selected);
                 };
             }
 
+            UpdateSelectableCardSelection(card, badge, selected);
             OcrStack.Children.Add(card);
         }
     }
@@ -139,32 +134,46 @@ public partial class SettingsWindow
                 Margin = new Thickness(0, 3, 0, 0)
             };
 
+            var badge = CreateSelectionBadge(false);
+            var swatchGrid = new Grid();
+            swatchGrid.Children.Add(swatch);
+            swatchGrid.Children.Add(badge);
+
             var stack = new StackPanel { Margin = new Thickness(4) };
-            stack.Children.Add(swatch);
+            stack.Children.Add(swatchGrid);
             stack.Children.Add(hexLabel);
 
+            var selected = false;
             if (_selectMode)
             {
-                var selected = false;
                 swatch.BorderThickness = new Thickness(0);
-                swatch.MouseLeftButtonDown += (_, _) =>
+                swatch.MouseLeftButtonDown += (_, e) =>
                 {
+                    e.Handled = true;
                     selected = !selected;
-                    swatch.BorderThickness = new Thickness(selected ? Theme.StrokeThickness : 0);
-                    swatch.BorderBrush = selected ? Theme.StrokeBrush() : null;
+                    UpdateSelectableCardSelection(swatch, badge, selected);
                     stack.Tag = selected ? entry : null;
                 };
             }
             else
             {
-                swatch.MouseLeftButtonDown += (_, _) =>
+                swatch.MouseLeftButtonDown += (_, e) =>
                 {
+                    e.Handled = true;
                     System.Windows.Clipboard.SetText(entry.Hex);
                     ToastWindow.Show("Copied", entry.Hex);
                 };
             }
 
+            UpdateSelectableCardSelection(swatch, badge, selected);
             ColorStack.Children.Add(stack);
         }
+    }
+
+    private static void UpdateSelectableCardSelection(Border card, Border badge, bool selected)
+    {
+        card.BorderThickness = new Thickness(selected ? Theme.StrokeThickness : 0);
+        card.BorderBrush = selected ? Theme.StrokeBrush() : System.Windows.Media.Brushes.Transparent;
+        badge.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
     }
 }

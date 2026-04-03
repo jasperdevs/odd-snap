@@ -21,14 +21,26 @@ public sealed partial class RegionOverlayForm
 
     private void OnPickerTick(object? sender, EventArgs e)
     {
-        if (_pickerBusy || !_pickerUpdateQueued)
+        if (_pickerBusy)
             return;
 
-        if (_pickerStopwatch.ElapsedMilliseconds < 16)
-            return;
+        bool didWork = false;
 
-        _pickerUpdateQueued = false;
-        RenderColorPickerFrame(_pendingPickerPoint);
+        if (_pickerUpdateQueued && _pickerStopwatch.ElapsedMilliseconds >= 16)
+        {
+            _pickerUpdateQueued = false;
+            RenderColorPickerFrame(_pendingPickerPoint);
+            didWork = true;
+        }
+
+        if (_emojiWarmupPending && _emojiPickerOpen)
+        {
+            WarmEmojiPickerCacheBatch();
+            didWork = true;
+        }
+
+        if (!didWork && !_pickerUpdateQueued && !_emojiWarmupPending)
+            _pickerTimer.Stop();
     }
 
     private void EnsurePickerForm()

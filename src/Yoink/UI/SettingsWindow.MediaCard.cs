@@ -5,76 +5,31 @@ using System.Windows.Input;
 using System.Windows.Media;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using VerticalAlignment = System.Windows.VerticalAlignment;
-using Point = System.Windows.Point;
-using DataObject = System.Windows.DataObject;
-using DataFormats = System.Windows.DataFormats;
-using DragDropEffects = System.Windows.DragDropEffects;
 using Cursors = System.Windows.Input.Cursors;
 using Brushes = System.Windows.Media.Brushes;
 using FontFamily = System.Windows.Media.FontFamily;
 using Image = System.Windows.Controls.Image;
 using Yoink.Models;
+using Yoink.Helpers;
 
 namespace Yoink.UI;
 
 public partial class SettingsWindow
 {
-    private sealed record MediaCardShell(Border Card, Grid ImageContainer, StackPanel InfoPanel, Border CopyButton, System.Windows.Controls.Image Image);
+    private sealed record MediaCardShell(Border Card, Grid ImageContainer, StackPanel InfoPanel, Border CopyButton, System.Windows.Controls.Image Image, Border SelectionBadge);
 
     private static bool IsDraggableFile(string? path) =>
         !string.IsNullOrWhiteSpace(path) && File.Exists(path);
 
-    private static void AttachFileDragHandlers(Border card, FrameworkElement dragSource, string filePath, Func<bool> canDrag, Action<bool> setDragging)
-    {
-        Point dragStart = default;
-        bool pressed = false;
-        bool dragging = false;
-
-        dragSource.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            if (!canDrag())
-                return;
-            pressed = true;
-            dragging = false;
-            setDragging(false);
-            dragStart = e.GetPosition(card);
-        };
-
-        dragSource.PreviewMouseMove += (_, e) =>
-        {
-            if (!pressed || dragging || e.LeftButton != MouseButtonState.Pressed || !canDrag())
-                return;
-
-            var current = e.GetPosition(card);
-            if (Math.Abs(current.X - dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
-                Math.Abs(current.Y - dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
-                return;
-
-            dragging = true;
-            pressed = false;
-            setDragging(true);
-            var data = new DataObject(DataFormats.FileDrop, new[] { filePath });
-            DragDrop.DoDragDrop(card, data, DragDropEffects.Copy);
-            setDragging(false);
-        };
-
-        dragSource.PreviewMouseLeftButtonUp += (_, _) =>
-        {
-            pressed = false;
-            dragging = false;
-            setDragging(false);
-        };
-    }
-
     private MediaCardShell BuildMediaCardShell(HistoryItemVM vm, Action copyAction)
     {
-        bool isDraggingFile = false;
+        bool suppressOpenAction = false;
         var img = new System.Windows.Controls.Image { Stretch = Stretch.UniformToFill, Opacity = 0 };
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
 
         img.Loaded += (_, _) =>
         {
-            LoadThumbAsync(img, vm.ThumbPath);
+            LoadThumbAsync(img, vm.ThumbPath, vm.Entry.FilePath);
             img.BeginAnimation(OpacityProperty,
                 new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(250)));
         };
@@ -103,15 +58,18 @@ public partial class SettingsWindow
                 VerticalAlignment = VerticalAlignment.Center,
             }
         };
-        copyBtn.MouseLeftButtonDown += (_, e) =>
+        copyBtn.PreviewMouseLeftButtonUp += (_, e) =>
         {
             e.Handled = true;
+            suppressOpenAction = true;
             copyAction();
         };
 
         Border? fileLocationBtn = null;
         if (IsDraggableFile(vm.Entry.FilePath))
-            fileLocationBtn = CreateFileLocationButton(vm.Entry.FilePath);
+            fileLocationBtn = CreateFileLocationButton(vm.Entry.FilePath, () => suppressOpenAction = true);
+
+        var selectionBadge = CreateSelectionBadge(vm.IsSelected);
 
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });
@@ -119,6 +77,7 @@ public partial class SettingsWindow
 
         var imgContainer = new Grid();
         imgContainer.Children.Add(img);
+        imgContainer.Children.Add(selectionBadge);
         if (fileLocationBtn != null)
             imgContainer.Children.Add(fileLocationBtn);
         imgContainer.Children.Add(copyBtn);
@@ -143,9 +102,6 @@ public partial class SettingsWindow
             RenderTransform = new ScaleTransform(1, 1),
             RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
         };
-
-        if (IsDraggableFile(vm.Entry.FilePath))
-            AttachFileDragHandlers(card, card, vm.Entry.FilePath, () => !_selectMode, v => isDraggingFile = v);
 
         card.SizeChanged += (s, _) =>
         {
@@ -190,15 +146,20 @@ public partial class SettingsWindow
 
         card.MouseLeftButtonUp += (s, e) =>
         {
-            if (_selectMode)
+            if (suppressOpenAction)
             {
-                vm.IsSelected = !vm.IsSelected;
-                UpdateCardSelection(card, vm);
+                suppressOpenAction = false;
+                e.Handled = true;
                 return;
             }
 
-            if (isDraggingFile)
+            if (_selectMode)
+            {
+                vm.IsSelected = !vm.IsSelected;
+                UpdateCardSelection(vm);
+                e.Handled = true;
                 return;
+            }
 
             if (!string.IsNullOrEmpty(vm.Entry.UploadUrl))
             {
@@ -232,27 +193,49 @@ public partial class SettingsWindow
             }
         };
 
-        card.MouseRightButtonDown += (s, e) =>
-        {
-            if (!_selectMode)
-            {
-                _selectMode = true;
-                SelectBtn.Content = "Done";
-                DeleteSelectedBtn.Visibility = Visibility.Visible;
-            }
-            vm.IsSelected = !vm.IsSelected;
-            UpdateCardSelection(card, vm);
-        };
+        vm.Card = card;
+        vm.SelectionBadge = selectionBadge;
+        UpdateCardSelection(vm);
 
-        return new MediaCardShell(card, imgContainer, info, copyBtn, img);
+        return new MediaCardShell(card, imgContainer, info, copyBtn, img, selectionBadge);
     }
 
-    private Border CreateFileLocationButton(string filePath)
+    private static Border CreateSelectionBadge(bool isSelected)
+    {
+        var badge = new Border
+        {
+            Width = 36,
+            Height = 36,
+            CornerRadius = new CornerRadius(18),
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(190, 20, 20, 20)),
+            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(160, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false,
+            Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed,
+            Child = new System.Windows.Shapes.Path
+            {
+                Data = System.Windows.Media.Geometry.Parse("M6,14 L11,19 L22,8"),
+                Stroke = Brushes.White,
+                StrokeThickness = 2.6,
+                StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
+                StrokeEndLineCap = System.Windows.Media.PenLineCap.Round,
+                Stretch = Stretch.Uniform,
+                Margin = new Thickness(8)
+            }
+        };
+        Grid.SetRowSpan(badge, 2);
+        System.Windows.Controls.Panel.SetZIndex(badge, 20);
+        return badge;
+    }
+
+    private Border CreateFileLocationButton(string filePath, Action markConsumed)
     {
         var btn = new Border
         {
-            Width = 28,
-            Height = 28,
+            Width = 30,
+            Height = 30,
             CornerRadius = new CornerRadius(6),
             Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(160, 0, 0, 0)),
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -262,19 +245,20 @@ public partial class SettingsWindow
             Opacity = 0,
             IsHitTestVisible = true,
             ToolTip = "Show in folder",
-            Child = new TextBlock
+            Child = new Image
             {
-                Text = "\uE838",
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 12,
-                Foreground = Theme.Brush(Theme.TextPrimary),
+                Source = ToolIcons.RenderFolderWpf(System.Drawing.Color.FromArgb(245, 250, 250, 250), 18),
+                Width = 18,
+                Height = 18,
+                Stretch = Stretch.Uniform,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             }
         };
-        btn.MouseLeftButtonDown += (s, e) =>
+        btn.PreviewMouseLeftButtonUp += (s, e) =>
         {
             e.Handled = true;
+            markConsumed();
             if (File.Exists(filePath))
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo

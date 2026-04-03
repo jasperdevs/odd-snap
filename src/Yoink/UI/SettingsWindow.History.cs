@@ -29,9 +29,6 @@ public partial class SettingsWindow
 
     private void LoadHistory()
     {
-        _selectMode = false;
-        SelectBtn.Content = "Select";
-        DeleteSelectedBtn.Visibility = Visibility.Collapsed;
         HistoryStack.Children.Clear();
 
         var entries = _historyService.ImageEntries;
@@ -53,6 +50,7 @@ public partial class SettingsWindow
 
         _historyRenderCount = Math.Min(HistoryPageSize, _allHistoryItems.Count);
         RenderHistoryItems();
+        DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void RenderHistoryItems()
@@ -131,85 +129,16 @@ public partial class SettingsWindow
         return shell.Card;
     }
 
-    private Border CreateGifCard(HistoryItemVM vm)
+    private static void UpdateCardSelection(HistoryItemVM vm)
     {
-        var filePath = vm.Entry.FilePath;
-        var shell = BuildMediaCardShell(vm, () =>
-        {
-            try
-            {
-                if (!string.IsNullOrEmpty(vm.Entry.UploadUrl))
-                {
-                    System.Windows.Clipboard.SetText(vm.Entry.UploadUrl);
-                    ToastWindow.Show("Copied", vm.Entry.UploadUrl);
-                    return;
-                }
-                var files = new System.Collections.Specialized.StringCollection();
-                files.Add(filePath);
-                System.Windows.Clipboard.SetFileDropList(files);
-                ToastWindow.Show("Copied", "GIF copied to clipboard");
-            }
-            catch { }
-        });
+        if (vm.Card is null)
+            return;
 
-        var gifBadge = new Border
-        {
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 0, 0, 0)),
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(5, 2, 5, 2),
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Left,
-            VerticalAlignment = System.Windows.VerticalAlignment.Bottom,
-            Margin = new Thickness(6, 0, 0, 6),
-            Child = new TextBlock
-            {
-                Text = "GIF",
-                FontSize = 9,
-                FontWeight = FontWeights.Bold,
-                Foreground = System.Windows.Media.Brushes.White
-            }
-        };
-
-        if (!string.IsNullOrEmpty(vm.Entry.UploadProvider))
-        {
-            var badge = CreateProviderBadge(vm.Entry.UploadProvider);
-            if (badge != null) shell.ImageContainer.Children.Add(badge);
-        }
-        shell.ImageContainer.Children.Add(gifBadge);
-
-        string sizeStr = "";
-        try { sizeStr = FormatStorageSize(new FileInfo(filePath).Length); } catch { }
-        shell.InfoPanel.Children.Add(new TextBlock
-        {
-            Text = vm.Entry.FileName,
-            FontSize = 11,
-            FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
-            TextTrimming = TextTrimming.CharacterEllipsis
-        });
-        if (!string.IsNullOrEmpty(sizeStr))
-        {
-            shell.InfoPanel.Children.Add(new TextBlock
-            {
-                Text = sizeStr,
-                FontSize = 10,
-                FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
-                Opacity = 0.35
-            });
-        }
-        shell.InfoPanel.Children.Add(new TextBlock
-        {
-            Text = vm.TimeAgo,
-            FontSize = 10,
-            FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
-            Opacity = 0.3
-        });
-
-        return shell.Card;
-    }
-
-    private static void UpdateCardSelection(Border card, HistoryItemVM vm)
-    {
+        var card = vm.Card;
         card.BorderThickness = new Thickness(vm.IsSelected ? Theme.StrokeThickness : 0);
         card.BorderBrush = vm.IsSelected ? Theme.StrokeBrush() : System.Windows.Media.Brushes.Transparent;
+        if (vm.SelectionBadge != null)
+            vm.SelectionBadge.Visibility = vm.IsSelected ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ToggleSelectMode(object sender, RoutedEventArgs e)
@@ -217,13 +146,13 @@ public partial class SettingsWindow
         _selectMode = !_selectMode;
         SelectBtn.Content = _selectMode ? "Done" : "Select";
         DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
-        if (!_selectMode) LoadCurrentHistoryTab();
+        LoadCurrentHistoryTab();
     }
 
     private void DeleteAllClick(object sender, RoutedEventArgs e)
     {
         string tab = HistoryCategoryCombo.SelectedIndex == 0 ? "images"
-            : HistoryCategoryCombo.SelectedIndex == 2 ? "GIFs"
+            : HistoryCategoryCombo.SelectedIndex == 2 ? "videos/GIFs"
             : HistoryCategoryCombo.SelectedIndex == 1 ? "text history"
             : HistoryCategoryCombo.SelectedIndex == 3 ? "colors" : "stickers";
         if (MessageBox.Show($"Delete all {tab}?", "Confirm 1/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
@@ -231,12 +160,10 @@ public partial class SettingsWindow
         if (MessageBox.Show($"This cannot be undone. Delete all {tab}?", "Confirm 3/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
         if (HistoryCategoryCombo.SelectedIndex == 0) _historyService.ClearImages();
-        else if (HistoryCategoryCombo.SelectedIndex == 2) _historyService.ClearGifs();
+        else if (HistoryCategoryCombo.SelectedIndex == 2) DeleteMediaItems(_allGifItems);
         else if (HistoryCategoryCombo.SelectedIndex == 1) _historyService.ClearOcr();
         else if (HistoryCategoryCombo.SelectedIndex == 3) _historyService.ClearColors();
         else _historyService.ClearStickers();
-
-        LoadCurrentHistoryTab();
     }
 
     private void DeleteSelectedClick(object sender, RoutedEventArgs e)
@@ -244,112 +171,39 @@ public partial class SettingsWindow
         if (HistoryCategoryCombo.SelectedIndex == 0)
         {
             var toDelete = _historyItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
-            foreach (var entry in toDelete)
-                _historyService.DeleteEntry(entry);
-            LoadHistory();
+            _historyService.DeleteEntries(toDelete);
         }
         else if (HistoryCategoryCombo.SelectedIndex == 2)
         {
-            var toDelete = _gifItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
-            foreach (var entry in toDelete)
-                _historyService.DeleteEntry(entry);
-            LoadGifHistory();
+            DeleteMediaItems(_gifItems.Where(i => i.IsSelected).ToList());
         }
         else if (HistoryCategoryCombo.SelectedIndex == 1)
         {
             var toDelete = OcrStack.Children.OfType<Border>().Where(b => b.Tag as bool? == true).ToList();
-            foreach (var card in toDelete)
-            {
-                int idx = OcrStack.Children.IndexOf(card);
-                if (idx >= 0 && idx < _historyService.OcrEntries.Count)
-                    _historyService.DeleteOcrEntry(_historyService.OcrEntries[idx]);
-            }
-            LoadOcrHistory();
+            var toDeleteEntries = toDelete
+                .Select(card =>
+                {
+                    int idx = OcrStack.Children.IndexOf(card);
+                    return idx >= 0 && idx < _historyService.OcrEntries.Count ? _historyService.OcrEntries[idx] : null;
+                })
+                .OfType<OcrHistoryEntry>()
+                .ToList();
+            _historyService.DeleteOcrEntries(toDeleteEntries);
         }
         else if (HistoryCategoryCombo.SelectedIndex == 3)
         {
             var toDelete = ColorStack.Children.OfType<StackPanel>().Select(s => s.Tag).OfType<ColorHistoryEntry>().ToList();
-            foreach (var entry in toDelete)
-                _historyService.DeleteColorEntry(entry);
-            LoadColorHistory();
+            _historyService.DeleteColorEntries(toDelete);
         }
         else if (HistoryCategoryCombo.SelectedIndex == 4)
         {
             var toDelete = _stickerItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
-            foreach (var entry in toDelete)
-                _historyService.DeleteEntry(entry);
-            LoadStickerHistory();
+            _historyService.DeleteEntries(toDelete);
         }
-    }
-
-    private void LoadGifHistory()
-    {
-        _selectMode = false;
-        SelectBtn.Content = "Select";
-        DeleteSelectedBtn.Visibility = Visibility.Collapsed;
-        GifStack.Children.Clear();
-
-        var entries = _historyService.GifEntries;
-        long totalBytes = 0;
-        foreach (var e in entries)
-            totalBytes += e.FileSizeBytes > 0 ? e.FileSizeBytes : TryGetFileLength(e.FilePath);
-        var sizeStr = FormatStorageSize(totalBytes);
-        HistoryCountText.Text = $"{entries.Count} GIF{(entries.Count == 1 ? "" : "s")} \u00B7 {sizeStr}";
-        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyLabel.Text = "No GIF recordings yet";
-
-        _allGifItems = entries.Select(e => new HistoryItemVM
-        {
-            Entry = e,
-            ThumbPath = e.FilePath,
-            Dimensions = "",
-            TimeAgo = FormatTimeAgo(e.CapturedAt)
-        }).ToList();
-
-        _gifRenderCount = Math.Min(HistoryPageSize, _allGifItems.Count);
-        RenderGifItems();
-    }
-
-    private void RenderGifItems()
-    {
-        GifStack.Children.Clear();
-        _gifItems = _allGifItems.Take(_gifRenderCount).ToList();
-        var groups = _gifItems.GroupBy(i => i.Entry.CapturedAt.Date).OrderByDescending(g => g.Key);
-        foreach (var group in groups)
-        {
-            string label = group.Key == DateTime.Today ? "Today"
-                : group.Key == DateTime.Today.AddDays(-1) ? "Yesterday"
-                : group.Key.ToString("MMMM d, yyyy");
-
-            GifStack.Children.Add(new TextBlock
-            {
-                Text = label,
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Opacity = 0.45,
-                Margin = new Thickness(6, 10, 0, 4)
-            });
-
-            var wrap = new WrapPanel();
-            foreach (var item in group)
-                wrap.Children.Add(CreateGifCard(item));
-            GifStack.Children.Add(wrap);
-        }
-    }
-
-    private void GifPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
-    {
-        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 300) return;
-        if (_gifRenderCount >= _allGifItems.Count) return;
-        _gifRenderCount = Math.Min(_gifRenderCount + HistoryPageSize, _allGifItems.Count);
-        RenderGifItems();
     }
 
     private void LoadStickerHistory()
     {
-        _selectMode = false;
-        SelectBtn.Content = "Select";
-        DeleteSelectedBtn.Visibility = Visibility.Collapsed;
         StickerStack.Children.Clear();
 
         var entries = _historyService.StickerEntries;
@@ -371,6 +225,7 @@ public partial class SettingsWindow
 
         _stickerRenderCount = Math.Min(HistoryPageSize, _allStickerItems.Count);
         RenderStickerItems();
+        DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void RenderStickerItems()

@@ -56,7 +56,7 @@ public sealed partial class RegionOverlayForm
             g.FillRectangle(overlay, 0, sel.Top, sel.Left, sel.Height);
             g.FillRectangle(overlay, sel.Right, sel.Top, ClientSize.Width - sel.Right, sel.Height);
         }
-        else
+        else if (ToolDef.IsCaptureTool(_mode))
         {
             // Light dim when idle (no selection)
             using var dimOverlay = new SolidBrush(Color.FromArgb(35, 0, 0, 0));

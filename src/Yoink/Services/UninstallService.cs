@@ -100,6 +100,15 @@ public static class UninstallService
     public static void RemoveAppData()
     {
         var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink");
+        var legacyHistory = Path.Combine(appData, "history");
+
+        try
+        {
+            if (Directory.Exists(legacyHistory))
+                CopyDirectoryContents(legacyHistory, HistoryService.HistoryDir);
+        }
+        catch { }
+
         TryDeleteDirectory(appData);
     }
 
@@ -132,6 +141,26 @@ public static class UninstallService
                 Directory.Delete(path, true);
         }
         catch { }
+    }
+
+    private static void CopyDirectoryContents(string sourceDir, string destinationDir)
+    {
+        Directory.CreateDirectory(destinationDir);
+
+        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(sourceDir, file);
+            var destPath = Path.Combine(destinationDir, relative);
+            var destFolder = Path.GetDirectoryName(destPath);
+            if (!string.IsNullOrEmpty(destFolder))
+                Directory.CreateDirectory(destFolder);
+
+            try
+            {
+                File.Copy(file, destPath, overwrite: true);
+            }
+            catch { }
+        }
     }
 
     private static bool LooksLikeBuildOutputPath(string path)

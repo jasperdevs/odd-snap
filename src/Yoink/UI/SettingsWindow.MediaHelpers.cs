@@ -1,4 +1,5 @@
 using System.IO;
+using System.Drawing.Drawing2D;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -9,13 +10,16 @@ using Image = System.Windows.Controls.Image;
 using FontFamily = System.Windows.Media.FontFamily;
 using Yoink.Models;
 using Yoink.Helpers;
+using Yoink.Native;
 using Yoink.Services;
 
 namespace Yoink.UI;
 
 public partial class SettingsWindow
 {
-    private static bool TryGetThumbFromCache(string path, out BitmapImage? image)
+    private static readonly Lazy<BitmapSource> VideoPlaceholder = new(CreateVideoPlaceholder);
+
+    private static bool TryGetThumbFromCache(string path, out BitmapSource? image)
     {
         lock (ThumbCache)
         {
@@ -31,7 +35,7 @@ public partial class SettingsWindow
         }
     }
 
-    private static void StoreThumbInCache(string path, BitmapImage image)
+    private static void StoreThumbInCache(string path, BitmapSource image)
     {
         lock (ThumbCache)
         {
@@ -96,6 +100,55 @@ public partial class SettingsWindow
         {
             return null;
         }
+    }
+
+    private static BitmapSource? LoadThumbSource(string path)
+    {
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var bmp = BitmapFrame.Create(fs, BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.OnLoad);
+            bmp.Freeze();
+            return bmp;
+        }
+        catch
+        {
+            try
+            {
+                using var bmp = new System.Drawing.Bitmap(path);
+                return BitmapPerf.ToBitmapSource(bmp);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+
+    private static BitmapSource CreateVideoPlaceholder()
+    {
+        using var bmp = new Bitmap(320, 180, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.Clear(System.Drawing.Color.FromArgb(30, 30, 30));
+
+            using var border = new System.Drawing.Pen(System.Drawing.Color.FromArgb(70, 255, 255, 255), 2f);
+            g.DrawRectangle(border, 1, 1, bmp.Width - 3, bmp.Height - 3);
+
+            using var badgeBg = new SolidBrush(System.Drawing.Color.FromArgb(180, 0, 0, 0));
+            var badgeRect = new RectangleF(bmp.Width / 2f - 46, bmp.Height / 2f - 22, 92, 44);
+            g.FillRoundedRectangle(badgeBg, badgeRect, 10);
+
+            using var badgeText = new SolidBrush(System.Drawing.Color.FromArgb(235, 255, 255, 255));
+            using var font = new System.Drawing.Font(System.Drawing.SystemFonts.DefaultFont.FontFamily, 13f, System.Drawing.FontStyle.Bold, GraphicsUnit.Point);
+            var text = "VIDEO";
+            var size = g.MeasureString(text, font);
+            g.DrawString(text, font, badgeText, badgeRect.X + (badgeRect.Width - size.Width) / 2f,
+                badgeRect.Y + (badgeRect.Height - size.Height) / 2f - 1f);
+        }
+
+        return BitmapPerf.ToBitmapSource(bmp);
     }
 
     private static FrameworkElement? CreateProviderBadge(string? providerOrPath, bool isPath = false)
@@ -181,5 +234,20 @@ public partial class SettingsWindow
         if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
         if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
         return dt.ToString("MMM d");
+    }
+}
+
+internal static class GraphicsExtensions
+{
+    public static void FillRoundedRectangle(this Graphics g, System.Drawing.Brush brush, RectangleF rect, float radius)
+    {
+        using var path = new GraphicsPath();
+        float d = radius * 2f;
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        g.FillPath(brush, path);
     }
 }

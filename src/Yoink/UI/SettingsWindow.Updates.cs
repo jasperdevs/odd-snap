@@ -34,7 +34,7 @@ public partial class SettingsWindow
 
         try
         {
-            _latestUpdate = await UpdateService.CheckForUpdatesAsync();
+            _latestUpdate = await UpdateService.CheckForUpdatesAsync(forceRefresh: isManualCheck);
             UpdateStatusText.Text = _latestUpdate.StatusMessage;
 
             if (_latestUpdate.IsUpdateAvailable)

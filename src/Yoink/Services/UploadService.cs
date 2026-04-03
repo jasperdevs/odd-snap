@@ -100,7 +100,8 @@ public static class UploadService
 
     private static StreamContent CreateFileStreamContent(string filePath, string contentType = "application/octet-stream")
     {
-        var content = new StreamContent(File.OpenRead(filePath));
+        var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
+        var content = new StreamContent(stream);
         content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
         return content;
     }

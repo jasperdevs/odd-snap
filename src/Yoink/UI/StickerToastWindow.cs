@@ -261,12 +261,7 @@ public sealed class StickerToastWindow : Window
     {
         using var cleaned = BitmapPerf.CleanupTransparentPixels(bitmap, 110);
         using var trimmed = BitmapPerf.TrimTransparentBounds(cleaned, 110);
-        using var ms = new MemoryStream();
-        trimmed.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-        ms.Position = 0;
-        var frame = BitmapFrame.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        frame.Freeze();
-        return frame;
+        return BitmapPerf.ToBitmapSource(trimmed);
     }
 
 }
