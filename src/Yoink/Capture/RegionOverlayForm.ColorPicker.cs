@@ -5,6 +5,7 @@ using System.Drawing.Text;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using Yoink.Models;
 
 namespace Yoink.Capture;
 
@@ -14,10 +15,14 @@ public sealed partial class RegionOverlayForm
     private bool _pickerBusy;
     private int _lastPickedArgb;
     private Point _lastRenderedPickerPoint = Point.Empty;
+    private Point _lastRenderedCapturePickerPoint = Point.Empty;
     private Point _pendingPickerPoint;
     private bool _pickerUpdateQueued;
     private readonly System.Diagnostics.Stopwatch _pickerStopwatch = System.Diagnostics.Stopwatch.StartNew();
     private PickerMagnifierForm? _pickerForm;
+    private Point _pendingCapturePickerPoint;
+    private bool _capturePickerUpdateQueued;
+    private readonly System.Diagnostics.Stopwatch _capturePickerStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
     private void OnPickerTick(object? sender, EventArgs e)
     {
@@ -30,6 +35,13 @@ public sealed partial class RegionOverlayForm
         {
             _pickerUpdateQueued = false;
             RenderColorPickerFrame(_pendingPickerPoint);
+            didWork = true;
+        }
+
+        if (_capturePickerUpdateQueued && _capturePickerStopwatch.ElapsedMilliseconds >= 16)
+        {
+            _capturePickerUpdateQueued = false;
+            RenderCaptureMagnifierFrame(_pendingCapturePickerPoint);
             didWork = true;
         }
 
@@ -48,6 +60,13 @@ public sealed partial class RegionOverlayForm
         if (_pickerForm != null) return;
         _pickerForm = new PickerMagnifierForm();
         var _ = _pickerForm.Handle;
+    }
+
+    private void EnsureCaptureMagnifierForm()
+    {
+        if (_captureMagnifierForm != null) return;
+        _captureMagnifierForm = new PickerMagnifierForm();
+        var _ = _captureMagnifierForm.Handle;
     }
 
     internal void UpdateColorPicker(Point overlayPoint)
@@ -70,12 +89,20 @@ public sealed partial class RegionOverlayForm
             _pickerReady = true;
             _pickerCursorPos = overlayPoint;
             BuildMagnifier();
+            if (!ShowCaptureMagnifier)
+            {
+                CloseMagWindow();
+                _lastRenderedPickerPoint = overlayPoint;
+                _pickerStopwatch.Restart();
+                return;
+            }
+
             EnsurePickerForm();
             var pickerForm = _pickerForm;
             if (pickerForm is null)
                 return;
 
-            var (mx, my) = MagPos(_pickerCursorPos);
+            var (mx, my) = MagPos(_pickerCursorPos, showInfo: true);
             pickerForm.Left = mx + _virtualBounds.X - 4;
             pickerForm.Top = my + _virtualBounds.Y - 4;
             if (!pickerForm.Visible)
@@ -90,6 +117,57 @@ public sealed partial class RegionOverlayForm
         }
     }
 
+    internal void UpdateCaptureMagnifier(Point overlayPoint)
+    {
+        if (!ShouldShowCaptureMagnifierAt(overlayPoint))
+        {
+            CloseCaptureMagnifier();
+            return;
+        }
+
+        _pendingCapturePickerPoint = overlayPoint;
+        _capturePickerUpdateQueued = true;
+        bool isSelectingCapture = _isSelecting &&
+            (_mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker);
+
+        if (!_pickerBusy && (!isSelectingCapture || _capturePickerStopwatch.ElapsedMilliseconds >= 16))
+        {
+            RenderCaptureMagnifierFrame(overlayPoint);
+        }
+        else if (!_pickerTimer.Enabled)
+        {
+            _pickerTimer.Start();
+        }
+    }
+
+    private void RenderCaptureMagnifierFrame(Point overlayPoint)
+    {
+        if (!ShouldShowCaptureMagnifierAt(overlayPoint))
+        {
+            CloseCaptureMagnifier();
+            return;
+        }
+
+        if (_lastRenderedCapturePickerPoint == overlayPoint && _captureMagnifierForm != null)
+            return;
+
+        _pickerCursorPos = overlayPoint;
+        BuildMagnifier();
+        EnsureCaptureMagnifierForm();
+        var magForm = _captureMagnifierForm;
+        if (magForm is null)
+            return;
+
+        var (mx, my) = MagPos(_pickerCursorPos, showInfo: false);
+        magForm.Left = mx + _virtualBounds.X - 4;
+        magForm.Top = my + _virtualBounds.Y - 4;
+        if (!magForm.Visible)
+            magForm.Show(this);
+        magForm.UpdateMagnifier(_magBitmap, _pickerCursorPos, _pickedColor, _hexStr, _rgbStr, showInfo: false);
+        _lastRenderedCapturePickerPoint = overlayPoint;
+        _capturePickerStopwatch.Restart();
+    }
+
     private void CloseMagWindow()
     {
         _pickerForm?.Close();
@@ -97,14 +175,29 @@ public sealed partial class RegionOverlayForm
         _pickerForm = null;
         _pickerUpdateQueued = false;
         _pickerReady = false;
+        _capturePickerUpdateQueued = false;
+    }
+
+    private void CloseCaptureMagnifier()
+    {
+        _captureMagnifierForm?.Close();
+        _captureMagnifierForm?.Dispose();
+        _captureMagnifierForm = null;
+        _capturePickerUpdateQueued = false;
+        _lastRenderedCapturePickerPoint = Point.Empty;
+        _lastMagnifierSamplePoint = new Point(-1, -1);
+        _capturePickerStopwatch.Reset();
+        _capturePickerStopwatch.Start();
     }
 
     private void BuildMagnifier()
     {
         int cx = Math.Clamp(_pickerCursorPos.X, 0, _bmpW - 1);
         int cy = Math.Clamp(_pickerCursorPos.Y, 0, _bmpH - 1);
+        var samplePoint = new Point(cx, cy);
         int argb = _pixelData[cy * _bmpW + cx];
         bool colorChanged = argb != _lastPickedArgb;
+        bool sampleChanged = samplePoint != _lastMagnifierSamplePoint;
         _lastPickedArgb = argb;
         _pickedColor = Color.FromArgb(argb);
         if (colorChanged)
@@ -112,6 +205,11 @@ public sealed partial class RegionOverlayForm
             _hexStr = $"{_pickedColor.R:X2}{_pickedColor.G:X2}{_pickedColor.B:X2}";
             _rgbStr = $"{_pickedColor.R}, {_pickedColor.G}, {_pickedColor.B}";
         }
+
+        if (!sampleChanged)
+            return;
+
+        _lastMagnifierSamplePoint = samplePoint;
 
         // Fill grid pixels directly into the mag bitmap buffer
         Array.Fill(_magPixels, unchecked((int)0xFF202020));
@@ -173,13 +271,16 @@ public sealed partial class RegionOverlayForm
         return unchecked((int)0xFF000000) | (r << 16) | (gg << 8) | b;
     }
 
-    private (int, int) MagPos(Point c)
+    private (int, int) MagPos(Point c, bool showInfo = true)
     {
-        // Form is larger than the bitmap now (circle + pill below)
-        int formW = 152, formH = 196;
+        int formW = 152;
+        int formH = showInfo ? 196 : 152;
+        int margin = 12;
         int px = c.X + MagOff, py = c.Y + MagOff;
-        if (px + formW > ClientSize.Width) px = c.X - MagOff - formW;
-        if (py + formH > ClientSize.Height) py = c.Y - MagOff - formH;
-        return (Math.Max(4, px), Math.Max(4, py));
+        if (px + formW > ClientSize.Width - margin) px = c.X - MagOff - formW;
+        if (py + formH > ClientSize.Height - margin) py = c.Y - MagOff - formH;
+        px = Math.Clamp(px, margin, Math.Max(margin, ClientSize.Width - formW - margin));
+        py = Math.Clamp(py, margin, Math.Max(margin, ClientSize.Height - formH - margin));
+        return (px, py);
     }
 }

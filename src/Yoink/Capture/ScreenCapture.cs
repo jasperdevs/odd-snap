@@ -217,17 +217,11 @@ public static class ScreenCapture
         try
         {
             using var g = Graphics.FromImage(bitmap);
-            IntPtr hdc = g.GetHdc();
-            try
-            {
-                int x = cursorInfo.ptScreenPos.X - captureBounds.X - (int)iconInfo.xHotspot;
-                int y = cursorInfo.ptScreenPos.Y - captureBounds.Y - (int)iconInfo.yHotspot;
-                User32.DrawIconEx(hdc, x, y, cursorInfo.hCursor, 0, 0, 0, IntPtr.Zero, User32.DI_NORMAL);
-            }
-            finally
-            {
-                g.ReleaseHdc(hdc);
-            }
+            using var cursorIcon = (System.Drawing.Icon)System.Drawing.Icon.FromHandle(cursorInfo.hCursor).Clone();
+            using var cursorBmp = cursorIcon.ToBitmap();
+            int x = cursorInfo.ptScreenPos.X - captureBounds.X - (int)iconInfo.xHotspot;
+            int y = cursorInfo.ptScreenPos.Y - captureBounds.Y - (int)iconInfo.yHotspot;
+            g.DrawImageUnscaled(cursorBmp, x, y);
         }
         finally
         {

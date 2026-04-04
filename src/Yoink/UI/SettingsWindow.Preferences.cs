@@ -90,6 +90,13 @@ public partial class SettingsWindow
         _settingsService.Save();
     }
 
+    private void ShowCaptureMagnifierCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.ShowCaptureMagnifier = ShowCaptureMagnifierCheck.IsChecked == true;
+        _settingsService.Save();
+    }
+
     private void ShowCursorCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded) return;

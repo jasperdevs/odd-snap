@@ -147,6 +147,8 @@ public partial class SetupWizard : Window
     {
         var s = _settingsService.Settings;
         WizAfterCombo.SelectedIndex = (int)s.AfterCapture;
+        WizCrosshairCheck.IsChecked = s.ShowCrosshairGuides;
+        WizCaptureMagnifierCheck.IsChecked = s.ShowCaptureMagnifier;
         WizMuteCheck.IsChecked = s.MuteSounds;
         WizAutoUpdateCheck.IsChecked = s.AutoCheckForUpdates;
     }
@@ -178,9 +180,10 @@ public partial class SetupWizard : Window
                 break;
             case 2:
                 s.AfterCapture = (AfterCaptureAction)WizAfterCombo.SelectedIndex;
+                s.ShowCrosshairGuides = WizCrosshairCheck.IsChecked == true;
+                s.ShowCaptureMagnifier = WizCaptureMagnifierCheck.IsChecked == true;
                 s.MuteSounds = WizMuteCheck.IsChecked == true;
                 s.AutoCheckForUpdates = WizAutoUpdateCheck.IsChecked == true;
-                s.ShowCrosshairGuides = WizCrosshairCheck.IsChecked == true;
                 _settingsService.Save();
                 break;
             case 3:

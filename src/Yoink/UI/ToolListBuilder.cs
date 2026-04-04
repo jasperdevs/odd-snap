@@ -33,6 +33,7 @@ public static class ToolListBuilder
         panel.Children.Clear();
         var s = settingsService.Settings;
         var enabled = s.EnabledTools ?? ToolDef.DefaultEnabledIds();
+        var defaultDisabled = ToolDef.DefaultToolbarDisabledIds();
         // Icon color for rendering lucide glyphs to bitmaps
         var iconColor = Theme.IsDark ? System.Drawing.Color.FromArgb(160, 255, 255, 255) : System.Drawing.Color.FromArgb(170, 0, 0, 0);
         var segoe = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName);
@@ -86,7 +87,7 @@ public static class ToolListBuilder
             {
                 var cb = new CheckBox
                 {
-                    IsChecked = enabled.Contains(toolId),
+                    IsChecked = enabled.Contains(toolId) && !defaultDisabled.Contains(toolId),
                     Tag = toolId,
                     VerticalAlignment = VerticalAlignment.Center,
                     Margin = new Thickness(0, 0, 8, 0),
@@ -165,6 +166,8 @@ public static class ToolListBuilder
                     enabledIds.Add(id);
             }
         }
+        enabledIds.Remove("step");
+        enabledIds.Remove("ruler");
         if (!enabledIds.Any(id => ToolDef.AllTools.Any(t => t.Id == id && t.Group == 0)))
             return; // must keep at least one capture tool
         svc.Settings.EnabledTools = enabledIds;

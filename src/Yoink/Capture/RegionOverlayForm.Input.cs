@@ -520,34 +520,59 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
+        bool isSelectingCapture = _isSelecting &&
+            (_mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker);
+
+        if (ShowCaptureMagnifier && ToolDef.IsCaptureTool(_mode) && ShouldShowCaptureMagnifierAt(e.Location))
+            UpdateCaptureMagnifier(e.Location);
+        else if (_captureMagnifierForm != null && (!ShowCaptureMagnifier || !ToolDef.IsCaptureTool(_mode)))
+            CloseCaptureMagnifier();
+        else if (isSelectingCapture || IsPointInOverlayUi(e.Location))
+            CloseCaptureMagnifier();
+
         switch (_mode)
         {
             case CaptureMode.Rectangle when !_isSelecting:
             case CaptureMode.Ocr when !_isSelecting:
             case CaptureMode.Scan when !_isSelecting:
-                var oldDetect = _autoDetectRect;
-                var detected = WindowDetector.GetDetectionRectAtPoint(
-                    e.Location, _virtualBounds, _windowDetectionMode);
-
-                if (detected != _autoDetectRect)
+            case CaptureMode.Sticker when !_isSelecting:
+                if (IsPointInOverlayUi(e.Location))
                 {
-                    _autoDetectRect = detected;
-                    _autoDetectActive = detected.Width > 0;
-                    Invalidate(Rectangle.Union(InflateForRepaint(oldDetect), InflateForRepaint(detected)));
+                    var oldDetect = _autoDetectRect;
+                    _autoDetectRect = Rectangle.Empty;
+                    _autoDetectActive = false;
+                    _autoDetectTimer.Stop();
+                    if (!oldDetect.IsEmpty)
+                        Invalidate(InflateForRepaint(oldDetect));
+                }
+                else
+                {
+                    UpdateAutoDetectRect(e.Location);
                 }
                 break;
             case CaptureMode.Rectangle when _isSelecting:
             case CaptureMode.Ocr when _isSelecting:
             case CaptureMode.Scan when _isSelecting:
             case CaptureMode.Sticker when _isSelecting:
+                var oldSelectionRect = _selectionRect;
+                bool wasOcrSelection = _mode == CaptureMode.Ocr;
+                bool wasScanSelection = _mode == CaptureMode.Scan;
                 _autoDetectActive = false;
+                _autoDetectTimer.Stop();
                 _selectionEnd = e.Location;
                 _selectionRect = _mode == CaptureMode.Rectangle && (ModifierKeys & Keys.Shift) != 0
                     ? GetSquareSelectionRect(_selectionStart, _selectionEnd)
                     : NormRect(_selectionStart, _selectionEnd);
                 if (_selectionRect.Width > 3 || _selectionRect.Height > 3) _hasDragged = true;
                 _hasSelection = _selectionRect.Width > 2 && _selectionRect.Height > 2;
-                Invalidate();
+                var oldDirty = GetSelectionOverlayBounds(oldSelectionRect, wasOcrSelection, wasScanSelection);
+                var newDirty = GetSelectionOverlayBounds(_selectionRect, _mode == CaptureMode.Ocr, _mode == CaptureMode.Scan);
+                if (oldDirty.IsEmpty)
+                    Invalidate(newDirty);
+                else if (newDirty.IsEmpty)
+                    Invalidate(oldDirty);
+                else
+                    Invalidate(Rectangle.Union(oldDirty, newDirty));
                 break;
             case CaptureMode.Freeform when _isSelecting:
                 _freeformPoints.Add(e.Location);
@@ -561,9 +586,6 @@ public sealed partial class RegionOverlayForm
                 Invalidate();
                 break;
             case CaptureMode.CircleShape when _isCircleShapeDragging:
-                Invalidate();
-                break;
-            case CaptureMode.Magnifier:
                 Invalidate();
                 break;
             case CaptureMode.Line when _isLineDragging:
@@ -635,11 +657,7 @@ public sealed partial class RegionOverlayForm
             if (newHover != _emojiHovered) { _emojiHovered = newHover; toolbarDirty = true; }
         }
 
-        // Crosshair: partial invalidation (old + new strips)
-        if (ShowCrosshairGuides)
-        {
-            Invalidate();
-        }
+        UpdateCrosshairGuides(_lastCursorPos);
 
         if (needsRepaint)
             Invalidate();
@@ -797,6 +815,9 @@ public sealed partial class RegionOverlayForm
     {
         base.OnMouseLeave(e);
         _hoveredButton = -1;
+        CloseCaptureMagnifier();
+        _autoDetectTimer.Stop();
+        ClearCrosshairGuides();
         _prevCursorPos = _lastCursorPos;
         _lastCursorPos = Point.Empty;
         _lastAutoDetectRect = Rectangle.Empty;
@@ -864,7 +885,7 @@ public sealed partial class RegionOverlayForm
 
         if (_fontPickerOpen) return;
         if (_isTyping) return;
-        if (TryHandleAnnotationToolNumber(e.KeyCode))
+        if (TryHandleAnnotationToolHotkey(e.KeyCode))
         {
             e.SuppressKeyPress = true;
             e.Handled = true;
@@ -1272,32 +1293,27 @@ public sealed partial class RegionOverlayForm
         return new Rectangle(px, py, pw, ph);
     }
 
-    // Maps keyboard keys to badge labels for annotation tool shortcuts
-    internal static readonly (Keys key, string label)[] AnnotationKeyMap = {
-        (Keys.D1, "1"), (Keys.D2, "2"), (Keys.D3, "3"),
-        (Keys.D4, "4"), (Keys.D5, "5"), (Keys.D6, "6"),
-        (Keys.D7, "7"), (Keys.D8, "8"), (Keys.D9, "9"),
-        (Keys.D0, "0"), (Keys.OemMinus, "-"), (Keys.Oemplus, "="),
-        (Keys.OemOpenBrackets, "["), (Keys.OemCloseBrackets, "]"),
-        (Keys.OemPipe, "\\"),
-    };
-
-    private bool TryHandleAnnotationToolNumber(Keys keyCode)
+    private bool TryHandleAnnotationToolHotkey(Keys keyCode)
     {
-        int index = -1;
-        for (int i = 0; i < AnnotationKeyMap.Length; i++)
-        {
-            if (AnnotationKeyMap[i].key == keyCode) { index = i; break; }
-        }
-        if (index < 0) return false;
+        var settings = Services.SettingsService.LoadStatic();
+        if (settings is null)
+            return false;
 
-        var modes = _visibleTools
-            .Where(t => t.Mode.HasValue && t.Group == 1)
-            .Select(t => t.Mode!.Value)
-            .ToList();
+        uint mod = 0;
+        if ((ModifierKeys & Keys.Control) != 0) mod |= Native.User32.MOD_CONTROL;
+        if ((ModifierKeys & Keys.Alt) != 0) mod |= Native.User32.MOD_ALT;
+        if ((ModifierKeys & Keys.Shift) != 0) mod |= Native.User32.MOD_SHIFT;
+        uint vk = unchecked((uint)(keyCode & Keys.KeyCode));
 
-        if (index >= modes.Count) return false;
-        SetMode(modes[index]);
+        var toolId = settings.FindAnnotationToolId(mod, vk, _visibleTools.Where(t => t.Group == 1).Select(t => t.Id));
+        if (toolId is null)
+            return false;
+
+        var tool = _visibleTools.FirstOrDefault(t => string.Equals(t.Id, toolId, StringComparison.OrdinalIgnoreCase));
+        if (tool?.Mode is not { } mode)
+            return false;
+
+        SetMode(mode);
         return true;
     }
 

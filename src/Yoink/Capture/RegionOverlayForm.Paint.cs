@@ -45,24 +45,6 @@ public sealed partial class RegionOverlayForm
         bool isScan = _mode == CaptureMode.Scan;
         bool isSelectionMode = _mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker;
 
-        // Screen dim: dark outside selection, clear inside, light dim when no selection
-        if (_hasSelection && isSelectionMode)
-        {
-            // Dark dim outside selection, NO dim inside
-            using var overlay = new SolidBrush(Color.FromArgb(100, 0, 0, 0));
-            var sel = _selectionRect;
-            g.FillRectangle(overlay, 0, 0, ClientSize.Width, sel.Top);
-            g.FillRectangle(overlay, 0, sel.Bottom, ClientSize.Width, ClientSize.Height - sel.Bottom);
-            g.FillRectangle(overlay, 0, sel.Top, sel.Left, sel.Height);
-            g.FillRectangle(overlay, sel.Right, sel.Top, ClientSize.Width - sel.Right, sel.Height);
-        }
-        else if (ToolDef.IsCaptureTool(_mode))
-        {
-            // Light dim when idle (no selection)
-            using var dimOverlay = new SolidBrush(Color.FromArgb(35, 0, 0, 0));
-            g.FillRectangle(dimOverlay, clip);
-        }
-
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         // Live tool previews (active drawing in progress)
@@ -95,7 +77,6 @@ public sealed partial class RegionOverlayForm
         if (_mode == CaptureMode.ColorPicker)
             return; // magnifier is its own layered window, overlay stays static
 
-        // Auto-detect: show detected window border when hovering
         if (isSelectionMode && !_isSelecting && _autoDetectActive && _autoDetectRect.Width > 0)
         {
             using var adShadow = new Pen(Color.FromArgb(30, 0, 0, 0), 4f);
@@ -243,21 +224,6 @@ public sealed partial class RegionOverlayForm
 
         if (!_hasSelection)
             _lastSelectionRect = Rectangle.Empty;
-
-        // Crosshair guidelines
-        if (ShowCrosshairGuides && _mode != CaptureMode.ColorPicker)
-        {
-            var cur = _lastCursorPos == Point.Empty
-                ? PointToClient(System.Windows.Forms.Cursor.Position)
-                : _lastCursorPos;
-            // Soft shadow for visibility on light backgrounds
-            using var chShadow = new Pen(Color.FromArgb(20, 0, 0, 0), 3f);
-            g.DrawLine(chShadow, cur.X + 1, 0, cur.X + 1, ClientSize.Height);
-            g.DrawLine(chShadow, 0, cur.Y + 1, ClientSize.Width, cur.Y + 1);
-            using var chPen = DashedPen(80, 1f);
-            g.DrawLine(chPen, cur.X, 0, cur.X, ClientSize.Height);
-            g.DrawLine(chPen, 0, cur.Y, ClientSize.Width, cur.Y);
-        }
 
         g.SmoothingMode = SmoothingMode.Default;
     }
@@ -430,10 +396,6 @@ public sealed partial class RegionOverlayForm
             }
         }
 
-        // Magnifier preview
-        if (_mode == CaptureMode.Magnifier)
-            PaintMagnifierTool(g);
-
         // Active text input (TextBox is off-screen for input, we paint visually here)
         if (_isTyping)
         {
@@ -553,16 +515,6 @@ public sealed partial class RegionOverlayForm
         g.SmoothingMode = SmoothingMode.Default;
     }
 
-    private void PaintMagnifierTool(Graphics g)
-    {
-        // Live preview following cursor
-        var cur = PointToClient(System.Windows.Forms.Cursor.Position);
-        int srcSize = 40;
-        int sx = Math.Clamp(cur.X - srcSize / 2, 0, _bmpW - srcSize);
-        int sy = Math.Clamp(cur.Y - srcSize / 2, 0, _bmpH - srcSize);
-        PaintMagnifierAt(g, cur, new Rectangle(sx, sy, srcSize, srcSize), 0.5f);
-    }
-
     private void PaintPlacedMagnifier(Graphics g, Point pos, Rectangle srcRect)
     {
         PaintMagnifierAt(g, pos, srcRect, 1f);
@@ -584,13 +536,15 @@ public sealed partial class RegionOverlayForm
         try
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var bgPath = RRect(new RectangleF(px - 2, py - 2, dstSize + 4, dstSize + 4), 8))
+            using (var bgPath = new GraphicsPath())
             {
+                bgPath.AddEllipse(new RectangleF(px - 2, py - 2, dstSize + 4, dstSize + 4));
                 using var bg = new SolidBrush(Color.FromArgb((int)(200 * opacity), UiChrome.SurfaceElevated.R, UiChrome.SurfaceElevated.G, UiChrome.SurfaceElevated.B));
                 g.FillPath(bg, bgPath);
             }
 
-            using var clipPath = RRect(dstRect, 6);
+            using var clipPath = new GraphicsPath();
+            clipPath.AddEllipse(dstRect);
             g.SetClip(clipPath);
             g.InterpolationMode = InterpolationMode.NearestNeighbor;
             g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
@@ -950,6 +904,12 @@ public sealed partial class RegionOverlayForm
                 g.FillEllipse(hoverBrush, btn.X, btn.Y, btn.Width, btn.Height);
             }
 
+            if (active)
+            {
+                using var activeBrush = new SolidBrush(Color.FromArgb(28, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
+                g.FillEllipse(activeBrush, btn.X, btn.Y, btn.Width, btn.Height);
+            }
+
             // Active = full white icon, default = dimmed, hover = mid
             int ia = active ? 255 : hover ? 220 : i >= BtnCount - 2 ? 130 : 160;
             var iconColor = UiChrome.SurfaceTextPrimary;
@@ -964,20 +924,8 @@ public sealed partial class RegionOverlayForm
             if (_hoveredButton < _visibleTools.Length)
             {
                 var tool = _visibleTools[_hoveredButton];
-                if (tool.Group == 1)
+                if (tool.Group == 1 || tool.Group == 0)
                 {
-                    // Annotation tool — show position-based number key
-                    int keyIdx = 0;
-                    for (int j = 0; j < _visibleTools.Length; j++)
-                    {
-                        if (_visibleTools[j].Group != 1) continue;
-                        if (j == _hoveredButton) { if (keyIdx < AnnotationKeyMap.Length) tipText += $"  ({AnnotationKeyMap[keyIdx].label})"; break; }
-                        keyIdx++;
-                    }
-                }
-                else if (tool.Group == 0)
-                {
-                    // Capture tool — show global hotkey from settings
                     var hk = Services.SettingsService.LoadStatic()?.GetToolHotkey(tool.Id) ?? (0u, 0u);
                     if (hk.key != 0)
                         tipText += $"  ({Helpers.HotkeyFormatter.Format(hk.mod, hk.key)})";
@@ -1129,15 +1077,10 @@ public sealed partial class RegionOverlayForm
 
     private void DrawLabel(Graphics g, Rectangle rect, bool isOcr, bool isScan = false)
     {
-        string text = isOcr ? $"OCR  {rect.Width} x {rect.Height}"
-            : isScan ? $"SCAN  {rect.Width} x {rect.Height}"
-            : $"{rect.Width} x {rect.Height}";
+        string text = GetSelectionLabelText(rect, isOcr, isScan);
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         var font = UiChrome.ChromeFont(10f);
-        var sz = g.MeasureString(text, font);
-        float lx = rect.X, ly = rect.Bottom + 8;
-        if (ly + sz.Height > ClientSize.Height) ly = rect.Y - sz.Height - 8;
-        var lr = new RectangleF(lx - 8, ly - 3, sz.Width + 16, sz.Height + 6);
+        var lr = GetLabelBounds(rect, isOcr, isScan, text, font, out float lx, out float ly);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         using (var p = RRect(lr, 8))
         {
@@ -1150,6 +1093,28 @@ public sealed partial class RegionOverlayForm
         using var fg = new SolidBrush(UiChrome.SurfaceTextPrimary);
         g.DrawString(text, font, fg, lx, ly);
         g.TextRenderingHint = TextRenderingHint.SystemDefault;
+    }
+
+    private static string GetSelectionLabelText(Rectangle rect, bool isOcr, bool isScan)
+        => isOcr ? $"OCR  {rect.Width} x {rect.Height}"
+        : isScan ? $"SCAN  {rect.Width} x {rect.Height}"
+        : $"{rect.Width} x {rect.Height}";
+
+    private RectangleF GetLabelBounds(Rectangle rect, bool isOcr, bool isScan)
+    {
+        string text = GetSelectionLabelText(rect, isOcr, isScan);
+        var font = UiChrome.ChromeFont(10f);
+        return GetLabelBounds(rect, isOcr, isScan, text, font, out _, out _);
+    }
+
+    private RectangleF GetLabelBounds(Rectangle rect, bool isOcr, bool isScan, string text, Font font, out float lx, out float ly)
+    {
+        var sz = TextRenderer.MeasureText(text, font, Size.Empty,
+            TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+        lx = rect.X;
+        ly = rect.Bottom + 8;
+        if (ly + sz.Height > ClientSize.Height) ly = rect.Y - sz.Height - 8;
+        return new RectangleF(lx - 8, ly - 3, sz.Width + 16, sz.Height + 6);
     }
 
     private void PaintTextToolbar(Graphics g, RectangleF textRect)

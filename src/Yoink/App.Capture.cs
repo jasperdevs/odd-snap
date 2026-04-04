@@ -43,7 +43,8 @@ public partial class App
                 bool recMic = fmt != RecordingFormat.GIF && s.RecordMicrophone;
                 bool recDesktop = fmt != RecordingFormat.GIF && s.RecordDesktopAudio;
                 var form = new RecordingForm(bmp, bounds, fps, savePath, fmt, maxH,
-                    showCursor, recMic, s.MicrophoneDeviceId, recDesktop, s.DesktopAudioDeviceId);
+                    showCursor, recMic, s.MicrophoneDeviceId, recDesktop, s.DesktopAudioDeviceId,
+                    _settingsService!.Settings.ShowCaptureMagnifier);
 
                 form.Shown += (_, _) =>
                 {
@@ -268,7 +269,8 @@ public partial class App
                 var overlay = new RegionOverlayForm(screenshot, bounds, initialMode, _settingsService!.Settings.WindowDetection)
                 {
                     ShowCrosshairGuides = _settingsService!.Settings.ShowCrosshairGuides,
-                    DetectWindows = _settingsService.Settings.DetectWindows
+                    DetectWindows = _settingsService.Settings.DetectWindows,
+                    ShowCaptureMagnifier = _settingsService.Settings.ShowCaptureMagnifier
                 };
                 overlay.SetEnabledTools(_settingsService.Settings.EnabledTools);
                 overlay.SetShowToolNumberBadges(_settingsService.Settings.ShowToolNumberBadges);

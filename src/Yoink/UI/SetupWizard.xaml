@@ -119,6 +119,10 @@
                               Foreground="{DynamicResource WizFg}" Cursor="Hand"/>
                 </Border>
                 <Border Style="{StaticResource WizRow}">
+                    <CheckBox x:Name="WizCaptureMagnifierCheck" Content="Show pixel magnifier near cursor during capture" FontSize="13"
+                              Foreground="{DynamicResource WizFg}" Cursor="Hand"/>
+                </Border>
+                <Border Style="{StaticResource WizRow}">
                     <CheckBox x:Name="WizMuteCheck" Content="Mute capture sounds" FontSize="13"
                               Foreground="{DynamicResource WizFg}" Cursor="Hand"/>
                 </Border>

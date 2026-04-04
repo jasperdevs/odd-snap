@@ -16,6 +16,9 @@ public static class RembgRuntimeService
 
     private static readonly string ModelCacheDir = Path.Combine(RootDir, "models");
 
+    public static string RootDirectory => RootDir;
+    public static string ModelCacheDirectory => ModelCacheDir;
+
     public static string GetSetupButtonText(StickerExecutionProvider provider) => provider == StickerExecutionProvider.Gpu
         ? "Install rembg + CUDA"
         : "Install rembg";

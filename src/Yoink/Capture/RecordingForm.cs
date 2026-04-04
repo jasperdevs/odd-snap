@@ -47,6 +47,7 @@ public sealed class RecordingForm : Form
     private readonly string? _micDeviceId;
     private readonly bool _recordDesktop;
     private readonly string? _desktopDeviceId;
+    private readonly bool _showMagnifier;
     private System.Windows.Forms.Timer? _tickTimer;
     private readonly string _savePath;
 
@@ -58,12 +59,12 @@ public sealed class RecordingForm : Form
     private Rectangle _stopBtn;
     private Rectangle _discardBtn;
     private int _hoveredBtn = -1; // 0=stop, 1=discard
+    private Rectangle _lastMagnifierRect;
 
     // TransparencyKey color - any color that won't appear in UI
     private static readonly Color TransKey = Color.FromArgb(1, 2, 3);
 
     // Cached GDI objects for paint
-    private readonly SolidBrush _dimBrush = new(Color.FromArgb(100, 0, 0, 0));
     private readonly Pen _selPen = new(Color.FromArgb(220, 239, 68, 68), 2f) { DashStyle = DashStyle.Dash };
     private readonly Font _labelFont = UiChrome.ChromeFont(9f, FontStyle.Bold);
     private readonly Font _hintFont = UiChrome.ChromeFont(UiChrome.ChromeHintSize);
@@ -90,7 +91,8 @@ public sealed class RecordingForm : Form
                          Models.RecordingFormat format = Models.RecordingFormat.GIF, int maxHeight = 0,
                          bool showCursor = false,
                          bool recordMic = false, string? micDeviceId = null,
-                         bool recordDesktop = false, string? desktopDeviceId = null)
+                         bool recordDesktop = false, string? desktopDeviceId = null,
+                         bool showMagnifier = false)
     {
         _screenshot = screenshot;
         _virtualBounds = virtualBounds;
@@ -104,6 +106,7 @@ public sealed class RecordingForm : Form
         _micDeviceId = micDeviceId;
         _recordDesktop = recordDesktop;
         _desktopDeviceId = desktopDeviceId;
+        _showMagnifier = showMagnifier;
 
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
@@ -175,8 +178,22 @@ public sealed class RecordingForm : Form
         if (_state == State.Selecting && _isDragging)
         {
             var oldSel = _selection;
+            var oldMag = _showMagnifier ? _lastMagnifierRect : Rectangle.Empty;
             _selection = NormRect(_dragStart, e.Location);
-            Invalidate(Rectangle.Union(oldSel, _selection));
+            var oldBounds = oldSel;
+            oldBounds.Inflate(4, 4);
+            var newBounds = _selection;
+            newBounds.Inflate(4, 4);
+            var dirty = Rectangle.Union(oldBounds, newBounds);
+            if (_showMagnifier)
+            {
+                _lastMagnifierRect = InflateForRepaint(GetMagnifierBounds(e.Location), 12);
+                if (!oldMag.IsEmpty)
+                    dirty = Rectangle.Union(dirty, oldMag);
+                if (!_lastMagnifierRect.IsEmpty)
+                    dirty = Rectangle.Union(dirty, _lastMagnifierRect);
+            }
+            Invalidate(dirty);
         }
         else if (_state == State.Recording)
         {
@@ -195,11 +212,22 @@ public sealed class RecordingForm : Form
         {
             _isDragging = false;
             var oldSel = _selection;
+            var oldMag = _lastMagnifierRect;
             _selection = NormRect(_dragStart, e.Location);
             if (_selection.Width > 10 && _selection.Height > 10)
                 StartRecording();
             else
-                Invalidate(oldSel);
+            {
+                var oldBounds = oldSel;
+                oldBounds.Inflate(4, 4);
+                var newBounds = _selection;
+                newBounds.Inflate(4, 4);
+                var dirty = Rectangle.Union(oldBounds, newBounds);
+                if (!oldMag.IsEmpty)
+                    dirty = Rectangle.Union(dirty, oldMag);
+                _lastMagnifierRect = Rectangle.Empty;
+                Invalidate(dirty);
+            }
         }
     }
 
@@ -364,7 +392,6 @@ public sealed class RecordingForm : Form
             return;
 
         g.DrawImage(screenshot, 0, 0);
-        g.FillRectangle(_dimBrush, 0, 0, Width, Height);
 
         if (_selection.Width > 2 && _selection.Height > 2)
         {
@@ -391,6 +418,9 @@ public sealed class RecordingForm : Form
             g.DrawString(hint, _hintFont, _hintBrush,
                 Width / 2f - hintSz.Width / 2f, Height / 2f - hintSz.Height / 2f);
         }
+
+        if (_showMagnifier && _isDragging)
+            PaintMagnifier(g, PointToClient(Cursor.Position));
     }
 
     private void PaintRecordingPhase(Graphics g)
@@ -465,6 +495,82 @@ public sealed class RecordingForm : Form
         }
     }
 
+    private void PaintMagnifier(Graphics g, Point cursor)
+    {
+        if (_screenshot is null || cursor == Point.Empty)
+            return;
+
+        int srcSize = 40;
+        int sx = Math.Clamp(cursor.X - srcSize / 2, 0, Math.Max(0, _screenshot.Width - srcSize));
+        int sy = Math.Clamp(cursor.Y - srcSize / 2, 0, Math.Max(0, _screenshot.Height - srcSize));
+        int zoom = 3;
+        int dstSize = srcSize * zoom;
+
+        int px = cursor.X + 20;
+        int py = cursor.Y + 20;
+        int margin = 12;
+        if (px + dstSize + 6 > Width - margin) px = cursor.X - 20 - dstSize;
+        if (py + dstSize + 6 > Height - margin) py = cursor.Y - 20 - dstSize;
+        px = Math.Clamp(px, margin, Math.Max(margin, Width - dstSize - margin));
+        py = Math.Clamp(py, margin, Math.Max(margin, Height - dstSize - margin));
+
+        var dstRect = new Rectangle(px, py, dstSize, dstSize);
+        var srcRect = new Rectangle(sx, sy, srcSize, srcSize);
+
+        using var bgBrush = new SolidBrush(Color.FromArgb(210, UiChrome.SurfaceElevated.R, UiChrome.SurfaceElevated.G, UiChrome.SurfaceElevated.B));
+        using var borderPen = new Pen(Color.FromArgb(70, UiChrome.SurfaceBorderStrong.R, UiChrome.SurfaceBorderStrong.G, UiChrome.SurfaceBorderStrong.B), 1f);
+        using var crossPen = new Pen(Color.FromArgb(180, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B), 1f);
+
+        using var bgPath = RRect(new RectangleF(px - 2, py - 2, dstSize + 4, dstSize + 4), 8);
+        g.FillPath(bgBrush, bgPath);
+        var state = g.Save();
+        try
+        {
+            using var clip = RRect(dstRect, 6);
+            g.SetClip(clip);
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+            g.DrawImage(_screenshot, dstRect, srcRect, GraphicsUnit.Pixel);
+            int ccx = px + dstSize / 2, ccy = py + dstSize / 2;
+            g.DrawLine(crossPen, ccx - 8, ccy, ccx + 8, ccy);
+            g.DrawLine(crossPen, ccx, ccy - 8, ccx, ccy + 8);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.DrawPath(borderPen, clip);
+        }
+        finally
+        {
+            g.Restore(state);
+        }
+    }
+
+    private Rectangle GetMagnifierBounds(Point cursor)
+    {
+        if (_screenshot is null || cursor == Point.Empty)
+            return Rectangle.Empty;
+
+        int srcSize = 40;
+        int zoom = 3;
+        int dstSize = srcSize * zoom;
+
+        int px = cursor.X + 20;
+        int py = cursor.Y + 20;
+        int margin = 12;
+        if (px + dstSize + 6 > Width - margin) px = cursor.X - 20 - dstSize;
+        if (py + dstSize + 6 > Height - margin) py = cursor.Y - 20 - dstSize;
+        px = Math.Clamp(px, margin, Math.Max(margin, Width - dstSize - margin));
+        py = Math.Clamp(py, margin, Math.Max(margin, Height - dstSize - margin));
+
+        return new Rectangle(px - 2, py - 2, dstSize + 4, dstSize + 4);
+    }
+
+    private static Rectangle InflateForRepaint(Rectangle rect, int pad = 8)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+            return Rectangle.Empty;
+        rect.Inflate(pad, pad);
+        return rect;
+    }
+
     private void DrawBtn(Graphics g, Rectangle rect, string text, bool hovered,
         Color textColor, Color bgColor)
     {
@@ -518,7 +624,7 @@ public sealed class RecordingForm : Form
             _videoRecorder?.Dispose();
             _screenshot?.Dispose();
             _screenshot = null;
-            _dimBrush.Dispose(); _selPen.Dispose(); _labelFont.Dispose();
+            _selPen.Dispose(); _labelFont.Dispose();
             _hintFont.Dispose(); _hintBrush.Dispose(); _bgLabelBrush.Dispose();
             _textLabelBrush.Dispose(); _borderPen.Dispose(); _cornerBrush.Dispose();
             _shadowBrush.Dispose(); _toolbarBgBrush.Dispose(); _toolbarBorderPen.Dispose();

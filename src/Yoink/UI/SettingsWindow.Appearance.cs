@@ -118,6 +118,7 @@ public partial class SettingsWindow
         AutoIndexImagesCheck.IsChecked = s.AutoIndexImages;
         MuteSoundsCheck.IsChecked = s.MuteSounds;
         CrosshairGuidesCheck.IsChecked = s.ShowCrosshairGuides;
+        ShowCaptureMagnifierCheck.IsChecked = s.ShowCaptureMagnifier;
         ShowToolNumberBadgesCheck.IsChecked = s.ShowToolNumberBadges;
         AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;

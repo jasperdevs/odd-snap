@@ -109,7 +109,15 @@ public static class UninstallService
         }
         catch { }
 
+        RemoveRuntimeCaches();
         TryDeleteDirectory(appData);
+    }
+
+    public static void RemoveRuntimeCaches()
+    {
+        TryDeleteDirectory(RembgRuntimeService.ModelCacheDirectory);
+        TryDeleteDirectory(RembgRuntimeService.RootDirectory);
+        TryDeleteDirectory(LocalClipRuntimeService.CacheDirectory);
     }
 
     public static void ScheduleInstallFolderRemoval()

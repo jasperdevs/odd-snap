@@ -621,6 +621,11 @@
 
                             <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
 
+                            <CheckBox x:Name="ShowCaptureMagnifierCheck" Content="Show pixel magnifier in captures" FontSize="13"
+                                      Checked="ShowCaptureMagnifierCheck_Changed" Unchecked="ShowCaptureMagnifierCheck_Changed"/>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>

@@ -14,10 +14,10 @@ public sealed class PickerMagnifierForm : Form
     private const int InfoH = 42;
     private const int Pad = 6;
     private const int TotalW = CircleDiameter + Pad * 2;
-    private const int TotalH = CircleDiameter + InfoGap + InfoH + Pad * 2;
 
     private Bitmap? _surface;
     private Graphics? _surfaceGraphics;
+    private bool _showInfo = true;
 
     private Bitmap? _magnifier;
     private string _hex = "000000";
@@ -40,7 +40,7 @@ public sealed class PickerMagnifierForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        Size = new Size(TotalW, TotalH);
+        Size = new Size(TotalW, GetTotalHeight(true));
         SetStyle(ControlStyles.AllPaintingInWmPaint |
                  ControlStyles.UserPaint |
                  ControlStyles.OptimizedDoubleBuffer, true);
@@ -72,12 +72,14 @@ public sealed class PickerMagnifierForm : Form
         base.WndProc(ref m);
     }
 
-    public void UpdateMagnifier(Bitmap magnifier, Point cursor, Color picked, string hex, string rgb)
+    public void UpdateMagnifier(Bitmap magnifier, Point cursor, Color picked, string hex, string rgb, bool showInfo = true)
     {
         _magnifier = magnifier;
         _picked = picked;
         _hex = hex;
         _rgb = rgb;
+        _showInfo = showInfo;
+        Size = new Size(TotalW, GetTotalHeight(showInfo));
         UpdateSurface();
     }
 
@@ -159,25 +161,28 @@ public sealed class PickerMagnifierForm : Form
         using var dotBorder = new Pen(UiChrome.SurfaceBorderStrong, 1f);
         g.DrawRectangle(dotBorder, cx - dotSize / 2, cy - dotSize / 2, dotSize, dotSize);
 
-        // Info pill below circle
-        string hexLabel = $"#{_hex}";
-        string rgbLabel = $"R: {_picked.R}  G: {_picked.G}  B: {_picked.B}";
-        var hexSize = g.MeasureString(hexLabel, _hexFont);
-        var rgbSize = g.MeasureString(rgbLabel, _rgbFont);
-        int pillW = (int)Math.Ceiling(Math.Max(hexSize.Width, rgbSize.Width)) + 20;
-        int pillH = InfoH;
-        int pillX = cx - pillW / 2;
-        int pillY = circleRect.Bottom + InfoGap;
-        var pillRect = new RectangleF(pillX, pillY, pillW, pillH);
+        if (_showInfo)
+        {
+            // Info pill below circle
+            string hexLabel = $"#{_hex}";
+            string rgbLabel = $"R: {_picked.R}  G: {_picked.G}  B: {_picked.B}";
+            var hexSize = g.MeasureString(hexLabel, _hexFont);
+            var rgbSize = g.MeasureString(rgbLabel, _rgbFont);
+            int pillW = (int)Math.Ceiling(Math.Max(hexSize.Width, rgbSize.Width)) + 20;
+            int pillH = InfoH;
+            int pillX = cx - pillW / 2;
+            int pillY = circleRect.Bottom + InfoGap;
+            var pillRect = new RectangleF(pillX, pillY, pillW, pillH);
 
-        using var pillPath = RoundedPill(pillRect, pillH / 2f);
-        g.FillPath(_pillBg, pillPath);
-        g.DrawPath(_pillBorder, pillPath);
+            using var pillPath = RoundedPill(pillRect, pillH / 2f);
+            g.FillPath(_pillBg, pillPath);
+            g.DrawPath(_pillBorder, pillPath);
 
-        var hexX = pillX + (pillW - hexSize.Width) / 2f;
-        var rgbX = pillX + (pillW - rgbSize.Width) / 2f;
-        g.DrawString(hexLabel, _hexFont, _labelBrush, hexX, pillY + 3);
-        g.DrawString(rgbLabel, _rgbFont, _labelBrush, rgbX, pillY + 21);
+            var hexX = pillX + (pillW - hexSize.Width) / 2f;
+            var rgbX = pillX + (pillW - rgbSize.Width) / 2f;
+            g.DrawString(hexLabel, _hexFont, _labelBrush, hexX, pillY + 3);
+            g.DrawString(rgbLabel, _rgbFont, _labelBrush, rgbX, pillY + 21);
+        }
 
         g.Flush(FlushIntention.Sync);
 
@@ -227,6 +232,9 @@ public sealed class PickerMagnifierForm : Form
         path.CloseFigure();
         return path;
     }
+
+    private static int GetTotalHeight(bool showInfo)
+        => CircleDiameter + Pad * 2 + (showInfo ? InfoGap + InfoH : 0);
 
     protected override void Dispose(bool disposing)
     {

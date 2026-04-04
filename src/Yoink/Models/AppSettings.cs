@@ -123,6 +123,7 @@ public sealed class AppSettings
     public bool MuteSounds { get; set; }
     public bool ShowCrosshairGuides { get; set; } // off by default
     public bool ShowCursor { get; set; }
+    public bool ShowCaptureMagnifier { get; set; }
     public bool DetectWindows { get; set; } = true;
     public bool CompressHistory { get; set; }
     public int JpegQuality { get; set; } = 85;
@@ -173,15 +174,13 @@ public sealed class AppSettings
         0x30, 0xBD, 0xBB, 0xDB, 0xDD, 0xDC // 0, -, =, [, ], \
     };
 
-    /// <summary>Compute annotation tool defaults dynamically from enabled tools (matches dock numbering).</summary>
+    /// <summary>Compute annotation tool defaults from stable tool order.</summary>
     private Dictionary<string, uint> GetAnnotationDefaults()
     {
-        var enabled = EnabledTools ?? ToolDef.DefaultEnabledIds();
         var result = new Dictionary<string, uint>();
         int idx = 0;
         foreach (var t in ToolDef.AllTools.Where(t => t.Group == 1))
         {
-            if (!enabled.Contains(t.Id)) continue;
             if (idx < AnnotationKeyVks.Length)
                 result[t.Id] = AnnotationKeyVks[idx++];
         }
@@ -208,7 +207,11 @@ public sealed class AppSettings
         // Check user-customized value first (including explicit clears stored as [0,0])
         if (ToolHotkeys != null && ToolHotkeys.TryGetValue(toolId, out var v) && v.Length >= 2)
             return (v[0], v[1]);
-        // Fall back to dynamic annotation tool defaults (matches dock numbering)
+        if (ToolDef.AllTools.Any(t => t.Id == toolId && t.Group == 1) &&
+            EnabledTools is { Count: > 0 } &&
+            !EnabledTools.Contains(toolId))
+            return (0u, 0u);
+        // Fall back to stable annotation tool defaults.
         var defaults = GetAnnotationDefaults();
         if (defaults.TryGetValue(toolId, out var defKey))
             return (0u, defKey);
@@ -236,6 +239,28 @@ public sealed class AppSettings
                 break;
         }
     }
+
+    public string? FindAnnotationToolId(uint mod, uint key, IEnumerable<string>? visibleToolIds = null)
+    {
+        if (key == 0)
+            return null;
+
+        HashSet<string>? visible = visibleToolIds != null
+            ? new HashSet<string>(visibleToolIds, StringComparer.OrdinalIgnoreCase)
+            : null;
+
+        foreach (var tool in ToolDef.AllTools.Where(t => t.Group == 1))
+        {
+            if (visible != null && !visible.Contains(tool.Id))
+                continue;
+
+            var hotkey = GetToolHotkey(tool.Id);
+            if (hotkey.mod == mod && hotkey.key == key)
+                return tool.Id;
+        }
+
+        return null;
+    }
 }
 
 /// <summary>Definition of a toolbar tool with id, label, icon, mode, and group.</summary>
@@ -262,7 +287,6 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
         new("ruler",       "Ruler",        '\uE14E', CaptureMode.Ruler,       1), // ruler
         new("rectShape",   "Rectangle",    '\uE16A', CaptureMode.RectShape,   1), // square
         new("circleShape", "Circle",       '\uE07A', CaptureMode.CircleShape, 1), // circle
-        new("magnifier",   "Magnifier",    '\uE154', CaptureMode.Magnifier,   1), // search
         new("emoji",       "Emoji",        '\uE167', CaptureMode.Emoji,       1), // smile
         new("eraser",      "Eraser",       '\uE28E', CaptureMode.Eraser,      1), // eraser
     };
@@ -275,4 +299,11 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
 
     public static List<string> DefaultEnabledIds() =>
         AllTools.Select(t => t.Id).ToList();
+
+    public static HashSet<string> DefaultToolbarDisabledIds() =>
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "step",
+            "ruler",
+        };
 }

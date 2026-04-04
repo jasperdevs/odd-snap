@@ -42,10 +42,14 @@ public sealed partial class RegionOverlayForm : Form
     private Point _prevCursorPos; // crosshair ghosting fix
     private Rectangle _lastSelectionRect;
     private Rectangle _lastAutoDetectRect;
+    private CrosshairGuideForm? _verticalCrosshairForm;
+    private CrosshairGuideForm? _horizontalCrosshairForm;
     private readonly System.Windows.Forms.Timer _animTimer;
+    private readonly System.Windows.Forms.Timer _autoDetectTimer;
     private DateTime _showTime;
     private ToolbarForm? _toolbarForm;
     private bool _allowDeactivation;
+    private Point _pendingAutoDetectPoint = Point.Empty;
 
     private const int TopBarHeight = 110;
 
@@ -58,6 +62,7 @@ public sealed partial class RegionOverlayForm : Form
     private readonly SolidBrush _mutedBrush = new(Color.FromArgb(140, 255, 255, 255));
     private readonly Pen _crossPen = new(Color.FromArgb(210, 255, 255, 255), 1f);
     private Point _pickerCursorPos;
+    private Point _lastMagnifierSamplePoint = new(-1, -1);
     private Color _pickedColor = Color.Black;
     private string _hexStr = "000000";
     private string _rgbStr = "0, 0, 0";
@@ -66,7 +71,7 @@ public sealed partial class RegionOverlayForm : Form
     private const int Grid = 11, Cell = 14, Mag = Grid * Cell;
     private const int InfoH = 0, PPad = 0;
     private const int PW = Mag, PH = Mag;
-    private const int MagOff = 16, MagMargin = 4;
+    private const int MagOff = 8, MagMargin = 4;
 
     // Typed undo stack: all annotations in creation order
     private readonly List<Annotation> _undoStack = new();
@@ -116,6 +121,7 @@ public sealed partial class RegionOverlayForm : Form
     // Color picker popup state
     private bool _colorPickerOpen;
     private Rectangle _colorPickerRect;
+    private PickerMagnifierForm? _captureMagnifierForm;
 
     // Select tool state
     private int _selectedAnnotationIndex = -1;
@@ -338,6 +344,9 @@ public sealed partial class RegionOverlayForm : Form
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool DetectWindows { get; set; } = true;
 
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool ShowCaptureMagnifier { get; set; }
+
     public void SetEnabledTools(List<string>? enabledIds)
     {
         _visibleTools = enabledIds == null
@@ -399,6 +408,16 @@ public sealed partial class RegionOverlayForm : Form
         _pickerTimer = new System.Windows.Forms.Timer { Interval = 16 };
         _pickerTimer.Tick += OnPickerTick;
         if (_mode == CaptureMode.ColorPicker) _pickerTimer.Start();
+
+        _autoDetectTimer = new System.Windows.Forms.Timer { Interval = 16 };
+        _autoDetectTimer.Tick += (_, _) =>
+        {
+            _autoDetectTimer.Stop();
+            if (_isSelecting || !ToolDef.IsCaptureTool(_mode) || IsPointInOverlayUi(_pendingAutoDetectPoint))
+                return;
+
+            UpdateAutoDetectRect(_pendingAutoDetectPoint);
+        };
     }
 
     private void SetupForm()
@@ -760,13 +779,90 @@ public sealed partial class RegionOverlayForm : Form
     private bool IsPointInOverlayUi(Point p)
     {
         var tbBounds = _toolbarRect;
-        tbBounds.Inflate(24, 18);
-        tbBounds.Height += 44;
+        tbBounds.Inflate(8, 8);
+        tbBounds.Height += 10;
         if (tbBounds.Contains(p)) return true;
         if (_emojiPickerOpen && _emojiPickerRect.Contains(p)) return true;
         if (_fontPickerOpen && _fontPickerRect.Contains(p)) return true;
         if (_colorPickerOpen && _colorPickerRect.Contains(p)) return true;
         return false;
+    }
+
+    private bool ShouldShowCaptureMagnifierAt(Point p)
+        => ShowCaptureMagnifier
+           && ToolDef.IsCaptureTool(_mode)
+           && !IsPointInOverlayUi(p);
+
+    private Rectangle GetSelectionOverlayBounds(Rectangle rect, bool isOcr, bool isScan)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+            return Rectangle.Empty;
+
+        var dirty = rect;
+        dirty.Inflate(8, 8);
+
+        var labelBounds = Rectangle.Ceiling(GetLabelBounds(rect, isOcr, isScan));
+        if (!labelBounds.IsEmpty)
+            dirty = Rectangle.Union(dirty, InflateForRepaint(labelBounds, 8));
+
+        return dirty;
+    }
+
+    private void UpdateAutoDetectRect(Point location)
+    {
+        var oldDetect = _autoDetectRect;
+        var detected = WindowDetector.GetDetectionRectAtPoint(
+            location, _virtualBounds, _windowDetectionMode);
+        _autoDetectRect = detected;
+        _autoDetectActive = detected.Width > 0 && detected.Height > 0;
+
+        if (oldDetect == detected)
+            return;
+
+        var oldDirty = InflateForRepaint(oldDetect);
+        var newDirty = InflateForRepaint(detected);
+        if (!oldDirty.IsEmpty)
+            Invalidate(oldDirty);
+        if (!newDirty.IsEmpty)
+            Invalidate(newDirty);
+    }
+
+    private void EnsureCrosshairForms()
+    {
+        if (_verticalCrosshairForm != null && _horizontalCrosshairForm != null)
+            return;
+
+        var color = Color.FromArgb(72, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B);
+        _verticalCrosshairForm ??= new CrosshairGuideForm(color);
+        _horizontalCrosshairForm ??= new CrosshairGuideForm(color);
+    }
+
+    private void UpdateCrosshairGuides(Point point)
+    {
+        bool shouldShow = ShowCrosshairGuides
+            && _mode != CaptureMode.ColorPicker
+            && point != Point.Empty
+            && !IsPointInOverlayUi(point);
+        if (!shouldShow)
+        {
+            ClearCrosshairGuides();
+            return;
+        }
+
+        EnsureCrosshairForms();
+        if (_verticalCrosshairForm is null || _horizontalCrosshairForm is null)
+            return;
+
+        int screenX = _virtualBounds.X + point.X;
+        int screenY = _virtualBounds.Y + point.Y;
+        _verticalCrosshairForm.UpdateLine(new Rectangle(screenX, _virtualBounds.Top, 1, _virtualBounds.Height));
+        _horizontalCrosshairForm.UpdateLine(new Rectangle(_virtualBounds.Left, screenY, _virtualBounds.Width, 1));
+    }
+
+    private void ClearCrosshairGuides()
+    {
+        _verticalCrosshairForm?.Hide();
+        _horizontalCrosshairForm?.Hide();
     }
 
     private static Rectangle NormRect(Point a, Point b) =>
@@ -969,14 +1065,21 @@ public sealed partial class RegionOverlayForm : Form
     {
         if (disposing)
         {
+            ClearCrosshairGuides();
+            _verticalCrosshairForm?.Close();
+            _verticalCrosshairForm?.Dispose();
+            _horizontalCrosshairForm?.Close();
+            _horizontalCrosshairForm?.Dispose();
             WindowDetector.UnregisterIgnoredWindow(Handle);
             if (_toolbarForm != null)
                 WindowDetector.UnregisterIgnoredWindow(_toolbarForm.Handle);
             CloseMagWindow();
+            CloseCaptureMagnifier();
             _toolbarForm?.Close();
             _toolbarForm?.Dispose();
             _animTimer.Dispose();
             _pickerTimer.Dispose();
+            _autoDetectTimer.Dispose();
             _magGfx.Dispose();
             _magBitmap.Dispose();
             _committedAnnotationsBitmap?.Dispose();

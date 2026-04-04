@@ -16,6 +16,8 @@ public sealed class LocalClipRuntimeService : IDisposable
     private static readonly string ScriptPath = Path.Combine(AppContext.BaseDirectory, "Python", "local_clip_service.py");
     private static readonly string CacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "clip");
 
+    public static string CacheDirectory => CacheDir;
+
     private readonly object _gate = new();
     private readonly SemaphoreSlim _startGate = new(1, 1);
     private readonly SemaphoreSlim _requestGate = new(1, 1);

@@ -50,7 +50,6 @@ public sealed class ScrollingCaptureForm : Form
     private System.Windows.Forms.Timer? _captureTimer;
 
     // Cached GDI objects for selection overlay
-    private readonly SolidBrush _dimBrush = new(Color.FromArgb(100, 0, 0, 0));
     private readonly Pen _selPen = new(Color.FromArgb(220, 100, 149, 237), 2f) { DashStyle = DashStyle.Dash };
     private readonly Font _labelFont = UiChrome.ChromeFont(9f, FontStyle.Bold);
     private readonly Font _hintFont = UiChrome.ChromeFont(UiChrome.ChromeHintSize);
@@ -125,7 +124,14 @@ public sealed class ScrollingCaptureForm : Form
         {
             var oldSel = _selection;
             _selection = NormRect(_dragStart, e.Location);
-            Invalidate(Rectangle.Union(InflateForRepaint(oldSel, 4), InflateForRepaint(_selection, 4)));
+            var oldBounds = GetSelectionOverlayBounds(oldSel);
+            var newBounds = GetSelectionOverlayBounds(_selection);
+            if (oldBounds.IsEmpty)
+                Invalidate(newBounds);
+            else if (newBounds.IsEmpty)
+                Invalidate(oldBounds);
+            else
+                Invalidate(Rectangle.Union(oldBounds, newBounds));
         }
     }
 
@@ -139,7 +145,16 @@ public sealed class ScrollingCaptureForm : Form
             if (_selection.Width > 20 && _selection.Height > 20)
                 ShowControlBar();
             else
-                Invalidate(InflateForRepaint(oldSel, 4));
+            {
+                var oldBounds = GetSelectionOverlayBounds(oldSel);
+                var newBounds = GetSelectionOverlayBounds(_selection);
+                if (oldBounds.IsEmpty)
+                    Invalidate(newBounds);
+                else if (newBounds.IsEmpty)
+                    Invalidate(oldBounds);
+                else
+                    Invalidate(Rectangle.Union(oldBounds, newBounds));
+            }
         }
     }
 
@@ -501,7 +516,6 @@ public sealed class ScrollingCaptureForm : Form
     private void PaintSelectionPhase(Graphics g)
     {
         g.DrawImage(_screenshot, 0, 0);
-        g.FillRectangle(_dimBrush, 0, 0, Width, Height);
 
         if (_selection.Width > 2 && _selection.Height > 2)
         {
@@ -555,6 +569,23 @@ public sealed class ScrollingCaptureForm : Form
         return rect;
     }
 
+    private Rectangle GetSelectionOverlayBounds(Rectangle rect)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+            return Rectangle.Empty;
+
+        var dirty = InflateForRepaint(rect, 8);
+        using var g = CreateGraphics();
+        string label = $"Scroll  {rect.Width} x {rect.Height}";
+        var sz = g.MeasureString(label, _labelFont);
+        float lx = rect.X + rect.Width / 2f - sz.Width / 2f;
+        float ly = rect.Bottom + 6;
+        if (ly + sz.Height > Height - 10)
+            ly = rect.Y - sz.Height - 6;
+        var labelRect = Rectangle.Ceiling(new RectangleF(lx - 8, ly - 2, sz.Width + 16, sz.Height + 4));
+        return Rectangle.Union(dirty, InflateForRepaint(labelRect, 8));
+    }
+
     private void DisposeFrames()
     {
         foreach (var f in _frames) f.Dispose();
@@ -570,7 +601,6 @@ public sealed class ScrollingCaptureForm : Form
             _controlBar?.Dispose();
             DisposeFrames();
             _screenshot.Dispose();
-            _dimBrush.Dispose();
             _selPen.Dispose();
             _labelFont.Dispose();
             _hintFont.Dispose();

@@ -11,6 +11,7 @@ public static class WindowDetector
 {
     private static readonly HashSet<IntPtr> IgnoredHandles = new();
     private static readonly object IgnoredHandleLock = new();
+    private const int MaxZOrderProbeDepth = 32;
 
     public static Rectangle GetDetectionRectAtPoint(
         Point screenPoint,
@@ -43,52 +44,49 @@ public static class WindowDetector
     public static Rectangle GetTopLevelWindowRectAtPoint(Point screenPoint, Rectangle virtualBounds)
     {
         var pt = new User32.POINT(screenPoint.X + virtualBounds.X, screenPoint.Y + virtualBounds.Y);
+        IntPtr hwnd = User32.WindowFromPoint(pt);
+        var visited = new HashSet<IntPtr>();
 
-        foreach (var hwnd in EnumerateTopLevelWindows())
+        for (int depth = 0; depth < MaxZOrderProbeDepth && hwnd != IntPtr.Zero; depth++)
         {
-            if (IsIgnoredWindowHandle(hwnd))
-                continue;
+            IntPtr candidate = NormalizeTopLevelWindow(hwnd);
+            if (candidate == IntPtr.Zero || !visited.Add(candidate))
+                break;
 
-            if (!User32.GetWindowRect(hwnd, out var rect))
-                continue;
+            if (TryGetWindowRect(candidate, pt, virtualBounds, out var rect))
+                return rect;
 
-            if (pt.X < rect.Left || pt.X >= rect.Right || pt.Y < rect.Top || pt.Y >= rect.Bottom)
-                continue;
-
-            var hwndRect = GetWindowRectFromHandle(hwnd, virtualBounds);
-            if (IsUsableRect(hwndRect))
-                return hwndRect;
+            hwnd = User32.GetWindow(candidate, User32.GW_HWNDNEXT);
         }
 
         return Rectangle.Empty;
     }
 
-    private static Rectangle GetWindowRectFromHandle(IntPtr hwnd, Rectangle virtualBounds)
+    private static bool TryGetWindowRect(IntPtr hwnd, User32.POINT point, Rectangle virtualBounds, out Rectangle rect)
     {
-        IntPtr root = User32.GetAncestor(hwnd, User32.GA_ROOT);
-        if (root != IntPtr.Zero)
-            hwnd = root;
+        rect = Rectangle.Empty;
 
-        if (!User32.GetWindowRect(hwnd, out var rect))
-            return Rectangle.Empty;
+        if (hwnd == IntPtr.Zero || IsIgnoredWindowHandle(hwnd) || !User32.IsWindowVisible(hwnd) || Dwm.IsWindowCloaked(hwnd))
+            return false;
 
-        return new Rectangle(
-            rect.Left - virtualBounds.X,
-            rect.Top - virtualBounds.Y,
-            rect.Width,
-            rect.Height);
+        var screenRect = Dwm.GetExtendedFrameBounds(hwnd);
+        if (!IsUsableRect(screenRect))
+            return false;
+        if (!screenRect.Contains(point.X, point.Y))
+            return false;
+
+        rect = new Rectangle(
+            screenRect.Left - virtualBounds.X,
+            screenRect.Top - virtualBounds.Y,
+            screenRect.Width,
+            screenRect.Height);
+        return IsUsableRect(rect);
     }
 
-    private static IEnumerable<IntPtr> EnumerateTopLevelWindows()
+    private static IntPtr NormalizeTopLevelWindow(IntPtr hwnd)
     {
-        var windows = new List<IntPtr>();
-        User32.EnumWindows((hWnd, _) =>
-        {
-            if (hWnd != IntPtr.Zero && User32.IsWindowVisible(hWnd))
-                windows.Add(hWnd);
-            return true;
-        }, IntPtr.Zero);
-        return windows;
+        IntPtr root = User32.GetAncestor(hwnd, User32.GA_ROOT);
+        return root != IntPtr.Zero ? root : hwnd;
     }
 
     private static bool IsUsableRect(Rectangle rect)
