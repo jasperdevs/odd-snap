@@ -214,26 +214,34 @@ public partial class App : Application
 
     private void ShowSettings()
     {
-        if (_settingsWindow is { IsVisible: true })
+        try
         {
-            _settingsWindow.Activate();
-            return;
-        }
+            if (_settingsWindow is { IsVisible: true })
+            {
+                _settingsWindow.Activate();
+                return;
+            }
 
-        var win = new SettingsWindow(_settingsService!, EnsureHistoryService(), EnsureImageSearchIndexService());
-        Action hotkeyHandler = () => RegisterHotkeys();
-        Action uninstallHandler = BeginUninstall;
-        win.HotkeyChanged += hotkeyHandler;
-        win.UninstallRequested += uninstallHandler;
-        win.Closed += (_, _) =>
+            var win = new SettingsWindow(_settingsService!, EnsureHistoryService(), EnsureImageSearchIndexService());
+            Action hotkeyHandler = () => RegisterHotkeys();
+            Action uninstallHandler = BeginUninstall;
+            win.HotkeyChanged += hotkeyHandler;
+            win.UninstallRequested += uninstallHandler;
+            win.Closed += (_, _) =>
+            {
+                win.HotkeyChanged -= hotkeyHandler;
+                win.UninstallRequested -= uninstallHandler;
+                _settingsWindow = null;
+                ScheduleIdleMemoryTrim();
+            };
+            _settingsWindow = win;
+            win.Show();
+        }
+        catch (Exception ex)
         {
-            win.HotkeyChanged -= hotkeyHandler;
-            win.UninstallRequested -= uninstallHandler;
             _settingsWindow = null;
-            ScheduleIdleMemoryTrim();
-        };
-        _settingsWindow = win;
-        win.Show();
+            try { ToastWindow.ShowError("Settings failed to open", ex.Message); } catch { }
+        }
     }
 
     private void ShowHistory()

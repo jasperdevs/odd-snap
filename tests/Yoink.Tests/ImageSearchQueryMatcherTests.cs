@@ -95,6 +95,22 @@ public sealed class ImageSearchQueryMatcherTests
     }
 
     [Fact]
+    public void PrefixMatchesHitPartialTokens()
+    {
+        var partial = ImageSearchQueryMatcher.Score(
+            "broke",
+            "brokecli is visible in the screenshot",
+            "capture.png");
+
+        var unrelated = ImageSearchQueryMatcher.Score(
+            "broke",
+            "completely unrelated text",
+            "capture.png");
+
+        Assert.True(partial > unrelated);
+    }
+
+    [Fact]
     public void SemanticScoreRewardsAlignedVectors()
     {
         var relatedScore = ImageSearchQueryMatcher.SemanticScore(

@@ -80,7 +80,7 @@ public partial class SettingsWindow
     private void LoadSettings()
     {
         var s = _settingsService.Settings;
-        LoadOcrLanguageOptions(s.OcrLanguageTag);
+        try { LoadOcrLanguageOptions(s.OcrLanguageTag); } catch { }
 
         DefaultCaptureModeCombo.SelectedIndex = s.DefaultCaptureMode == Yoink.Models.CaptureMode.Freeform ? 1 : 0;
         AfterCaptureCombo.SelectedIndex = (int)s.AfterCapture;
@@ -131,7 +131,7 @@ public partial class SettingsWindow
         RecordingFpsCombo.SelectedIndex = s.RecordingFps switch { 15 => 0, 24 => 1, 30 => 2, 60 => 3, _ => 2 };
         RecordMicCheck.IsChecked = s.RecordMicrophone;
         RecordDesktopAudioCheck.IsChecked = s.RecordDesktopAudio;
-        PopulateAudioDevices();
+        try { PopulateAudioDevices(); } catch { }
 
         double dur = s.ToastDurationSeconds;
         int durIdx = dur switch { 1.5 => 0, 2.0 => 1, 2.5 => 2, 3.0 => 3, 4.0 => 4, 5.0 => 5, _ => 2 };
@@ -141,18 +141,20 @@ public partial class SettingsWindow
         AutoUploadScreenshotsCheck.IsChecked = s.AutoUploadScreenshots;
         AutoUploadGifsCheck.IsChecked = s.AutoUploadGifs;
         AutoUploadVideosCheck.IsChecked = s.AutoUploadVideos;
-        LoadUploadSettingsIntoUi(s.ImageUploadSettings);
-        LoadStickerSettingsIntoUi(s.StickerUploadSettings);
+        try { LoadUploadSettingsIntoUi(s.ImageUploadSettings); } catch { }
+        try { LoadStickerSettingsIntoUi(s.StickerUploadSettings); } catch { }
         UpdateUploadSettingsVisibility();
         UpdateUploadTabVisibility();
         VersionText.Text = $"Yoink {UpdateService.GetCurrentVersionLabel()}";
 
-        PopulateToolToggles();
-        UpdateCaptureFormatControls();
-        UpdateRecordingFormatVisibility();
+        try { PopulateToolToggles(); } catch { }
+        try { UpdateCaptureFormatControls(); } catch { }
+        try { UpdateRecordingFormatVisibility(); } catch { }
 
         if (HistoryTab.IsChecked == true)
-            LoadCurrentHistoryTab();
+        {
+            try { LoadCurrentHistoryTab(); } catch { }
+        }
     }
 
     internal static readonly (string id, string label, char icon)[] ExtraTools =

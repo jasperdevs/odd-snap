@@ -112,6 +112,10 @@ public static class ImageSearchQueryMatcher
             score += 700;
         if (ContainsTokenSequence(searchTokens, queryTokens))
             score += 650;
+        if (ContainsTokenPrefixSequence(fileTokens, queryTokens))
+            score += 600;
+        if (ContainsTokenPrefixSequence(searchTokens, queryTokens))
+            score += 560;
 
         if (exactMatch)
         {
@@ -127,13 +131,17 @@ public static class ImageSearchQueryMatcher
 
         foreach (var token in queryTokens)
         {
-            if (fileTokenSet.Contains(token)) score += 20;
-            if (searchTokenSet.Contains(token)) score += 12;
+            if (fileTokenSet.Contains(token) || fileTokens.Any(value => value.StartsWith(token, StringComparison.Ordinal)))
+                score += 20;
+            if (searchTokenSet.Contains(token) || searchTokens.Any(value => value.StartsWith(token, StringComparison.Ordinal)))
+                score += 12;
         }
 
         var matchedTokens = queryTokens.Count(token =>
             fileTokenSet.Contains(token) ||
-            searchTokenSet.Contains(token));
+            searchTokenSet.Contains(token) ||
+            fileTokens.Any(value => value.StartsWith(token, StringComparison.Ordinal)) ||
+            searchTokens.Any(value => value.StartsWith(token, StringComparison.Ordinal)));
         if (matchedTokens == queryTokens.Length)
             score += 50;
 
@@ -210,6 +218,30 @@ public static class ImageSearchQueryMatcher
             for (int j = 0; j < needle.Count; j++)
             {
                 if (!haystack[i + j].Equals(needle[j], StringComparison.Ordinal))
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsTokenPrefixSequence(IReadOnlyList<string> haystack, IReadOnlyList<string> needle)
+    {
+        if (needle.Count == 0 || haystack.Count < needle.Count)
+            return false;
+
+        for (int i = 0; i <= haystack.Count - needle.Count; i++)
+        {
+            bool match = true;
+            for (int j = 0; j < needle.Count; j++)
+            {
+                if (!haystack[i + j].StartsWith(needle[j], StringComparison.Ordinal))
                 {
                     match = false;
                     break;
@@ -967,7 +999,7 @@ public sealed class ImageSearchIndexService : IDisposable
         var tokens = normalizedQuery
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(token => token.Length > 0)
-            .Select(token => token.Replace("\"", "\"\""))
+            .Select(token => exactMatch ? token.Replace("\"", "\"\"") : $"{token.Replace("\"", "\"\"")}*")
             .ToArray();
 
         return tokens.Length == 0 ? escaped : string.Join(" AND ", tokens);
