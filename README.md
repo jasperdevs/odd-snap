@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Yoink: All-in-one open-source fast, clean ShareX alternative</strong>
+  <strong>Yoink: All-in-one open-source ShareX alternative</strong>
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@
 <img width="947" height="490" alt="image" src="assets/banner3333.png" />
 </p>
 
-Yoink is a free, open-source screenshot tool that stays out of the way until you need it. Capture part of the screen, mark it up, copy it, save it, drag it out, record it, or upload it without breaking your flow.
+Yoink is a free, open-source screenshot tool for capture, annotation, OCR, stickers, recording, and uploads.
 
 ## Download
 
@@ -58,7 +58,6 @@ winget upgrade --id JasperDevs.Yoink -e
 - OCR, color picking, QR/barcode scanning, stickers, and screen recording with GIF/MP4/WebM/MKV output
 - Drag-and-drop preview plus local history for images, text, colors, stickers, and recordings
 - Optional uploads for screenshots, stickers, and recordings to public hosts, cloud storage, or self-hosted targets
-- More to come (and more i didnt mention lol)
 
 ## Stickers
 
@@ -103,8 +102,6 @@ Yoink can search through your image history using filenames, OCR text, and seman
 | Annotation tools | `1-9`, `0`, `-`, `=`, `[`, `]`, `\` |
 
 Annotation tool hotkeys can be configured in settings, and hover tooltips reflect the real assigned key.
-
-Hotkeys can be changed in settings.
 
 ## Build from source
 
