@@ -38,8 +38,6 @@
 <img width="947" height="490" alt="image" src="assets/banner3333.png" />
 </p>
 
-Yoink is a free, open-source screenshot tool for capture, annotation, OCR, stickers, recording, and uploads.
-
 ## Download
 
 Grab the latest release from the [**Releases page**](https://github.com/jasperdevs/yoink/releases/latest).
