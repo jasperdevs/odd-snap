@@ -28,7 +28,7 @@
 
   <div class="page">
     <h1>Downloads</h1>
-    <p class="subtitle">All releases with Windows executables and source code.</p>
+    <p class="subtitle">Windows executables and source code from GitHub releases.</p>
     <div id="releases"><div class="loading">Loading releases...</div></div>
   </div>
 
@@ -44,18 +44,29 @@
         document.getElementById('starCount').textContent = s >= 1000 ? (s/1000).toFixed(1)+'k' : s;
       }).catch(() => {});
 
+    const WIN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="opacity:0.5"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>';
+
     function formatSize(b) {
-      if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
-      return (b / 1048576).toFixed(1) + ' MB';
+      if (b < 1048576) return (b/1024).toFixed(0) + ' KB';
+      return (b/1048576).toFixed(1) + ' MB';
     }
     function formatDate(s) {
-      return new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      return new Date(s).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
     }
-    function archLabel(name) {
-      if (name.includes('x64')) return 'x64';
-      if (name.includes('x86')) return 'x86';
-      if (name.includes('arm64')) return 'ARM64';
-      return '';
+
+    function detectArch() {
+      const ua = navigator.userAgent.toLowerCase();
+      if (ua.includes('arm') || ua.includes('aarch64')) return 'arm64';
+      if (ua.includes('wow64') || ua.includes('win64') || ua.includes('x86_64') || ua.includes('x64')) return 'x64';
+      return 'x64';
+    }
+
+    function assetInfo(a) {
+      const n = a.name.toLowerCase();
+      if (n.includes('arm64')) return { arch: 'arm64', label: 'Windows (ARM64)', ext: n.endsWith('.exe') ? 'exe' : 'zip' };
+      if (n.includes('x86') && !n.includes('x64')) return { arch: 'x86', label: 'Windows (x86)', ext: n.endsWith('.exe') ? 'exe' : 'zip' };
+      if (n.includes('x64')) return { arch: 'x64', label: 'Windows (x64)', ext: n.endsWith('.exe') ? 'exe' : 'zip' };
+      return { arch: '', label: a.name, ext: '' };
     }
 
     async function loadReleases() {
@@ -64,40 +75,43 @@
       const c = document.getElementById('releases');
       if (!releases.length) { c.innerHTML = '<p class="loading">No releases found.</p>'; return; }
 
+      const myArch = detectArch();
+
       c.innerHTML = releases.map((r, i) => {
         const exes = r.assets.filter(a => a.name.endsWith('.exe'));
-        const other = r.assets.filter(a => !a.name.endsWith('.exe'));
-        const hasOther = other.length > 0;
-        const id = 'extra-' + i;
+        const zips = r.assets.filter(a => a.name.endsWith('.zip'));
+        const moreId = 'more-' + i;
 
-        return `
-        <div class="release-card">
+        // Main rows: exe downloads
+        const mainRows = exes.map(a => {
+          const info = assetInfo(a);
+          const rec = info.arch === myArch;
+          return `<div class="dl-row">
+            <span class="dl-label">${WIN} ${info.label}${rec ? '<span class="rec">Recommended</span>' : ''} <span class="size">${formatSize(a.size)}</span></span>
+            <a href="${a.browser_download_url}" class="dl-btn">Download</a>
+          </div>`;
+        }).join('');
+
+        // Extra rows: zips + source
+        const extraRows = zips.map(a => {
+          const info = assetInfo(a);
+          return `<div class="dl-row">
+            <span class="dl-label">${WIN} ${info.label} (.zip) <span class="size">${formatSize(a.size)}</span></span>
+            <a href="${a.browser_download_url}" class="dl-btn">Download</a>
+          </div>`;
+        }).join('') + `<div class="dl-row">
+          <span class="dl-label">Source code (.zip)</span>
+          <a href="${r.zipball_url}" class="dl-btn">Download</a>
+        </div>`;
+
+        return `<div class="release-card">
           <div class="header">
-            <div>
-              <span class="tag">${r.tag_name}</span>
-              ${i === 0 ? '<span class="badge">Latest</span>' : ''}
-            </div>
+            <div><span class="tag">${r.tag_name}</span>${i === 0 ? '<span class="badge">Latest</span>' : ''}</div>
             <span class="date">${formatDate(r.published_at)}</span>
           </div>
-          <div class="assets">
-            ${exes.map(a => `
-              <a href="${a.browser_download_url}">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Windows ${archLabel(a.name)}
-                <span class="size">${formatSize(a.size)}</span>
-              </a>
-            `).join('')}
-            ${hasOther ? `<button class="show-more-btn" onclick="document.getElementById('${id}').style.display=this.style.display='none'?'':'flex'">More</button>` : ''}
-          </div>
-          ${hasOther ? `<div class="assets" id="${id}" style="display:none;margin-top:6px">
-            ${other.map(a => `
-              <a href="${a.browser_download_url}">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                ${a.name} <span class="size">${formatSize(a.size)}</span>
-              </a>
-            `).join('')}
-            <a href="${r.zipball_url}">Source (.zip)</a>
-          </div>` : ''}
+          ${mainRows}
+          <div id="${moreId}" style="display:none">${extraRows}</div>
+          <button class="show-more-btn" onclick="var e=document.getElementById('${moreId}');if(e.style.display==='none'){e.style.display='block';this.textContent='Show less'}else{e.style.display='none';this.textContent='Show more'}">Show more</button>
         </div>`;
       }).join('');
     }

@@ -187,7 +187,7 @@ nav .right a:hover { color: #fff; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
 }
 .release-card .tag { font-size: 16px; font-weight: 600; }
 .release-card .date { font-size: 12px; color: var(--text-muted); }
@@ -201,36 +201,54 @@ nav .right a:hover { color: #fff; }
   color: #4ade80;
   margin-left: 8px;
 }
-.release-card .assets { display: flex; flex-wrap: wrap; gap: 6px; }
-.release-card .assets a {
-  display: inline-flex;
+.dl-row {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 7px 12px;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.dl-row:first-child { border-top: none; }
+.dl-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.dl-label .icon { color: var(--text-muted); font-size: 16px; }
+.dl-label .size { font-size: 11px; color: var(--text-muted); margin-left: 4px; }
+.dl-label .rec {
+  font-size: 10px;
+  color: #4ade80;
+  background: #1a3a1a;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+}
+.dl-btn {
+  padding: 6px 16px;
   border-radius: 6px;
   font-size: 12.5px;
+  font-weight: 500;
   border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text-muted);
-  transition: all 0.15s;
-}
-.release-card .assets a:hover {
-  border-color: #444;
-  color: #fff;
-  background: var(--bg-hover);
-}
-.release-card .assets a .size { font-size: 10px; opacity: 0.5; }
-.show-more-btn {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 12px;
+  background: transparent;
+  color: var(--text);
   cursor: pointer;
   transition: all 0.15s;
+  text-decoration: none;
 }
-.show-more-btn:hover { border-color: #444; color: #fff; }
+.dl-btn:hover { border-color: #555; color: #fff; background: var(--bg-hover); }
+.show-more-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 10px 0 2px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.show-more-btn:hover { color: #fff; }
 
 /* Changelog */
 .changelog-entry {
