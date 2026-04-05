@@ -65,7 +65,7 @@ winget upgrade --id JasperDevs.Yoink -e
 
 Yoink can turn captures into stickers by removing the background, then saving, previewing, copying, and uploading them like normal images.
 
-<p align="center">
+<p align="left">
   <img src="assets/sticker-showcase.png" alt="Before and after sticker example" width="92%" />
 </p>
 
@@ -78,7 +78,7 @@ Yoink can turn captures into stickers by removing the background, then saving, p
 Yoink can extract text from any region of your screen and translate it instantly. OCR results open in a dedicated window where you can edit, copy, or translate the text.
 
 <p align="left">
-  <img src="assets/ocr-translate.png" alt="OCR result window with translation" width="60%" />
+  <img src="assets/yoink_20260404_235253.png" alt="OCR result window with translation" width="60%" />
 </p>
 
 - Extract text from screenshots with Tesseract OCR
