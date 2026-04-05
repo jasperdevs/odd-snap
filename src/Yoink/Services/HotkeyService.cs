@@ -37,6 +37,31 @@ public sealed class HotkeyService : IDisposable
     public event Action? ActiveWindowHotkeyPressed;
     public event Action? ScrollCaptureHotkeyPressed;
 
+    /// <summary>Force-unregister all hotkey IDs to clear any stale registrations from previous instances.</summary>
+    public void UnregisterAll()
+    {
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_CAPTURE);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_OCR);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_PICKER);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCAN);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_RULER);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_STICKER);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_GIF);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_FULLSCREEN);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_ACTIVE_WINDOW);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCROLL_CAPTURE);
+        _captureRegistered = false;
+        _ocrRegistered = false;
+        _pickerRegistered = false;
+        _scanRegistered = false;
+        _rulerRegistered = false;
+        _stickerRegistered = false;
+        _gifRegistered = false;
+        _fullscreenRegistered = false;
+        _activeWindowRegistered = false;
+        _scrollCaptureRegistered = false;
+    }
+
     public bool Register(uint modifiers, uint key)
     {
         ComponentDispatcher.ThreadPreprocessMessage += OnMsg;

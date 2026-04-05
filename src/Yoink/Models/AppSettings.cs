@@ -81,6 +81,7 @@ public sealed class AppSettings
     public uint OcrHotkeyModifiers { get; set; } = Native.User32.MOD_ALT | Native.User32.MOD_SHIFT;
     public uint OcrHotkeyKey { get; set; } = 0xC0;
     public string OcrLanguageTag { get; set; } = "auto";
+    public int OcrModelQuality { get; set; } // 0 = Fast (~1 MB), 1 = Standard (~4 MB)
     public string OcrDefaultTranslateFrom { get; set; } = "auto";
     public string OcrDefaultTranslateTo { get; set; } = "en";
     public string? GoogleTranslateApiKey { get; set; }
@@ -116,6 +117,7 @@ public sealed class AppSettings
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.ShowPreview;
     public bool SaveToFile { get; set; } = true;
     public bool AskForFileNameOnSave { get; set; }
+    public string FileNameTemplate { get; set; } = "yoink_{date}_{time}";
     public CaptureImageFormat CaptureImageFormat { get; set; } = CaptureImageFormat.Png;
     public int CaptureMaxLongEdge { get; set; }
     public string SaveDirectory { get; set; } = System.IO.Path.Combine(

@@ -97,17 +97,29 @@ public partial class SettingsWindow
     private string? FindHotkeyConflict(string excludeToolId, uint mod, uint key)
     {
         var s = _settingsService.Settings;
+        // Determine if the tool being edited is an annotation tool (Group 1) or capture/extra tool
+        bool isAnnotation = ToolDef.AllTools.Any(t => t.Id == excludeToolId && t.Group == 1);
+        bool isCapture = !isAnnotation;
+
+        // Only check conflicts within the same group — annotation tools and capture tools
+        // operate in different contexts (overlay vs global) and can share hotkeys.
         foreach (var t in ToolDef.AllTools)
         {
             if (t.Id == excludeToolId) continue;
+            bool sameGroup = isAnnotation ? t.Group == 1 : t.Group == 0;
+            if (!sameGroup) continue;
             var (m, k) = s.GetToolHotkey(t.Id);
             if (m == mod && k == key) return t.Label;
         }
-        foreach (var (id, label, _) in ExtraTools)
+        // ExtraTools are always capture-level (global hotkeys)
+        if (isCapture)
         {
-            if (id == excludeToolId) continue;
-            var (m, k) = s.GetToolHotkey(id);
-            if (m == mod && k == key) return label;
+            foreach (var (id, label, _) in ExtraTools)
+            {
+                if (id == excludeToolId) continue;
+                var (m, k) = s.GetToolHotkey(id);
+                if (m == mod && k == key) return label;
+            }
         }
         return null;
     }
@@ -115,17 +127,24 @@ public partial class SettingsWindow
     private void ClearConflictingHotkey(uint mod, uint key, string excludeId)
     {
         var s = _settingsService.Settings;
+        bool isAnnotation = ToolDef.AllTools.Any(t => t.Id == excludeId && t.Group == 1);
+
         foreach (var t in ToolDef.AllTools)
         {
             if (t.Id == excludeId) continue;
+            bool sameGroup = isAnnotation ? t.Group == 1 : t.Group == 0;
+            if (!sameGroup) continue;
             var (m, k) = s.GetToolHotkey(t.Id);
             if (m == mod && k == key) s.SetToolHotkey(t.Id, 0, 0);
         }
-        foreach (var (id, _, _) in ExtraTools)
+        if (!isAnnotation)
         {
-            if (id == excludeId) continue;
-            var (m, k) = s.GetToolHotkey(id);
-            if (m == mod && k == key) s.SetToolHotkey(id, 0, 0);
+            foreach (var (id, _, _) in ExtraTools)
+            {
+                if (id == excludeId) continue;
+                var (m, k) = s.GetToolHotkey(id);
+                if (m == mod && k == key) s.SetToolHotkey(id, 0, 0);
+            }
         }
         _settingsService.Save();
     }

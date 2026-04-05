@@ -9,7 +9,7 @@ namespace Yoink.Services;
 /// </summary>
 public static class TessdataService
 {
-    private const string TessdataBaseUrl = "https://github.com/tesseract-ocr/tessdata/raw/main/";
+    private const string TessdataBaseUrl = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/";
 
     /// <summary>All language packs available from tessdata with human-readable labels.</summary>
     public static readonly IReadOnlyList<(string Code, string Name)> AvailableLanguages = new[]
@@ -138,12 +138,22 @@ public static class TessdataService
 
     public static string GetTessdataDirectory()
     {
+        // Use persistent AppData location so downloads survive between launches
+        // (single-file apps extract to temp dirs that change each run)
+        var appData = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Yoink", "Tessdata");
+        if (Directory.Exists(appData)) return appData;
+
+        // Fall back to checking next to the exe (for dev builds)
         var baseDir = AppContext.BaseDirectory;
         var dir = Path.Combine(baseDir, "Tessdata");
         if (Directory.Exists(dir)) return dir;
         var lower = Path.Combine(baseDir, "tessdata");
         if (Directory.Exists(lower)) return lower;
-        return dir;
+
+        // Default to AppData for new downloads
+        return appData;
     }
 
     public static bool IsLanguageInstalled(string code)
@@ -152,17 +162,40 @@ public static class TessdataService
         return File.Exists(Path.Combine(dir, $"{code}.traineddata"));
     }
 
+    /// <summary>Returns true if at least one OCR language model is downloaded.</summary>
+    public static bool HasAnyLanguageInstalled()
+    {
+        var dir = GetTessdataDirectory();
+        if (!Directory.Exists(dir)) return false;
+        return Directory.EnumerateFiles(dir, "*.traineddata", SearchOption.TopDirectoryOnly).Any();
+    }
+
     public static async Task DownloadLanguageAsync(string code, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
+        // Release any Tesseract engine locks on traineddata files
+        OcrService.ClearEngines();
+        // Small delay to let file handles close
+        await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+
         var dir = GetTessdataDirectory();
         Directory.CreateDirectory(dir);
 
         var targetPath = Path.Combine(dir, $"{code}.traineddata");
+
+        // Clean up any stale temp files from previous failed downloads
+        foreach (var tmp in Directory.GetFiles(dir, "*.tmp"))
+        {
+            try { File.Delete(tmp); } catch { }
+        }
+
         if (File.Exists(targetPath))
+        {
+            progress?.Report($"{code} already installed");
             return;
+        }
 
         var url = $"{TessdataBaseUrl}{code}.traineddata";
-        progress?.Report($"Downloading {code}.traineddata...");
+        progress?.Report($"Downloading {code}...");
 
         using var http = new HttpClient();
         http.Timeout = TimeSpan.FromMinutes(5);
@@ -170,15 +203,17 @@ public static class TessdataService
         using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
-        var tempPath = targetPath + ".tmp";
+        var tempPath = Path.Combine(dir, $"{code}_{Guid.NewGuid():N}.tmp");
         try
         {
-            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var file = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
-            await stream.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
+            using (var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
+            using (var file = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await stream.CopyToAsync(file, cancellationToken).ConfigureAwait(false);
+            }
 
             File.Move(tempPath, targetPath, overwrite: true);
-            progress?.Report($"Installed {code}.traineddata");
+            progress?.Report($"Installed {code}");
         }
         catch
         {
@@ -187,11 +222,68 @@ public static class TessdataService
         }
     }
 
+    /// <summary>Returns Tesseract language codes matching the system's installed UI languages.</summary>
+    public static List<string> DetectSystemLanguages()
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Always include English
+        result.Add("eng");
+        seen.Add("eng");
+
+        // Map system culture to Tesseract codes
+        var cultures = new[]
+        {
+            System.Globalization.CultureInfo.CurrentUICulture,
+            System.Globalization.CultureInfo.CurrentCulture,
+            System.Globalization.CultureInfo.InstalledUICulture,
+        };
+
+        foreach (var culture in cultures)
+        {
+            if (culture == null) continue;
+            var iso = culture.TwoLetterISOLanguageName.ToLowerInvariant();
+            var iso3 = culture.ThreeLetterISOLanguageName.ToLowerInvariant();
+
+            // Try to match against available languages
+            foreach (var (code, _) in AvailableLanguages)
+            {
+                if (seen.Contains(code)) continue;
+                var codeLower = code.ToLowerInvariant();
+                if (codeLower == iso3 || codeLower == iso || codeLower.StartsWith(iso + "_"))
+                {
+                    result.Add(code);
+                    seen.Add(code);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Downloads OCR models for detected system languages if none are installed.</summary>
+    public static async Task EnsureSystemLanguagesAsync(IProgress<string>? progress = null)
+    {
+        if (HasAnyLanguageInstalled()) return;
+
+        var langs = DetectSystemLanguages();
+        foreach (var code in langs)
+        {
+            try
+            {
+                progress?.Report($"Setting up OCR: downloading {code}...");
+                await DownloadLanguageAsync(code, progress).ConfigureAwait(false);
+            }
+            catch { /* non-fatal — continue with other languages */ }
+        }
+
+        OcrService.GetAvailableRecognizerLanguages(refresh: true);
+    }
+
     public static bool RemoveLanguage(string code)
     {
-        if (code.Equals("eng", StringComparison.OrdinalIgnoreCase))
-            return false; // Don't remove English
-
+        OcrService.ClearEngines();
         var path = Path.Combine(GetTessdataDirectory(), $"{code}.traineddata");
         try
         {

@@ -81,7 +81,7 @@ public partial class SettingsWindow
     private void LoadSettings()
     {
         var s = _settingsService.Settings;
-        try { LoadOcrLanguageOptions(s.OcrLanguageTag); } catch { }
+        try { LoadOcrLanguageOptions(); } catch { }
 
         DefaultCaptureModeCombo.SelectedIndex = s.DefaultCaptureMode == Yoink.Models.CaptureMode.Freeform ? 1 : 0;
         AfterCaptureCombo.SelectedIndex = (int)s.AfterCapture;
@@ -122,6 +122,7 @@ public partial class SettingsWindow
         ShowCaptureMagnifierCheck.IsChecked = s.ShowCaptureMagnifier;
         ShowToolNumberBadgesCheck.IsChecked = s.ShowToolNumberBadges;
         AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
+        LoadFileNameTemplateCombo(s.FileNameTemplate);
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
         WindowDetectionCombo.SelectedIndex = (int)s.WindowDetection;
         ShowCursorCheck.IsChecked = s.ShowCursor;

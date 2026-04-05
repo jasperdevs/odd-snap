@@ -21,7 +21,7 @@ public partial class App
         string? requestedPath = null;
         if (settings.SaveToFile)
         {
-            var defaultPath = Path.Combine(settings.SaveDirectory, $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}");
+            var defaultPath = Path.Combine(settings.SaveDirectory, $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}.{ext}");
             if (settings.AskForFileNameOnSave)
             {
                 // SaveFileDialog must run on the WPF dispatcher thread
@@ -99,7 +99,7 @@ public partial class App
         string? requestedPath = null;
         if (settings.SaveToFile)
         {
-            var defaultStickerPath = Path.Combine(settings.SaveDirectory, $"yoink_sticker_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+            var defaultStickerPath = Path.Combine(settings.SaveDirectory, $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_sticker.png");
             requestedPath = settings.AskForFileNameOnSave
                 ? ResolveSavePath(defaultStickerPath, CaptureImageFormat.Png)
                 : defaultStickerPath;
@@ -213,14 +213,7 @@ public partial class App
         {
             try
             {
-                // Auto-download tessdata if needed
                 var langTag = _settingsService?.Settings.OcrLanguageTag;
-                if (!string.IsNullOrWhiteSpace(langTag) && langTag != "auto" && !Services.TessdataService.IsLanguageInstalled(langTag))
-                {
-                    ToastWindow.Show("OCR", $"Downloading {langTag}...");
-                    await Services.TessdataService.DownloadLanguageAsync(langTag);
-                }
-
                 string text = await OcrService.RecognizeAsync(result, langTag);
                 if (!string.IsNullOrWhiteSpace(text))
                 {

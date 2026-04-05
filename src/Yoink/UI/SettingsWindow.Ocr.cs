@@ -21,43 +21,54 @@ public partial class SettingsWindow
         if (_ocrTabLoaded) return;
         _ocrTabLoaded = true;
 
-        LoadOcrLanguageOptions(_settingsService.Settings.OcrLanguageTag);
+        LoadOcrLanguageOptions();
         LoadTranslateLanguageCombos();
         TranslateModelCombo.SelectedIndex = _settingsService.Settings.TranslationModel;
         GoogleApiKeyBox.Text = _settingsService.Settings.GoogleTranslateApiKey ?? "";
         _ = CheckModelStatusAsync();
     }
 
-    private void LoadOcrLanguageOptions(string? selectedTag)
+    private void LoadOcrLanguageOptions()
     {
         _ocrLanguageItems.Clear();
         OcrLanguageCombo.Items.Clear();
 
-        var autoItem = new ComboBoxItem { Content = "Auto (English)", Tag = "auto" };
+        // Auto at top — uses Windows system language
+        var autoItem = new ComboBoxItem { Content = "Auto (system language)", Tag = "auto" };
         _ocrLanguageItems.Add(autoItem);
         OcrLanguageCombo.Items.Add(autoItem);
 
-        // Show ALL available languages — installed ones get a checkmark
-        foreach (var (code, name) in TessdataService.AvailableLanguages)
+        // Show all installed Windows OCR languages
+        var languages = OcrService.GetAvailableRecognizerLanguages();
+        foreach (var tag in languages)
         {
-            var installed = TessdataService.IsLanguageInstalled(code);
-            var label = installed ? $"{name} ({code})" : $"{name} ({code})  ↓";
-            var item = new ComboBoxItem { Content = label, Tag = code };
-            _ocrLanguageItems.Add(item);
-            OcrLanguageCombo.Items.Add(item);
+            try
+            {
+                var lang = new Windows.Globalization.Language(tag);
+                var label = $"{lang.DisplayName} ({tag})";
+                var item = new ComboBoxItem { Content = label, Tag = tag };
+                _ocrLanguageItems.Add(item);
+                OcrLanguageCombo.Items.Add(item);
+            }
+            catch
+            {
+                var item = new ComboBoxItem { Content = tag, Tag = tag };
+                _ocrLanguageItems.Add(item);
+                OcrLanguageCombo.Items.Add(item);
+            }
         }
 
-        var targetTag = string.IsNullOrWhiteSpace(selectedTag) ? "auto" : selectedTag;
+        var targetTag = _settingsService.Settings.OcrLanguageTag ?? "auto";
         var selectedItem = OcrLanguageCombo.Items
             .OfType<ComboBoxItem>()
             .FirstOrDefault(item => string.Equals(item.Tag as string, targetTag, StringComparison.OrdinalIgnoreCase))
             ?? OcrLanguageCombo.Items.OfType<ComboBoxItem>().First();
 
         OcrLanguageCombo.SelectedItem = selectedItem;
-        OcrLanguageStatusText.Text = "";
+        OcrLanguageStatusText.Text = $"{languages.Count} language{(languages.Count == 1 ? "" : "s")} available from Windows";
     }
 
-    private async void OcrLanguageCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OcrLanguageCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
         if (OcrLanguageCombo.SelectedItem is not ComboBoxItem item) return;
@@ -65,49 +76,19 @@ public partial class SettingsWindow
         var code = item.Tag as string ?? "auto";
         _settingsService.Settings.OcrLanguageTag = code;
         _settingsService.Save();
-
-        // Auto-download if not installed
-        if (code != "auto" && !TessdataService.IsLanguageInstalled(code))
-        {
-            OcrLanguageCombo.IsEnabled = false;
-            OcrLanguageStatusText.Text = $"Downloading {code}...";
-
-            try
-            {
-                await TessdataService.DownloadLanguageAsync(code,
-                    new Progress<string>(s => OcrLanguageStatusText.Text = s));
-                OcrLanguageStatusText.Text = $"Ready";
-                // Refresh list to remove the ↓ marker
-                LoadOcrLanguageOptions(code);
-            }
-            catch (Exception ex)
-            {
-                OcrLanguageStatusText.Text = $"Download failed: {ex.Message}";
-            }
-            finally
-            {
-                OcrLanguageCombo.IsEnabled = true;
-            }
-        }
-        else
-        {
-            OcrLanguageStatusText.Text = "";
-        }
     }
 
     private static string GetLanguageLabel(string languageTag)
     {
-        foreach (var (code, name) in TessdataService.AvailableLanguages)
+        try
         {
-            if (code.Equals(languageTag, StringComparison.OrdinalIgnoreCase))
-                return $"{name} ({code})";
+            var lang = new Windows.Globalization.Language(languageTag);
+            return $"{lang.DisplayName} ({languageTag})";
         }
-
-        return languageTag.ToLowerInvariant() switch
+        catch
         {
-            "eng" => "English (eng)",
-            _ => languageTag
-        };
+            return languageTag;
+        }
     }
 
     private void LoadTranslateLanguageCombos()

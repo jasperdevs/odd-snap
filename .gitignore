@@ -41,3 +41,4 @@ src/Yoink/yoink_*.png
 
 ## Release zips
 *.zip
+.omx/

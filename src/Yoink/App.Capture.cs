@@ -35,7 +35,7 @@ public partial class App
                 string ext = fmt switch { RecordingFormat.MP4 => ".mp4", RecordingFormat.WebM => ".webm", RecordingFormat.MKV => ".mkv", _ => ".gif" };
                 string saveDir = fmt == RecordingFormat.GIF ? baseDir : Path.Combine(baseDir, "Videos");
                 Directory.CreateDirectory(saveDir);
-                string fileName = $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}{ext}";
+                string fileName = $"{Helpers.FileNameTemplate.Format(s.FileNameTemplate)}{ext}";
                 string savePath = Path.Combine(saveDir, fileName);
                 int maxH = s.RecordingQuality switch { RecordingQuality.P1080 => 1080, RecordingQuality.P720 => 720, RecordingQuality.P480 => 480, _ => 0 };
                 int fps = fmt == RecordingFormat.GIF ? s.GifFps : s.RecordingFps;

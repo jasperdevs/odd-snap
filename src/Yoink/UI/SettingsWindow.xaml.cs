@@ -317,6 +317,43 @@ public partial class SettingsWindow : Window
         _settingsService.Save();
     }
 
+    private void LoadFileNameTemplateCombo(string currentTemplate)
+    {
+        FileNameTemplateCombo.Items.Clear();
+        foreach (var preset in Helpers.FileNameTemplate.Presets)
+        {
+            var example = Helpers.FileNameTemplate.FormatExample(preset) + ".png";
+            var item = new System.Windows.Controls.ComboBoxItem { Content = example, Tag = preset };
+            FileNameTemplateCombo.Items.Add(item);
+        }
+
+        var match = FileNameTemplateCombo.Items.OfType<System.Windows.Controls.ComboBoxItem>()
+            .FirstOrDefault(i => (string)i.Tag == currentTemplate);
+        if (match != null)
+            FileNameTemplateCombo.SelectedItem = match;
+        else if (FileNameTemplateCombo.Items.Count > 0)
+            FileNameTemplateCombo.SelectedIndex = 0;
+
+        UpdateFileNamePreview();
+    }
+
+    private void FileNameTemplateCombo_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (FileNameTemplateCombo.SelectedItem is System.Windows.Controls.ComboBoxItem item && item.Tag is string tag)
+        {
+            _settingsService.Settings.FileNameTemplate = tag;
+            _settingsService.Save();
+            UpdateFileNamePreview();
+        }
+    }
+
+    private void UpdateFileNamePreview()
+    {
+        var template = _settingsService.Settings.FileNameTemplate;
+        FileNamePreviewText.Text = Helpers.FileNameTemplate.Format(template) + ".png";
+    }
+
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new System.Windows.Forms.FolderBrowserDialog

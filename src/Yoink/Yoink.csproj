@@ -12,7 +12,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>yoink.ico</ApplicationIcon>
-    <Version>0.8.1</Version>
+    <Version>0.8.2</Version>
     <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
     <Authors>jasperdevs</Authors>
     <Description>Screenshot, annotation, OCR, sticker, and recording tool for Windows</Description>
@@ -74,19 +74,12 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="SSH.NET" Version="2024.2.0" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10" />
-    <PackageReference Include="Tesseract" Version="5.2.0" />
     <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
     <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageReference Include="ZXing.Net" Version="0.16.10" />
     <PackageReference Include="ZXing.Net.Bindings.Windows.Compatibility" Version="0.16.10" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Tessdata\*.traineddata">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
 
   <Target Name="RemovePublishImportLibraries" AfterTargets="Publish">
     <ItemGroup>

@@ -13,6 +13,7 @@ public partial class App
     {
         _hotkeyService?.Dispose();
         _hotkeyService = new HotkeyService();
+        _hotkeyService.UnregisterAll();
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
         _hotkeyService.OcrHotkeyPressed += OnOcrHotkeyPressed;
         _hotkeyService.PickerHotkeyPressed += OnPickerHotkeyPressed;
@@ -27,29 +28,24 @@ public partial class App
         var s = _settingsService!.Settings;
         var failed = new List<string>();
 
-        if (!_hotkeyService.Register(s.HotkeyModifiers, s.HotkeyKey))
-            failed.Add("Capture");
-        if (!_hotkeyService.RegisterOcr(s.OcrHotkeyModifiers, s.OcrHotkeyKey))
-            failed.Add("OCR");
-        if (!_hotkeyService.RegisterPicker(s.PickerHotkeyModifiers, s.PickerHotkeyKey))
-            failed.Add("Color Picker");
-        if (!_hotkeyService.RegisterScan(s.ScanHotkeyModifiers, s.ScanHotkeyKey))
-            failed.Add("Scanner");
-        if (!_hotkeyService.RegisterSticker(s.StickerHotkeyModifiers, s.StickerHotkeyKey))
-            failed.Add("Sticker");
-        if (!_hotkeyService.RegisterRuler(s.RulerHotkeyModifiers, s.RulerHotkeyKey))
-            failed.Add("Ruler");
-        if (!_hotkeyService.RegisterGif(s.GifHotkeyModifiers, s.GifHotkeyKey))
-            failed.Add("GIF");
-        if (!_hotkeyService.RegisterFullscreen(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey))
-            failed.Add("Fullscreen");
-        if (!_hotkeyService.RegisterActiveWindow(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey))
-            failed.Add("Active Window");
-        if (!_hotkeyService.RegisterScrollCapture(s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey))
-            failed.Add("Scroll Capture");
+        void TryRegister(bool ok, string label, uint mod, uint key)
+        {
+            if (!ok) failed.Add($"{label} ({HotkeyFormatter.Format(mod, key)})");
+        }
+
+        TryRegister(_hotkeyService.Register(s.HotkeyModifiers, s.HotkeyKey), "Capture", s.HotkeyModifiers, s.HotkeyKey);
+        TryRegister(_hotkeyService.RegisterOcr(s.OcrHotkeyModifiers, s.OcrHotkeyKey), "OCR", s.OcrHotkeyModifiers, s.OcrHotkeyKey);
+        TryRegister(_hotkeyService.RegisterPicker(s.PickerHotkeyModifiers, s.PickerHotkeyKey), "Color Picker", s.PickerHotkeyModifiers, s.PickerHotkeyKey);
+        TryRegister(_hotkeyService.RegisterScan(s.ScanHotkeyModifiers, s.ScanHotkeyKey), "Scanner", s.ScanHotkeyModifiers, s.ScanHotkeyKey);
+        TryRegister(_hotkeyService.RegisterSticker(s.StickerHotkeyModifiers, s.StickerHotkeyKey), "Sticker", s.StickerHotkeyModifiers, s.StickerHotkeyKey);
+        TryRegister(_hotkeyService.RegisterRuler(s.RulerHotkeyModifiers, s.RulerHotkeyKey), "Ruler", s.RulerHotkeyModifiers, s.RulerHotkeyKey);
+        TryRegister(_hotkeyService.RegisterGif(s.GifHotkeyModifiers, s.GifHotkeyKey), "GIF", s.GifHotkeyModifiers, s.GifHotkeyKey);
+        TryRegister(_hotkeyService.RegisterFullscreen(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey), "Fullscreen", s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey);
+        TryRegister(_hotkeyService.RegisterActiveWindow(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey), "Active Window", s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey);
+        TryRegister(_hotkeyService.RegisterScrollCapture(s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey), "Scroll Capture", s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey);
 
         if (failed.Count > 0)
-            ToastWindow.ShowError("Hotkey conflicts", $"Could not register: {string.Join(", ", failed)}. Try different combos.");
+            ToastWindow.ShowError("Hotkey conflict", $"{string.Join(", ", failed)} — already in use by another app");
         else
         {
             var name = HotkeyFormatter.Format(s.HotkeyModifiers, s.HotkeyKey);
