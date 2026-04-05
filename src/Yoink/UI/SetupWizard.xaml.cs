@@ -114,26 +114,46 @@ public partial class SetupWizard : Window
             var (m, k) = _settingsService.Settings.GetToolHotkey(toolId);
             box.Text = HotkeyFormatter.Format(m, k);
         };
-        box.PreviewKeyDown += (_, e) =>
+        void HandleKey(Key rawKey, ModifierKeys modifiers)
         {
             if (!recording) return;
-            e.Handled = true;
-            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            var key = rawKey == Key.System ? Key.None : rawKey;
+            if (key == Key.None) return;
             if (key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
                 or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape)
                 return;
 
             uint mod = 0;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Windows)) mod |= Native.User32.MOD_WIN;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) mod |= Native.User32.MOD_ALT;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) mod |= Native.User32.MOD_CONTROL;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) mod |= Native.User32.MOD_SHIFT;
+            if (modifiers.HasFlag(ModifierKeys.Windows)) mod |= Native.User32.MOD_WIN;
+            if (modifiers.HasFlag(ModifierKeys.Alt)) mod |= Native.User32.MOD_ALT;
+            if (modifiers.HasFlag(ModifierKeys.Control)) mod |= Native.User32.MOD_CONTROL;
+            if (modifiers.HasFlag(ModifierKeys.Shift)) mod |= Native.User32.MOD_SHIFT;
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
+            if (vk == 0) return;
 
             _settingsService.Settings.SetToolHotkey(toolId, mod, vk);
             box.Text = HotkeyFormatter.Format(mod, vk);
             recording = false;
             Keyboard.ClearFocus();
+        }
+
+        box.PreviewKeyDown += (_, e) =>
+        {
+            if (!recording) return;
+            e.Handled = true;
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            HandleKey(key, Keyboard.Modifiers);
+        };
+        // PrintScreen and some special keys only arrive on KeyUp
+        box.PreviewKeyUp += (_, e) =>
+        {
+            if (!recording) return;
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (key is Key.Snapshot or Key.Pause or Key.Cancel)
+            {
+                e.Handled = true;
+                HandleKey(key, Keyboard.Modifiers);
+            }
         };
     }
 

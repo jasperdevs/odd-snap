@@ -28,15 +28,14 @@ public partial class SettingsWindow
             var (m, k) = _settingsService.Settings.GetToolHotkey(toolId);
             box.Text = HotkeyFormatter.Format(m, k);
         };
-        box.PreviewKeyDown += (_, e) =>
+        void AcceptKey(Key rawKey)
         {
             if (!_recordingFlags.GetValueOrDefault(box)) return;
-            e.Handled = true;
-            var key = e.Key == Key.System ? e.SystemKey : e.Key;
-            if (IsModifierOnly(key)) return;
+            if (IsModifierOnly(rawKey)) return;
 
             uint mod = GetModifiers();
-            uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
+            uint vk = (uint)KeyInterop.VirtualKeyFromKey(rawKey);
+            if (vk == 0) return;
 
             var conflict = FindHotkeyConflict(toolId, mod, vk);
             if (conflict != null)
@@ -65,6 +64,25 @@ public partial class SettingsWindow
             Keyboard.ClearFocus();
             HotkeyChanged?.Invoke();
             if (conflict != null) PopulateToolToggles();
+        }
+
+        box.PreviewKeyDown += (_, e) =>
+        {
+            if (!_recordingFlags.GetValueOrDefault(box)) return;
+            e.Handled = true;
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            AcceptKey(key);
+        };
+        // PrintScreen and some special keys only arrive on KeyUp
+        box.PreviewKeyUp += (_, e) =>
+        {
+            if (!_recordingFlags.GetValueOrDefault(box)) return;
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (key is Key.Snapshot or Key.Pause or Key.Cancel)
+            {
+                e.Handled = true;
+                AcceptKey(key);
+            }
         };
     }
 

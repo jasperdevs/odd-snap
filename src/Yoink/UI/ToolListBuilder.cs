@@ -188,12 +188,10 @@ public static class ToolListBuilder
             var (m, k) = svc.Settings.GetToolHotkey(toolId);
             box.Text = HotkeyFormatter.Format(m, k);
         };
-        box.PreviewKeyDown += (_, e) =>
+        void AcceptKey(Key rawKey)
         {
             if (!RecordingFlags.GetValueOrDefault(box)) return;
-            e.Handled = true;
-            var key = e.Key == Key.System ? e.SystemKey : e.Key;
-            if (key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
+            if (rawKey is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
                 or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape)
                 return;
 
@@ -202,7 +200,8 @@ public static class ToolListBuilder
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) mod |= Native.User32.MOD_ALT;
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) mod |= Native.User32.MOD_CONTROL;
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) mod |= Native.User32.MOD_SHIFT;
-            uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
+            uint vk = (uint)KeyInterop.VirtualKeyFromKey(rawKey);
+            if (vk == 0) return;
 
             svc.Settings.SetToolHotkey(toolId, mod, vk);
             svc.Save();
@@ -210,6 +209,24 @@ public static class ToolListBuilder
             RecordingFlags[box] = false;
             Keyboard.ClearFocus();
             hotkeyChanged?.Invoke();
+        }
+
+        box.PreviewKeyDown += (_, e) =>
+        {
+            if (!RecordingFlags.GetValueOrDefault(box)) return;
+            e.Handled = true;
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            AcceptKey(key);
+        };
+        box.PreviewKeyUp += (_, e) =>
+        {
+            if (!RecordingFlags.GetValueOrDefault(box)) return;
+            var key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (key is Key.Snapshot or Key.Pause or Key.Cancel)
+            {
+                e.Handled = true;
+                AcceptKey(key);
+            }
         };
     }
 }
