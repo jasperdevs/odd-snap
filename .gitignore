@@ -43,3 +43,4 @@ src/Yoink/yoink_*.png
 *.zip
 .omx/
 site/node_modules/
+*.tsbuildinfo

@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-<img width="947" height="490" alt="image" src="assets/yoink_20260405_002517.png" />
+<img width="947" height="490" alt="image" src="assets/screenshot-main.png" />
 </p>
 
 ## Download
@@ -78,7 +78,7 @@ Yoink can turn captures into stickers by removing the background, then saving, p
 Yoink can extract text from any region of your screen and translate it instantly. OCR results open in a dedicated window where you can edit, copy, or translate the text.
 
 <p align="left">
-  <img src="assets/yoink_20260404_235253.png" alt="OCR result window with translation" width="60%" />
+  <img src="assets/screenshot-ocr.png" alt="OCR result window with translation" width="60%" />
 </p>
 
 - Extract text from screenshots with Tesseract OCR
@@ -92,7 +92,7 @@ Search your image history by filename, OCR text, and semantic matching, so you c
 
 
 <p align="left">
-  <img src="assets/image.png" alt="Searching image history with OCR and semantic matching" width="60%" />
+  <img src="assets/screenshot-search.png" alt="Searching image history with OCR and semantic matching" width="60%" />
 </p>
 
 
@@ -138,6 +138,11 @@ dotnet publish src/Yoink/Yoink.csproj -c Release -r win-x64 --self-contained tru
 ```
 
 Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on building from source, reporting bugs, and submitting pull requests.
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=jasperdevs%2Fyoink&type=timeline&legend=top-left">
