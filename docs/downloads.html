@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Downloads — Yoink</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <div class="left">
+      <a href="./" class="logo">Yoink</a>
+      <div class="links">
+        <a href="./">Home</a>
+        <a href="downloads.html" class="active">Downloads</a>
+        <a href="changelog.html">Changelog</a>
+        <a href="donate.html">Donate</a>
+      </div>
+    </div>
+    <div class="right">
+      <a href="https://github.com/jasperdevs/yoink" target="_blank" title="GitHub">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+      </a>
+    </div>
+  </nav>
+
+  <div class="page">
+    <h1>Downloads</h1>
+    <p class="subtitle">All releases from GitHub. Pick the latest version for your platform.</p>
+    <div id="releases"><div class="loading">Loading releases...</div></div>
+  </div>
+
+  <footer>
+    <p>Yoink is open source under the GPL-3.0 license.</p>
+  </footer>
+
+  <script>
+    const REPO = 'jasperdevs/yoink';
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(0) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function formatDate(str) {
+      return new Date(str).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function labelForAsset(name) {
+      if (name.includes('win-x64')) return 'Windows x64';
+      if (name.includes('win-x86')) return 'Windows x86';
+      if (name.includes('win-arm64')) return 'Windows ARM64';
+      if (name.includes('Source')) return 'Source Code';
+      return name;
+    }
+
+    async function loadReleases() {
+      const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`);
+      const releases = await res.json();
+      const container = document.getElementById('releases');
+
+      if (!releases.length) {
+        container.innerHTML = '<p class="loading">No releases found.</p>';
+        return;
+      }
+
+      container.innerHTML = releases.map((r, i) => `
+        <div class="release-card">
+          <div class="header">
+            <div>
+              <span class="tag">${r.tag_name}</span>
+              ${i === 0 ? '<span class="badge">Latest</span>' : ''}
+            </div>
+            <span class="date">${formatDate(r.published_at)}</span>
+          </div>
+          <div class="assets">
+            ${r.assets.map(a => `
+              <a href="${a.browser_download_url}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                ${labelForAsset(a.name)}
+                <span class="size">${formatSize(a.size)}</span>
+              </a>
+            `).join('')}
+            <a href="${r.zipball_url}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Source (.zip)
+            </a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    loadReleases();
+  </script>
+</body>
+</html>

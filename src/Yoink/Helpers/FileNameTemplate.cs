@@ -17,7 +17,8 @@ public static class FileNameTemplate
             .Replace("{min}", now.ToString("mm"))
             .Replace("{sec}", now.ToString("ss"))
             .Replace("{w}", width > 0 ? width.ToString() : "")
-            .Replace("{h}", height > 0 ? height.ToString() : "");
+            .Replace("{h}", height > 0 ? height.ToString() : "")
+            .Replace("{rand}", Guid.NewGuid().ToString("N").Substring(0, 4));
 
         // Ensure all filenames start with yoink_
         if (!result.StartsWith("yoink", StringComparison.OrdinalIgnoreCase))
