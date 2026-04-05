@@ -13,10 +13,10 @@ public partial class SetupWizard : Window
 {
     private readonly SettingsService _settingsService;
     private int _page = 1;
+    private const int TotalPages = 4;
     private readonly Border[] _dots;
     private readonly Grid[] _pages;
 
-    // All capture tools + capture actions to show hotkey boxes for
     private static readonly (string id, string label, char icon)[] CaptureHotkeys =
     {
         ("rect",           "Screenshot",        '\uE257'),
@@ -33,11 +33,11 @@ public partial class SetupWizard : Window
         InitializeComponent();
         ApplyTheme();
 
-        _dots = new[] { Dot1, Dot2, Dot3 };
-        _pages = new[] { Page1, Page2, Page3 };
+        _dots = new[] { Dot1, Dot2, Dot3, Dot4 };
+        _pages = new[] { Page1, Page2, Page3, Page4 };
 
         BuildHotkeyRows();
-        LoadPreferenceDefaults();
+        LoadDefaults();
     }
 
     // ── Page 1: Hotkey rows ──────────────────────────────────────
@@ -45,7 +45,9 @@ public partial class SetupWizard : Window
     private void BuildHotkeyRows()
     {
         var segoe = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName);
-        var iconColor = Theme.IsDark ? System.Drawing.Color.FromArgb(160, 255, 255, 255) : System.Drawing.Color.FromArgb(170, 0, 0, 0);
+        var iconColor = Theme.IsDark
+            ? System.Drawing.Color.FromArgb(160, 255, 255, 255)
+            : System.Drawing.Color.FromArgb(170, 0, 0, 0);
         var s = _settingsService.Settings;
 
         foreach (var (id, label, icon) in CaptureHotkeys)
@@ -94,7 +96,6 @@ public partial class SetupWizard : Window
                 BorderThickness = new Thickness(1),
                 Cursor = System.Windows.Input.Cursors.Hand,
             };
-            // Apply rounded corner template
             var template = (ControlTemplate?)TryFindResource("WizHotkeyBoxTemplate");
             if (template != null) hkBox.Template = template;
             var (mod, key) = s.GetToolHotkey(id);
@@ -142,29 +143,39 @@ public partial class SetupWizard : Window
         };
     }
 
-    // ── Page 2: Preferences ──────────────────────────────────────
+    // ── Defaults ─────────────────────────────────────────────────
 
-    private void LoadPreferenceDefaults()
+    private void LoadDefaults()
     {
         var s = _settingsService.Settings;
+
+        // Page 2: Capture
         WizAfterCombo.SelectedIndex = (int)s.AfterCapture;
         WizCrosshairCheck.IsChecked = s.ShowCrosshairGuides;
         WizCaptureMagnifierCheck.IsChecked = s.ShowCaptureMagnifier;
         WizMuteCheck.IsChecked = s.MuteSounds;
-        WizAutoUpdateCheck.IsChecked = s.AutoCheckForUpdates;
+
+        // Page 3: Recording
+        WizRecordFormatCombo.SelectedIndex = (int)s.RecordingFormat;
+        WizRecordQualityCombo.SelectedIndex = (int)s.RecordingQuality;
+        // Select FPS combo by matching Tag
+        for (int i = 0; i < WizRecordFpsCombo.Items.Count; i++)
+        {
+            if (WizRecordFpsCombo.Items[i] is ComboBoxItem item && item.Tag is string tag && int.TryParse(tag, out int fps) && fps == s.RecordingFps)
+            { WizRecordFpsCombo.SelectedIndex = i; break; }
+        }
+        if (WizRecordFpsCombo.SelectedIndex < 0) WizRecordFpsCombo.SelectedIndex = 2; // default 30
+        WizRecordMicCheck.IsChecked = s.RecordMicrophone;
+        WizRecordDesktopAudioCheck.IsChecked = s.RecordDesktopAudio;
     }
 
     // ── Navigation ───────────────────────────────────────────────
 
     private void GoToPage(int page)
     {
-        // Save current page
         SaveCurrentPage();
-
-        var oldPage = _page - 1;
         _page = page;
 
-        // Fade out old page, fade in new page
         for (int i = 0; i < _pages.Length; i++)
         {
             if (i == page - 1)
@@ -179,13 +190,12 @@ public partial class SetupWizard : Window
                 _pages[i].Visibility = Visibility.Collapsed;
             }
 
-            // Animate dot opacity
             var dotTarget = i == page - 1 ? 0.7 : 0.2;
             _dots[i].BeginAnimation(OpacityProperty,
                 new DoubleAnimation(dotTarget, new Duration(TimeSpan.FromMilliseconds(200))));
         }
         BackBtn.Visibility = page > 1 ? Visibility.Visible : Visibility.Collapsed;
-        NextBtn.Content = page == 3 ? "Get Started" : "Next";
+        NextBtn.Content = page == TotalPages ? "Get Started" : "Next";
     }
 
     private void SaveCurrentPage()
@@ -201,10 +211,18 @@ public partial class SetupWizard : Window
                 s.ShowCrosshairGuides = WizCrosshairCheck.IsChecked == true;
                 s.ShowCaptureMagnifier = WizCaptureMagnifierCheck.IsChecked == true;
                 s.MuteSounds = WizMuteCheck.IsChecked == true;
-                s.AutoCheckForUpdates = WizAutoUpdateCheck.IsChecked == true;
                 _settingsService.Save();
                 break;
             case 3:
+                s.RecordingFormat = (RecordingFormat)WizRecordFormatCombo.SelectedIndex;
+                s.RecordingQuality = (RecordingQuality)WizRecordQualityCombo.SelectedIndex;
+                if (WizRecordFpsCombo.SelectedItem is ComboBoxItem fpsItem && fpsItem.Tag is string fpsTag && int.TryParse(fpsTag, out int fpsVal))
+                    s.RecordingFps = fpsVal;
+                s.RecordMicrophone = WizRecordMicCheck.IsChecked == true;
+                s.RecordDesktopAudio = WizRecordDesktopAudioCheck.IsChecked == true;
+                _settingsService.Save();
+                break;
+            case 4:
                 s.HasCompletedSetup = true;
                 _settingsService.Save();
                 break;
@@ -213,7 +231,7 @@ public partial class SetupWizard : Window
 
     private void Next_Click(object sender, RoutedEventArgs e)
     {
-        if (_page < 3)
+        if (_page < TotalPages)
             GoToPage(_page + 1);
         else
         {
@@ -260,11 +278,10 @@ public partial class SetupWizard : Window
 
     private void OpenSettings_Click(object sender, RoutedEventArgs e)
     {
-        // Save and close wizard, then the app will open settings
         SaveCurrentPage();
         _settingsService.Settings.HasCompletedSetup = true;
         _settingsService.Save();
-        Tag = "OpenSettings"; // signal to App.xaml.cs
+        Tag = "OpenSettings";
         DialogResult = true;
         Close();
     }

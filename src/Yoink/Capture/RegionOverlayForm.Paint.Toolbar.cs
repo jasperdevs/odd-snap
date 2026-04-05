@@ -91,13 +91,13 @@ public sealed partial class RegionOverlayForm
             // Active/hover circle highlight
             if (active)
             {
-                using var activeBrush = new SolidBrush(Color.FromArgb(32, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
-                g.FillEllipse(activeBrush, btn.X + 1f, btn.Y + 1f, btn.Width - 2f, btn.Height - 2f);
+                using var activeBrush = new SolidBrush(Color.FromArgb(18, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
+                g.FillEllipse(activeBrush, btn.X + 3f, btn.Y + 3f, btn.Width - 6f, btn.Height - 6f);
             }
             else if (hover)
             {
-                using var hoverBrush = new SolidBrush(UiChrome.SurfaceHover);
-                g.FillEllipse(hoverBrush, btn.X + 1f, btn.Y + 1f, btn.Width - 2f, btn.Height - 2f);
+                using var hoverBrush = new SolidBrush(Color.FromArgb(18, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
+                g.FillEllipse(hoverBrush, btn.X + 3f, btn.Y + 3f, btn.Width - 6f, btn.Height - 6f);
             }
 
             int ia = active ? 255 : hover ? 220 : i >= BtnCount - 1 ? 135 : 165;
@@ -126,13 +126,13 @@ public sealed partial class RegionOverlayForm
 
                 if (fActive)
                 {
-                    using var ab = new SolidBrush(Color.FromArgb(32, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
-                    g.FillEllipse(ab, fb.X + 2.5f, fb.Y + 2.5f, fb.Width - 5f, fb.Height - 5f);
+                    using var ab = new SolidBrush(Color.FromArgb(18, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
+                    g.FillEllipse(ab, fb.X + 4f, fb.Y + 4f, fb.Width - 8f, fb.Height - 8f);
                 }
                 else if (fHover)
                 {
-                    using var hb = new SolidBrush(UiChrome.SurfaceHover);
-                    g.FillEllipse(hb, fb.X + 2.5f, fb.Y + 2.5f, fb.Width - 5f, fb.Height - 5f);
+                    using var hb = new SolidBrush(Color.FromArgb(18, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
+                    g.FillEllipse(hb, fb.X + 4f, fb.Y + 4f, fb.Width - 8f, fb.Height - 8f);
                 }
 
                 int fia = fActive ? 255 : fHover ? 220 : 165;
