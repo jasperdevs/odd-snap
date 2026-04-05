@@ -8,11 +8,17 @@ function formatDate(iso: string): string {
   });
 }
 
-function renderMarkdown(body: string): string {
-  let html = body;
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-  // Escape HTML
-  html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function renderMarkdown(body: string): string {
+  let html = escapeHtml(body);
 
   // Headers: ### h3, ## h2, # h1
   html = html.replace(/^### (.+)$/gm, '<h4 class="text-sm font-semibold mt-4 mb-1">$1</h4>');
@@ -34,9 +40,9 @@ function renderMarkdown(body: string): string {
     (match) => `<ul class="space-y-1 my-2">${match}</ul>`
   );
 
-  // Links: [text](url)
+  // Links: [text](url) - only allow http/https URLs
   html = html.replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
+    /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
     '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">$1</a>'
   );
 
@@ -62,15 +68,37 @@ function renderMarkdown(body: string): string {
   return html;
 }
 
+function ChangelogSkeleton() {
+  return (
+    <div className="px-6 py-10 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Changelog</h1>
+        <p className="text-[#8a8a80] mt-2">Release notes for every version of Yoink.</p>
+      </div>
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="rounded-lg border border-[#2a2a28] bg-[#1a1a18] p-5 space-y-3 animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="h-5 w-16 bg-[#222220] rounded" />
+              <div className="h-4 w-24 bg-[#222220] rounded" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-3 w-full bg-[#222220] rounded" />
+              <div className="h-3 w-4/5 bg-[#222220] rounded" />
+              <div className="h-3 w-3/5 bg-[#222220] rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Changelog() {
   const { releases, loading } = useReleases();
 
   if (loading) {
-    return (
-      <div className="text-center py-20 text-[#8a8a80]">
-        Loading changelog...
-      </div>
-    );
+    return <ChangelogSkeleton />;
   }
 
   return (

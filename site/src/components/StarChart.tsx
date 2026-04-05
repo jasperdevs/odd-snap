@@ -5,6 +5,12 @@ interface StarData {
   stars: number;
 }
 
+interface CachedStarData {
+  timestamp: number;
+  data: StarData[];
+  total: number | null;
+}
+
 interface ChartLayout {
   padL: number;
   padR: number;
@@ -17,6 +23,28 @@ interface ChartLayout {
   niceMax: number;
 }
 
+const CACHE_KEY = "yoink-star-chart";
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function getCachedData(): CachedStarData | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const cached: CachedStarData = JSON.parse(raw);
+    if (Date.now() - cached.timestamp < CACHE_TTL && cached.data.length > 0) {
+      return cached;
+    }
+  } catch {}
+  return null;
+}
+
+function setCachedData(data: StarData[], total: number | null) {
+  try {
+    const cached: CachedStarData = { timestamp: Date.now(), data, total };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
+  } catch {}
+}
+
 export default function StarChart() {
   const [data, setData] = useState<StarData[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -25,6 +53,13 @@ export default function StarChart() {
   const layoutRef = useRef<ChartLayout | null>(null);
 
   useEffect(() => {
+    const cached = getCachedData();
+    if (cached) {
+      setData(cached.data);
+      setTotal(cached.total);
+      return;
+    }
+
     fetch("https://api.github.com/repos/jasperdevs/yoink")
       .then((r) => r.json())
       .then((d) => setTotal(d.stargazers_count))
@@ -84,6 +119,10 @@ export default function StarChart() {
       }
 
       setData(points);
+      setTotal((prev) => {
+        setCachedData(points, prev);
+        return prev;
+      });
     }
 
     fetchStarHistory();
@@ -133,15 +172,17 @@ export default function StarChart() {
       ctx.fillText(val.toString(), padL - 8, y + 3);
     }
 
-    // X labels
+    // X labels - use UTC to avoid timezone offset issues
     ctx.textAlign = "center";
     const xTicks = Math.min(6, data.length);
     for (let i = 0; i < xTicks; i++) {
       const idx = Math.round((i / (xTicks - 1)) * (data.length - 1));
       const x = padL + (idx / (data.length - 1)) * plotW;
-      const date = new Date(data[idx].date);
-      const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][date.getUTCMonth()];
-      const label = `${mo} ${date.getUTCDate()}`;
+      const parts = data[idx].date.split("-");
+      const moIdx = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][moIdx];
+      const label = `${mo} ${day}`;
       ctx.fillText(label, x, h - padB + 16);
     }
 
@@ -191,7 +232,6 @@ export default function StarChart() {
     if (hoverIdx !== undefined && hoverIdx >= 0 && hoverIdx < points.length) {
       const [hx, hy] = points[hoverIdx];
 
-      // Vertical line
       ctx.strokeStyle = "rgba(255,255,255,0.15)";
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
@@ -201,7 +241,6 @@ export default function StarChart() {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Dot
       ctx.beginPath();
       ctx.arc(hx, hy, 4, 0, Math.PI * 2);
       ctx.fillStyle = "#fff";
@@ -246,8 +285,16 @@ export default function StarChart() {
         : total.toString()
       : "...";
 
+  // Format tooltip date from the ISO date string directly to avoid timezone issues
   const tooltipDate = hover
-    ? new Date(hover.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    ? (() => {
+        const parts = hover.date.split("-");
+        const moIdx = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const year = parts[0];
+        const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][moIdx];
+        return `${mo} ${day}, ${year}`;
+      })()
     : "";
 
   return (

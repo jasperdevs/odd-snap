@@ -234,8 +234,33 @@ export default function Downloads() {
 
   if (loading) {
     return (
-      <div className="text-center py-20 text-[#8a8a80]">
-        Loading releases...
+      <div className="px-6 py-10 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Downloads</h1>
+          <p className="text-[#8a8a80] mt-2">Loading releases...</p>
+        </div>
+        <div className="space-y-4">
+          {[1, 2].map((i) => (
+            <div key={i} className="rounded-lg border border-[#2a2a28] bg-[#1a1a18] overflow-hidden animate-pulse">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-[#2a2a28]">
+                <div className="h-5 w-16 bg-[#222220] rounded" />
+                <div className="h-4 w-24 bg-[#222220] rounded ml-auto" />
+              </div>
+              <div className="px-5 py-3 flex items-center gap-4">
+                <div className="h-5 w-5 bg-[#222220] rounded" />
+                <div className="h-4 w-32 bg-[#222220] rounded" />
+                <div className="h-4 w-16 bg-[#222220] rounded ml-auto" />
+                <div className="h-8 w-24 bg-[#222220] rounded" />
+              </div>
+              <div className="px-5 py-3 flex items-center gap-4 border-t border-[#2a2a28]">
+                <div className="h-5 w-5 bg-[#222220] rounded" />
+                <div className="h-4 w-32 bg-[#222220] rounded" />
+                <div className="h-4 w-16 bg-[#222220] rounded ml-auto" />
+                <div className="h-8 w-24 bg-[#222220] rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
