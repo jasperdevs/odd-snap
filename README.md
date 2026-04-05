@@ -52,12 +52,14 @@ winget upgrade --id JasperDevs.Yoink -e
 ## Why Yoink
 
 - Region, fullscreen, active-window, and scrolling capture
-- Built-in annotation tools with stroke/shadow effects and configurable hotkeys
-- OCR with dedicated result window and built-in translation (Argos Translate offline, Google Translate API)
-- Auto-download OCR language packs for 100+ languages
-- Color picking, QR/barcode scanning, stickers, and screen recording
+- Built-in annotation tools (arrows, text, shapes, blur, freehand) with stroke/shadow effects
+- OCR text extraction with built-in translation (Argos Translate offline, Google Translate API)
+- Auto-download language packs for 100+ OCR languages
+- Color picking, QR/barcode scanning, ruler, and step numbering
+- Sticker creation with background removal
+- Screen recording (GIF, MP4, WebM, MKV) with microphone and desktop audio
 - Local history with image search using OCR and semantic matching
-- Optional uploads to public hosts, cloud storage, and self-hosted targets
+- Optional uploads to 15+ services including Imgur, S3, Dropbox, and self-hosted targets
 
 ## Stickers
 
@@ -70,6 +72,19 @@ Yoink can turn captures into stickers by removing the background, then saving, p
 - Cloud sticker providers: `remove.bg`, `Photoroom`
 - Local sticker models: `U2Netp`, `BRIA RMBG`
 - Optional sticker finishing: drop shadow and white stroke
+
+## OCR & Translate
+
+Yoink can extract text from any region of your screen and translate it instantly. OCR results open in a dedicated window where you can edit, copy, or translate the text.
+
+<p align="left">
+  <img src="assets/ocr-translate.png" alt="OCR result window with translation" width="60%" />
+</p>
+
+- Extract text from screenshots with Tesseract OCR
+- Auto-download language packs for 100+ languages
+- Translate with Argos Translate (offline) or Google Translate API
+- Dedicated result window with copy and translate buttons
 
 ## Search
 
