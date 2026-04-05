@@ -42,14 +42,16 @@ public static class FileNameTemplate
             .Replace("{day}", "05")
             .Replace("{hour}", "14")
             .Replace("{min}", "30")
-            .Replace("{sec}", "52");
+            .Replace("{sec}", "52")
+            .Replace("{w}", "1920")
+            .Replace("{h}", "1080")
+            .Replace("{rand}", "a3f1");
     }
 
     public static readonly string[] Presets =
     {
-        "yoink_{date}_{time}",
-        "yoink_{datetime}",
-        "yoink_{year}-{month}-{day}_{hour}-{min}-{sec}",
-        "yoink_{year}{month}{day}_{hour}{min}{sec}",
+        "yoink_{year}-{month}-{day}_{hour}-{min}_{rand}",
+        "yoink_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}",
+        "yoink_{year}.{month}.{day}_{hour}.{min}.{sec}_{rand}",
     };
 }

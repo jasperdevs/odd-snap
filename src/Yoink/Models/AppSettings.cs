@@ -117,7 +117,7 @@ public sealed class AppSettings
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.ShowPreview;
     public bool SaveToFile { get; set; } = true;
     public bool AskForFileNameOnSave { get; set; }
-    public string FileNameTemplate { get; set; } = "yoink_{date}_{time}";
+    public string FileNameTemplate { get; set; } = "yoink_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}";
     public CaptureImageFormat CaptureImageFormat { get; set; } = CaptureImageFormat.Png;
     public int CaptureMaxLongEdge { get; set; }
     public string SaveDirectory { get; set; } = System.IO.Path.Combine(
