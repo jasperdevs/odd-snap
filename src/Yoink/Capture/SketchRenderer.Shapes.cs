@@ -55,29 +55,24 @@ public static partial class SketchRenderer
 
         if (strokeShadow)
         {
-            // Shadow passes (matching text)
-            using var shadow1 = (GraphicsPath)path.Clone();
-            using var shadow2 = (GraphicsPath)path.Clone();
-            var m1 = new System.Drawing.Drawing2D.Matrix(); m1.Translate(2, 2);
-            var m2 = new System.Drawing.Drawing2D.Matrix(); m2.Translate(3, 3);
-            shadow1.Transform(m1);
-            shadow2.Transform(m2);
-            using var sb1 = new SolidBrush(AnnotShadow1);
-            using var sb2 = new SolidBrush(AnnotShadow2);
-            g.FillPath(sb1, shadow1);
-            g.FillPath(sb2, shadow2);
+            // Shadow passes — reuse a single cloned path and matrix
+            using var shadowPath = (GraphicsPath)path.Clone();
+            var m = new System.Drawing.Drawing2D.Matrix();
+            m.Translate(2, 2);
+            shadowPath.Transform(m);
+            g.FillPath(BrushShadow1, shadowPath);
+            m.Reset(); m.Translate(1, 1); // from (2,2) to (3,3)
+            shadowPath.Transform(m);
+            g.FillPath(BrushShadow2, shadowPath);
 
-            // Stroke passes (8 directions, matching text)
-            using var strokeBrush = new SolidBrush(AnnotStroke);
-            for (int ox = -1; ox <= 1; ox++)
-                for (int oy = -1; oy <= 1; oy++)
-                    if (ox != 0 || oy != 0)
-                    {
-                        using var sp = (GraphicsPath)path.Clone();
-                        var sm = new System.Drawing.Drawing2D.Matrix(); sm.Translate(ox, oy);
-                        sp.Transform(sm);
-                        g.FillPath(strokeBrush, sp);
-                    }
+            // Stroke passes (8 directions) — reuse one clone, translate incrementally
+            foreach (var (ox, oy) in StrokeOffsets)
+            {
+                using var sp = (GraphicsPath)path.Clone();
+                m.Reset(); m.Translate(ox, oy);
+                sp.Transform(m);
+                g.FillPath(BrushStroke, sp);
+            }
         }
 
         // Main pass
@@ -109,18 +104,16 @@ public static partial class SketchRenderer
         {
             using var s1Path = RoundedRect(new Rectangle(rect.X + 2, rect.Y + 2, rect.Width, rect.Height), 3);
             using var s2Path = RoundedRect(new Rectangle(rect.X + 3, rect.Y + 3, rect.Width, rect.Height), 3);
-            using var s1Pen = new Pen(AnnotShadow1, 3f) { LineJoin = LineJoin.Round };
-            using var s2Pen = new Pen(AnnotShadow2, 3f) { LineJoin = LineJoin.Round };
-            g.DrawPath(s1Pen, s1Path);
-            g.DrawPath(s2Pen, s2Path);
+            using var shadowPen1 = new Pen(AnnotShadow1, 3f) { LineJoin = LineJoin.Round };
+            using var shadowPen2 = new Pen(AnnotShadow2, 3f) { LineJoin = LineJoin.Round };
+            g.DrawPath(shadowPen1, s1Path);
+            g.DrawPath(shadowPen2, s2Path);
             using var strokePen = new Pen(AnnotStroke, 3f) { LineJoin = LineJoin.Round };
-            for (int ox = -1; ox <= 1; ox++)
-                for (int oy = -1; oy <= 1; oy++)
-                    if (ox != 0 || oy != 0)
-                    {
-                        using var sp = RoundedRect(new Rectangle(rect.X + ox, rect.Y + oy, rect.Width, rect.Height), 3);
-                        g.DrawPath(strokePen, sp);
-                    }
+            foreach (var (ox, oy) in StrokeOffsets)
+            {
+                using var sp = RoundedRect(new Rectangle(rect.X + ox, rect.Y + oy, rect.Width, rect.Height), 3);
+                g.DrawPath(strokePen, sp);
+            }
         }
 
         using var pen = new Pen(color, 3f) { LineJoin = LineJoin.Round };
@@ -135,15 +128,13 @@ public static partial class SketchRenderer
 
         if (strokeShadow)
         {
-            using var s1Pen = new Pen(AnnotShadow1, 3f);
-            using var s2Pen = new Pen(AnnotShadow2, 3f);
-            g.DrawEllipse(s1Pen, new Rectangle(rect.X + 2, rect.Y + 2, rect.Width, rect.Height));
-            g.DrawEllipse(s2Pen, new Rectangle(rect.X + 3, rect.Y + 3, rect.Width, rect.Height));
+            using var shadowPen1 = new Pen(AnnotShadow1, 3f);
+            using var shadowPen2 = new Pen(AnnotShadow2, 3f);
+            g.DrawEllipse(shadowPen1, new Rectangle(rect.X + 2, rect.Y + 2, rect.Width, rect.Height));
+            g.DrawEllipse(shadowPen2, new Rectangle(rect.X + 3, rect.Y + 3, rect.Width, rect.Height));
             using var strokePen = new Pen(AnnotStroke, 3f);
-            for (int ox = -1; ox <= 1; ox++)
-                for (int oy = -1; oy <= 1; oy++)
-                    if (ox != 0 || oy != 0)
-                        g.DrawEllipse(strokePen, new Rectangle(rect.X + ox, rect.Y + oy, rect.Width, rect.Height));
+            foreach (var (ox, oy) in StrokeOffsets)
+                g.DrawEllipse(strokePen, new Rectangle(rect.X + ox, rect.Y + oy, rect.Width, rect.Height));
         }
 
         using var pen = new Pen(color, 3f) { LineJoin = LineJoin.Round };

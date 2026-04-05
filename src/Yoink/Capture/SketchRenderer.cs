@@ -15,6 +15,32 @@ public static partial class SketchRenderer
     private static readonly Color AnnotShadow2 = Color.FromArgb(25, 0, 0, 0);
     private static readonly Color AnnotStroke = Color.FromArgb(60, 0, 0, 0);
 
+    // Cached GDI objects for stroke/shadow rendering — avoid per-frame allocations
+    private static readonly SolidBrush BrushShadow1 = new(AnnotShadow1);
+    private static readonly SolidBrush BrushShadow2 = new(AnnotShadow2);
+    private static readonly SolidBrush BrushStroke = new(AnnotStroke);
+
+    // Pre-computed 8-direction offsets for stroke outline
+    private static readonly (int dx, int dy)[] StrokeOffsets =
+    {
+        (-1, -1), (-1, 0), (-1, 1),
+        (0, -1),           (0, 1),
+        (1, -1),  (1, 0),  (1, 1)
+    };
+
+    // Reusable point buffer for offset calculations (avoids LINQ .Select().ToArray() per frame)
+    [ThreadStatic] private static Point[]? _offsetBuffer;
+
+    /// <summary>Offset points into a reusable buffer — avoids allocating a new array per shadow/stroke pass.</summary>
+    private static Point[] OffsetPointsInPlace(Point[] src, int ox, int oy)
+    {
+        if (_offsetBuffer == null || _offsetBuffer.Length < src.Length)
+            _offsetBuffer = new Point[src.Length];
+        for (int i = 0; i < src.Length; i++)
+            _offsetBuffer[i] = new Point(src[i].X + ox, src[i].Y + oy);
+        return _offsetBuffer;
+    }
+
     private static void DrawPenWithStrokeShadow(Graphics g, Pen mainPen, PointF from, PointF to)
     {
         // Shadow: two offset passes (matching text shadow)
@@ -66,22 +92,19 @@ public static partial class SketchRenderer
 
         if (strokeShadow)
         {
-            // Shadow passes
+            float ndx = dx / len, ndy = dy / len;
             using var s1 = new Pen(AnnotShadow1, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             g.DrawLine(s1, from.X + 2, from.Y + 2, to.X + 2, to.Y + 2);
-            DrawArrowhead(g, new PointF(to.X + 2, to.Y + 2), dx / len, dy / len, len, AnnotShadow1, thickness + 0.5f);
+            DrawArrowhead(g, new PointF(to.X + 2, to.Y + 2), ndx, ndy, len, AnnotShadow1, thickness + 0.5f);
             using var s2 = new Pen(AnnotShadow2, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             g.DrawLine(s2, from.X + 3, from.Y + 3, to.X + 3, to.Y + 3);
 
-            // Stroke passes (8 directions)
-            for (int ox = -1; ox <= 1; ox++)
-                for (int oy = -1; oy <= 1; oy++)
-                    if (ox != 0 || oy != 0)
-                    {
-                        using var sp = new Pen(AnnotStroke, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-                        g.DrawLine(sp, from.X + ox, from.Y + oy, to.X + ox, to.Y + oy);
-                        DrawArrowhead(g, new PointF(to.X + ox, to.Y + oy), dx / len, dy / len, len, AnnotStroke, thickness + 0.5f);
-                    }
+            using var sp = new Pen(AnnotStroke, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            foreach (var (ox, oy) in StrokeOffsets)
+            {
+                g.DrawLine(sp, from.X + ox, from.Y + oy, to.X + ox, to.Y + oy);
+                DrawArrowhead(g, new PointF(to.X + ox, to.Y + oy), ndx, ndy, len, AnnotStroke, thickness + 0.5f);
+            }
         }
 
         using var pen = new Pen(color, thickness)
@@ -142,33 +165,38 @@ public static partial class SketchRenderer
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        // Helper to draw the curve + arrowhead at a given offset with a given color
-        void DrawCurveAndHead(Point[] pts, PointF headTip, Color c, float thick)
+        // Helper to draw curve + arrowhead with a given pen
+        void DrawCurveAndHead(Point[] pts, int count, PointF headTip, Color c, Pen pen)
         {
-            using var pen = new Pen(c, thick)
-                { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
-            if (pts.Length >= 4)
-                g.DrawCurve(pen, pts, 0.5f);
+            if (count >= 4)
+                g.DrawCurve(pen, pts, 0, count - 1, 0.5f);
             else
-                g.DrawLines(pen, pts);
-            DrawArrowhead(g, headTip, nx, ny, len, c, thick + 0.5f);
+                g.DrawLines(pen, pts.AsSpan(0, count).ToArray());
+            DrawArrowhead(g, headTip, nx, ny, len, c, pen.Width + 0.5f);
         }
 
-        Point[] OffsetPts(Point[] src, int ox, int oy) =>
-            src.Select(p => new Point(p.X + ox, p.Y + oy)).ToArray();
+        int ptCount = shortenedPts.Length;
 
         if (strokeShadow)
         {
-            DrawCurveAndHead(OffsetPts(shortenedPts, 2, 2), new PointF(tip.X + 2, tip.Y + 2), AnnotShadow1, thickness);
-            DrawCurveAndHead(OffsetPts(shortenedPts, 3, 3), new PointF(tip.X + 3, tip.Y + 3), AnnotShadow2, thickness);
+            using var s1Pen = new Pen(AnnotShadow1, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
+            using var s2Pen = new Pen(AnnotShadow2, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
+            using var stPen = new Pen(AnnotStroke, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
 
-            for (int ox = -1; ox <= 1; ox++)
-                for (int oy = -1; oy <= 1; oy++)
-                    if (ox != 0 || oy != 0)
-                        DrawCurveAndHead(OffsetPts(shortenedPts, ox, oy), new PointF(tip.X + ox, tip.Y + oy), AnnotStroke, thickness);
+            var buf = OffsetPointsInPlace(shortenedPts, 2, 2);
+            DrawCurveAndHead(buf, ptCount, new PointF(tip.X + 2, tip.Y + 2), AnnotShadow1, s1Pen);
+            buf = OffsetPointsInPlace(shortenedPts, 3, 3);
+            DrawCurveAndHead(buf, ptCount, new PointF(tip.X + 3, tip.Y + 3), AnnotShadow2, s2Pen);
+
+            foreach (var (ox, oy) in StrokeOffsets)
+            {
+                buf = OffsetPointsInPlace(shortenedPts, ox, oy);
+                DrawCurveAndHead(buf, ptCount, new PointF(tip.X + ox, tip.Y + oy), AnnotStroke, stPen);
+            }
         }
 
-        DrawCurveAndHead(shortenedPts, new PointF(tip.X, tip.Y), color, thickness);
+        using var mainPen = new Pen(color, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
+        DrawCurveAndHead(shortenedPts, ptCount, new PointF(tip.X, tip.Y), color, mainPen);
 
         g.SmoothingMode = SmoothingMode.Default;
     }
