@@ -6,18 +6,59 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
-      - name: Publish release to WinGet
-        uses: vedantmgoyal9/winget-releaser@v2
-        with:
-          identifier: JasperDevs.Yoink
-          installers-regex: '\.zip$'
-          fork-user: ${{ github.repository_owner }}
-          token: ${{ secrets.WINGET_TOKEN }}
-          release-notes-url: ${{ github.event.release.html_url }}
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get release info
+        id: release
+        shell: pwsh
+        run: |
+          [xml]$csproj = Get-Content src/Yoink/Yoink.csproj -Raw
+          $version = ($csproj.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding utf8
+
+          $tag = "${{ github.event.release.tag_name }}"
+          $baseUrl = "https://github.com/${{ github.repository }}/releases/download/$tag"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "base_url=$baseUrl" -Encoding utf8
+
+      - name: Download release zips
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          $baseUrl = "https://github.com/${{ github.repository }}/releases/download/$tag"
+          foreach ($rid in @('win-x64', 'win-x86', 'win-arm64')) {
+            $url = "$baseUrl/Yoink-$rid.zip"
+            $out = "Yoink-$rid.zip"
+            Write-Host "Downloading $url"
+            Invoke-WebRequest -Uri $url -OutFile $out -MaximumRedirection 10
+          }
+
+      - name: Generate manifests and submit
+        shell: pwsh
+        run: |
+          $version = "${{ steps.release.outputs.version }}"
+          $baseUrl = "${{ steps.release.outputs.base_url }}"
+
+          $x64Hash = (Get-FileHash -Algorithm SHA256 'Yoink-win-x64.zip').Hash.ToUpperInvariant()
+          $x86Hash = (Get-FileHash -Algorithm SHA256 'Yoink-win-x86.zip').Hash.ToUpperInvariant()
+          $arm64Hash = (Get-FileHash -Algorithm SHA256 'Yoink-win-arm64.zip').Hash.ToUpperInvariant()
+
+          & scripts/winget/New-WingetManifests.ps1 `
+            -PackageVersion $version `
+            -OutputDirectory manifests `
+            -X64InstallerUrl "$baseUrl/Yoink-win-x64.zip" `
+            -X64InstallerSha256 $x64Hash `
+            -X86InstallerUrl "$baseUrl/Yoink-win-x86.zip" `
+            -X86InstallerSha256 $x86Hash `
+            -Arm64InstallerUrl "$baseUrl/Yoink-win-arm64.zip" `
+            -Arm64InstallerSha256 $arm64Hash
+
+          & scripts/winget/Submit-WingetSubmission.ps1 `
+            -ManifestDirectory (Join-Path $PWD "manifests/$version") `
+            -GitHubToken ${{ secrets.WINGET_TOKEN }}

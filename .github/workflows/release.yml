@@ -104,11 +104,11 @@ jobs:
             -PackageVersion $version `
             -OutputDirectory (Join-Path $PWD 'dist\winget-manifests') `
             -X64InstallerUrl "$baseUrl/Yoink-win-x64.zip" `
-            -X64InstallerSha256 ((Get-FileHash -Algorithm SHA256 $x64Zip).Hash.ToLowerInvariant()) `
+            -X64InstallerSha256 ((Get-FileHash -Algorithm SHA256 $x64Zip).Hash.ToUpperInvariant()) `
             -X86InstallerUrl "$baseUrl/Yoink-win-x86.zip" `
-            -X86InstallerSha256 ((Get-FileHash -Algorithm SHA256 $x86Zip).Hash.ToLowerInvariant()) `
+            -X86InstallerSha256 ((Get-FileHash -Algorithm SHA256 $x86Zip).Hash.ToUpperInvariant()) `
             -Arm64InstallerUrl "$baseUrl/Yoink-win-arm64.zip" `
-            -Arm64InstallerSha256 ((Get-FileHash -Algorithm SHA256 $arm64Zip).Hash.ToLowerInvariant())
+            -Arm64InstallerSha256 ((Get-FileHash -Algorithm SHA256 $arm64Zip).Hash.ToUpperInvariant())
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

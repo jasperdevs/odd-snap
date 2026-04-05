@@ -139,10 +139,6 @@ dotnet publish src/Yoink/Yoink.csproj -c Release -r win-x64 --self-contained tru
 
 Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on building from source, reporting bugs, and submitting pull requests.
-
 ## Star History
 
 <a href="https://www.star-history.com/?repos=jasperdevs%2Fyoink&type=timeline&legend=top-left">
