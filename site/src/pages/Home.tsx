@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import { useStarCount } from "../hooks/useStarCount";
 import { useState } from "react";
+import StarChart from "../components/StarChart";
 
 const features = [
   { name: "Region capture", desc: "Rectangle, freeform, fullscreen, active window, and scrolling capture" },
@@ -41,7 +41,6 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 }
 
 export default function Home() {
-  const stars = useStarCount();
   const base = import.meta.env.BASE_URL;
 
   return (
@@ -143,19 +142,9 @@ export default function Home() {
       <section className="border-t border-zinc-800 py-14 px-6">
         <h2 className="text-base font-bold mb-3">Open source</h2>
         <p className="text-sm text-zinc-500 mb-6">
-          Free and open source with{" "}
-          <span className="text-zinc-200 font-medium">
-            {stars !== null ? stars.toLocaleString() : "..."}
-          </span>{" "}
-          GitHub stars. Licensed under GPL-3.0.
+          Free and open source, licensed under GPL-3.0.
         </p>
-        <div className="rounded-lg border border-zinc-800 overflow-hidden">
-          <img
-            src="https://api.star-history.com/image?repos=jasperdevs/yoink&type=timeline&theme=dark&legend=top-left"
-            alt="Star History Chart"
-            className="w-full"
-          />
-        </div>
+        <StarChart />
       </section>
 
       {/* FAQ */}
