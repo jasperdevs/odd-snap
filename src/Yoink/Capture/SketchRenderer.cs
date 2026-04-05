@@ -136,7 +136,7 @@ public static class SketchRenderer
         float len = MathF.Sqrt(dx * dx + dy * dy);
         if (len < 2) return;
 
-        const float thickness = 2.5f;
+        const float thickness = 3f;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -158,7 +158,7 @@ public static class SketchRenderer
         float len = MathF.Sqrt(dx * dx + dy * dy);
         if (len < 3) return;
 
-        const float thickness = 2.5f;
+        const float thickness = 3.5f;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -208,7 +208,7 @@ public static class SketchRenderer
         }
         if (len < 3) return;
 
-        const float thickness = 2.5f;
+        const float thickness = 3.5f;
 
         // Calculate arrowhead size first — we need it to find the right direction distance
         float headSize = Math.Clamp(12f + len / 15f, 12f, 28f);
@@ -396,11 +396,11 @@ public static class SketchRenderer
         {
             using var s1Path = RoundedRect(new Rectangle(rect.X + 2, rect.Y + 2, rect.Width, rect.Height), 3);
             using var s2Path = RoundedRect(new Rectangle(rect.X + 3, rect.Y + 3, rect.Width, rect.Height), 3);
-            using var s1Pen = new Pen(AnnotShadow1, 2.2f) { LineJoin = LineJoin.Round };
-            using var s2Pen = new Pen(AnnotShadow2, 2.2f) { LineJoin = LineJoin.Round };
+            using var s1Pen = new Pen(AnnotShadow1, 3f) { LineJoin = LineJoin.Round };
+            using var s2Pen = new Pen(AnnotShadow2, 3f) { LineJoin = LineJoin.Round };
             g.DrawPath(s1Pen, s1Path);
             g.DrawPath(s2Pen, s2Path);
-            using var strokePen = new Pen(AnnotStroke, 2.2f) { LineJoin = LineJoin.Round };
+            using var strokePen = new Pen(AnnotStroke, 3f) { LineJoin = LineJoin.Round };
             for (int ox = -1; ox <= 1; ox++)
                 for (int oy = -1; oy <= 1; oy++)
                     if (ox != 0 || oy != 0)
@@ -410,7 +410,7 @@ public static class SketchRenderer
                     }
         }
 
-        using var pen = new Pen(color, 2.2f) { LineJoin = LineJoin.Round };
+        using var pen = new Pen(color, 3f) { LineJoin = LineJoin.Round };
         g.DrawPath(pen, path);
         g.SmoothingMode = SmoothingMode.Default;
     }
@@ -422,18 +422,18 @@ public static class SketchRenderer
 
         if (strokeShadow)
         {
-            using var s1Pen = new Pen(AnnotShadow1, 2.2f);
-            using var s2Pen = new Pen(AnnotShadow2, 2.2f);
+            using var s1Pen = new Pen(AnnotShadow1, 3f);
+            using var s2Pen = new Pen(AnnotShadow2, 3f);
             g.DrawEllipse(s1Pen, new Rectangle(rect.X + 2, rect.Y + 2, rect.Width, rect.Height));
             g.DrawEllipse(s2Pen, new Rectangle(rect.X + 3, rect.Y + 3, rect.Width, rect.Height));
-            using var strokePen = new Pen(AnnotStroke, 2.2f);
+            using var strokePen = new Pen(AnnotStroke, 3f);
             for (int ox = -1; ox <= 1; ox++)
                 for (int oy = -1; oy <= 1; oy++)
                     if (ox != 0 || oy != 0)
                         g.DrawEllipse(strokePen, new Rectangle(rect.X + ox, rect.Y + oy, rect.Width, rect.Height));
         }
 
-        using var pen = new Pen(color, 2.2f) { LineJoin = LineJoin.Round };
+        using var pen = new Pen(color, 3f) { LineJoin = LineJoin.Round };
         g.DrawEllipse(pen, rect);
         g.SmoothingMode = SmoothingMode.Default;
     }

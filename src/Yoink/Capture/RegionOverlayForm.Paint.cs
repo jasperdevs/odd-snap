@@ -32,6 +32,7 @@ public sealed partial class RegionOverlayForm
         var g = e.Graphics;
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
         g.PixelOffsetMode = PixelOffsetMode.None;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         g.SmoothingMode = SmoothingMode.None;
 
         // Blit the cached screenshot + committed annotations layer.
@@ -557,11 +558,13 @@ public sealed partial class RegionOverlayForm
         using var borderPen = new Pen(UiChrome.SurfaceTextPrimary, 2f);
         g.DrawEllipse(borderPen, pos.X - radius, pos.Y - radius, radius * 2, radius * 2);
         // Number
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         var font = UiChrome.ChromeFont(12f, FontStyle.Bold);
         string text = num.ToString();
         var sz = g.MeasureString(text, font);
         using var textBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
         g.DrawString(text, font, textBrush, pos.X - sz.Width / 2, pos.Y - sz.Height / 2);
+        g.TextRenderingHint = TextRenderingHint.SystemDefault;
         g.SmoothingMode = SmoothingMode.Default;
     }
 
@@ -715,7 +718,9 @@ public sealed partial class RegionOverlayForm
                 _fontCache[name] = font;
             }
             using var brush = new SolidBrush(Color.FromArgb(active ? 255 : 180, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
             g.DrawString(name, font, brush, px + pad + 6, iy + 4);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
         }
 
         // Scroll indicator
@@ -1366,30 +1371,49 @@ public sealed partial class RegionOverlayForm
         float dist = MathF.Sqrt(dx * dx + dy * dy);
         float angle = MathF.Atan2(dy, dx) * 180f / MathF.PI;
 
-        using var shadowPen = new Pen(UiChrome.SurfaceShadow, 4f)
-        { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        using var pen = new Pen(UiChrome.SurfaceTextPrimary, 2f)
-        { StartCap = LineCap.Round, EndCap = LineCap.Round };
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.DrawLine(shadowPen, from.X + 1, from.Y + 1, to.X + 1, to.Y + 1);
-        g.DrawLine(pen, from, to);
-        using var dotBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
-        g.FillEllipse(dotBrush, from.X - 3, from.Y - 3, 6, 6);
-        g.FillEllipse(dotBrush, to.X - 3, to.Y - 3, 6, 6);
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
-        string text = $"{(int)dist}px   {Math.Abs(dx):0}px x {Math.Abs(dy):0}px   {angle:0.#} deg";
-        var font = UiChrome.ChromeFont(10f);
+        // Perpendicular direction for tick marks
+        float nx = 0, ny = 0;
+        if (dist > 1) { nx = -dy / dist; ny = dx / dist; }
+        const float tickHalf = 6f;
+
+        // Shadow line
+        using var shadowPen = new Pen(Color.FromArgb(70, 0, 0, 0), 3f)
+            { StartCap = LineCap.Flat, EndCap = LineCap.Flat };
+        g.DrawLine(shadowPen, from.X + 1, from.Y + 1, to.X + 1, to.Y + 1);
+
+        // Main line
+        using var pen = new Pen(UiChrome.SurfaceTextPrimary, 1.8f)
+            { StartCap = LineCap.Flat, EndCap = LineCap.Flat };
+        g.DrawLine(pen, from, to);
+
+        // Tick marks at each end (perpendicular to the line)
+        using var tickPen = new Pen(UiChrome.SurfaceTextPrimary, 1.8f)
+            { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        g.DrawLine(tickPen, from.X - nx * tickHalf, from.Y - ny * tickHalf,
+                            from.X + nx * tickHalf, from.Y + ny * tickHalf);
+        g.DrawLine(tickPen, to.X - nx * tickHalf, to.Y - ny * tickHalf,
+                            to.X + nx * tickHalf, to.Y + ny * tickHalf);
+
+        // Label
+        string text = $"{(int)dist}px  ·  {Math.Abs(dx):0} × {Math.Abs(dy):0}  ·  {angle:0.0}°";
+        var font = UiChrome.ChromeFont(9.5f);
         var sz = g.MeasureString(text, font);
         var mid = new PointF((from.X + to.X) / 2f, (from.Y + to.Y) / 2f);
-        var label = new RectangleF(mid.X - sz.Width / 2f - 8, mid.Y - sz.Height - 16, sz.Width + 16, sz.Height + 8);
+        var label = new RectangleF(mid.X - sz.Width / 2f - 10, mid.Y - sz.Height - 14, sz.Width + 20, sz.Height + 10);
         PaintShadow(g, label, 8f, 48, 1f);
         using var path = RRect(label, 8f);
         using var bg = new SolidBrush(UiChrome.SurfacePill);
         using var border = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
-        using var fg = new SolidBrush(UiChrome.SurfaceTextPrimary);
         g.FillPath(bg, path);
         g.DrawPath(border, path);
-        g.DrawString(text, font, fg, label.X + 8, label.Y + 4);
+
+        using var fg = new SolidBrush(UiChrome.SurfaceTextPrimary);
+        g.DrawString(text, font, fg, label.X + 10, label.Y + 5);
+
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
         g.SmoothingMode = SmoothingMode.Default;
     }
 
