@@ -51,7 +51,7 @@ export default function Home() {
     <div className="text-[13px]">
       {/* Hero */}
       <section className="text-center py-20 px-6">
-        <img src={base + "banner.svg"} alt="Yoink" className="w-40 mx-auto mb-8 opacity-70" />
+        <img src={base + "banner.svg"} alt="Yoink" className="w-64 mx-auto mb-8 opacity-70" />
         <h1 className="text-3xl font-bold tracking-tight mb-4">Yoink</h1>
         <p className="text-zinc-500 max-w-sm mx-auto leading-relaxed mb-8">
           Capture, annotate, OCR, translate, make stickers, record video, and upload. All in one open-source tool for Windows.
@@ -130,7 +130,7 @@ export default function Home() {
           [&#x2605;] Search your image history by filename, OCR text, and semantic matching, so you can find screenshots by what they say or by what they show.
         </p>
         <div className="rounded-lg border border-zinc-800 overflow-hidden">
-          <img src={base + "search-screenshot.png"} alt="Search history" className="w-full" />
+          <img src={base + "search-screenshot.png"} alt="Search history" className="w-full" style={{ marginBottom: "-20%", clipPath: "inset(0 0 20% 0)" }} />
         </div>
       </section>
 
