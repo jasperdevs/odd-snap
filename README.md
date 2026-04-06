@@ -145,6 +145,6 @@ Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&theme=dark&legend=top-left&v=2" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&v=2" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&v=2" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&v=3" />
   </picture>
 </a>
