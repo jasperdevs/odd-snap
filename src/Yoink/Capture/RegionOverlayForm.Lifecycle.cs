@@ -3,6 +3,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Yoink.Helpers;
 using Yoink.Models;
@@ -11,6 +12,16 @@ namespace Yoink.Capture;
 
 public sealed partial class RegionOverlayForm
 {
+    public static void CloseTransientUi()
+    {
+        var current = _currentOverlay;
+        if (current is null)
+            return;
+
+        try { current.CloseMagWindow(); } catch { }
+        try { current.CloseCaptureMagnifier(); } catch { }
+    }
+
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
@@ -19,20 +30,52 @@ public sealed partial class RegionOverlayForm
         Native.User32.SetWindowPos(Handle, Native.User32.HWND_TOPMOST,
             0, 0, 0, 0,
             Native.User32.SWP_NOMOVE | Native.User32.SWP_NOSIZE | Native.User32.SWP_SHOWWINDOW);
-        Native.User32.SetForegroundWindow(Handle);
-
-        _toolbarForm = new ToolbarForm(this);
-        PositionToolbarForm();
-        var _ = _toolbarForm.Handle;
-        WindowDetector.RegisterIgnoredWindow(_toolbarForm.Handle);
-        _toolbarForm.UpdateSurface();
-        _toolbarForm.Show(this);
+        Activate();
         Focus();
+        EnsureToolbarReady();
+        Invalidate();
+        Update();
+
+        WindowDetector.ClearSnapshot();
+        if (_windowDetectionMode != WindowDetectionMode.Off)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(220).ConfigureAwait(false);
+                    if (IsDisposed || Disposing || !Visible)
+                        return;
+
+                    WindowDetector.SnapshotWindows(_virtualBounds);
+                }
+                catch { }
+            });
+        }
+    }
+
+    private void EnsureToolbarReady()
+    {
+        if (IsDisposed || Disposing || !Visible)
+            return;
+
+        if (_toolbarForm == null || _toolbarForm.IsDisposed)
+        {
+            _toolbarForm = new ToolbarForm(this);
+            PositionToolbarForm();
+            var _ = _toolbarForm.Handle;
+            WindowDetector.RegisterIgnoredWindow(_toolbarForm.Handle);
+            _toolbarForm.Show(this);
+        }
+        else if (!_toolbarForm.Visible)
+        {
+            PositionToolbarForm();
+            _toolbarForm.Show(this);
+        }
+
+        _toolbarForm.UpdateSurface();
         Invalidate(new Rectangle(_toolbarRect.X - 12, _toolbarRect.Y - 48,
             _toolbarRect.Width + 24, _toolbarRect.Height + 96));
-
-        // Pre-snapshot all visible window rects for instant detection during mouse moves.
-        WindowDetector.SnapshotWindows(_virtualBounds);
     }
 
     protected override void OnDeactivate(EventArgs e)
@@ -56,15 +99,15 @@ public sealed partial class RegionOverlayForm
     internal void PositionToolbarForm()
     {
         if (_toolbarForm is null) return;
-        // Keep enough horizontal room for tooltips, but avoid a giant full-screen layered surface.
-        int marginX = 220;
-        int marginY = 24;
-        int popupH = 320;
+        int marginX = IsVerticalDock ? 72 : 220;
+        int marginY = IsVerticalDock ? 56 : 32;
+        int popupW = IsVerticalDock ? 340 : 220;
+        int popupH = IsVerticalDock ? 220 : 340;
         var bounds = new Rectangle(
-            _toolbarRect.X - marginX + _virtualBounds.X,
-            _toolbarRect.Y - marginY + _virtualBounds.Y,
-            _toolbarRect.Width + marginX * 2,
-            _toolbarRect.Height + popupH + marginY * 2);
+            _toolbarRect.X - marginX - popupW + _virtualBounds.X,
+            _toolbarRect.Y - marginY - popupH + _virtualBounds.Y,
+            _toolbarRect.Width + (marginX * 2) + (popupW * 2),
+            _toolbarRect.Height + (marginY * 2) + (popupH * 2));
         _toolbarForm.Bounds = bounds;
     }
 
@@ -239,6 +282,28 @@ public sealed partial class RegionOverlayForm
         _toolbarForm?.UpdateSurface();
     }
 
+    internal void UpdateToolbarSurfaceOnly()
+    {
+        _toolbarForm?.UpdateSurface();
+    }
+
+    private void SetFlyoutOpen(bool open)
+    {
+        _flyoutOpen = open;
+        _flyoutAnimStart = _flyoutAnim;
+        _flyoutAnimTarget = open ? 1f : 0f;
+        _flyoutAnimStartedAt = DateTime.UtcNow;
+        if (!open)
+            _hoveredFlyoutButton = -1;
+
+        if (!_animTimer.Enabled)
+            _animTimer.Start();
+
+        RefreshToolbar();
+        Invalidate(new Rectangle(_toolbarRect.X - 12, _toolbarRect.Y - 48,
+            _toolbarRect.Width + 24, _toolbarRect.Height + 160));
+    }
+
     private void HideToolbarImmediately()
     {
         if (_toolbarForm is null || _toolbarForm.IsDisposed)
@@ -303,6 +368,8 @@ public sealed partial class RegionOverlayForm
     {
         if (disposing)
         {
+            if (_currentOverlay == this)
+                _currentOverlay = null;
             ClearCrosshairGuides();
             _verticalCrosshairForm?.Close();
             _verticalCrosshairForm?.Dispose();

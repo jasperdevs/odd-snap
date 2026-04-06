@@ -271,7 +271,8 @@ public partial class App
                     ShowCrosshairGuides = _settingsService!.Settings.ShowCrosshairGuides,
                     DetectWindows = _settingsService.Settings.DetectWindows,
                     ShowCaptureMagnifier = _settingsService.Settings.ShowCaptureMagnifier,
-                    AnnotationStrokeShadow = _settingsService.Settings.AnnotationStrokeShadow
+                    AnnotationStrokeShadow = _settingsService.Settings.AnnotationStrokeShadow,
+                    CaptureDockSide = _settingsService.Settings.CaptureDockSide
                 };
                 overlay.SetEnabledTools(_settingsService.Settings.EnabledTools);
                 overlay.SetShowToolNumberBadges(_settingsService.Settings.ShowToolNumberBadges);
@@ -281,17 +282,17 @@ public partial class App
                     overlay.Hide();
                     using var annotated = overlay.RenderAnnotatedBitmap();
                     var cropped = ScreenCapture.CropRegion(annotated, sel);
-                    HandleCaptureResult(cropped);
                     overlay.Close();
                     System.Windows.Forms.Application.ExitThread();
+                    HandleCaptureResult(cropped);
                 };
 
                 overlay.FreeformSelected += fbmp =>
                 {
                     overlay.Hide();
-                    HandleCaptureResult(fbmp);
                     overlay.Close();
                     System.Windows.Forms.Application.ExitThread();
+                    HandleCaptureResult(fbmp);
                 };
 
                 overlay.OcrRegionSelected += sel =>
@@ -299,9 +300,9 @@ public partial class App
                     overlay.Hide();
                     using var annotated = overlay.RenderAnnotatedBitmap();
                     var cropped = ScreenCapture.CropRegion(annotated, sel);
-                    HandleOcrResult(cropped);
                     overlay.Close();
                     System.Windows.Forms.Application.ExitThread();
+                    HandleOcrResult(cropped);
                 };
 
                 overlay.ScanRegionSelected += sel =>
@@ -310,16 +311,20 @@ public partial class App
                     SoundService.PlayScanSound();
                     using var annotated = overlay.RenderAnnotatedBitmap();
                     var scanned = ScreenCapture.CropRegion(annotated, sel);
+                    overlay.Close();
+                    System.Windows.Forms.Application.ExitThread();
                     Dispatcher.BeginInvoke(() =>
                     {
                         try
                         {
-                            var text = BarcodeService.Decode(scanned);
-                            if (!string.IsNullOrWhiteSpace(text))
+                            var decoded = BarcodeService.DecodeDetailed(scanned);
+                            if (decoded is not null)
                             {
-                                ClipboardService.CopyTextToClipboard(text);
-                                var prev = text.Length > 100 ? text[..100] + "..." : text;
-                                ToastWindow.Show("Code copied", prev);
+                                ClipboardService.CopyTextToClipboard(decoded.Text);
+                                var prev = decoded.Text.Length > 100 ? decoded.Text[..100] + "..." : decoded.Text;
+                                var preview = BarcodeService.RenderPreview(decoded.Text, decoded.Format);
+                                var title = decoded.Format == ZXing.BarcodeFormat.QR_CODE ? "QR Code copied" : "Barcode copied";
+                                ToastWindow.ShowInlinePreview(preview, title, prev);
                             }
                             else
                             {
@@ -335,8 +340,6 @@ public partial class App
                             scanned.Dispose();
                         }
                     });
-                    overlay.Close();
-                    System.Windows.Forms.Application.ExitThread();
                 };
 
                 overlay.StickerRegionSelected += sel =>
@@ -391,11 +394,6 @@ public partial class App
                     });
                     overlay.Close();
                     System.Windows.Forms.Application.ExitThread();
-                };
-
-                overlay.SettingsRequested += () =>
-                {
-                    Dispatcher.BeginInvoke(ShowSettings);
                 };
 
                 overlay.SelectionCancelled += () =>

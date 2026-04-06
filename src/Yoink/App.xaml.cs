@@ -1,6 +1,5 @@
 using System.Drawing;
 using System.IO;
-using System.Runtime;
 using System.Windows;
 using System.Windows.Threading;
 using Yoink.Helpers;
@@ -25,17 +24,18 @@ public partial class App : Application
     private volatile bool _isCapturing;
     private bool _historyRecovered;
     private bool _historyChangedHooked;
+    private bool _historyMaintenanceScheduled;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         if (e.Args.Any(a => a.Equals("--uninstall", StringComparison.OrdinalIgnoreCase) || a.Equals("/uninstall", StringComparison.OrdinalIgnoreCase)))
         {
             base.OnStartup(e);
-            try { UninstallService.RemoveInstalledAppEntry(); } catch { }
-            try { UninstallService.RemoveStartMenuShortcut(); } catch { }
-            try { UninstallService.RemoveStartupEntry(); } catch { }
-            try { UninstallService.RemoveAppData(); } catch { }
-            try { UninstallService.ScheduleInstallFolderRemoval(); } catch { }
+            try { UninstallService.RemoveInstalledAppEntry(); } catch (Exception ex) { AppDiagnostics.LogError("startup.uninstall.remove-installed-entry", ex); }
+            try { UninstallService.RemoveStartMenuShortcut(); } catch (Exception ex) { AppDiagnostics.LogError("startup.uninstall.remove-start-menu", ex); }
+            try { UninstallService.RemoveStartupEntry(); } catch (Exception ex) { AppDiagnostics.LogError("startup.uninstall.remove-startup-entry", ex); }
+            try { UninstallService.RemoveAppData(); } catch (Exception ex) { AppDiagnostics.LogError("startup.uninstall.remove-appdata", ex); }
+            try { UninstallService.ScheduleInstallFolderRemoval(); } catch (Exception ex) { AppDiagnostics.LogError("startup.uninstall.schedule-folder-removal", ex); }
             Shutdown();
             return;
         }
@@ -64,7 +64,8 @@ public partial class App : Application
             }
             catch (Exception ex)
             {
-                try { base.OnStartup(e); } catch { }
+                try { base.OnStartup(e); } catch (Exception startupEx) { AppDiagnostics.LogError("startup.install-wizard.base", startupEx); }
+                AppDiagnostics.LogError("startup.install-wizard", ex);
                 MessageBox.Show($"Install wizard failed to start:\n\n{ex}", "Yoink", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             Shutdown();
@@ -92,23 +93,61 @@ public partial class App : Application
 
         base.OnStartup(e);
 
-        try { UninstallService.RegisterInstalledAppEntry(); } catch { }
-        try { UninstallService.EnsureStartMenuShortcut(); } catch { }
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+                AppDiagnostics.LogError("appdomain.unhandled", ex);
+            else
+                AppDiagnostics.LogWarning("appdomain.unhandled", args.ExceptionObject?.ToString() ?? "Unknown unhandled exception.");
+        };
+        DispatcherUnhandledException += (_, args) =>
+        {
+            AppDiagnostics.LogError("dispatcher.unhandled", args.Exception);
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            AppDiagnostics.LogError("tasks.unobserved", args.Exception);
+            args.SetObserved();
+        };
+
+        try { UninstallService.RegisterInstalledAppEntry(); } catch (Exception ex) { AppDiagnostics.LogError("startup.register-installed-entry", ex); }
+        try { UninstallService.EnsureStartMenuShortcut(); } catch (Exception ex) { AppDiagnostics.LogError("startup.ensure-start-menu-shortcut", ex); }
 
         _settingsService = new SettingsService();
         _settingsService.Load();
-        if (_settingsService.Settings.AutoIndexImages)
+        BackgroundRuntimeJobService.Initialize();
+        _ = Task.Run(() =>
         {
-            EnsureHistoryService();
-            EnsureImageSearchIndexService();
-        }
+            try
+            {
+                var historyService = EnsureHistoryService();
+                SettingsWindow.WarmHistoryThumbsInBackground(historyService.ImageEntries, maxCount: 192, immediateCount: 48, batchSize: 24);
+                EnsureImageSearchIndexService();
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError("startup.preload-history-search", ex);
+            }
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await LocalClipRuntimeService.EnsureInstalledAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError("startup.preload-semantic-runtime", ex);
+            }
+        });
 
         // After a fresh install, force onboarding
         if (isPostInstall)
             _settingsService.Settings.HasCompletedSetup = false;
 
         // Sync startup registry entry with settings
-        try { SyncStartupRegistry(_settingsService.Settings.StartWithWindows); } catch { }
+        try { SyncStartupRegistry(_settingsService.Settings.StartWithWindows); } catch (Exception ex) { AppDiagnostics.LogError("startup.sync-startup-registry", ex); }
         System.Windows.Forms.Application.EnableVisualStyles();
         SoundService.Muted = _settingsService.Settings.MuteSounds;
         SoundService.SetPack(_settingsService.Settings.SoundPack);
@@ -116,6 +155,7 @@ public partial class App : Application
         Theme.ApplyTo(Resources);
         ToastWindow.SetPosition(_settingsService.Settings.ToastPosition);
         ToastWindow.SetDuration(_settingsService.Settings.ToastDurationSeconds);
+        ToastWindow.SetFadeOutBehavior(_settingsService.Settings.ToastFadeOutEnabled, _settingsService.Settings.ToastFadeOutSeconds);
 
         _idleTrimTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _idleTrimTimer.Tick += (_, _) => TrimIdleMemory();
@@ -143,10 +183,10 @@ public partial class App : Application
 
         _ = Task.Run(() =>
         {
-            try { Yoink.Capture.DxgiScreenCapture.WarmUp(); } catch { }
+            try { Yoink.Capture.DxgiScreenCapture.WarmUp(); } catch (Exception ex) { AppDiagnostics.LogError("startup.dxgi-warmup", ex); }
         });
 
-        if (_settingsService.Settings.AutoCheckForUpdates)
+        if (_settingsService?.Settings.AutoCheckForUpdates == true)
             _ = CheckForUpdatesOnStartupAsync();
 
         if (openSettingsAfterWizard)
@@ -182,7 +222,7 @@ public partial class App : Application
                 using var parent = System.Diagnostics.Process.GetProcessById(parentPid);
                 parent.WaitForExit(15000);
             }
-            catch { /* process already exited */ }
+            catch (Exception ex) { AppDiagnostics.LogWarning("startup.apply-update.wait-parent", "Parent process was already gone or couldn't be inspected.", ex); }
         }
 
         base.OnStartup(e);
@@ -203,218 +243,21 @@ public partial class App : Application
         return true;
     }
 
-    private static void SyncStartupRegistry(bool enabled)
-    {
-        const string rk = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(rk, true);
-        if (key is null) return;
-        if (enabled)
-        {
-            var exe = Environment.ProcessPath;
-            if (exe != null) key.SetValue("Yoink", $"\"{exe}\"");
-        }
-        else key.DeleteValue("Yoink", false);
-    }
-
-    private void ShowSettings()
-    {
-        try
-        {
-            if (_settingsWindow is { IsVisible: true })
-            {
-                _settingsWindow.Activate();
-                return;
-            }
-
-            var win = new SettingsWindow(_settingsService!, EnsureHistoryService(), EnsureImageSearchIndexService());
-            Action hotkeyHandler = () => RegisterHotkeys();
-            Action uninstallHandler = BeginUninstall;
-            win.HotkeyChanged += hotkeyHandler;
-            win.UninstallRequested += uninstallHandler;
-            win.Closed += (_, _) =>
-            {
-                win.HotkeyChanged -= hotkeyHandler;
-                win.UninstallRequested -= uninstallHandler;
-                _settingsWindow = null;
-                ScheduleIdleMemoryTrim();
-            };
-            _settingsWindow = win;
-            win.Show();
-        }
-        catch (Exception ex)
-        {
-            _settingsWindow = null;
-            try { ToastWindow.ShowError("Settings failed to open", ex.Message); } catch { }
-        }
-    }
-
-    private void ShowHistory()
-    {
-        ShowSettings();
-        Dispatcher.BeginInvoke(() =>
-        {
-            var tab = _settingsWindow?.FindName("HistoryTab") as System.Windows.Controls.RadioButton;
-            if (tab is not null)
-            {
-                tab.IsChecked = true;
-                tab.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-            }
-        }, DispatcherPriority.Loaded);
-    }
-
-    private void BeginUninstall()
-    {
-        Dispatcher.BeginInvoke(() =>
-        {
-            var result = MessageBox.Show(
-                "Uninstall Yoink? This will remove the app data and try to remove the app folder.",
-                "Confirm uninstall",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (result != MessageBoxResult.Yes)
-                return;
-
-            try { UninstallService.RemoveStartupEntry(); } catch { }
-            try { UninstallService.RemoveInstalledAppEntry(); } catch { }
-            try { UninstallService.RemoveStartMenuShortcut(); } catch { }
-            try { UninstallService.RemoveAppData(); } catch { }
-            try { UninstallService.ScheduleInstallFolderRemoval(); } catch { }
-
-            ToastWindow.Show("Uninstalling", "Yoink will close and remove its files.");
-            Shutdown();
-        });
-    }
-
-    private async Task CheckForUpdatesOnStartupAsync()
-    {
-        try
-        {
-            var result = await UpdateService.CheckForUpdatesAsync();
-            if (!result.IsUpdateAvailable)
-                return;
-
-            var detail = string.IsNullOrWhiteSpace(result.AssetName)
-                ? $"{result.LatestVersionLabel} is available on GitHub Releases."
-                : $"{result.LatestVersionLabel} is ready: {result.AssetName}";
-
-            _ = Dispatcher.BeginInvoke(() => ToastWindow.Show("Update available", detail));
-        }
-        catch
-        {
-            // Ignore background update check failures.
-        }
-    }
-
     protected override void OnExit(ExitEventArgs e)
     {
         _idleTrimTimer?.Stop();
         _hotkeyService?.Dispose();
-        try { _historyService?.FlushPendingWrites(); } catch { }
-        try { _imageSearchIndexService?.Dispose(); } catch { }
+        try { _settingsService?.Dispose(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.dispose-settings", ex); }
+        try { _historyService?.FlushPendingWrites(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.flush-history", ex); }
+        try { _imageSearchIndexService?.Dispose(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.dispose-image-search", ex); }
         _imageSearchIndexService = null;
         _trayIcon?.Dispose();
         _settingsWindow?.Close();
-        try { Yoink.Capture.DxgiScreenCapture.ResetCache(); } catch { }
-        try { LocalStickerEngineService.Shutdown(); } catch { }
-        try { _mutex?.ReleaseMutex(); } catch { }
-        try { _mutex?.Dispose(); } catch { }
+        try { Yoink.Capture.DxgiScreenCapture.ResetCache(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.reset-dxgi-cache", ex); }
+        try { LocalStickerEngineService.Shutdown(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.sticker-engine", ex); }
+        try { _mutex?.ReleaseMutex(); } catch (Exception ex) { AppDiagnostics.LogWarning("shutdown.release-mutex", ex.Message, ex); }
+        try { _mutex?.Dispose(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.dispose-mutex", ex); }
         base.OnExit(e);
     }
 
-    private HistoryService EnsureHistoryService()
-    {
-        lock (_historyGate)
-        {
-            if (_historyService is null)
-            {
-                _historyService = new HistoryService();
-                _historyService.Load();
-                if (!_historyRecovered)
-                {
-                    _historyService.RecoverFromDirectories(_settingsService!.Settings.SaveDirectory);
-                    _historyRecovered = true;
-                }
-                _historyService.PruneByRetention(_settingsService!.Settings.HistoryRetention);
-                if (!_historyChangedHooked)
-                {
-                    _historyService.Changed += HistoryService_Changed;
-                    _historyChangedHooked = true;
-                }
-
-                if (_imageSearchIndexService is not null && _settingsService!.Settings.AutoIndexImages)
-                    _imageSearchIndexService.RequestSync(_historyService.ImageEntries, _settingsService!.Settings.OcrLanguageTag);
-            }
-
-            _historyService.CompressHistory = _settingsService!.Settings.CompressHistory;
-            _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
-            _historyService.CaptureImageFormat = _settingsService.Settings.CaptureImageFormat;
-            return _historyService;
-        }
-    }
-
-    private ImageSearchIndexService EnsureImageSearchIndexService()
-    {
-        lock (_historyGate)
-        {
-            if (_imageSearchIndexService is null)
-            {
-                _imageSearchIndexService = new ImageSearchIndexService();
-                _imageSearchIndexService.Load();
-                if (_historyService is not null && _settingsService!.Settings.AutoIndexImages)
-                    _imageSearchIndexService.RequestSync(_historyService.ImageEntries, _settingsService!.Settings.OcrLanguageTag);
-            }
-
-            return _imageSearchIndexService;
-        }
-    }
-
-    private void HistoryService_Changed()
-    {
-        lock (_historyGate)
-        {
-            if (_historyService is null || _settingsService is null)
-                return;
-
-            if (_settingsService.Settings.AutoIndexImages)
-                _imageSearchIndexService?.RequestSync(_historyService.ImageEntries, _settingsService.Settings.OcrLanguageTag);
-        }
-    }
-
-    private void ScheduleIdleMemoryTrim()
-    {
-        if (_idleTrimTimer is null)
-            return;
-
-        _idleTrimTimer.Stop();
-        _idleTrimTimer.Start();
-    }
-
-    private void TrimIdleMemory()
-    {
-        _idleTrimTimer?.Stop();
-
-        if (_isCapturing || Volatile.Read(ref _activeUploadCount) > 0)
-        {
-            ScheduleIdleMemoryTrim();
-            return;
-        }
-
-        if (_settingsWindow is not { IsVisible: true })
-        {
-            _historyService = null;
-            _historyRecovered = false;
-            try { _imageSearchIndexService?.Dispose(); } catch { }
-            _imageSearchIndexService = null;
-        }
-        SettingsWindow.ClearThumbCache();
-
-        try { LocalStickerEngineService.ReleaseSessions(); } catch { }
-
-        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-        GC.WaitForPendingFinalizers();
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-        ProcessMemory.TrimCurrentProcessWorkingSet();
-    }
 }

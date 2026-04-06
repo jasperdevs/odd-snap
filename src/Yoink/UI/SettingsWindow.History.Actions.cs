@@ -63,7 +63,7 @@ public partial class SettingsWindow
         if (ImageSearchOcrCheck.IsChecked)
             parts.Add("OCR");
         if (ImageSearchSemanticCheck.IsChecked)
-            parts.Add("Semantic");
+            parts.Add(_semanticRuntimeInstalled ? "Semantic" : "Semantic setup");
         if (ImageSearchExactMatchCheck.IsChecked)
             parts.Add("Exact");
 
@@ -79,7 +79,10 @@ public partial class SettingsWindow
             ImageSearchFileNameCheck.IsChecked = (sources & ImageSearchSourceOptions.FileName) != 0;
             ImageSearchOcrCheck.IsChecked = (sources & ImageSearchSourceOptions.Ocr) != 0;
             ImageSearchSemanticCheck.IsChecked = (sources & ImageSearchSourceOptions.Semantic) != 0;
-            ImageSearchSemanticCheck.IsEnabled = !_settingsService.Settings.ImageSearchExactMatch;
+            ImageSearchSemanticCheck.IsEnabled = !_settingsService.Settings.ImageSearchExactMatch && _semanticRuntimeInstalled;
+            ImageSearchSemanticCheck.ToolTip = _semanticRuntimeInstalled
+                ? "Use local semantic embeddings when the runtime is installed."
+                : LocalClipRuntimeService.SetupHelpText;
             ImageSearchExactMatchCheck.IsChecked = _settingsService.Settings.ImageSearchExactMatch;
         }
         finally
@@ -112,7 +115,7 @@ public partial class SettingsWindow
             _settingsService.Settings.ImageSearchExactMatch = ImageSearchExactMatchCheck.IsChecked == true;
             _settingsService.Save();
 
-            ImageSearchSemanticCheck.IsEnabled = !_settingsService.Settings.ImageSearchExactMatch;
+            ImageSearchSemanticCheck.IsEnabled = !_settingsService.Settings.ImageSearchExactMatch && _semanticRuntimeInstalled;
             UpdateImageSearchSourceSummary();
             CancelImageSearchWork();
 
@@ -137,8 +140,8 @@ public partial class SettingsWindow
             _settingsService.Save();
             UpdateImageSearchSourceSummary();
 
-            if (HistoryCategoryCombo.SelectedIndex == 0)
-                ApplyImageSearchFilter();
+        if (HistoryCategoryCombo.SelectedIndex == 0)
+            ApplyImageSearchFilter();
         }
         catch (Exception ex)
         {
@@ -215,7 +218,10 @@ public partial class SettingsWindow
     private void ReindexAllBtn_Click(object sender, RoutedEventArgs e)
     {
         _imageSearchIndexService.RequestSync(_historyService.ImageEntries, _settingsService.Settings.OcrLanguageTag);
-        LoadCurrentHistoryTab();
+        UpdateImageSearchStatus();
+        UpdateImageSearchActionButtons();
+        UpdateImageSearchPlaceholderText();
+        QueueImageIndexRefresh();
     }
 
     private void ImageSearchFiltersBtn_Click(object sender, RoutedEventArgs e)
@@ -228,13 +234,24 @@ public partial class SettingsWindow
     {
         if (HistoryCategoryCombo.SelectedIndex == 0 && _settingsService.Settings.ShowImageSearchBar)
         {
-            var shouldHideSearch = e.VerticalOffset > 18 && !ImageSearchBox.IsKeyboardFocused;
+            var shouldHideSearch = e.VerticalOffset > 18 &&
+                                   !ImageSearchBox.IsKeyboardFocused &&
+                                   string.IsNullOrWhiteSpace(_imageSearchQuery);
             SetImageSearchRowAutoHidden(shouldHideSearch);
+        }
+
+        if (_useVirtualizedImageHistory)
+        {
+            UpdateVirtualizedHistoryViewport();
+            return;
         }
 
         if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 300) return;
         if (_historyRenderCount >= _filteredHistoryItems.Count) return;
+        var previousCount = _historyRenderCount;
         _historyRenderCount = Math.Min(_historyRenderCount + HistoryPageSize, _filteredHistoryItems.Count);
-        RenderHistoryItems();
+        var appended = _filteredHistoryItems.Skip(previousCount).Take(_historyRenderCount - previousCount).ToList();
+        _historyItems.AddRange(appended);
+        AppendGroupedHistoryItems(HistoryStack, appended, CreateHistoryCard);
     }
 }

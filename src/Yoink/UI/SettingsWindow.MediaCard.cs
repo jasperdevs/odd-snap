@@ -21,18 +21,46 @@ public partial class SettingsWindow
     private static bool IsDraggableFile(string? path) =>
         !string.IsNullOrWhiteSpace(path) && File.Exists(path);
 
+    private static void DetachElementFromParent(FrameworkElement element)
+    {
+        switch (element.Parent)
+        {
+            case System.Windows.Controls.Panel panel:
+                panel.Children.Remove(element);
+                break;
+            case Decorator decorator when ReferenceEquals(decorator.Child, element):
+                decorator.Child = null;
+                break;
+            case ContentControl contentControl when ReferenceEquals(contentControl.Content, element):
+                contentControl.Content = null;
+                break;
+        }
+    }
+
     private MediaCardShell BuildMediaCardShell(HistoryItemVM vm, Action copyAction)
     {
         bool suppressOpenAction = false;
-        var img = new System.Windows.Controls.Image { Stretch = Stretch.UniformToFill, Opacity = 0 };
+        if (vm.ThumbnailLoaded && IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))
+        {
+            vm.ThumbnailLoaded = false;
+            vm.ThumbnailSource = null;
+        }
+        if ((vm.ThumbnailSource is null || !vm.ThumbnailLoaded) &&
+            TryGetThumbFromCache(vm.Entry.FilePath, out var cachedThumb))
+        {
+            vm.ThumbnailSource = cachedThumb;
+            vm.ThumbnailLoaded = true;
+        }
+        var img = new System.Windows.Controls.Image
+        {
+            Stretch = Stretch.UniformToFill,
+            Opacity = 1
+        };
+        vm.ThumbnailImage = img;
+        img.Source = vm.ThumbnailSource ?? GetHistoryPlaceholder(vm.Entry.Kind);
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
 
-        img.Loaded += (_, _) =>
-        {
-            LoadThumbAsync(img, vm.ThumbPath, vm.Entry.FilePath);
-            img.BeginAnimation(OpacityProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(250)));
-        };
+        img.Loaded += (_, _) => RefreshCardThumbnail(vm);
 
         var copyBtn = new Border
         {
@@ -115,28 +143,28 @@ public partial class SettingsWindow
             var b = (Border)s!;
             var st = (ScaleTransform)b.RenderTransform;
             st.BeginAnimation(ScaleTransform.ScaleXProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(1.03, TimeSpan.FromMilliseconds(120)));
+                Motion.To(1.03, 150, Motion.SmoothOut));
             st.BeginAnimation(ScaleTransform.ScaleYProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(1.03, TimeSpan.FromMilliseconds(120)));
+                Motion.To(1.03, 150, Motion.SmoothOut));
             copyBtn.BeginAnimation(OpacityProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
+                Motion.To(1, 150, Motion.SmoothOut));
             if (fileLocationBtn != null)
                 fileLocationBtn.BeginAnimation(OpacityProperty,
-                    new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
+                    Motion.To(1, 150, Motion.SmoothOut));
         };
         card.MouseLeave += (s, _) =>
         {
             var b = (Border)s!;
             var st = (ScaleTransform)b.RenderTransform;
             st.BeginAnimation(ScaleTransform.ScaleXProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
+                Motion.To(1, 150, Motion.SmoothOut));
             st.BeginAnimation(ScaleTransform.ScaleYProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(120)));
+                Motion.To(1, 150, Motion.SmoothOut));
             copyBtn.BeginAnimation(OpacityProperty,
-                new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
+                Motion.To(0, 150, Motion.SmoothOut));
             if (fileLocationBtn != null)
                 fileLocationBtn.BeginAnimation(OpacityProperty,
-                    new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
+                    Motion.To(0, 150, Motion.SmoothOut));
         };
 
         card.MouseLeftButtonUp += (s, e) =>
@@ -266,9 +294,9 @@ public partial class SettingsWindow
             }
         };
         btn.MouseEnter += (s, _) => ((Border)s!).BeginAnimation(OpacityProperty,
-            new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(100)));
+            Motion.To(1, 130, Motion.SmoothOut));
         btn.MouseLeave += (s, _) => ((Border)s!).BeginAnimation(OpacityProperty,
-            new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(100)));
+            Motion.To(0, 130, Motion.SmoothOut));
         return btn;
     }
 
@@ -277,16 +305,20 @@ public partial class SettingsWindow
         if (!File.Exists(filePath))
             return;
 
-        try
+        _ = Task.Run(() =>
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            try
             {
-                FileName = filePath,
-                UseShellExecute = true
-            });
-        }
-        catch
-        {
-        }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = filePath,
+                    UseShellExecute = true,
+                    Verb = "open"
+                });
+            }
+            catch
+            {
+            }
+        });
     }
 }

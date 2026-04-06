@@ -57,7 +57,7 @@ public partial class PreviewWindow
             }
 
             var dur = TimeSpan.FromMilliseconds(180);
-            var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
+            var ease = Motion.SmoothOut;
             DragScale.CenterX = ActualWidth / 2;
             DragScale.CenterY = ActualHeight / 2;
             DragScale.BeginAnimation(ScaleTransform.ScaleXProperty,
@@ -135,7 +135,7 @@ public partial class PreviewWindow
 
         var wa = SystemParameters.WorkArea;
         var dur = TimeSpan.FromMilliseconds(280);
-        var ease = new QuarticEase { EasingMode = EasingMode.EaseIn };
+        var ease = Motion.SmoothIn;
 
         var (exitLeft, exitTop, animateLeft) = PopupWindowHelper.GetDismissPlacement(
             _position, ActualWidth, ActualHeight, wa, Edge);

@@ -1,78 +1,137 @@
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
-using System.Text;
-using System.Text.Json;
+using System.Net.Http;
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace Yoink.Services;
 
 public sealed class LocalClipRuntimeService : IDisposable
 {
-    private const string PythonLauncherArg = "-3";
-    private const string ModelName = "ViT-B-32";
-    private const string PretrainedName = "laion2b_s34b_b79k";
-    private const string PipPackage = "open_clip_torch";
-    private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
+    private const int TargetImageSize = 224;
+    private static readonly TimeSpan RuntimeProbeCacheTtl = TimeSpan.FromMinutes(10);
+    private static readonly object SetupStateGate = new();
+    private static readonly HttpClient Http = CreateHttpClient();
+    private static readonly string CacheDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "clip");
+    private static readonly string VocabPath = Path.Combine(CacheDir, "vocab.json");
+    private static readonly string MergesPath = Path.Combine(CacheDir, "merges.txt");
+    private static readonly string TextModelPath = Path.Combine(CacheDir, "text_model_quantized.onnx");
+    private static readonly string VisionModelPath = Path.Combine(CacheDir, "vision_model_quantized.onnx");
+    private static readonly string RuntimeVersionPath = Path.Combine(CacheDir, "runtime.version");
+    private static readonly string BundledRuntimeDir = Path.Combine(AppContext.BaseDirectory, "Assets", "Clip");
+    private static readonly string RuntimeVersion = "xenova-clip-vit-base-patch32-quantized-v1";
+    private static readonly IReadOnlyList<(string Url, string TargetPath)> RuntimeAssets =
+    [
+        ("https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/vocab.json?download=1", VocabPath),
+        ("https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/merges.txt?download=1", MergesPath),
+        ("https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/text_model_quantized.onnx?download=1", TextModelPath),
+        ("https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/vision_model_quantized.onnx?download=1", VisionModelPath)
+    ];
+    private static readonly float[] Mean = [0.48145466f, 0.4578275f, 0.40821073f];
+    private static readonly float[] Std = [0.26862954f, 0.26130258f, 0.27577711f];
 
-    private static readonly string ScriptPath = Path.Combine(AppContext.BaseDirectory, "Python", "local_clip_service.py");
-    private static readonly string CacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "clip");
+    private static bool? _cachedRuntimeReady;
+    private static string _cachedRuntimeStatus = "Unknown";
+    private static DateTime _cachedRuntimeCheckedUtc;
 
     public static string CacheDirectory => CacheDir;
+    public static string SetupHelpText => "Semantic search is prepared automatically during install and app startup.";
+    public static string IdleStatusText => "Preparing local semantic search";
 
     private readonly object _gate = new();
     private readonly SemaphoreSlim _startGate = new(1, 1);
-    private readonly SemaphoreSlim _requestGate = new(1, 1);
-    private readonly StringBuilder _stderrTail = new();
-    private Process? _process;
-    private StreamWriter? _stdin;
-    private StreamReader? _stdout;
+    private InferenceSession? _textSession;
+    private InferenceSession? _visionSession;
+    private ClipOnnxTokenizer? _tokenizer;
     private bool _isAvailable;
-    private string _statusText = "CLIP runtime idle";
-    private int _requestId;
+    private string _statusText = IdleStatusText;
     private bool _disposed;
-    private string _modelKey = $"{ModelName}/{PretrainedName}";
 
     public event Action<string>? StatusChanged;
 
     public bool IsAvailable { get { lock (_gate) return _isAvailable; } }
     public string StatusText { get { lock (_gate) return _statusText; } }
-    public string ModelKey { get { lock (_gate) return _modelKey; } }
+    public string ModelKey => RuntimeVersion;
 
     public static async Task EnsureInstalledAsync(IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
         if (await IsRuntimeReadyAsync(cancellationToken).ConfigureAwait(false))
             return;
 
-        if (!await IsPythonLauncherAvailableAsync(cancellationToken).ConfigureAwait(false))
-            throw new InvalidOperationException("Python launcher 'py' was not found.");
-
-        progress?.Report($"Installing {PipPackage}...");
-        var install = await RunPythonAsync(new[] { PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", PipPackage, "pillow" }, cancellationToken).ConfigureAwait(false);
-        if (install.ExitCode != 0)
+        AppDiagnostics.LogInfo("semantic.install", "Preparing local semantic runtime.");
+        Directory.CreateDirectory(CacheDir);
+        if (TryCopyBundledRuntimeAssets(progress))
         {
-            var message = !string.IsNullOrWhiteSpace(install.StdErr) ? install.StdErr.Trim() : install.StdOut.Trim();
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? $"Couldn't install {PipPackage}." : message);
+            await File.WriteAllTextAsync(RuntimeVersionPath, RuntimeVersion, cancellationToken).ConfigureAwait(false);
+            UpdateRuntimeProbeCache(true, "Installed");
+            return;
         }
 
-        if (!await IsRuntimeReadyAsync(cancellationToken).ConfigureAwait(false))
-            throw new InvalidOperationException($"{PipPackage} installed, but CLIP imports are still unavailable.");
+        foreach (var (url, targetPath) in RuntimeAssets)
+        {
+            progress?.Report($"Downloading {Path.GetFileName(targetPath)}...");
+            await DownloadFileAsync(url, targetPath, cancellationToken).ConfigureAwait(false);
+        }
+
+        await File.WriteAllTextAsync(RuntimeVersionPath, RuntimeVersion, cancellationToken).ConfigureAwait(false);
+        UpdateRuntimeProbeCache(true, "Installed");
     }
 
-    public static async Task<bool> IsRuntimeReadyAsync(CancellationToken cancellationToken = default)
+    public static Task<bool> IsRuntimeReadyAsync(CancellationToken cancellationToken = default)
     {
-        if (!await IsPythonLauncherAvailableAsync(cancellationToken).ConfigureAwait(false))
-            return false;
+        if (TryGetCachedRuntimeProbe(out var cachedReady, out _))
+            return Task.FromResult(cachedReady);
 
-        var result = await RunPythonAsync(new[] { PythonLauncherArg, "-c", "import open_clip, torch; print('ok')" }, cancellationToken).ConfigureAwait(false);
-        return result.ExitCode == 0 && result.StdOut.Contains("ok", StringComparison.OrdinalIgnoreCase);
+        var ready = HasRuntimeFiles();
+        UpdateRuntimeProbeCache(ready, ready ? "Installed" : IdleStatusText);
+        return Task.FromResult(ready);
     }
+
+    public static Task<string> GetRuntimeStatusAsync(CancellationToken cancellationToken = default)
+    {
+        if (TryGetCachedRuntimeProbe(out _, out var cachedStatus))
+            return Task.FromResult(cachedStatus);
+
+        return Task.FromResult(IdleStatusText);
+    }
+
+    public static bool TryGetCachedStatus(out bool isReady, out string status)
+        => TryGetCachedRuntimeProbe(out isReady, out status);
 
     public async Task<ClipEmbeddingResult> EmbedTextAsync(string text, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(text))
             return new ClipEmbeddingResult(null, "Text was empty.");
 
-        var response = await SendRequestAsync("text", text, null, cancellationToken).ConfigureAwait(false);
-        return response ?? new ClipEmbeddingResult(null, StatusText);
+        if (!await EnsureSessionsAsync(cancellationToken).ConfigureAwait(false))
+            return new ClipEmbeddingResult(null, StatusText);
+
+        try
+        {
+            var tokenizer = _tokenizer!;
+            var (inputIds, attentionMask) = tokenizer.Encode(text);
+            var inputNames = _textSession!.InputMetadata.Keys.ToList();
+            var inputs = new List<NamedOnnxValue>(2)
+            {
+                NamedOnnxValue.CreateFromTensor(inputNames[0], new DenseTensor<long>(inputIds, [1, inputIds.Length]))
+            };
+            if (inputNames.Count > 1)
+                inputs.Add(NamedOnnxValue.CreateFromTensor(inputNames[1], new DenseTensor<long>(attentionMask, [1, attentionMask.Length])));
+
+            using var results = _textSession.Run(inputs);
+            var vector = ExtractEmbedding(results);
+            return vector is null
+                ? new ClipEmbeddingResult(null, "Text embedding failed.")
+                : new ClipEmbeddingResult(vector, null);
+        }
+        catch (Exception ex)
+        {
+            MarkUnavailable($"Text embedding failed: {ex.Message}");
+            return new ClipEmbeddingResult(null, StatusText);
+        }
     }
 
     public async Task<ClipEmbeddingResult> EmbedImageAsync(string imagePath, CancellationToken cancellationToken = default)
@@ -80,94 +139,50 @@ public sealed class LocalClipRuntimeService : IDisposable
         if (string.IsNullOrWhiteSpace(imagePath))
             return new ClipEmbeddingResult(null, "Image path was empty.");
 
-        var response = await SendRequestAsync("image", null, imagePath, cancellationToken).ConfigureAwait(false);
-        return response ?? new ClipEmbeddingResult(null, StatusText);
+        if (!await EnsureSessionsAsync(cancellationToken).ConfigureAwait(false))
+            return new ClipEmbeddingResult(null, StatusText);
+
+        try
+        {
+            var pixels = PrepareImageTensor(imagePath);
+            var inputName = _visionSession!.InputMetadata.Keys.First();
+            using var results = _visionSession.Run([
+                NamedOnnxValue.CreateFromTensor(inputName, new DenseTensor<float>(pixels, [1, 3, TargetImageSize, TargetImageSize]))
+            ]);
+            var vector = ExtractEmbedding(results);
+            return vector is null
+                ? new ClipEmbeddingResult(null, "Image embedding failed.")
+                : new ClipEmbeddingResult(vector, null);
+        }
+        catch (Exception ex)
+        {
+            MarkUnavailable($"Image embedding failed: {ex.Message}");
+            return new ClipEmbeddingResult(null, StatusText);
+        }
     }
 
     public void Dispose()
     {
         _disposed = true;
-        try
+        lock (_gate)
         {
-            lock (_gate)
-            {
-                if (_process is { HasExited: false })
-                {
-                    try { _stdin?.WriteLine(JsonSerializer.Serialize(new ClipRequest("shutdown", 0, null, null), JsonOpts)); } catch { }
-                    try { _stdin?.Flush(); } catch { }
-                    try { _process.Kill(entireProcessTree: true); } catch { }
-                }
-            }
-        }
-        catch
-        {
+            _textSession?.Dispose();
+            _textSession = null;
+            _visionSession?.Dispose();
+            _visionSession = null;
+            _tokenizer = null;
+            _isAvailable = false;
         }
     }
 
-    private async Task<ClipEmbeddingResult?> SendRequestAsync(string op, string? text = null, string? imagePath = null, CancellationToken cancellationToken = default)
-    {
-        if (_disposed)
-            return new ClipEmbeddingResult(null, "CLIP runtime was disposed.");
-
-        if (!await EnsureProcessAsync(cancellationToken).ConfigureAwait(false))
-            return new ClipEmbeddingResult(null, StatusText);
-
-        await _requestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (!await EnsureProcessAsync(cancellationToken).ConfigureAwait(false))
-                return new ClipEmbeddingResult(null, StatusText);
-
-            var payload = JsonSerializer.Serialize(new ClipRequest(op, Interlocked.Increment(ref _requestId), text, imagePath), JsonOpts);
-            StreamWriter? stdin;
-            StreamReader? stdout;
-            lock (_gate)
-            {
-                stdin = _stdin;
-                stdout = _stdout;
-            }
-
-            if (stdin is null || stdout is null)
-                return new ClipEmbeddingResult(null, "CLIP runtime is not connected.");
-
-            await stdin.WriteLineAsync(payload).ConfigureAwait(false);
-            await stdin.FlushAsync().ConfigureAwait(false);
-
-            var responseLine = await stdout.ReadLineAsync().ConfigureAwait(false);
-            if (responseLine is null)
-            {
-                MarkUnavailable("CLIP helper exited unexpectedly.");
-                return new ClipEmbeddingResult(null, StatusText);
-            }
-
-            var response = JsonSerializer.Deserialize<ClipResponse>(responseLine, JsonOpts);
-            if (response is null)
-                return new ClipEmbeddingResult(null, "CLIP helper returned invalid JSON.");
-
-            if (!response.Ok)
-                return new ClipEmbeddingResult(null, response.Error ?? "CLIP helper rejected the request.");
-
-            return new ClipEmbeddingResult(response.Embedding ?? Array.Empty<float>(), null);
-        }
-        catch (Exception ex)
-        {
-            MarkUnavailable($"CLIP helper failed: {ex.Message}");
-            return new ClipEmbeddingResult(null, StatusText);
-        }
-        finally
-        {
-            try { _requestGate.Release(); } catch { }
-        }
-    }
-
-    private async Task<bool> EnsureProcessAsync(CancellationToken cancellationToken)
+    private async Task<bool> EnsureSessionsAsync(CancellationToken cancellationToken)
     {
         if (_disposed)
             return false;
 
         lock (_gate)
         {
-            if (_process is { HasExited: false } && _stdin is not null && _stdout is not null)
+            if (_textSession is not null && _visionSession is not null && _tokenizer is not null)
                 return true;
         }
 
@@ -179,85 +194,42 @@ public sealed class LocalClipRuntimeService : IDisposable
 
             lock (_gate)
             {
-                if (_process is { HasExited: false } && _stdin is not null && _stdout is not null)
+                if (_textSession is not null && _visionSession is not null && _tokenizer is not null)
                     return true;
             }
 
-            if (!File.Exists(ScriptPath))
+            if (!await IsRuntimeReadyAsync(cancellationToken).ConfigureAwait(false))
             {
-                MarkUnavailable($"CLIP helper script was not found: {ScriptPath}");
-                return false;
+                try
+                {
+                    SetStatus("Downloading local semantic search...");
+                    await EnsureInstalledAsync(new Progress<string>(SetStatus), cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    MarkUnavailable(ex.Message);
+                    return false;
+                }
             }
 
-            await EnsureInstalledAsync(null, cancellationToken).ConfigureAwait(false);
-            SetStatus("Loading CLIP runtime...");
-
-            var psi = new ProcessStartInfo
+            SetStatus("Loading local semantic search...");
+            var options = new SessionOptions
             {
-                FileName = "py",
-                UseShellExecute = false,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                WorkingDirectory = AppContext.BaseDirectory
-            };
-            psi.ArgumentList.Add(PythonLauncherArg);
-            psi.ArgumentList.Add("-u");
-            psi.ArgumentList.Add(ScriptPath);
-            psi.EnvironmentVariables["PYTHONUTF8"] = "1";
-            psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
-            psi.EnvironmentVariables["PYTHONUNBUFFERED"] = "1";
-            psi.EnvironmentVariables["TORCH_HOME"] = CacheDir;
-            psi.EnvironmentVariables["HF_HOME"] = CacheDir;
-            psi.EnvironmentVariables["XDG_CACHE_HOME"] = CacheDir;
-            Directory.CreateDirectory(CacheDir);
-
-            var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-            process.Exited += (_, _) =>
-            {
-                var message = ReadStderrTail();
-                MarkUnavailable(string.IsNullOrWhiteSpace(message) ? "CLIP helper stopped." : $"CLIP helper stopped: {message}");
+                EnableCpuMemArena = true,
+                GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
             };
 
-            if (!process.Start())
-            {
-                MarkUnavailable("Could not start Python launcher.");
-                return false;
-            }
+            var tokenizer = ClipOnnxTokenizer.Load(VocabPath, MergesPath);
+            var textSession = new InferenceSession(TextModelPath, options);
+            var visionSession = new InferenceSession(VisionModelPath, options);
 
             lock (_gate)
             {
-                _process = process;
-                _stdin = process.StandardInput;
-                _stdin.AutoFlush = true;
-                _stdout = process.StandardOutput;
-                _isAvailable = false;
-            }
-
-            _ = Task.Run(() => DrainStderrAsync(process));
-
-            var readyLine = await process.StandardOutput.ReadLineAsync().ConfigureAwait(false);
-            if (readyLine is null)
-            {
-                var stderr = ReadStderrTail();
-                MarkUnavailable(string.IsNullOrWhiteSpace(stderr) ? "CLIP helper ended before initialization." : stderr);
-                return false;
-            }
-
-            var ready = JsonSerializer.Deserialize<ClipBootstrapResponse>(readyLine, JsonOpts);
-            if (ready is null || !ready.Ok)
-            {
-                MarkUnavailable(ready?.Error ?? "CLIP helper returned invalid startup data.");
-                return false;
-            }
-
-            lock (_gate)
-            {
+                _tokenizer = tokenizer;
+                _textSession = textSession;
+                _visionSession = visionSession;
                 _isAvailable = true;
-                _modelKey = string.IsNullOrWhiteSpace(ready.ModelKey) ? $"{ModelName}/{PretrainedName}" : ready.ModelKey;
-                _statusText = $"CLIP ready ({ready.Device ?? "cpu"})";
-                _stderrTail.Clear();
+                _statusText = "Ready";
             }
 
             StatusChanged?.Invoke(StatusText);
@@ -269,104 +241,227 @@ public sealed class LocalClipRuntimeService : IDisposable
         }
     }
 
-    private async Task DrainStderrAsync(Process process)
-    {
-        try
-        {
-            while (!_disposed && !process.HasExited)
-            {
-                var line = await process.StandardError.ReadLineAsync().ConfigureAwait(false);
-                if (line is null)
-                    break;
-
-                lock (_gate)
-                {
-                    if (_stderrTail.Length > 0)
-                        _stderrTail.AppendLine();
-                    _stderrTail.Append(line);
-                    if (_stderrTail.Length > 8192)
-                        _stderrTail.Remove(0, _stderrTail.Length - 8192);
-                }
-            }
-        }
-        catch
-        {
-        }
-    }
-
     private void MarkUnavailable(string status)
     {
         lock (_gate)
         {
             _isAvailable = false;
-            _statusText = status;
-            _stdout = null;
-            _stdin = null;
-            if (_process is { HasExited: false })
-            {
-                try { _process.Kill(entireProcessTree: true); } catch { }
-            }
-
-            _process?.Dispose();
-            _process = null;
+            _statusText = NormalizeRuntimeStatus(status);
+            _textSession?.Dispose();
+            _textSession = null;
+            _visionSession?.Dispose();
+            _visionSession = null;
+            _tokenizer = null;
         }
 
+        AppDiagnostics.LogWarning("semantic.runtime", _statusText);
+        UpdateRuntimeProbeCache(false, _statusText);
         StatusChanged?.Invoke(StatusText);
     }
 
     private void SetStatus(string status)
     {
         lock (_gate)
-            _statusText = status;
+            _statusText = NormalizeRuntimeStatus(status);
 
-        StatusChanged?.Invoke(status);
+        StatusChanged?.Invoke(StatusText);
     }
 
-    private string ReadStderrTail()
+    private static HttpClient CreateHttpClient()
     {
-        lock (_gate)
-            return _stderrTail.ToString().Trim();
+        var client = new HttpClient { Timeout = TimeSpan.FromMinutes(20) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Yoink/semantic-runtime");
+        return client;
     }
 
-    private static async Task<bool> IsPythonLauncherAvailableAsync(CancellationToken cancellationToken)
+    private static bool TryCopyBundledRuntimeAssets(IProgress<string>? progress)
     {
-        var result = await RunPythonAsync(new[] { PythonLauncherArg, "--version" }, cancellationToken).ConfigureAwait(false);
-        return result.ExitCode == 0;
-    }
+        if (!Directory.Exists(BundledRuntimeDir))
+            return false;
 
-    private static async Task<PythonRunResult> RunPythonAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
-    {
-        var psi = new ProcessStartInfo
+        var bundledVersionPath = Path.Combine(BundledRuntimeDir, "runtime.version");
+        if (!File.Exists(bundledVersionPath))
+            return false;
+
+        var bundledVersion = SafeReadAllText(bundledVersionPath);
+        if (!string.Equals(bundledVersion, RuntimeVersion, StringComparison.Ordinal))
+            return false;
+
+        foreach (var targetPath in new[] { VocabPath, MergesPath, TextModelPath, VisionModelPath })
         {
-            FileName = "py",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            WorkingDirectory = AppContext.BaseDirectory
-        };
+            var fileName = Path.GetFileName(targetPath);
+            var bundledPath = Path.Combine(BundledRuntimeDir, fileName);
+            if (!File.Exists(bundledPath))
+                return false;
 
-        psi.EnvironmentVariables["PYTHONUTF8"] = "1";
-        psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
-        foreach (var arg in arguments)
-            psi.ArgumentList.Add(arg);
+            progress?.Report($"Preparing {fileName}...");
+            File.Copy(bundledPath, targetPath, overwrite: true);
+        }
 
-        using var process = new Process { StartInfo = psi };
-        if (!process.Start())
-            return new PythonRunResult(-1, "", "Could not start Python launcher.");
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        var stdout = await stdoutTask.ConfigureAwait(false);
-        var stderr = await stderrTask.ConfigureAwait(false);
-        return new PythonRunResult(process.ExitCode, stdout, stderr);
+        return true;
     }
 
-    private sealed record ClipRequest(string Op, int Id, string? Text, string? Path);
-    private sealed record ClipResponse(int Id, bool Ok, float[]? Embedding, string? Error);
-    private sealed record ClipBootstrapResponse(bool Ok, string? Device, string? Model, string? Pretrained, string? ModelKey, string? Error);
-    private sealed record PythonRunResult(int ExitCode, string StdOut, string StdErr);
+    private static string SafeReadAllText(string path)
+    {
+        try
+        {
+            return File.ReadAllText(path).Trim();
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static async Task DownloadFileAsync(string url, string targetPath, CancellationToken cancellationToken)
+    {
+        var tempPath = targetPath + ".tmp";
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+
+        using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var output = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+        output.Close();
+
+        File.Move(tempPath, targetPath, overwrite: true);
+    }
+
+    private static float[] PrepareImageTensor(string imagePath)
+    {
+        using var source = new Bitmap(imagePath);
+        using var prepared = new Bitmap(TargetImageSize, TargetImageSize);
+        using (var g = Graphics.FromImage(prepared))
+        {
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.SmoothingMode = SmoothingMode.HighQuality;
+            g.Clear(System.Drawing.Color.Black);
+
+            var crop = CenterCrop(source.Width, source.Height);
+            g.DrawImage(source, new Rectangle(0, 0, TargetImageSize, TargetImageSize), crop, GraphicsUnit.Pixel);
+        }
+
+        var tensor = new float[3 * TargetImageSize * TargetImageSize];
+        for (int y = 0; y < TargetImageSize; y++)
+        {
+            for (int x = 0; x < TargetImageSize; x++)
+            {
+                var pixel = prepared.GetPixel(x, y);
+                var index = y * TargetImageSize + x;
+                tensor[index] = ((pixel.R / 255f) - Mean[0]) / Std[0];
+                tensor[TargetImageSize * TargetImageSize + index] = ((pixel.G / 255f) - Mean[1]) / Std[1];
+                tensor[2 * TargetImageSize * TargetImageSize + index] = ((pixel.B / 255f) - Mean[2]) / Std[2];
+            }
+        }
+
+        return tensor;
+    }
+
+    private static Rectangle CenterCrop(int width, int height)
+    {
+        var size = Math.Min(width, height);
+        var x = (width - size) / 2;
+        var y = (height - size) / 2;
+        return new Rectangle(x, y, size, size);
+    }
+
+    private static float[]? ExtractEmbedding(IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results)
+    {
+        foreach (var result in results)
+        {
+            if (result.Value is not Tensor<float> tensor)
+                continue;
+
+            var values = tensor.ToArray();
+            if (values.Length == 0)
+                continue;
+
+            NormalizeInPlace(values);
+            return values;
+        }
+
+        return null;
+    }
+
+    private static void NormalizeInPlace(float[] values)
+    {
+        double sum = 0;
+        foreach (var value in values)
+            sum += value * value;
+
+        var norm = Math.Sqrt(sum);
+        if (norm <= 0)
+            return;
+
+        for (int i = 0; i < values.Length; i++)
+            values[i] = (float)(values[i] / norm);
+    }
+
+    private static bool TryGetCachedRuntimeProbe(out bool isReady, out string status)
+    {
+        lock (SetupStateGate)
+        {
+            if (_cachedRuntimeReady.HasValue && DateTime.UtcNow - _cachedRuntimeCheckedUtc <= RuntimeProbeCacheTtl)
+            {
+                isReady = _cachedRuntimeReady.Value;
+                status = _cachedRuntimeStatus;
+                return true;
+            }
+        }
+
+        if (HasRuntimeFiles())
+        {
+            UpdateRuntimeProbeCache(true, "Installed");
+            isReady = true;
+            status = "Installed";
+            return true;
+        }
+
+        isReady = false;
+        status = "";
+        return false;
+    }
+
+    private static bool HasRuntimeFiles()
+    {
+        try
+        {
+            return File.Exists(VocabPath) &&
+                   File.Exists(MergesPath) &&
+                   File.Exists(TextModelPath) &&
+                   File.Exists(VisionModelPath) &&
+                   File.Exists(RuntimeVersionPath) &&
+                   string.Equals(File.ReadAllText(RuntimeVersionPath).Trim(), RuntimeVersion, StringComparison.Ordinal);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("semantic.runtime-check", ex.Message, ex);
+            return false;
+        }
+    }
+
+    private static void UpdateRuntimeProbeCache(bool isReady, string status)
+    {
+        lock (SetupStateGate)
+        {
+            _cachedRuntimeReady = isReady;
+            _cachedRuntimeStatus = NormalizeRuntimeStatus(status);
+            _cachedRuntimeCheckedUtc = DateTime.UtcNow;
+        }
+    }
+
+    private static string NormalizeRuntimeStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            return "Not installed";
+
+        var text = status.Trim().Replace(Environment.NewLine, " ").Replace('\n', ' ').Replace('\r', ' ');
+        while (text.Contains("  ", StringComparison.Ordinal))
+            text = text.Replace("  ", " ", StringComparison.Ordinal);
+        return text.Length <= 140 ? text : text[..137] + "...";
+    }
 }
 
 public sealed record ClipEmbeddingResult(float[]? Embedding, string? Error)

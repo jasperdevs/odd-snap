@@ -18,6 +18,8 @@ namespace Yoink.UI;
 public partial class SettingsWindow
 {
     private static readonly Lazy<BitmapSource> VideoPlaceholder = new(CreateVideoPlaceholder);
+    private static readonly Lazy<BitmapSource> ImagePlaceholder = new(CreateImagePlaceholder);
+    private const int HistoryThumbDecodePixelWidth = 336;
 
     private static bool TryGetThumbFromCache(string path, out BitmapSource? image)
     {
@@ -71,7 +73,83 @@ public partial class SettingsWindow
             ThumbCacheOrder.Clear();
             ThumbCacheNodes.Clear();
         }
+        lock (ThumbWaiters)
+            ThumbWaiters.Clear();
         LogoCache.Clear();
+    }
+
+    internal static void TrimThumbCache(int keepCount)
+    {
+        if (keepCount <= 0)
+        {
+            ClearThumbCache();
+            return;
+        }
+
+        lock (ThumbCache)
+        {
+            while (ThumbCacheOrder.Count > keepCount)
+            {
+                var oldest = ThumbCacheOrder.Last;
+                if (oldest is null)
+                    break;
+
+                ThumbCacheOrder.RemoveLast();
+                ThumbCacheNodes.Remove(oldest.Value);
+                ThumbCache.Remove(oldest.Value);
+            }
+        }
+    }
+
+    internal static void WarmRecentHistoryThumbs(IEnumerable<HistoryEntry> entries, int maxCount = 24)
+    {
+        foreach (var entry in entries
+                     .OrderByDescending(entry => entry.CapturedAt)
+                     .Where(entry => !string.IsNullOrWhiteSpace(entry.FilePath))
+                     .Take(maxCount))
+        {
+            var thumbPath = entry.FilePath;
+            PrimeThumbLoad(thumbPath, thumbPath, entry.Kind);
+        }
+    }
+
+    internal static void WarmHistoryThumbsInBackground(IEnumerable<HistoryEntry> entries, int maxCount = 192, int immediateCount = 48, int batchSize = 24)
+    {
+        var targets = entries
+            .OrderByDescending(entry => entry.CapturedAt)
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.FilePath))
+            .Take(maxCount)
+            .ToList();
+
+        if (targets.Count == 0)
+            return;
+
+        WarmRecentHistoryThumbs(targets, Math.Min(immediateCount, targets.Count));
+
+        CancellationTokenSource cts;
+        lock (ThumbWarmGate)
+        {
+            ThumbWarmCts?.Cancel();
+            ThumbWarmCts?.Dispose();
+            ThumbWarmCts = new CancellationTokenSource();
+            cts = ThumbWarmCts;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                foreach (var batch in targets.Skip(immediateCount).Chunk(batchSize))
+                {
+                    cts.Token.ThrowIfCancellationRequested();
+                    WarmRecentHistoryThumbs(batch, batch.Length);
+                    await Task.Delay(180, cts.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }, cts.Token);
     }
 
     private static BitmapImage? LoadPackImage(string relativePath)
@@ -107,7 +185,13 @@ public partial class SettingsWindow
         try
         {
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            var bmp = BitmapFrame.Create(fs, BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.OnLoad);
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.StreamSource = fs;
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            bmp.DecodePixelWidth = HistoryThumbDecodePixelWidth;
+            bmp.EndInit();
             bmp.Freeze();
             return bmp;
         }
@@ -151,6 +235,44 @@ public partial class SettingsWindow
         return BitmapPerf.ToBitmapSource(bmp);
     }
 
+    private static BitmapSource CreateImagePlaceholder()
+    {
+        using var bmp = new Bitmap(320, 180, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using var top = new SolidBrush(System.Drawing.Color.FromArgb(54, 54, 54));
+            using var bottom = new SolidBrush(System.Drawing.Color.FromArgb(42, 42, 42));
+            g.FillRectangle(top, 0, 0, bmp.Width, bmp.Height / 2);
+            g.FillRectangle(bottom, 0, bmp.Height / 2, bmp.Width, bmp.Height / 2);
+
+            using var mountain = new SolidBrush(System.Drawing.Color.FromArgb(78, 78, 78));
+            g.FillPolygon(mountain, new[]
+            {
+                new System.Drawing.Point(26, 138),
+                new System.Drawing.Point(108, 78),
+                new System.Drawing.Point(162, 122),
+                new System.Drawing.Point(214, 92),
+                new System.Drawing.Point(292, 138)
+            });
+
+            using var sun = new SolidBrush(System.Drawing.Color.FromArgb(145, 145, 145));
+            g.FillEllipse(sun, 216, 34, 34, 34);
+        }
+
+        return BitmapPerf.ToBitmapSource(bmp);
+    }
+
+    private static BitmapSource GetHistoryPlaceholder(HistoryKind kind) =>
+        kind == HistoryKind.Image || kind == HistoryKind.Sticker
+            ? ImagePlaceholder.Value
+            : VideoPlaceholder.Value;
+
+    private static bool IsStaleHistoryPlaceholder(BitmapSource? source, HistoryKind kind) =>
+        source is not null &&
+        (kind == HistoryKind.Image || kind == HistoryKind.Gif || kind == HistoryKind.Sticker) &&
+        ReferenceEquals(source, GetHistoryPlaceholder(kind));
+
     private static FrameworkElement? CreateProviderBadge(string? providerOrPath, bool isPath = false)
     {
         string logoPath = isPath ? (providerOrPath ?? string.Empty) : UploadService.GetHistoryLogoPath(providerOrPath);
@@ -179,9 +301,9 @@ public partial class SettingsWindow
                 Background = Theme.Brush(Theme.SectionIconBg),
                 BorderBrush = Theme.StrokeBrush(),
                 BorderThickness = new Thickness(1),
-                Margin = new Thickness(6, 6, 0, 0),
+                Margin = new Thickness(6, 0, 0, 6),
                 HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
+                VerticalAlignment = VerticalAlignment.Bottom,
                 Child = new TextBlock
                 {
                     Text = text,
@@ -203,9 +325,9 @@ public partial class SettingsWindow
             Background = Theme.Brush(Theme.SectionIconBg),
             BorderBrush = Theme.StrokeBrush(),
             BorderThickness = new Thickness(1),
-            Margin = new Thickness(6, 6, 0, 0),
+            Margin = new Thickness(6, 0, 0, 6),
             HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
+            VerticalAlignment = VerticalAlignment.Bottom,
             Child = new Image
             {
                 Source = logoSource,

@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Shell;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Yoink.Services;
 using ComboBox = System.Windows.Controls.ComboBox;
 using ComboBoxItem = System.Windows.Controls.ComboBoxItem;
@@ -46,7 +48,7 @@ public partial class OcrResultWindow : Window
         TranslatedTextBox.FontFamily = fontFamily;
 
         PopulateLanguageCombos();
-        ModelCombo.SelectedIndex = settingsService.Settings.TranslationModel;
+        SelectTranslationModelCombo(settingsService.Settings.TranslationModel);
 
         Loaded += (_, _) =>
         {
@@ -140,7 +142,8 @@ public partial class OcrResultWindow : Window
 
     private void TitleBtn_Enter(object sender, MouseEventArgs e)
     {
-        if (sender is Border b) b.Background = Theme.Brush(Theme.AccentHover);
+        if (sender is not Border b) return;
+        b.Background = Theme.Brush(ReferenceEquals(b, CloseTitleBtn) ? Theme.DangerHover : Theme.AccentHover);
     }
 
     private void TitleBtn_Leave(object sender, MouseEventArgs e)
@@ -176,12 +179,36 @@ public partial class OcrResultWindow : Window
     private void ModelCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
-        _settingsService.Settings.TranslationModel = ModelCombo.SelectedIndex;
+        _settingsService.Settings.TranslationModel = (int)GetSelectedModel();
         _settingsService.Save();
     }
 
-    private TranslationModel GetSelectedModel() =>
-        (TranslationModel)Math.Max(0, ModelCombo.SelectedIndex);
+    private TranslationModel GetSelectedModel()
+    {
+        if (ModelCombo.SelectedItem is ComboBoxItem item &&
+            item.Tag is string tag &&
+            int.TryParse(tag, out var raw) &&
+            Enum.IsDefined(typeof(TranslationModel), raw))
+        {
+            return (TranslationModel)raw;
+        }
+
+        return TranslationModel.OpenSourceLocal;
+    }
+
+    private void SelectTranslationModelCombo(int rawValue)
+    {
+        var selected = ModelCombo.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item =>
+                item.Tag is string tag &&
+                int.TryParse(tag, out var parsed) &&
+                parsed == rawValue);
+
+        if (selected is not null)
+            ModelCombo.SelectedItem = selected;
+        else if (ModelCombo.Items.Count > 0)
+            ModelCombo.SelectedIndex = 0;
+    }
 
     private void FilterCombo_PreviewTextInput(object sender, TextCompositionEventArgs e)
     {
@@ -231,6 +258,7 @@ public partial class OcrResultWindow : Window
 
     private System.Windows.Threading.DispatcherTimer? _translateTimer;
     private DateTime _translateStartTime;
+    private DoubleAnimation? _translationShimmerAnimation;
 
     private void StartTranslateTimer()
     {
@@ -242,19 +270,81 @@ public partial class OcrResultWindow : Window
         _translateTimer.Tick += (_, _) =>
         {
             var elapsed = (int)(DateTime.Now - _translateStartTime).TotalSeconds;
-            if (elapsed > 0)
-            {
-                var baseText = TranslateStatus.Text?.Split('(')[0].TrimEnd() ?? "Working";
-                TranslateStatus.Text = $"{baseText} ({elapsed}s)";
-            }
+            UpdateTranslateStatusText(elapsed);
         };
         _translateTimer.Start();
+        UpdateTranslateStatusText(0);
     }
 
     private void StopTranslateTimer()
     {
         _translateTimer?.Stop();
         _translateTimer = null;
+    }
+
+    private void StartTranslationLoading(TranslationModel model)
+    {
+        TranslatedTextBox.Text = "";
+        TranslateStatus.Visibility = Visibility.Visible;
+        TranslationLoadingOverlay.Visibility = Visibility.Visible;
+        CopyTranslationBtn.Visibility = Visibility.Collapsed;
+        TranslateBtn.IsEnabled = false;
+        TranslateBtn.Content = "Translating...";
+        FromLanguageCombo.IsEnabled = false;
+        ToLanguageCombo.IsEnabled = false;
+        ModelCombo.IsEnabled = false;
+        TranslateProgressBar.IsIndeterminate = true;
+        TranslateStatus.Text = GetTranslationStatusLabel(model, 0);
+
+        if (TranslationShimmerRect.Fill is LinearGradientBrush shimmerBrush &&
+            shimmerBrush.RelativeTransform is TranslateTransform shimmerTransform)
+        {
+            _translationShimmerAnimation ??= new DoubleAnimation
+            {
+                From = -1.2,
+                To = 1.2,
+                Duration = TimeSpan.FromSeconds(1.25),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            shimmerTransform.BeginAnimation(TranslateTransform.XProperty, _translationShimmerAnimation);
+        }
+    }
+
+    private void StopTranslationLoading(bool keepStatusVisible)
+    {
+        StopTranslateTimer();
+        if (TranslationShimmerRect.Fill is LinearGradientBrush shimmerBrush &&
+            shimmerBrush.RelativeTransform is TranslateTransform shimmerTransform)
+        {
+            shimmerTransform.BeginAnimation(TranslateTransform.XProperty, null);
+            shimmerTransform.X = -1.2;
+        }
+        TranslationLoadingOverlay.Visibility = Visibility.Collapsed;
+        TranslateProgressBar.IsIndeterminate = false;
+        TranslateBtn.IsEnabled = true;
+        TranslateBtn.Content = "Translate";
+        FromLanguageCombo.IsEnabled = true;
+        ToLanguageCombo.IsEnabled = true;
+        ModelCombo.IsEnabled = true;
+        if (!keepStatusVisible)
+            TranslateStatus.Visibility = Visibility.Collapsed;
+    }
+
+    private void UpdateTranslateStatusText(int elapsedSeconds)
+    {
+        var model = GetSelectedModel();
+        TranslateStatus.Text = $"{GetTranslationStatusLabel(model, elapsedSeconds)} ({elapsedSeconds}s)";
+    }
+
+    private static string GetTranslationStatusLabel(TranslationModel model, int elapsedSeconds)
+    {
+        if (elapsedSeconds <= 1)
+            return model == TranslationModel.OpenSourceLocal ? "Warming local model..." : "Starting translation...";
+        if (elapsedSeconds <= 3)
+            return model == TranslationModel.OpenSourceLocal ? "Detecting language..." : "Sending text...";
+        if (elapsedSeconds <= 6)
+            return model == TranslationModel.OpenSourceLocal ? "Generating translation..." : "Translating...";
+        return model == TranslationModel.OpenSourceLocal ? "Still working locally..." : "Finishing translation...";
     }
 
     private async void TranslateBtn_Click(object sender, RoutedEventArgs e)
@@ -272,52 +362,27 @@ public partial class OcrResultWindow : Window
         _translateCts?.Cancel();
         _translateCts = new CancellationTokenSource();
         var token = _translateCts.Token;
+        var model = GetSelectedModel();
 
-        TranslateBtn.IsEnabled = false;
-        TranslateBtn.Content = "Translating...";
-        TranslatedTextBox.Text = "";
-        TranslateStatus.Visibility = Visibility.Visible;
-        CopyTranslationBtn.Visibility = Visibility.Collapsed;
-
+        StartTranslationLoading(model);
         StartTranslateTimer();
 
         try
         {
-            var model = GetSelectedModel();
-
-            // Auto-install Argos if needed
-            if (model == TranslationModel.Argos)
-            {
-                var ready = await TranslationService.IsArgosReadyAsync(token);
-                if (!ready)
-                {
-                    TranslateStatus.Text = "Installing Argos Translate...";
-                    TranslateBtn.Content = "Installing...";
-                    await TranslationService.EnsureInstalledAsync(cancellationToken: token);
-                }
-            }
-
-            TranslateStatus.Text = "Translating...";
-            TranslateBtn.Content = "Translating...";
+            await TranslationService.EnsureReadyAsync(fromCode, model, token);
             var result = await TranslationService.TranslateAsync(text, fromCode, toCode, model, token);
-            StopTranslateTimer();
+            StopTranslationLoading(keepStatusVisible: false);
             TranslatedTextBox.Text = result;
-            TranslateStatus.Visibility = Visibility.Collapsed;
             CopyTranslationBtn.Visibility = Visibility.Visible;
         }
         catch (OperationCanceledException)
         {
-            StopTranslateTimer();
+            StopTranslationLoading(keepStatusVisible: false);
         }
         catch (Exception ex)
         {
-            StopTranslateTimer();
+            StopTranslationLoading(keepStatusVisible: true);
             TranslateStatus.Text = $"Error: {ex.Message}";
-        }
-        finally
-        {
-            TranslateBtn.IsEnabled = true;
-            TranslateBtn.Content = "Translate";
         }
     }
 }

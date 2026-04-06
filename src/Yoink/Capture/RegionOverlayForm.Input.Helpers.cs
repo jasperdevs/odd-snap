@@ -104,9 +104,7 @@ public sealed partial class RegionOverlayForm
             int searchBarH = 28;
             int pw = cols * (emojiSize + pad) + pad;
             int ph = searchBarH + pad + visibleRows * (emojiSize + pad) + pad;
-            int px = _toolbarRect.X + _toolbarRect.Width / 2 - pw / 2;
-            int py = _toolbarRect.Bottom + 8;
-            _emojiPickerRect = new Rectangle(px, py, pw, ph);
+            _emojiPickerRect = PositionPopupFromAnchor(_toolbarRect, pw, ph);
             ShowEmojiSearchBox();
             _emojiWarmupIndex = 0;
             _emojiWarmupPending = true;
@@ -186,9 +184,7 @@ public sealed partial class RegionOverlayForm
         int ph = rows * (swatchSize + pad) + pad;
         int colorBtnIdx = BtnCount - 3;
         var colorBtn = _toolbarButtons.Length > colorBtnIdx ? _toolbarButtons[colorBtnIdx] : Rectangle.Empty;
-        int px = colorBtn.X + colorBtn.Width / 2 - pw / 2;
-        int py = colorBtn.Y + colorBtn.Height + 8;
-        return new Rectangle(px, py, pw, ph);
+        return PositionPopupFromAnchor(colorBtn, pw, ph);
     }
 
     private Rectangle GetEmojiPickerBounds()
@@ -198,9 +194,7 @@ public sealed partial class RegionOverlayForm
         int visibleRows = 4;
         int pw = cols * (emojiSize + pad) + pad;
         int ph = searchBarH + pad + visibleRows * (emojiSize + pad) + pad;
-        int px = _toolbarRect.X + _toolbarRect.Width / 2 - pw / 2;
-        int py = _toolbarRect.Bottom + 8;
-        return new Rectangle(px, py, pw, ph);
+        return PositionPopupFromAnchor(_toolbarRect, pw, ph);
     }
 
     private Rectangle GetFontPickerBounds()
@@ -216,8 +210,9 @@ public sealed partial class RegionOverlayForm
         }
         else
         {
-            px = _toolbarRect.X + _toolbarRect.Width / 2 - pw / 2;
-            py = _toolbarRect.Bottom + 8;
+            var popupRect = PositionPopupFromAnchor(_toolbarRect, pw, ph);
+            px = popupRect.X;
+            py = popupRect.Y;
         }
         return new Rectangle(px, py, pw, ph);
     }

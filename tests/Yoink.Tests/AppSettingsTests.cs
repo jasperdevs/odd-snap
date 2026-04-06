@@ -68,4 +68,12 @@ public sealed class AppSettingsTests
 
         Assert.Equal(StickerProvider.LocalCpu, settings.StickerUploadSettings.Provider);
     }
+
+    [Fact]
+    public void CaptureDockSide_DefaultsToTop()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(CaptureDockSide.Top, settings.CaptureDockSide);
+    }
 }

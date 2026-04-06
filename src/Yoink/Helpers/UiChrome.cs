@@ -15,9 +15,11 @@ public static class UiChrome
 
     public const int ToolbarHeight = 46;
     public const int ToolbarButtonSize = 34;
-    public const int ToolbarButtonSpacing = 3;
+    public const int ToolbarButtonSpacing = 4;
     public const int ToolbarTopMargin = 16;
-    public const int ToolbarGroupGap = 14;
+    public const int ToolbarGroupGap = 12;
+    public const int ToolbarInnerPadding = 10;
+    public const int ToolbarFlyoutPadding = 9;
 
     public const int PopupMargin = 20;
     public const int PopupGap = 8;

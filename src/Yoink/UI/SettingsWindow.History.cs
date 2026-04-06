@@ -28,102 +28,299 @@ public partial class SettingsWindow
     private bool _suppressImageSearchSourceEvents;
     private CancellationTokenSource? _searchFilterCts;
     private int _searchFilterVersion;
+    private string _lastImmediateSearchQuery = "";
+    private ImageSearchSourceOptions _lastImmediateSearchSources = ImageSearchSourceOptions.None;
+    private bool _lastImmediateSearchExactMatch;
+    private List<HistoryItemVM> _lastImmediateSearchResults = new();
     private int _historyRenderCount;
     private int _gifRenderCount;
     private int _stickerRenderCount;
     private bool _imageSearchRowAutoHidden;
     private const int HistoryPageSize = 60;
+    private const double HistoryCardFullWidth = 174d;
+    private const double HistoryVirtualRowHeight = 156d;
+    private const int HistoryVirtualRowBuffer = 3;
+    private const int HistoryPrefetchRowBuffer = 2;
+    private const int HistoryPrefetchLimit = 48;
+    private bool _useVirtualizedImageHistory;
+    private int _virtualizedHistoryColumns = 1;
+    private int _virtualizedHistoryStartIndex = -1;
+    private int _virtualizedHistoryEndIndex = -1;
+    private Border? _historyTopSpacer;
+    private Border? _historyBottomSpacer;
+    private WrapPanel? _historyVirtualizedPanel;
 
-    private void LoadHistory()
+    private bool ShouldUseVirtualizedImageHistory(IReadOnlyCollection<HistoryItemVM> items)
+        => false;
+
+    private sealed record PreparedHistoryItemData(
+        HistoryEntry Entry,
+        string ThumbPath,
+        string Dimensions,
+        string TimeAgo,
+        string FileNameSearchText,
+        string NormalizedFileNameSearchText,
+        string SearchText,
+        string NormalizedSearchText,
+        string ImageSearchStatusText,
+        string ImageSearchDiagnosticsText,
+        string ImageSearchMatchText,
+        bool IsSelected);
+
+    private async void LoadHistory()
     {
+        _historyLoadCts?.Cancel();
+        _historyLoadCts?.Dispose();
+        _historyLoadCts = new CancellationTokenSource();
+        var cancellationToken = _historyLoadCts.Token;
+        var version = ++_historyLoadVersion;
+        _historyLoadInProgress = true;
+        _deferHistoryMonitor = true;
         HistoryStack.Children.Clear();
+        HistoryEmptyText.Visibility = Visibility.Collapsed;
+        HistoryEmptyLabel.Text = "Loading captures...";
+        HistoryCountText.Text = "Loading captures...";
         _imageSearchRowAutoHidden = false;
+        _lastImmediateSearchQuery = "";
+        _lastImmediateSearchSources = ImageSearchSourceOptions.None;
+        _lastImmediateSearchExactMatch = false;
+        _lastImmediateSearchResults = new List<HistoryItemVM>();
 
-        var entries = _historyService.ImageEntries;
-        var selectedPaths = _allHistoryItems
-            .Where(i => i.IsSelected)
-            .Select(i => i.Entry.FilePath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        _allHistoryItems = new List<HistoryItemVM>(entries.Count);
-        _allHistoryItemsByPath = new Dictionary<string, HistoryItemVM>(StringComparer.OrdinalIgnoreCase);
-        foreach (var e in entries)
+        try
         {
-            var fileNameSearch = Path.GetFileNameWithoutExtension(e.FileName);
-            var searchText = _imageSearchIndexService.BuildSearchText(e.FilePath, e.FileName);
+            var entries = _historyService.ImageEntries;
+            var selectedPaths = _allHistoryItems
+                .Where(i => i.IsSelected)
+                .Select(i => i.Entry.FilePath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var searchEnabled = _settingsService.Settings.ShowImageSearchBar;
+            var query = _imageSearchQuery;
+            var sources = _settingsService.Settings.ImageSearchSources;
+            var exactMatch = _settingsService.Settings.ImageSearchExactMatch;
 
-            var vm = new HistoryItemVM
+            var prepared = await Task.Run(() =>
             {
-                Entry = e,
-                ThumbPath = e.FilePath,
-                Dimensions = e.Width > 0 ? $"{e.Width} x {e.Height}" : "",
-                TimeAgo = FormatTimeAgo(e.CapturedAt),
-                FileNameSearchText = fileNameSearch,
-                NormalizedFileNameSearchText = ImageSearchQueryMatcher.Normalize(fileNameSearch),
-                SearchText = searchText,
-                NormalizedSearchText = ImageSearchQueryMatcher.Normalize(searchText),
-                OcrSearchText = "",
-                SemanticSearchText = "",
-                IsSelected = selectedPaths.Contains(e.FilePath)
-            };
-
-            _allHistoryItems.Add(vm);
-            _allHistoryItemsByPath[e.FilePath] = vm;
-        }
-
-        if (_settingsService.Settings.ShowImageSearchBar)
-            RefreshImageSearchTexts();
-
-        if (_settingsService.Settings.AutoIndexImages)
-            Dispatcher.BeginInvoke(() =>
-            {
-                try
+                var rows = new List<PreparedHistoryItemData>(entries.Count);
+                foreach (var entry in entries)
                 {
-                    if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
-                        _imageSearchIndexService.RequestSync(entries, _settingsService.Settings.OcrLanguageTag);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var fileNameSearch = Path.GetFileNameWithoutExtension(entry.FileName);
+                    var searchText = _imageSearchIndexService.BuildSearchText(entry.FilePath, entry.FileName);
+                    var diagnostics = searchEnabled
+                        ? _imageSearchIndexService.GetDiagnostics(entry.FilePath, entry.FileName, query, sources, exactMatch)
+                        : new ImageSearchRecordDiagnostics();
+
+                    rows.Add(new PreparedHistoryItemData(
+                        entry,
+                        entry.FilePath,
+                        entry.Width > 0 ? $"{entry.Width} x {entry.Height}" : "",
+                        FormatTimeAgo(entry.CapturedAt),
+                        fileNameSearch,
+                        ImageSearchQueryMatcher.Normalize(fileNameSearch),
+                        searchText,
+                        ImageSearchQueryMatcher.Normalize(searchText),
+                        diagnostics.StatusText,
+                        diagnostics.DetailsText,
+                        diagnostics.MatchText,
+                        selectedPaths.Contains(entry.FilePath)));
                 }
-                catch { }
-            }, System.Windows.Threading.DispatcherPriority.Background);
-        ApplyImageSearchFilter();
-        DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+
+                return rows;
+            }, cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested || version != _historyLoadVersion || !IsLoaded)
+                return;
+
+            var previousItemsByPath = _allHistoryItemsByPath;
+            _allHistoryItems = new List<HistoryItemVM>(prepared.Count);
+            _allHistoryItemsByPath = new Dictionary<string, HistoryItemVM>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in prepared)
+            {
+                var vm = previousItemsByPath.TryGetValue(row.Entry.FilePath, out var existing)
+                    ? existing
+                    : new HistoryItemVM();
+
+                vm.Card = null;
+                vm.ThumbnailImage = null;
+                vm.SelectionBadge = null;
+
+                vm.Entry = row.Entry;
+                vm.ThumbPath = row.ThumbPath;
+                vm.Dimensions = row.Dimensions;
+                vm.TimeAgo = row.TimeAgo;
+                vm.FileNameSearchText = row.FileNameSearchText;
+                vm.NormalizedFileNameSearchText = row.NormalizedFileNameSearchText;
+                vm.SearchText = row.SearchText;
+                vm.NormalizedSearchText = row.NormalizedSearchText;
+                vm.OcrSearchText = "";
+                vm.SemanticSearchText = "";
+                vm.ImageSearchStatusText = row.ImageSearchStatusText;
+                vm.ImageSearchDiagnosticsText = row.ImageSearchDiagnosticsText;
+                vm.ImageSearchMatchText = row.ImageSearchMatchText;
+                vm.IsSelected = row.IsSelected;
+                if (vm.ThumbnailLoaded && IsStaleHistoryPlaceholder(vm.ThumbnailSource, row.Entry.Kind))
+                {
+                    vm.ThumbnailLoaded = false;
+                    vm.ThumbnailSource = null;
+                }
+                if ((vm.ThumbnailSource is null || !vm.ThumbnailLoaded) &&
+                    TryGetThumbFromCache(row.Entry.FilePath, out var cachedThumb))
+                {
+                    vm.ThumbnailSource = cachedThumb;
+                    vm.ThumbnailLoaded = true;
+                }
+
+                _allHistoryItems.Add(vm);
+                _allHistoryItemsByPath[row.Entry.FilePath] = vm;
+            }
+
+            ApplyImageSearchFilter();
+            _historyImageCacheReady = true;
+            PrimeHistoryFingerprint();
+            DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+            if (_settingsService.Settings.AutoIndexImages)
+            {
+                _ = Dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
+                            _imageSearchIndexService.RequestSync(entries, _settingsService.Settings.OcrLanguageTag);
+                    }
+                    catch { }
+                }, System.Windows.Threading.DispatcherPriority.Background);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (version == _historyLoadVersion)
+            {
+                _historyLoadInProgress = false;
+                _deferHistoryMonitor = false;
+                UpdateHistoryMonitorState();
+                if (_pendingHistoryDiskRefresh || _pendingHistoryUiRefresh)
+                {
+                    _historyRefreshTimer.Stop();
+                    _historyRefreshTimer.Start();
+                }
+            }
+        }
     }
 
     private void RenderHistoryItems()
     {
+        _useVirtualizedImageHistory = ShouldUseVirtualizedImageHistory(_filteredHistoryItems);
+        if (_useVirtualizedImageHistory)
+        {
+            RenderVirtualizedHistoryItems(resetScrollPosition: true);
+            return;
+        }
+
         HistoryStack.Children.Clear();
         _historyItems = _filteredHistoryItems.Take(_historyRenderCount).ToList();
-        var groups = _historyItems.GroupBy(i => i.Entry.CapturedAt.Date).OrderByDescending(g => g.Key);
-        foreach (var group in groups)
+        AppendGroupedHistoryItems(HistoryStack, _historyItems, CreateHistoryCard);
+        PrimeHistoryThumbnailLoads(_filteredHistoryItems.Take(_historyRenderCount + 12));
+    }
+
+    private void RenderVirtualizedHistoryItems(bool resetScrollPosition)
+    {
+        EnsureHistoryVirtualizedElements();
+        _historyItems.Clear();
+        _virtualizedHistoryStartIndex = -1;
+        _virtualizedHistoryEndIndex = -1;
+
+        if (resetScrollPosition)
+            ImagesPanel.ScrollToVerticalOffset(0);
+
+        UpdateVirtualizedHistoryViewport();
+    }
+
+    private void EnsureHistoryVirtualizedElements()
+    {
+        if (_historyTopSpacer is not null &&
+            _historyBottomSpacer is not null &&
+            _historyVirtualizedPanel is not null &&
+            HistoryStack.Children.Count == 3 &&
+            ReferenceEquals(HistoryStack.Children[0], _historyTopSpacer) &&
+            ReferenceEquals(HistoryStack.Children[1], _historyVirtualizedPanel) &&
+            ReferenceEquals(HistoryStack.Children[2], _historyBottomSpacer))
+            return;
+
+        _historyTopSpacer = new Border { Height = 0 };
+        _historyVirtualizedPanel = new WrapPanel();
+        _historyBottomSpacer = new Border { Height = 0 };
+
+        HistoryStack.Children.Clear();
+        HistoryStack.Children.Add(_historyTopSpacer);
+        HistoryStack.Children.Add(_historyVirtualizedPanel);
+        HistoryStack.Children.Add(_historyBottomSpacer);
+    }
+
+    private void UpdateVirtualizedHistoryViewport()
+    {
+        if (!_useVirtualizedImageHistory || _historyVirtualizedPanel is null || _historyTopSpacer is null || _historyBottomSpacer is null)
+            return;
+
+        var totalCount = _filteredHistoryItems.Count;
+        if (totalCount == 0)
         {
-            string label = group.Key == DateTime.Today ? "Today"
-                : group.Key == DateTime.Today.AddDays(-1) ? "Yesterday"
-                : group.Key.ToString("MMMM d, yyyy");
+            _historyVirtualizedPanel.Children.Clear();
+            _historyTopSpacer.Height = 0;
+            _historyBottomSpacer.Height = 0;
+            _historyItems.Clear();
+            return;
+        }
 
-            if (HistoryStack.Children.Count > 0)
-            {
-                HistoryStack.Children.Add(new Border
-                {
-                    Height = 1,
-                    Background = Theme.Brush(Theme.BorderSubtle),
-                    Margin = new Thickness(6, 14, 6, 0)
-                });
-            }
+        var availableWidth = ImagesPanel.ViewportWidth > 0 ? ImagesPanel.ViewportWidth : ImagesPanel.ActualWidth;
+        var columns = Math.Max(1, (int)Math.Floor(Math.Max(HistoryCardFullWidth, availableWidth - 6) / HistoryCardFullWidth));
+        _virtualizedHistoryColumns = columns;
 
-            HistoryStack.Children.Add(new TextBlock
-            {
-                Text = label,
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
-                Foreground = Theme.Brush(Theme.TextPrimary),
-                Opacity = 0.45,
-                Margin = new Thickness(6, 12, 0, 6)
-            });
+        var totalRows = (int)Math.Ceiling(totalCount / (double)columns);
+        var viewportHeight = ImagesPanel.ViewportHeight > 0 ? ImagesPanel.ViewportHeight : 600d;
+        var visibleRows = Math.Max(1, (int)Math.Ceiling(viewportHeight / HistoryVirtualRowHeight));
+        var firstVisibleRow = Math.Max(0, (int)Math.Floor(ImagesPanel.VerticalOffset / HistoryVirtualRowHeight));
+        var startRow = Math.Max(0, firstVisibleRow - HistoryVirtualRowBuffer);
+        var endRowExclusive = Math.Min(totalRows, firstVisibleRow + visibleRows + HistoryVirtualRowBuffer);
+        var startIndex = Math.Min(totalCount, startRow * columns);
+        var endIndex = Math.Min(totalCount, endRowExclusive * columns);
 
-            var wrap = new WrapPanel();
-            foreach (var item in group)
-                wrap.Children.Add(CreateHistoryCard(item));
-            HistoryStack.Children.Add(wrap);
+        if (startIndex == _virtualizedHistoryStartIndex && endIndex == _virtualizedHistoryEndIndex)
+            return;
+
+        _virtualizedHistoryStartIndex = startIndex;
+        _virtualizedHistoryEndIndex = endIndex;
+        _historyTopSpacer.Height = startRow * HistoryVirtualRowHeight;
+        _historyBottomSpacer.Height = Math.Max(0, (totalRows - endRowExclusive) * HistoryVirtualRowHeight);
+
+        var visibleItems = _filteredHistoryItems.Skip(startIndex).Take(endIndex - startIndex).ToList();
+        _historyItems = visibleItems;
+        _historyVirtualizedPanel.Children.Clear();
+        foreach (var item in visibleItems)
+            _historyVirtualizedPanel.Children.Add(GetOrCreateHistoryCard(item));
+
+        var prefetchItems = visibleItems
+            .Concat(_filteredHistoryItems.Skip(endIndex).Take(columns * HistoryPrefetchRowBuffer))
+            .DistinctBy(item => item.Entry.FilePath)
+            .ToList();
+        PrimeHistoryThumbnailLoads(prefetchItems);
+    }
+
+    private static void PrimeHistoryThumbnailLoads(IEnumerable<HistoryItemVM> items)
+    {
+        int queued = 0;
+        foreach (var item in items)
+        {
+            if (queued >= HistoryPrefetchLimit)
+                break;
+
+            if (item.ThumbnailLoaded && item.ThumbnailSource != null)
+                continue;
+
+            queued++;
+            PrimeThumbLoad(item);
         }
     }
 
@@ -156,9 +353,10 @@ public partial class SettingsWindow
             FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
             TextTrimming = TextTrimming.CharacterEllipsis
         });
-        var timeAndStatus = string.IsNullOrWhiteSpace(vm.ImageSearchStatusText)
+        var visibleStatus = ShouldShowHistoryCardStatus(vm.ImageSearchStatusText) ? vm.ImageSearchStatusText : "";
+        var timeAndStatus = string.IsNullOrWhiteSpace(visibleStatus)
             ? vm.TimeAgo
-            : $"{vm.TimeAgo} · {vm.ImageSearchStatusText}";
+            : $"{vm.TimeAgo} · {visibleStatus}";
         shell.InfoPanel.Children.Add(new TextBlock
         {
             Text = timeAndStatus,
@@ -185,6 +383,56 @@ public partial class SettingsWindow
                 shell.Card.ToolTip = vm.ImageSearchDiagnosticsText;
         }
         return shell.Card;
+    }
+
+    private Border GetOrCreateHistoryCard(HistoryItemVM vm)
+    {
+        if (vm.Card is Border existing)
+        {
+            DetachElementFromParent(existing);
+            UpdateCardSelection(vm);
+            RefreshCardThumbnail(vm);
+            return existing;
+        }
+
+        return CreateHistoryCard(vm);
+    }
+
+    private static void RefreshCardThumbnail(HistoryItemVM vm)
+    {
+        if (vm.ThumbnailImage is not Image image)
+            return;
+
+        if (vm.ThumbnailLoaded && IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))
+        {
+            vm.ThumbnailLoaded = false;
+            vm.ThumbnailSource = null;
+        }
+
+        if ((vm.ThumbnailSource is null || !vm.ThumbnailLoaded) &&
+            TryGetThumbFromCache(vm.Entry.FilePath, out var cachedThumb))
+        {
+            vm.ThumbnailSource = cachedThumb;
+            vm.ThumbnailLoaded = true;
+        }
+
+        image.Source = vm.ThumbnailSource ?? GetHistoryPlaceholder(vm.Entry.Kind);
+        image.Opacity = 1;
+
+        if (!vm.ThumbnailLoaded || vm.ThumbnailSource is null || IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))
+            LoadThumbAsync(image, vm);
+    }
+
+    private static bool ShouldShowHistoryCardStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            return false;
+
+        return status.Equals("OCR ready", StringComparison.OrdinalIgnoreCase) ||
+               status.Equals("Indexed", StringComparison.OrdinalIgnoreCase) ||
+               status.Equals("No text", StringComparison.OrdinalIgnoreCase) ||
+               status.Equals("OCR error", StringComparison.OrdinalIgnoreCase) ||
+               status.Equals("OCR failed", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void UpdateCardSelection(HistoryItemVM vm)
@@ -329,46 +577,66 @@ public partial class SettingsWindow
     {
         StickerStack.Children.Clear();
         _stickerItems = _allStickerItems.Take(_stickerRenderCount).ToList();
-        var groups = _stickerItems.GroupBy(i => i.Entry.CapturedAt.Date).OrderByDescending(g => g.Key);
-        foreach (var group in groups)
-        {
-            string label = group.Key == DateTime.Today ? "Today"
-                : group.Key == DateTime.Today.AddDays(-1) ? "Yesterday"
-                : group.Key.ToString("MMMM d, yyyy");
-
-            if (StickerStack.Children.Count > 0)
-            {
-                StickerStack.Children.Add(new Border
-                {
-                    Height = 1,
-                    Background = Theme.Brush(Theme.BorderSubtle),
-                    Margin = new Thickness(6, 14, 6, 0)
-                });
-            }
-
-            StickerStack.Children.Add(new TextBlock
-            {
-                Text = label,
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Opacity = 0.45,
-                Margin = new Thickness(6, 10, 0, 4)
-            });
-
-            var wrap = new WrapPanel();
-            foreach (var item in group)
-                wrap.Children.Add(CreateHistoryCard(item));
-            StickerStack.Children.Add(wrap);
-        }
+        AppendGroupedHistoryItems(StickerStack, _stickerItems, CreateHistoryCard);
+        PrimeHistoryThumbnailLoads(_stickerItems);
     }
 
     private void StickerPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
         if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 300) return;
         if (_stickerRenderCount >= _allStickerItems.Count) return;
+        var previousCount = _stickerRenderCount;
         _stickerRenderCount = Math.Min(_stickerRenderCount + HistoryPageSize, _allStickerItems.Count);
-        RenderStickerItems();
+        var appended = _allStickerItems.Skip(previousCount).Take(_stickerRenderCount - previousCount).ToList();
+        _stickerItems.AddRange(appended);
+        AppendGroupedHistoryItems(StickerStack, appended, CreateHistoryCard);
+        PrimeHistoryThumbnailLoads(_allStickerItems.Take(Math.Min(_stickerRenderCount + 12, _allStickerItems.Count)));
     }
+
+    private void AppendGroupedHistoryItems(System.Windows.Controls.Panel target, IEnumerable<HistoryItemVM> items, Func<HistoryItemVM, Border> cardFactory)
+    {
+        WrapPanel? currentWrap = target.Children.Count > 0 ? target.Children[target.Children.Count - 1] as WrapPanel : null;
+        DateTime? currentDate = currentWrap?.Tag is DateTime tagDate ? tagDate : null;
+
+        foreach (var item in items)
+        {
+            var itemDate = item.Entry.CapturedAt.Date;
+            if (currentWrap is null || currentDate != itemDate)
+            {
+                if (target.Children.Count > 0)
+                {
+                    target.Children.Add(new Border
+                    {
+                        Height = 1,
+                        Background = Theme.Brush(Theme.BorderSubtle),
+                        Margin = new Thickness(6, 14, 6, 0)
+                    });
+                }
+
+                target.Children.Add(new TextBlock
+                {
+                    Text = FormatHistoryGroupLabel(itemDate),
+                    FontSize = 12,
+                    FontWeight = FontWeights.SemiBold,
+                    FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
+                    Foreground = Theme.Brush(Theme.TextPrimary),
+                    Opacity = 0.45,
+                    Margin = new Thickness(6, 12, 0, 6)
+                });
+
+                currentWrap = new WrapPanel { Tag = itemDate };
+                target.Children.Add(currentWrap);
+                currentDate = itemDate;
+            }
+
+            currentWrap.Children.Add(cardFactory(item));
+        }
+    }
+
+    private static string FormatHistoryGroupLabel(DateTime date) =>
+        date == DateTime.Today ? "Today"
+        : date == DateTime.Today.AddDays(-1) ? "Yesterday"
+        : date.ToString("MMMM d, yyyy");
 
     private static long TryGetFileLength(string filePath)
     {

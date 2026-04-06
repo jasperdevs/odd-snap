@@ -5,6 +5,8 @@ public static class FileNameTemplate
     public static string Format(string template, int width = 0, int height = 0)
     {
         var now = DateTime.Now;
+        var randomToken = Guid.NewGuid().ToString("N").Substring(0, 4);
+        template = NormalizeLegacyPlaceholders(template);
 
         var result = template
             .Replace("{datetime}", now.ToString("yyyyMMdd_HHmmss"))
@@ -18,7 +20,7 @@ public static class FileNameTemplate
             .Replace("{sec}", now.ToString("ss"))
             .Replace("{w}", width > 0 ? width.ToString() : "")
             .Replace("{h}", height > 0 ? height.ToString() : "")
-            .Replace("{rand}", Guid.NewGuid().ToString("N").Substring(0, 4));
+            .Replace("{rand}", randomToken);
 
         // Ensure all filenames start with yoink_
         if (!result.StartsWith("yoink", StringComparison.OrdinalIgnoreCase))
@@ -27,6 +29,14 @@ public static class FileNameTemplate
         // Sanitize invalid filename chars
         foreach (var c in System.IO.Path.GetInvalidFileNameChars())
             result = result.Replace(c, '_');
+
+        while (result.Contains("__", StringComparison.Ordinal))
+            result = result.Replace("__", "_", StringComparison.Ordinal);
+
+        result = result.Trim('_', '-', '.', ' ');
+
+        if (string.IsNullOrWhiteSpace(result) || result.Equals("yoink", StringComparison.OrdinalIgnoreCase))
+            result = $"yoink_{now:yyyy-MM-dd_HH-mm-ss}_{randomToken}";
 
         return result;
     }
@@ -55,4 +65,34 @@ public static class FileNameTemplate
         "yoink_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}",
         "yoink_{year}.{month}.{day}_{hour}.{min}.{sec}_{rand}",
     };
+
+    private static string NormalizeLegacyPlaceholders(string template)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return "{datetime}_{rand}";
+
+        return ReplaceLoosePlaceholder(
+            ReplaceLoosePlaceholder(template, "rand", "{rand}"),
+            "datetime",
+            "{datetime}");
+    }
+
+    private static string ReplaceLoosePlaceholder(string template, string token, string replacement)
+    {
+        var escapedToken = System.Text.RegularExpressions.Regex.Escape(token);
+
+        template = System.Text.RegularExpressions.Regex.Replace(
+            template,
+            $@"(?i)\(\s*{escapedToken}\s*\)",
+            replacement);
+        template = System.Text.RegularExpressions.Regex.Replace(
+            template,
+            $@"(?i)\[\s*{escapedToken}\s*\]",
+            replacement);
+        template = System.Text.RegularExpressions.Regex.Replace(
+            template,
+            $@"(?i)(?<![A-Za-z0-9{{\[(]){escapedToken}(?![A-Za-z0-9}}\])])",
+            replacement);
+        return template;
+    }
 }

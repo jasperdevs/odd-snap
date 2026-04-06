@@ -12,13 +12,19 @@ namespace Yoink.UI;
 
 public partial class SettingsWindow : Window
 {
-    private const int MaxThumbCacheEntries = 32;
+    private const int MaxThumbCacheEntries = 384;
+    private const string SemanticRuntimeJobKey = "runtime:semantic-search";
+    private const string OpenSourceLocalTranslationJobKey = "runtime:translation-open-source-local";
+    private const string ArgosTranslationJobKey = "runtime:translation-argos";
     private static readonly Dictionary<string, BitmapSource> ThumbCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly LinkedList<string> ThumbCacheOrder = new();
     private static readonly Dictionary<string, LinkedListNode<string>> ThumbCacheNodes = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, List<WeakReference<System.Windows.Controls.Image>>> ThumbWaiters = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, BitmapImage> LogoCache = new();
     private static readonly SemaphoreSlim ThumbDecodeGate = new(4);
     private static readonly HashSet<string> ThumbInflight = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object ThumbWarmGate = new();
+    private static CancellationTokenSource? ThumbWarmCts;
     private readonly System.Windows.Threading.DispatcherTimer _historyMonitorTimer = new()
     {
         Interval = TimeSpan.FromSeconds(2.5)
@@ -27,9 +33,13 @@ public partial class SettingsWindow : Window
     {
         Interval = TimeSpan.FromSeconds(1.25)
     };
+    private readonly System.Windows.Threading.DispatcherTimer _historyRefreshTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(300)
+    };
     private readonly System.Windows.Threading.DispatcherTimer _imageSearchDebounceTimer = new()
     {
-        Interval = TimeSpan.FromMilliseconds(700)
+        Interval = TimeSpan.FromMilliseconds(180)
     };
     private readonly System.Windows.Threading.DispatcherTimer _semanticSearchTimer = new()
     {
@@ -41,6 +51,20 @@ public partial class SettingsWindow : Window
     private UpdateCheckResult? _latestUpdate;
     private bool _updateCheckInFlight;
     private string? _lastHistoryFingerprint;
+    private bool _pendingImageSearchTextRefresh;
+    private bool _pendingHistoryDiskRefresh;
+    private bool _pendingHistoryUiRefresh;
+    private bool _historyRefreshInProgress;
+    private CancellationTokenSource? _historyLoadCts;
+    private int _historyLoadVersion;
+    private bool _historyLoadInProgress;
+    private bool _historyImageCacheReady;
+    private bool _deferHistoryMonitor;
+    private bool _pendingTrayHistoryOpen;
+    private bool _trayHistoryOpenScheduled;
+    private int _historyTabLoadVersion;
+    private bool _historyTabLoadScheduled;
+    private bool _historyTabLoadPreserveTransientState;
 
     public event Action? HotkeyChanged;
     public event Action? UninstallRequested;
@@ -66,10 +90,13 @@ public partial class SettingsWindow : Window
         LoadSettings();
         Loaded += (_, _) => ApplyMicaBackdrop();
         Loaded += async (_, _) => await RefreshUpdateStatusAsync(false);
+        ContentRendered += (_, _) => TryProcessPendingTrayHistoryOpen();
         _historyService.Changed += HistoryService_Changed;
         _imageSearchIndexService.Changed += ImageSearchIndexService_Changed;
         _imageSearchIndexService.StatusChanged += ImageSearchIndexService_StatusChanged;
+        BackgroundRuntimeJobService.Changed += BackgroundRuntimeJobService_Changed;
         _historyMonitorTimer.Tick += (_, _) => PollHistoryChanges();
+        _historyRefreshTimer.Tick += async (_, _) => await FlushQueuedHistoryRefreshAsync();
         _imageIndexRefreshTimer.Tick += (_, _) => FlushQueuedImageIndexRefresh();
         _imageSearchDebounceTimer.Tick += (_, _) => FlushQueuedImageSearchRefresh();
         _semanticSearchTimer.Tick += (_, _) => FlushQueuedSemanticSearchRefresh();
@@ -78,29 +105,94 @@ public partial class SettingsWindow : Window
             ApplyThemeColors();
             UpdateLocalEngineUi();
         };
+        SizeChanged += (_, _) =>
+        {
+            if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
+                UpdateVirtualizedHistoryViewport();
+        };
         Closed += (_, _) =>
         {
             _historyService.Changed -= HistoryService_Changed;
             _imageSearchIndexService.Changed -= ImageSearchIndexService_Changed;
             _imageSearchIndexService.StatusChanged -= ImageSearchIndexService_StatusChanged;
+            BackgroundRuntimeJobService.Changed -= BackgroundRuntimeJobService_Changed;
+            _historyLoadCts?.Cancel();
+            _historyLoadCts?.Dispose();
             CancelImageSearchWork();
             _imageIndexRefreshTimer.Stop();
+            _historyRefreshTimer.Stop();
             _imageSearchDebounceTimer.Stop();
             _semanticSearchTimer.Stop();
             _historyMonitorTimer.Stop();
-            ClearThumbCache();
         };
+    }
+
+    private void BackgroundRuntimeJobService_Changed(string key)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(() => BackgroundRuntimeJobService_Changed(key));
+            return;
+        }
+
+        if (!IsLoaded)
+            return;
+
+        try
+        {
+            _ = RefreshSemanticRuntimeStatusAsync();
+            if (_ocrTabLoaded)
+                _ = CheckModelStatusAsync();
+            UpdateLocalEngineUi();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.background-runtime-changed", ex);
+        }
+    }
+
+    private static string GetStickerRuntimeJobKey(StickerExecutionProvider provider)
+        => $"runtime:sticker-rembg:{provider}";
+
+    private static string GetStickerModelJobKey(LocalStickerEngine engine)
+        => $"runtime:sticker-model:{engine}";
+
+    public void OpenHistoryFromTray()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(OpenHistoryFromTray, System.Windows.Threading.DispatcherPriority.Background);
+            return;
+        }
+
+        _pendingTrayHistoryOpen = true;
+        TryProcessPendingTrayHistoryOpen();
+    }
+
+    private void TryProcessPendingTrayHistoryOpen()
+    {
+        if (!_pendingTrayHistoryOpen || !IsLoaded || !IsVisible || _trayHistoryOpenScheduled)
+            return;
+
+        _trayHistoryOpenScheduled = true;
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            _trayHistoryOpenScheduled = false;
+            if (!_pendingTrayHistoryOpen || !IsLoaded || !IsVisible)
+                return;
+
+            _pendingTrayHistoryOpen = false;
+            HistoryTab.IsChecked = true;
+            ApplyMainTabSelection();
+        }, System.Windows.Threading.DispatcherPriority.ContextIdle);
     }
 
     private void HistoryService_Changed()
     {
         Dispatcher.BeginInvoke(() =>
         {
-            if (!IsLoaded || HistoryTab.IsChecked != true)
-                return;
-
-            LoadCurrentHistoryTab();
-            PrimeHistoryFingerprint();
+            _historyImageCacheReady = false;
+            QueueHistoryRefresh(reloadFromDisk: false);
         });
     }
 
@@ -110,14 +202,14 @@ public partial class SettingsWindow : Window
         {
             try
             {
-                RefreshImageSearchTexts();
-                QueueImageIndexRefresh();
                 UpdateImageSearchStatus();
                 UpdateImageSearchActionButtons();
                 UpdateImageSearchPlaceholderText();
+                QueueImageIndexRefresh();
             }
-            catch
+            catch (Exception ex)
             {
+                AppDiagnostics.LogError("settings.image-search-index-changed", ex);
                 SetImageSearchLoading(false, forceSemantic: true);
             }
         });
@@ -136,8 +228,9 @@ public partial class SettingsWindow : Window
                 UpdateImageSearchActionButtons();
                 UpdateImageSearchPlaceholderText();
             }
-            catch
+            catch (Exception ex)
             {
+                AppDiagnostics.LogError("settings.image-search-status", ex);
                 SetImageSearchLoading(false, forceSemantic: true);
             }
         });
@@ -145,16 +238,9 @@ public partial class SettingsWindow : Window
 
     private void QueueImageIndexRefresh()
     {
+        _pendingImageSearchTextRefresh = true;
+
         if (!IsLoaded || HistoryTab.IsChecked != true || HistoryCategoryCombo.SelectedIndex != 0)
-            return;
-
-        if (!_settingsService.Settings.ShowImageSearchBar)
-            return;
-
-        if (string.IsNullOrWhiteSpace(_imageSearchQuery))
-            return;
-
-        if (_settingsService.Settings.ImageSearchSources == ImageSearchSourceOptions.None)
             return;
 
         _imageIndexRefreshTimer.Stop();
@@ -180,8 +266,16 @@ public partial class SettingsWindow : Window
         if (!IsLoaded || HistoryTab.IsChecked != true || HistoryCategoryCombo.SelectedIndex != 0)
             return;
 
-        if (!_settingsService.Settings.ShowImageSearchBar)
-            return;
+        if (_pendingImageSearchTextRefresh)
+        {
+            var relevantItems = _historyItems.Count > 0
+                ? _historyItems
+                : _filteredHistoryItems.Count > 0
+                    ? _filteredHistoryItems
+                    : _allHistoryItems;
+            RefreshImageSearchTexts(relevantItems);
+            _pendingImageSearchTextRefresh = false;
+        }
 
         ApplyImageSearchFilter();
     }
@@ -212,7 +306,7 @@ public partial class SettingsWindow : Window
 
     private void PollHistoryChanges()
     {
-        if (!IsLoaded || HistoryTab.IsChecked != true)
+        if (!IsLoaded || HistoryTab.IsChecked != true || _deferHistoryMonitor || _historyLoadInProgress)
         {
             _historyMonitorTimer.Stop();
             return;
@@ -222,16 +316,13 @@ public partial class SettingsWindow : Window
         if (fingerprint == _lastHistoryFingerprint)
             return;
 
-        RefreshHistoryFromDisk();
+        QueueHistoryRefresh(reloadFromDisk: true);
     }
 
     private void RefreshHistoryFromDisk()
     {
-        _historyService.Load();
         _historyService.RecoverFromDirectories(_settingsService.Settings.SaveDirectory);
         _historyService.PruneByRetention(_settingsService.Settings.HistoryRetention);
-        LoadCurrentHistoryTab();
-        PrimeHistoryFingerprint();
     }
 
     private void PrimeHistoryFingerprint()
@@ -239,10 +330,28 @@ public partial class SettingsWindow : Window
         _lastHistoryFingerprint = _historyService.GetDiskFingerprint(_settingsService.Settings.SaveDirectory);
     }
 
+    private bool CanReuseLoadedImageHistory()
+    {
+        if (!_historyImageCacheReady || _historyLoadInProgress || _pendingHistoryDiskRefresh)
+            return false;
+
+        if (_allHistoryItems.Count == 0)
+            return false;
+
+        var fingerprint = _historyService.GetDiskFingerprint(_settingsService.Settings.SaveDirectory);
+        return string.Equals(fingerprint, _lastHistoryFingerprint, StringComparison.Ordinal);
+    }
+
     private void UpdateHistoryMonitorState()
     {
         if (HistoryTab.IsChecked == true)
         {
+            if (_deferHistoryMonitor || _historyLoadInProgress)
+            {
+                _historyMonitorTimer.Stop();
+                return;
+            }
+
             PrimeHistoryFingerprint();
             if (!_historyMonitorTimer.IsEnabled)
                 _historyMonitorTimer.Start();
@@ -251,6 +360,81 @@ public partial class SettingsWindow : Window
         {
             _historyMonitorTimer.Stop();
             _lastHistoryFingerprint = null;
+        }
+    }
+
+    private void QueueHistoryRefresh(bool reloadFromDisk)
+    {
+        if (!IsLoaded || HistoryTab.IsChecked != true)
+            return;
+
+        if (reloadFromDisk)
+            _historyImageCacheReady = false;
+
+        _pendingHistoryDiskRefresh |= reloadFromDisk;
+        _pendingHistoryUiRefresh = true;
+        _historyRefreshTimer.Stop();
+        _historyRefreshTimer.Start();
+    }
+
+    private void ScheduleHistoryTabLoad(bool preserveTransientState = false)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.BeginInvoke(() => ScheduleHistoryTabLoad(preserveTransientState), System.Windows.Threading.DispatcherPriority.Background);
+            return;
+        }
+
+        _historyTabLoadVersion++;
+        _historyTabLoadPreserveTransientState |= preserveTransientState;
+        if (_historyTabLoadScheduled)
+            return;
+
+        _historyTabLoadScheduled = true;
+        var scheduledVersion = _historyTabLoadVersion;
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            _historyTabLoadScheduled = false;
+            if (!IsLoaded || HistoryTab.IsChecked != true || scheduledVersion != _historyTabLoadVersion)
+                return;
+
+            var preserveState = _historyTabLoadPreserveTransientState;
+            _historyTabLoadPreserveTransientState = false;
+            LoadCurrentHistoryTab(preserveTransientState: preserveState);
+        }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+    }
+
+    private async Task FlushQueuedHistoryRefreshAsync()
+    {
+        _historyRefreshTimer.Stop();
+
+        if (!IsLoaded || HistoryTab.IsChecked != true)
+            return;
+
+        if (_historyRefreshInProgress || _historyLoadInProgress)
+        {
+            _historyRefreshTimer.Start();
+            return;
+        }
+
+        _historyRefreshInProgress = true;
+        try
+        {
+            var reloadFromDisk = _pendingHistoryDiskRefresh;
+            _pendingHistoryDiskRefresh = false;
+            _pendingHistoryUiRefresh = false;
+
+            if (reloadFromDisk)
+                await Task.Run(RefreshHistoryFromDisk);
+
+            ScheduleHistoryTabLoad(preserveTransientState: true);
+            PrimeHistoryFingerprint();
+        }
+        finally
+        {
+            _historyRefreshInProgress = false;
+            if (_pendingHistoryDiskRefresh || _pendingHistoryUiRefresh)
+                _historyRefreshTimer.Start();
         }
     }
 
@@ -265,7 +449,8 @@ public partial class SettingsWindow : Window
 
     private void TitleBtn_Enter(object sender, System.Windows.Input.MouseEventArgs e)
     {
-        if (sender is Border b) b.Background = Theme.Brush(Theme.AccentHover);
+        if (sender is not Border b) return;
+        b.Background = Theme.Brush(ReferenceEquals(b, CloseTitleBtn) ? Theme.DangerHover : Theme.AccentHover);
     }
 
     private void TitleBtn_Leave(object sender, System.Windows.Input.MouseEventArgs e)
@@ -280,7 +465,10 @@ public partial class SettingsWindow : Window
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             Native.Dwm.DisableBackdrop(hwnd);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("settings.apply-backdrop", ex.Message, ex);
+        }
         ApplyThemeColors();
     }
 
@@ -334,7 +522,6 @@ public partial class SettingsWindow : Window
         else if (FileNameTemplateCombo.Items.Count > 0)
             FileNameTemplateCombo.SelectedIndex = 0;
 
-        UpdateFileNamePreview();
     }
 
     private void FileNameTemplateCombo_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -344,14 +531,7 @@ public partial class SettingsWindow : Window
         {
             _settingsService.Settings.FileNameTemplate = tag;
             _settingsService.Save();
-            UpdateFileNamePreview();
         }
-    }
-
-    private void UpdateFileNamePreview()
-    {
-        var template = _settingsService.Settings.FileNameTemplate;
-        FileNamePreviewText.Text = Helpers.FileNameTemplate.Format(template) + ".png";
     }
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)

@@ -1,11 +1,25 @@
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Forms;
 using Yoink.Models;
 
 namespace Yoink.UI;
 
 internal static class PopupWindowHelper
 {
+    public static Rect GetCurrentWorkArea()
+    {
+        try
+        {
+            var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+            return new Rect(area.Left, area.Top, area.Width, area.Height);
+        }
+        catch
+        {
+            return SystemParameters.WorkArea;
+        }
+    }
+
     public static void ApplyNoActivateChrome(Window window)
     {
         var hwnd = new WindowInteropHelper(window).Handle;
@@ -27,11 +41,11 @@ internal static class PopupWindowHelper
         return position switch
         {
             ToastPosition.Left =>
-                (edge, workArea.Bottom - actualHeight - edge, -actualWidth - offScreenDistance, workArea.Bottom - actualHeight - edge, true),
+                (workArea.Left + edge, workArea.Bottom - actualHeight - edge, workArea.Left - actualWidth - offScreenDistance, workArea.Bottom - actualHeight - edge, true),
             ToastPosition.TopLeft =>
-                (edge, edge, edge, -actualHeight - offScreenDistance, false),
+                (workArea.Left + edge, workArea.Top + edge, workArea.Left + edge, workArea.Top - actualHeight - offScreenDistance, false),
             ToastPosition.TopRight =>
-                (workArea.Right - actualWidth - edge, edge, workArea.Right - actualWidth - edge, -actualHeight - offScreenDistance, false),
+                (workArea.Right - actualWidth - edge, workArea.Top + edge, workArea.Right - actualWidth - edge, workArea.Top - actualHeight - offScreenDistance, false),
             _ =>
                 (workArea.Right - actualWidth - edge, workArea.Bottom - actualHeight - edge, workArea.Right + offScreenDistance, workArea.Bottom - actualHeight - edge, true),
         };
@@ -48,11 +62,11 @@ internal static class PopupWindowHelper
         return position switch
         {
             ToastPosition.Left =>
-                (-actualWidth - exitDistance, workArea.Bottom - actualHeight - edge, true),
+                (workArea.Left - actualWidth - exitDistance, workArea.Bottom - actualHeight - edge, true),
             ToastPosition.TopLeft =>
-                (edge, -actualHeight - exitDistance, false),
+                (workArea.Left + edge, workArea.Top - actualHeight - exitDistance, false),
             ToastPosition.TopRight =>
-                (workArea.Right - actualWidth - edge, -actualHeight - exitDistance, false),
+                (workArea.Right - actualWidth - edge, workArea.Top - actualHeight - exitDistance, false),
             _ =>
                 (workArea.Right + exitDistance, workArea.Bottom - actualHeight - edge, true),
         };

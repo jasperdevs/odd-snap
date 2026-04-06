@@ -18,6 +18,7 @@ public enum OcrWorkload
 public static class OcrService
 {
     public const string EngineId = "winocr-v1";
+    private static readonly SemaphoreSlim RecognizeGate = new(1, 1);
 
     /// <summary>Windows OCR is always ready — no downloads needed.</summary>
     public static bool IsReady() => true;
@@ -35,25 +36,33 @@ public static class OcrService
 
     public static async Task<string> RecognizeAsync(Bitmap bitmap, string? languageTag = null, OcrWorkload workload = OcrWorkload.Full)
     {
-        return await Task.Run(async () =>
+        await RecognizeGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            var engine = CreateEngine(languageTag);
-            if (engine == null)
-                return "";
+            return await Task.Run(async () =>
+            {
+                var engine = CreateEngine(languageTag);
+                if (engine == null)
+                    return "";
 
-            // Convert GDI Bitmap to SoftwareBitmap via in-memory PNG
-            using var ms = new MemoryStream();
-            bitmap.Save(ms, ImageFormat.Png);
-            ms.Position = 0;
+                // Convert GDI Bitmap to SoftwareBitmap via in-memory PNG
+                using var ms = new MemoryStream();
+                bitmap.Save(ms, ImageFormat.Png);
+                ms.Position = 0;
 
-            var stream = ms.AsRandomAccessStream();
-            var decoder = await BitmapDecoder.CreateAsync(stream);
-            var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
-                BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                var stream = ms.AsRandomAccessStream();
+                var decoder = await BitmapDecoder.CreateAsync(stream);
+                var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
+                    BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
 
-            var result = await engine.RecognizeAsync(softwareBitmap);
-            return result?.Text?.Trim() ?? "";
-        }).ConfigureAwait(false);
+                var result = await engine.RecognizeAsync(softwareBitmap);
+                return result?.Text?.Trim() ?? "";
+            }).ConfigureAwait(false);
+        }
+        finally
+        {
+            RecognizeGate.Release();
+        }
     }
 
     private static OcrEngine? CreateEngine(string? languageTag)

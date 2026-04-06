@@ -1,4 +1,5 @@
 using System.Drawing;
+using Yoink.Models;
 
 namespace Yoink.Helpers;
 
@@ -9,6 +10,7 @@ public static class ToolbarLayout
         Rectangle screenBounds,
         int toolbarWidth,
         int toolbarHeight,
+        CaptureDockSide dockSide = CaptureDockSide.Top,
         int topMargin = UiChrome.ToolbarTopMargin,
         int horizontalPadding = 8)
     {
@@ -18,24 +20,34 @@ public static class ToolbarLayout
         int screenLeft = screenBounds.Left - virtualBounds.Left;
         int screenTop = screenBounds.Top - virtualBounds.Top;
 
-        int x = screenLeft + Math.Max(0, (screenBounds.Width - toolbarWidth) / 2);
-        if (screenBounds.Width > toolbarWidth + horizontalPadding * 2)
-        {
-            int minX = screenLeft + horizontalPadding;
-            int maxX = screenLeft + screenBounds.Width - toolbarWidth - horizontalPadding;
-            x = Math.Clamp(x, minX, maxX);
-        }
-        else
-        {
-            x = screenLeft + horizontalPadding;
-        }
+        int centeredX = screenLeft + Math.Max(0, (screenBounds.Width - toolbarWidth) / 2);
+        int centeredY = screenTop + Math.Max(0, (screenBounds.Height - toolbarHeight) / 2);
+        int minX = screenLeft + horizontalPadding;
+        int maxX = screenLeft + Math.Max(horizontalPadding, screenBounds.Width - toolbarWidth - horizontalPadding);
+        int minY = screenTop + horizontalPadding;
+        int maxY = screenTop + Math.Max(horizontalPadding, screenBounds.Height - toolbarHeight - horizontalPadding);
 
-        int y = screenTop + topMargin;
-        if (screenBounds.Height > toolbarHeight + topMargin + horizontalPadding)
+        int x;
+        int y;
+
+        switch (dockSide)
         {
-            int minY = screenTop + topMargin;
-            int maxY = screenTop + screenBounds.Height - toolbarHeight - horizontalPadding;
-            y = Math.Clamp(y, minY, maxY);
+            case CaptureDockSide.Bottom:
+                x = Math.Clamp(centeredX, minX, maxX);
+                y = Math.Clamp(screenTop + screenBounds.Height - toolbarHeight - (horizontalPadding + 10), minY, maxY);
+                break;
+            case CaptureDockSide.Left:
+                x = minX;
+                y = Math.Clamp(centeredY, minY, maxY);
+                break;
+            case CaptureDockSide.Right:
+                x = Math.Clamp(screenLeft + screenBounds.Width - toolbarWidth - horizontalPadding, minX, maxX);
+                y = Math.Clamp(centeredY, minY, maxY);
+                break;
+            default:
+                x = Math.Clamp(centeredX, minX, maxX);
+                y = Math.Clamp(screenTop + topMargin, minY, maxY);
+                break;
         }
 
         return new Rectangle(x, y, toolbarWidth, toolbarHeight);

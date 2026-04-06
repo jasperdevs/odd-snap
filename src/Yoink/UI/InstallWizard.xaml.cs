@@ -110,6 +110,9 @@ public partial class InstallWizard : Window
                     status => dispatcher.BeginInvoke(() => StatusDetail.Text = status));
             });
 
+            StatusText.Text = "Preparing runtimes...";
+            await PrepareBundledRuntimesAsync();
+
             StatusText.Text = "Installed!";
             StatusDetail.Text = "";
             ProgressBar.Visibility = Visibility.Collapsed;
@@ -137,13 +140,58 @@ public partial class InstallWizard : Window
         }
     }
 
+    private async Task PrepareBundledRuntimesAsync()
+    {
+        var warnings = new List<string>();
+
+        try
+        {
+            StatusDetail.Text = "Installing Argos Translate...";
+            await TranslationService.EnsureInstalledAsync(
+                new Progress<string>(message => Dispatcher.BeginInvoke(() => StatusDetail.Text = message)));
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Argos Translate: {TrimInstallWarning(ex.Message)}");
+        }
+
+        try
+        {
+            StatusDetail.Text = "Installing semantic runtime...";
+            await LocalClipRuntimeService.EnsureInstalledAsync(
+                new Progress<string>(message => Dispatcher.BeginInvoke(() => StatusDetail.Text = message)));
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Semantic runtime: {TrimInstallWarning(ex.Message)}");
+        }
+
+        if (warnings.Count > 0)
+        {
+            StatusDetail.Text = string.Join("  |  ", warnings);
+            await Task.Delay(1400);
+        }
+    }
+
+    private static string TrimInstallWarning(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return "setup failed";
+
+        var singleLine = message.Replace(Environment.NewLine, " ").Replace('\n', ' ').Replace('\r', ' ');
+        while (singleLine.Contains("  ", StringComparison.Ordinal))
+            singleLine = singleLine.Replace("  ", " ");
+
+        return singleLine.Length <= 110 ? singleLine : singleLine[..107] + "...";
+    }
+
     private async Task PlayCompletionAnimation()
     {
         System.Windows.Controls.Panel.SetZIndex(Page2, 10);
 
         // Fade text out instantly
         StatusText.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(1, 0, new Duration(TimeSpan.FromMilliseconds(120))));
+            Motion.FromTo(1, 0, 170, Motion.SmoothIn));
 
         await Task.Delay(80);
 
@@ -164,9 +212,9 @@ public partial class InstallWizard : Window
         };
         InstallingContent.Children.Insert(1, tintOverlay);
 
-        // Logo explodes to 500x in 300ms
-        var growDuration = new Duration(TimeSpan.FromMilliseconds(300));
-        var ease = new ExponentialEase { Exponent = 5, EasingMode = EasingMode.EaseIn };
+        // Logo explodes to 500x with a smoother ramp
+        var growDuration = new Duration(TimeSpan.FromMilliseconds(340));
+        var ease = new QuinticEase { EasingMode = EasingMode.EaseIn };
 
         LogoScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
             new DoubleAnimation(1, 500, growDuration) { EasingFunction = ease });
@@ -175,15 +223,17 @@ public partial class InstallWizard : Window
 
         // Tint overlay on the logo fades in as it grows
         tintOverlay.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(250)))
+            new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(280)))
             {
+                EasingFunction = Motion.SmoothOut,
                 BeginTime = TimeSpan.FromMilliseconds(100)
             });
 
         // Window bg overlay catches the end
         CompletionOverlay.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(150)))
+            new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(180)))
             {
+                EasingFunction = Motion.SmoothOut,
                 BeginTime = TimeSpan.FromMilliseconds(180)
             });
 

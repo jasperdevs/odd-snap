@@ -42,7 +42,7 @@ public sealed partial class ImageSearchIndexService
         if (!indexingActive)
             SetStatus(status);
 
-        if (status.StartsWith("CLIP ready", StringComparison.OrdinalIgnoreCase))
+        if (_clipRuntime.IsAvailable || status.StartsWith("Ready", StringComparison.OrdinalIgnoreCase))
             StartSyncLoopIfNeeded();
     }
 
@@ -204,21 +204,15 @@ public sealed partial class ImageSearchIndexService
         ImageSearchOcrState ocrState;
         int retryCount = 0;
         long nextRetryTicks = 0;
-        if (!string.IsNullOrWhiteSpace(ocrText))
+        if (string.IsNullOrWhiteSpace(ocrError))
         {
             ocrState = ImageSearchOcrState.Indexed;
-        }
-        else if (!string.IsNullOrWhiteSpace(ocrError))
-        {
-            retryCount = 1;
-            nextRetryTicks = GetNextRetryUtc(0).Ticks;
-            ocrState = ImageSearchOcrState.RetryableError;
         }
         else
         {
             retryCount = 1;
             nextRetryTicks = GetNextRetryUtc(0).Ticks;
-            ocrState = ImageSearchOcrState.RetryableEmpty;
+            ocrState = ImageSearchOcrState.RetryableError;
         }
 
         return new ImageSearchIndexRecord
@@ -289,36 +283,11 @@ public sealed partial class ImageSearchIndexService
 
     private void LoadIndex_NoLock()
     {
-        if (File.Exists(IndexPath))
-        {
-            try
-            {
-                var records = JsonSerializer.Deserialize<List<ImageSearchIndexRecord>>(File.ReadAllText(IndexPath), JsonOpts) ?? new();
-                _records.Clear();
-                foreach (var record in records.Where(r => !string.IsNullOrWhiteSpace(r.FilePath)))
-                    _records[record.FilePath] = record;
-                return;
-            }
-            catch
-            {
-                _records.Clear();
-            }
-        }
+        _records.Clear();
+        if (TryLoadRecordsFromDatabase_NoLock())
+            return;
 
-        if (File.Exists(LegacyIndexPath))
-        {
-            try
-            {
-                var records = JsonSerializer.Deserialize<List<ImageSearchIndexRecord>>(File.ReadAllText(LegacyIndexPath), JsonOpts) ?? new();
-                _records.Clear();
-                foreach (var record in records.Where(r => !string.IsNullOrWhiteSpace(r.FilePath)))
-                    _records[record.FilePath] = record;
-            }
-            catch
-            {
-                _records.Clear();
-            }
-        }
+        TryImportLegacyRecords_NoLock();
     }
 
     private void PruneMissingEntries_NoLock()
@@ -334,14 +303,7 @@ public sealed partial class ImageSearchIndexService
 
     private void Persist_NoLock()
     {
-        try
-        {
-            var ordered = _records.Values.OrderByDescending(r => r.IndexedAt).ToList();
-            SafeWriteAllText(IndexPath, JsonSerializer.Serialize(ordered, JsonOpts));
-        }
-        catch
-        {
-        }
+        // Search records persist directly into the shared history database.
     }
 
     private void NotifyChanged() => Changed?.Invoke();
@@ -364,20 +326,6 @@ public sealed partial class ImageSearchIndexService
     {
         try { return File.GetLastWriteTimeUtc(filePath).Ticks; }
         catch { return 0; }
-    }
-
-    private static void SafeWriteAllText(string path, string contents)
-    {
-        var tmpPath = path + ".tmp";
-        try
-        {
-            File.WriteAllText(tmpPath, contents);
-            File.Move(tmpPath, path, overwrite: true);
-        }
-        catch
-        {
-            File.WriteAllText(path, contents);
-        }
     }
 
     private static DateTime GetNextRetryUtc(int completedRetryCount)
@@ -419,7 +367,16 @@ public sealed partial class ImageSearchIndexService
                 indexedAt TEXT NOT NULL,
                 ocrState INTEGER NOT NULL,
                 ocrRetryCount INTEGER NOT NULL,
-                nextOcrRetryUtcTicks INTEGER NOT NULL
+                nextOcrRetryUtcTicks INTEGER NOT NULL,
+                fileLengthBytes INTEGER NOT NULL DEFAULT 0,
+                lastWriteTimeUtcTicks INTEGER NOT NULL DEFAULT 0,
+                ocrLanguageTag TEXT NOT NULL DEFAULT '',
+                ocrEngineId TEXT NOT NULL DEFAULT '',
+                ocrCompleted INTEGER NOT NULL DEFAULT 0,
+                semanticModelKey TEXT NOT NULL DEFAULT '',
+                semanticCompleted INTEGER NOT NULL DEFAULT 0,
+                semanticEmbedding TEXT NOT NULL DEFAULT '',
+                lastError TEXT NOT NULL DEFAULT ''
             );
             CREATE VIRTUAL TABLE IF NOT EXISTS image_search_fts USING fts5(
                 filePath UNINDEXED,
@@ -428,7 +385,53 @@ public sealed partial class ImageSearchIndexService
                 searchText,
                 tokenize = 'unicode61'
             );
+            CREATE TABLE IF NOT EXISTS image_search_meta (
+                key TEXT PRIMARY KEY NOT NULL,
+                value TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_image_search_records_state_retry
+                ON image_search_records(ocrState, nextOcrRetryUtcTicks);
+            CREATE INDEX IF NOT EXISTS idx_image_search_records_indexed_at
+                ON image_search_records(indexedAt DESC);
             """;
+        command.ExecuteNonQuery();
+    }
+
+    private void RecreateDatabaseSchema_NoLock()
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            DROP TABLE IF EXISTS image_search_fts;
+            DROP TABLE IF EXISTS image_search_records;
+            DROP TABLE IF EXISTS image_search_meta;
+            """;
+        command.ExecuteNonQuery();
+        EnsureDatabase_NoLock();
+    }
+
+    private static bool IsDatabaseCurrent_NoLock()
+    {
+        if (!File.Exists(HistoryService.DatabasePath))
+            return false;
+
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT value FROM image_search_meta WHERE key = 'schemaVersion' LIMIT 1;";
+        var result = command.ExecuteScalar()?.ToString();
+        return int.TryParse(result, out var version) && version == SearchDatabaseSchemaVersion;
+    }
+
+    private static void SetDatabaseSchemaVersion_NoLock()
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO image_search_meta(key, value)
+            VALUES('schemaVersion', $version)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+            """;
+        command.Parameters.AddWithValue("$version", SearchDatabaseSchemaVersion.ToString());
         command.ExecuteNonQuery();
     }
 
@@ -468,8 +471,42 @@ public sealed partial class ImageSearchIndexService
         using var recordCommand = connection.CreateCommand();
         recordCommand.Transaction = transaction;
         recordCommand.CommandText = """
-            INSERT INTO image_search_records(filePath, fileName, ocrText, searchText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks)
-            VALUES($filePath, $fileName, $ocrText, $searchText, $indexedAt, $ocrState, $ocrRetryCount, $nextRetry)
+            INSERT INTO image_search_records(
+                filePath,
+                fileName,
+                ocrText,
+                searchText,
+                indexedAt,
+                ocrState,
+                ocrRetryCount,
+                nextOcrRetryUtcTicks,
+                fileLengthBytes,
+                lastWriteTimeUtcTicks,
+                ocrLanguageTag,
+                ocrEngineId,
+                ocrCompleted,
+                semanticModelKey,
+                semanticCompleted,
+                semanticEmbedding,
+                lastError)
+            VALUES(
+                $filePath,
+                $fileName,
+                $ocrText,
+                $searchText,
+                $indexedAt,
+                $ocrState,
+                $ocrRetryCount,
+                $nextRetry,
+                $fileLengthBytes,
+                $lastWriteTimeUtcTicks,
+                $ocrLanguageTag,
+                $ocrEngineId,
+                $ocrCompleted,
+                $semanticModelKey,
+                $semanticCompleted,
+                $semanticEmbedding,
+                $lastError)
             ON CONFLICT(filePath) DO UPDATE SET
                 fileName = excluded.fileName,
                 ocrText = excluded.ocrText,
@@ -477,7 +514,16 @@ public sealed partial class ImageSearchIndexService
                 indexedAt = excluded.indexedAt,
                 ocrState = excluded.ocrState,
                 ocrRetryCount = excluded.ocrRetryCount,
-                nextOcrRetryUtcTicks = excluded.nextOcrRetryUtcTicks;
+                nextOcrRetryUtcTicks = excluded.nextOcrRetryUtcTicks,
+                fileLengthBytes = excluded.fileLengthBytes,
+                lastWriteTimeUtcTicks = excluded.lastWriteTimeUtcTicks,
+                ocrLanguageTag = excluded.ocrLanguageTag,
+                ocrEngineId = excluded.ocrEngineId,
+                ocrCompleted = excluded.ocrCompleted,
+                semanticModelKey = excluded.semanticModelKey,
+                semanticCompleted = excluded.semanticCompleted,
+                semanticEmbedding = excluded.semanticEmbedding,
+                lastError = excluded.lastError;
             """;
         recordCommand.Parameters.AddWithValue("$filePath", record.FilePath);
         recordCommand.Parameters.AddWithValue("$fileName", fileName);
@@ -487,6 +533,15 @@ public sealed partial class ImageSearchIndexService
         recordCommand.Parameters.AddWithValue("$ocrState", (int)record.OcrState);
         recordCommand.Parameters.AddWithValue("$ocrRetryCount", record.OcrRetryCount);
         recordCommand.Parameters.AddWithValue("$nextRetry", record.NextOcrRetryUtcTicks);
+        recordCommand.Parameters.AddWithValue("$fileLengthBytes", record.FileLengthBytes);
+        recordCommand.Parameters.AddWithValue("$lastWriteTimeUtcTicks", record.LastWriteTimeUtcTicks);
+        recordCommand.Parameters.AddWithValue("$ocrLanguageTag", record.OcrLanguageTag ?? "");
+        recordCommand.Parameters.AddWithValue("$ocrEngineId", record.OcrEngineId ?? "");
+        recordCommand.Parameters.AddWithValue("$ocrCompleted", record.OcrCompleted ? 1 : 0);
+        recordCommand.Parameters.AddWithValue("$semanticModelKey", record.SemanticModelKey ?? "");
+        recordCommand.Parameters.AddWithValue("$semanticCompleted", record.SemanticCompleted ? 1 : 0);
+        recordCommand.Parameters.AddWithValue("$semanticEmbedding", SerializeEmbedding(record.SemanticEmbedding));
+        recordCommand.Parameters.AddWithValue("$lastError", record.LastError ?? "");
         recordCommand.ExecuteNonQuery();
 
         using var deleteFts = connection.CreateCommand();
@@ -522,8 +577,8 @@ public sealed partial class ImageSearchIndexService
 
     private static SqliteConnection OpenConnection()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(DbPath)!);
-        var connection = new SqliteConnection($"Data Source={DbPath};Pooling=True;Cache=Shared");
+        Directory.CreateDirectory(Path.GetDirectoryName(HistoryService.DatabasePath)!);
+        var connection = new SqliteConnection($"Data Source={HistoryService.DatabasePath};Pooling=True;Cache=Shared");
         connection.Open();
         using var pragma = connection.CreateCommand();
         pragma.CommandText = """
@@ -532,5 +587,207 @@ public sealed partial class ImageSearchIndexService
             """;
         pragma.ExecuteNonQuery();
         return connection;
+    }
+
+    private bool TryLoadRecordsFromDatabase_NoLock()
+    {
+        using var connection = OpenConnection();
+        using var existsCommand = connection.CreateCommand();
+        existsCommand.CommandText = """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'image_search_records';
+            """;
+        var tableCount = Convert.ToInt32(existsCommand.ExecuteScalar() ?? 0);
+        if (tableCount == 0)
+            return false;
+
+        var availableColumns = GetAvailableColumns_NoLock(connection, "image_search_records");
+        var hasExtendedColumns = availableColumns.Contains("fileLengthBytes", StringComparer.OrdinalIgnoreCase);
+        using var command = connection.CreateCommand();
+        command.CommandText = hasExtendedColumns
+            ? """
+                SELECT filePath, ocrText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks,
+                       fileLengthBytes, lastWriteTimeUtcTicks, ocrLanguageTag, ocrEngineId,
+                       ocrCompleted, semanticModelKey, semanticCompleted, semanticEmbedding, lastError
+                FROM image_search_records;
+                """
+            : """
+                SELECT filePath, ocrText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks
+                FROM image_search_records;
+                """;
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var indexedAtText = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var record = new ImageSearchIndexRecord
+            {
+                FilePath = reader.GetString(0),
+                OcrText = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                IndexedAt = DateTime.TryParse(indexedAtText, out var indexedAt) ? indexedAt : DateTime.UtcNow,
+                OcrState = (ImageSearchOcrState)reader.GetInt32(3),
+                OcrRetryCount = reader.GetInt32(4),
+                NextOcrRetryUtcTicks = reader.GetInt64(5)
+            };
+
+            if (hasExtendedColumns)
+            {
+                record.FileLengthBytes = reader.IsDBNull(6) ? 0 : reader.GetInt64(6);
+                record.LastWriteTimeUtcTicks = reader.IsDBNull(7) ? 0 : reader.GetInt64(7);
+                record.OcrLanguageTag = reader.IsDBNull(8) ? "" : reader.GetString(8);
+                record.OcrEngineId = reader.IsDBNull(9) ? "" : reader.GetString(9);
+                record.OcrCompleted = !reader.IsDBNull(10) && reader.GetInt64(10) != 0;
+                record.SemanticModelKey = reader.IsDBNull(11) ? "" : reader.GetString(11);
+                record.SemanticCompleted = !reader.IsDBNull(12) && reader.GetInt64(12) != 0;
+                record.SemanticEmbedding = DeserializeEmbedding(reader.IsDBNull(13) ? "" : reader.GetString(13));
+                record.LastError = reader.IsDBNull(14) ? "" : reader.GetString(14);
+            }
+            else
+            {
+                record.OcrCompleted = record.OcrState == ImageSearchOcrState.Indexed;
+            }
+
+            if (!File.Exists(record.FilePath))
+                continue;
+
+            _records[record.FilePath] = record;
+        }
+
+        return _records.Count > 0;
+    }
+
+    private void TryImportLegacyRecords_NoLock()
+    {
+        // History entries are migrated separately by HistoryService.
+        // OCR/search state is intentionally rebuilt from live files to avoid
+        // carrying forward stale legacy failures and missing-file rows.
+    }
+
+    private bool TryImportLegacyRecordsFromDatabase_NoLock()
+    {
+        if (!File.Exists(LegacyDbPath))
+            return false;
+
+        try
+        {
+            using var connection = new SqliteConnection($"Data Source={LegacyDbPath};Pooling=True;Cache=Shared");
+            connection.Open();
+            var availableColumns = GetAvailableColumns_NoLock(connection, "image_search_records");
+            var hasExtendedColumns = availableColumns.Contains("fileLengthBytes", StringComparer.OrdinalIgnoreCase);
+            using var command = connection.CreateCommand();
+            command.CommandText = hasExtendedColumns
+                ? """
+                    SELECT filePath, ocrText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks,
+                           fileLengthBytes, lastWriteTimeUtcTicks, ocrLanguageTag, ocrEngineId,
+                           ocrCompleted, semanticModelKey, semanticCompleted, semanticEmbedding, lastError
+                    FROM image_search_records;
+                    """
+                : """
+                    SELECT filePath, ocrText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks
+                    FROM image_search_records;
+                    """;
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var indexedAtText = reader.IsDBNull(2) ? null : reader.GetString(2);
+                var record = new ImageSearchIndexRecord
+                {
+                    FilePath = reader.GetString(0),
+                    OcrText = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                    IndexedAt = DateTime.TryParse(indexedAtText, out var indexedAt) ? indexedAt : DateTime.UtcNow,
+                    OcrState = (ImageSearchOcrState)reader.GetInt32(3),
+                    OcrRetryCount = reader.GetInt32(4),
+                    NextOcrRetryUtcTicks = reader.GetInt64(5)
+                };
+
+                if (hasExtendedColumns)
+                {
+                    record.FileLengthBytes = reader.IsDBNull(6) ? 0 : reader.GetInt64(6);
+                    record.LastWriteTimeUtcTicks = reader.IsDBNull(7) ? 0 : reader.GetInt64(7);
+                    record.OcrLanguageTag = reader.IsDBNull(8) ? "" : reader.GetString(8);
+                    record.OcrEngineId = reader.IsDBNull(9) ? "" : reader.GetString(9);
+                    record.OcrCompleted = !reader.IsDBNull(10) && reader.GetInt64(10) != 0;
+                    record.SemanticModelKey = reader.IsDBNull(11) ? "" : reader.GetString(11);
+                    record.SemanticCompleted = !reader.IsDBNull(12) && reader.GetInt64(12) != 0;
+                    record.SemanticEmbedding = DeserializeEmbedding(reader.IsDBNull(13) ? "" : reader.GetString(13));
+                    record.LastError = reader.IsDBNull(14) ? "" : reader.GetString(14);
+                }
+                else
+                {
+                    record.OcrCompleted = record.OcrState == ImageSearchOcrState.Indexed;
+                }
+
+                if (!File.Exists(record.FilePath))
+                    continue;
+
+                _records[record.FilePath] = record;
+            }
+
+            return _records.Count > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static HashSet<string> GetAvailableColumns_NoLock(SqliteConnection connection, string tableName)
+    {
+        using var pragma = connection.CreateCommand();
+        pragma.CommandText = $"PRAGMA table_info({tableName});";
+        using var reader = pragma.ExecuteReader();
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (reader.Read())
+        {
+            if (!reader.IsDBNull(1))
+                columns.Add(reader.GetString(1));
+        }
+
+        return columns;
+    }
+
+    private static string SerializeEmbedding(IReadOnlyList<float>? embedding)
+    {
+        if (embedding is null || embedding.Count == 0)
+            return "";
+
+        return JsonSerializer.Serialize(embedding);
+    }
+
+    private static float[] DeserializeEmbedding(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<float>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<float[]>(value) ?? Array.Empty<float>();
+        }
+        catch
+        {
+            return Array.Empty<float>();
+        }
+    }
+
+    private static void CleanupLegacySearchArtifacts_NoLock()
+    {
+        foreach (var path in new[]
+                 {
+                     LegacyDbPath,
+                     $"{LegacyDbPath}-shm",
+                     $"{LegacyDbPath}-wal",
+                     LegacyAppDataIndexPath,
+                     LegacyHistoryIndexPath
+                 })
+        {
+            try
+            {
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+            catch
+            {
+            }
+        }
     }
 }

@@ -9,6 +9,9 @@ namespace Yoink.UI;
 
 public partial class SettingsWindow
 {
+    private bool _semanticRuntimeInstalled;
+    private bool _semanticRuntimeInstallInProgress;
+
     private void ExportSettingsButton_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -134,6 +137,36 @@ public partial class SettingsWindow
         }
     }
 
+    private void CaptureDockSideCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.CaptureDockSide = (CaptureDockSide)CaptureDockSideCombo.SelectedIndex;
+        _settingsService.Save();
+    }
+
+    private void ToastFadeOutCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.ToastFadeOutEnabled = ToastFadeOutCheck.IsChecked == true;
+        ToastFadeDurationRow.Visibility = _settingsService.Settings.ToastFadeOutEnabled ? Visibility.Visible : Visibility.Collapsed;
+        _settingsService.Save();
+        ToastWindow.SetFadeOutBehavior(_settingsService.Settings.ToastFadeOutEnabled, _settingsService.Settings.ToastFadeOutSeconds);
+    }
+
+    private void ToastFadeDurationCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (ToastFadeDurationCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+        {
+            if (double.TryParse(tag, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double secs))
+            {
+                _settingsService.Settings.ToastFadeOutSeconds = secs;
+                _settingsService.Save();
+                ToastWindow.SetFadeOutBehavior(_settingsService.Settings.ToastFadeOutEnabled, secs);
+            }
+        }
+    }
+
     private void AutoPinPreviewsCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded) return;
@@ -182,6 +215,91 @@ public partial class SettingsWindow
 
         if (HistoryTab.IsChecked == true)
             LoadCurrentHistoryTab();
+    }
+
+    private void SemanticRuntimeInstallBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_semanticRuntimeInstallInProgress)
+            return;
+
+        var started = BackgroundRuntimeJobService.Start(
+            new BackgroundRuntimeJobOptions(
+                SemanticRuntimeJobKey,
+                "Semantic search",
+                "Preparing semantic search...",
+                "Semantic search ready",
+                "Local semantic search finished preparing.",
+                "Semantic search setup failed")
+            {
+                SuccessStatus = "Ready"
+            },
+            (progress, cancellationToken) => LocalClipRuntimeService.EnsureInstalledAsync(progress, cancellationToken));
+
+        if (!started)
+            ToastWindow.Show("Semantic search", "Semantic search is already preparing in the background.");
+
+        _ = RefreshSemanticRuntimeStatusAsync();
+    }
+
+    private Task RefreshSemanticRuntimeStatusAsync()
+    {
+        try
+        {
+            if (BackgroundRuntimeJobService.TryGetSnapshot(SemanticRuntimeJobKey, out var job) && job.IsRunning)
+            {
+                _semanticRuntimeInstallInProgress = true;
+                _semanticRuntimeInstalled = false;
+                SemanticRuntimeStatusText.Text = job.Status;
+                SemanticRuntimeInstallBtn.Content = "Repair";
+                SemanticRuntimeInstallBtn.IsEnabled = false;
+                SemanticRuntimeProgressBar.Visibility = Visibility.Visible;
+                SemanticRuntimeSection.Visibility = Visibility.Visible;
+                LoadImageSearchSources();
+                return Task.CompletedTask;
+            }
+
+            _semanticRuntimeInstallInProgress = false;
+            string status;
+            if (LocalClipRuntimeService.TryGetCachedStatus(out var installed, out var cachedStatus))
+            {
+                _semanticRuntimeInstalled = installed;
+                status = cachedStatus;
+            }
+            else if (BackgroundRuntimeJobService.TryGetSnapshot(SemanticRuntimeJobKey, out var failedJob) && failedJob is { LastSucceeded: false })
+            {
+                _semanticRuntimeInstalled = false;
+                status = $"Failed: {failedJob.LastError}";
+            }
+            else
+            {
+                _semanticRuntimeInstalled = false;
+                status = LocalClipRuntimeService.IdleStatusText;
+            }
+
+            var hasActionableIssue = !_semanticRuntimeInstalled &&
+                                     !string.Equals(status, LocalClipRuntimeService.IdleStatusText, StringComparison.OrdinalIgnoreCase);
+
+            SemanticRuntimeStatusText.Text = _semanticRuntimeInstalled ? "Ready" : status;
+            SemanticRuntimeInstallBtn.Content = "Repair";
+            SemanticRuntimeInstallBtn.IsEnabled = true;
+            SemanticRuntimeProgressBar.Visibility = Visibility.Collapsed;
+            SemanticRuntimeSection.Visibility = hasActionableIssue ? Visibility.Visible : Visibility.Collapsed;
+            LoadImageSearchSources();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.semantic-status", ex);
+            _semanticRuntimeInstallInProgress = false;
+            _semanticRuntimeInstalled = false;
+            SemanticRuntimeStatusText.Text = ex.Message;
+            SemanticRuntimeInstallBtn.Content = "Repair";
+            SemanticRuntimeInstallBtn.IsEnabled = true;
+            SemanticRuntimeProgressBar.Visibility = Visibility.Collapsed;
+            SemanticRuntimeSection.Visibility = Visibility.Visible;
+            LoadImageSearchSources();
+        }
+
+        return Task.CompletedTask;
     }
 
     private void ResetImageIndexesBtn_Click(object sender, RoutedEventArgs e)

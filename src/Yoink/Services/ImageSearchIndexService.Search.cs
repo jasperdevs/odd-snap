@@ -150,10 +150,11 @@ public sealed partial class ImageSearchIndexService
     private static string GetStatusText(ImageSearchIndexRecord record) => record.OcrState switch
     {
         ImageSearchOcrState.Pending => "Pending index",
+        ImageSearchOcrState.Indexed when string.IsNullOrWhiteSpace(record.OcrText) => "No text",
         ImageSearchOcrState.Indexed when record.SemanticCompleted => "Indexed",
         ImageSearchOcrState.Indexed => "OCR ready",
-        ImageSearchOcrState.RetryableEmpty => $"Retry OCR ({record.OcrRetryCount})",
-        ImageSearchOcrState.RetryableError => $"OCR error ({record.OcrRetryCount})",
+        ImageSearchOcrState.RetryableEmpty => "Indexing OCR",
+        ImageSearchOcrState.RetryableError => "OCR error",
         ImageSearchOcrState.Failed => "OCR failed",
         _ => "Indexed"
     };

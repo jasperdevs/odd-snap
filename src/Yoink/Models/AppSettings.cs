@@ -5,7 +5,8 @@ namespace Yoink.Models;
 public enum AfterCaptureAction
 {
     CopyToClipboard,
-    ShowPreview
+    PreviewAndCopy,
+    PreviewOnly
 }
 
 public enum ToastPosition
@@ -61,6 +62,14 @@ public enum WindowDetectionMode
     WindowOnly
 }
 
+public enum CaptureDockSide
+{
+    Top,
+    Bottom,
+    Left,
+    Right
+}
+
 [Flags]
 public enum ImageSearchSourceOptions
 {
@@ -86,7 +95,7 @@ public sealed class AppSettings
     public string OcrDefaultTranslateTo { get; set; } = "en";
     public string? GoogleTranslateApiKey { get; set; }
     public bool TranslationRuntimeInstalled { get; set; }
-    public int TranslationModel { get; set; } // 0 = Argos (fast), 1 = Google
+    public int TranslationModel { get; set; } = 2; // 0 = Argos, 1 = Google, 2 = Open-source local
     public bool AnnotationStrokeShadow { get; set; } = true;
 
     // Color picker hotkey: Alt+C
@@ -114,11 +123,14 @@ public sealed class AppSettings
     public uint GifHotkeyKey { get; set; }
     public int GifFps { get; set; } = 15;
 
-    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.ShowPreview;
+    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.PreviewAndCopy;
     public bool SaveToFile { get; set; } = true;
     public bool AskForFileNameOnSave { get; set; }
     public string FileNameTemplate { get; set; } = "yoink_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}";
     public CaptureImageFormat CaptureImageFormat { get; set; } = CaptureImageFormat.Png;
+    public bool StyleScreenshots { get; set; }
+    public bool AddScreenshotShadow { get; set; }
+    public bool AddScreenshotStroke { get; set; }
     public int CaptureMaxLongEdge { get; set; }
     public string SaveDirectory { get; set; } = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Yoink");
@@ -126,6 +138,7 @@ public sealed class AppSettings
     public bool AutoCheckForUpdates { get; set; } = true;
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
     public WindowDetectionMode WindowDetection { get; set; } = WindowDetectionMode.WindowOnly;
+    public CaptureDockSide CaptureDockSide { get; set; } = CaptureDockSide.Top;
     public int CaptureDelaySeconds { get; set; }
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }
@@ -155,6 +168,8 @@ public sealed class AppSettings
     public Services.StickerSettings StickerUploadSettings { get; set; } = new();
 
     public double ToastDurationSeconds { get; set; } = 2.5;
+    public bool ToastFadeOutEnabled { get; set; }
+    public double ToastFadeOutSeconds { get; set; } = 1.0;
     public bool AutoPinPreviews { get; set; }
     public SoundPack SoundPack { get; set; } = SoundPack.Default;
 

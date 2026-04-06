@@ -116,106 +116,7 @@ public sealed partial class RegionOverlayForm
                 break;
 
             case CaptureMode.Freeform when _freeformPoints.Count >= 2:
-                var pts = _freeformPoints.ToArray();
-
-                // Find the most recent closed loop anywhere in the path.
-                // The old logic only checked "latest point near earlier point", which breaks
-                // if the user keeps drawing after closing a loop. We instead scan segment
-                // intersections across the whole stroke and use the latest valid one.
-                int loopStart = -1;
-                int loopEnd = -1;
-                if (pts.Length > 6)
-                {
-                    for (int i = 0; i < pts.Length - 3; i++)
-                    {
-                        var a1 = pts[i];
-                        var a2 = pts[i + 1];
-                        for (int j = i + 2; j < pts.Length - 1; j++)
-                        {
-                            // Skip adjacent segments that share endpoints
-                            if (j == i || j == i + 1) continue;
-                            var b1 = pts[j];
-                            var b2 = pts[j + 1];
-                            if (SegmentsIntersect(a1, a2, b1, b2))
-                            {
-                                loopStart = i + 1;
-                                loopEnd = j;
-                            }
-                        }
-                    }
-
-                    // Fallback: if the current tail returns near any earlier point, keep dimming
-                    // while the user continues drawing after a closed loop.
-                    if (loopStart < 0 && _isSelecting)
-                    {
-                        var last = pts[^1];
-                        for (int ci = 0; ci < pts.Length - 15; ci++)
-                        {
-                            if (Math.Abs(last.X - pts[ci].X) + Math.Abs(last.Y - pts[ci].Y) < 30)
-                            {
-                                loopStart = ci;
-                                loopEnd = pts.Length - 1;
-                            }
-                        }
-                    }
-                }
-
-                // Dim outside closed loop
-                bool hasClosed = loopStart >= 0 || !_isSelecting;
-                Point[]? closedLoopPts = null;
-                if (hasClosed && pts.Length > 2)
-                {
-                    int from = loopStart >= 0 ? loopStart : 0;
-                    int to = loopEnd >= from ? loopEnd + 1 : pts.Length;
-                    int count = to - from;
-                    if (count >= 3)
-                    {
-                        var loopPts = new Point[count];
-                        Array.Copy(pts, from, loopPts, 0, loopPts.Length);
-
-                        // Remove adjacent duplicates and collapse degenerate runs.
-                        loopPts = DeduplicateAdjacent(loopPts);
-
-                        // Guard against pathological loops (e.g. degenerate/near-collinear triangles)
-                        if (loopPts.Length >= 3 && PolygonArea(loopPts) >= 4f)
-                        {
-                            closedLoopPts = loopPts;
-                            try
-                            {
-                                using var path = new GraphicsPath();
-                                path.AddPolygon(loopPts);
-                                using var region = new Region(new Rectangle(0, 0, ClientSize.Width, ClientSize.Height));
-                                region.Exclude(path);
-                                var dimBrush = _freeformDimBrush ??= new SolidBrush(Color.FromArgb(100, 0, 0, 0));
-                                g.FillRegion(dimBrush, region);
-                            }
-                            catch (ArgumentException)
-                            {
-                                hasClosed = false;
-                                closedLoopPts = null;
-                            }
-                        }
-                        else
-                        {
-                            hasClosed = false;
-                        }
-                    }
-                    else
-                    {
-                        hasClosed = false;
-                    }
-                }
-
-                // Dashed border matching rectangle selection style
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.DrawLines(ShadowPen(30), pts);
-                var freeformPen = DashedPen(220);
-                g.DrawLines(freeformPen, pts);
-                if (hasClosed && closedLoopPts is { Length: >= 3 })
-                {
-                    g.DrawLine(freeformPen, closedLoopPts[^1], closedLoopPts[0]);
-                }
-                g.SmoothingMode = SmoothingMode.Default;
+                DrawFreeformSelectionPreview(g, _freeformPoints);
                 break;
         }
 
@@ -239,7 +140,6 @@ public sealed partial class RegionOverlayForm
     // Cached GDI objects for hot-path rendering (avoid allocation per frame).
     private static Pen? _cachedDash180, _cachedDash255, _cachedDash120, _cachedDash220;
     private static Pen? _cachedShadow30, _cachedShadow40;
-    private static SolidBrush? _freeformDimBrush;
     private static Pen? _selectDashPen, _selectHandlePen;
     private static SolidBrush? _selectHandleBrush;
 
@@ -279,57 +179,18 @@ public sealed partial class RegionOverlayForm
         return slot ??= new Pen(Color.FromArgb(alpha, 0, 0, 0), 4f);
     }
 
-    private static bool SegmentsIntersect(Point p1, Point p2, Point q1, Point q2)
+    private static void DrawFreeformSelectionPreview(Graphics g, List<Point> pts)
     {
-        static long Cross(Point a, Point b, Point c)
-            => (long)(b.X - a.X) * (c.Y - a.Y) - (long)(b.Y - a.Y) * (c.X - a.X);
+        if (pts.Count < 2)
+            return;
 
-        static bool OnSegment(Point a, Point b, Point p)
-            => Math.Min(a.X, b.X) <= p.X && p.X <= Math.Max(a.X, b.X)
-            && Math.Min(a.Y, b.Y) <= p.Y && p.Y <= Math.Max(a.Y, b.Y);
-
-        long d1 = Cross(p1, p2, q1);
-        long d2 = Cross(p1, p2, q2);
-        long d3 = Cross(q1, q2, p1);
-        long d4 = Cross(q1, q2, p2);
-
-        if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-            ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)))
-            return true;
-
-        if (d1 == 0 && OnSegment(p1, p2, q1)) return true;
-        if (d2 == 0 && OnSegment(p1, p2, q2)) return true;
-        if (d3 == 0 && OnSegment(q1, q2, p1)) return true;
-        if (d4 == 0 && OnSegment(q1, q2, p2)) return true;
-
-        return false;
-    }
-
-    private static float PolygonArea(Point[] pts)
-    {
-        if (pts.Length < 3) return 0f;
-        long sum = 0;
-        for (int i = 0; i < pts.Length; i++)
-        {
-            var a = pts[i];
-            var b = pts[(i + 1) % pts.Length];
-            sum += (long)a.X * b.Y - (long)b.X * a.Y;
-        }
-        return Math.Abs(sum) * 0.5f;
-    }
-
-    private static Point[] DeduplicateAdjacent(Point[] pts)
-    {
-        if (pts.Length <= 1) return pts;
-        var list = new List<Point>(pts.Length) { pts[0] };
-        for (int i = 1; i < pts.Length; i++)
-        {
-            if (pts[i] != list[^1])
-                list.Add(pts[i]);
-        }
-        if (list.Count > 1 && list[0] == list[^1])
-            list.RemoveAt(list.Count - 1);
-        return list.ToArray();
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        var shadowPen = ShadowPen(30);
+        var outlinePen = DashedPen(255);
+        var path = pts.ToArray();
+        g.DrawLines(shadowPen, path);
+        g.DrawLines(outlinePen, path);
+        g.SmoothingMode = SmoothingMode.Default;
     }
 
     private void DrawLabel(Graphics g, Rectangle rect, bool isOcr, bool isScan = false)

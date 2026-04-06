@@ -16,6 +16,8 @@ namespace Yoink.UI;
 
 public partial class SettingsWindow
 {
+    private const string VideoThumbnailSeekOffset = "0.40";
+
     private void LoadMediaHistory()
     {
         GifStack.Children.Clear();
@@ -103,16 +105,10 @@ public partial class SettingsWindow
             StringComparer.OrdinalIgnoreCase);
 
         var baseDir = _settingsService.Settings.SaveDirectory;
-        var videoDirs = new[] { baseDir, Path.Combine(baseDir, "Videos") }.Where(Directory.Exists);
-
-        foreach (var dir in videoDirs)
+        foreach (var thumbDir in EnumerateManagedThumbnailDirectories(baseDir))
         {
-            foreach (var thumb in Directory.EnumerateFiles(dir, "*.jpg", SearchOption.AllDirectories))
+            foreach (var thumb in Directory.EnumerateFiles(thumbDir, "*.jpg", SearchOption.TopDirectoryOnly))
             {
-                var parentDir = Path.GetFileName(Path.GetDirectoryName(thumb));
-                if (parentDir is null || !parentDir.Equals(".thumbs", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
                 if (expectedThumbs.Contains(thumb))
                     continue;
 
@@ -125,45 +121,33 @@ public partial class SettingsWindow
     {
         GifStack.Children.Clear();
         _gifItems = _allGifItems.Take(_gifRenderCount).ToList();
-        var groups = _gifItems.GroupBy(i => i.Entry.CapturedAt.Date).OrderByDescending(g => g.Key);
-        foreach (var group in groups)
-        {
-            string label = group.Key == DateTime.Today ? "Today"
-                : group.Key == DateTime.Today.AddDays(-1) ? "Yesterday"
-                : group.Key.ToString("MMMM d, yyyy");
-
-            if (GifStack.Children.Count > 0)
-            {
-                GifStack.Children.Add(new Border
-                {
-                    Height = 1,
-                    Background = Theme.Brush(Theme.BorderSubtle),
-                    Margin = new Thickness(6, 14, 6, 0)
-                });
-            }
-
-            GifStack.Children.Add(new TextBlock
-            {
-                Text = label,
-                FontSize = 12,
-                FontWeight = FontWeights.SemiBold,
-                Opacity = 0.45,
-                Margin = new Thickness(6, 10, 0, 4)
-            });
-
-            var wrap = new WrapPanel();
-            foreach (var item in group)
-                wrap.Children.Add(item.Entry.Kind == HistoryKind.Gif ? CreateGifCard(item) : CreateVideoCard(item));
-            GifStack.Children.Add(wrap);
-        }
+        AppendGroupedHistoryItems(GifStack, _gifItems, CreateMediaCard);
+        PrimeHistoryThumbnailLoads(_allGifItems.Take(Math.Min(_gifRenderCount + 12, _allGifItems.Count)));
     }
 
     private void GifPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
         if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 300) return;
         if (_gifRenderCount >= _allGifItems.Count) return;
+        var previousCount = _gifRenderCount;
         _gifRenderCount = Math.Min(_gifRenderCount + HistoryPageSize, _allGifItems.Count);
-        RenderMediaItems();
+        var appended = _allGifItems.Skip(previousCount).Take(_gifRenderCount - previousCount).ToList();
+        _gifItems.AddRange(appended);
+        AppendGroupedHistoryItems(GifStack, appended, CreateMediaCard);
+        PrimeHistoryThumbnailLoads(_allGifItems.Take(Math.Min(_gifRenderCount + 12, _allGifItems.Count)));
+    }
+
+    private Border CreateMediaCard(HistoryItemVM item)
+    {
+        if (item.Card is Border existing)
+        {
+            DetachElementFromParent(existing);
+            UpdateCardSelection(item);
+            RefreshCardThumbnail(item);
+            return existing;
+        }
+
+        return item.Entry.Kind == HistoryKind.Gif ? CreateGifCard(item) : CreateVideoCard(item);
     }
 
     private Border CreateGifCard(HistoryItemVM vm)
@@ -330,9 +314,8 @@ public partial class SettingsWindow
 
     private static string GetVideoThumbnailPath(string videoPath)
     {
-        var thumbDir = Path.Combine(Path.GetDirectoryName(videoPath)!, ".thumbs");
-        Directory.CreateDirectory(thumbDir);
-        return Path.Combine(thumbDir, Path.GetFileNameWithoutExtension(videoPath) + ".jpg");
+        var fileKey = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(videoPath))).ToLowerInvariant();
+        return Path.Combine(HistoryService.ThumbnailDir, fileKey + ".jpg");
     }
 
     private static async Task<string> EnsureVideoThumbnailAsync(string videoPath, string thumbPath)
@@ -346,10 +329,11 @@ public partial class SettingsWindow
 
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(thumbPath)!);
             var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = ffmpeg,
-                Arguments = $"-y -i \"{videoPath}\" -vframes 1 -q:v 4 \"{thumbPath}\"",
+                Arguments = $"-y -ss {VideoThumbnailSeekOffset} -i \"{videoPath}\" -vframes 1 -q:v 4 \"{thumbPath}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,
@@ -367,18 +351,33 @@ public partial class SettingsWindow
         }
     }
 
-    private static void LoadThumbAsync(System.Windows.Controls.Image img, string path)
-        => LoadThumbAsync(img, path, null);
-
-    private static void LoadThumbAsync(System.Windows.Controls.Image img, string path, string? sourcePath)
+    private static IEnumerable<string> EnumerateManagedThumbnailDirectories(string baseDir)
     {
-        if (img.Source != null) return;
+        if (Directory.Exists(HistoryService.ThumbnailDir))
+            yield return HistoryService.ThumbnailDir;
+    }
+
+    private static void LoadThumbAsync(System.Windows.Controls.Image img, HistoryItemVM vm)
+        => LoadThumbAsync(img, vm, vm.ThumbPath, vm.Entry.FilePath);
+
+    private static void LoadThumbAsync(System.Windows.Controls.Image img, HistoryItemVM vm, string path, string? sourcePath)
+    {
+        if (vm.ThumbnailLoaded && vm.ThumbnailSource != null && !IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))
+        {
+            img.Source = vm.ThumbnailSource;
+            img.Opacity = 1;
+            return;
+        }
 
         var cacheKey = sourcePath ?? path;
+        RegisterThumbWaiter(cacheKey, img);
 
         if (TryGetThumbFromCache(cacheKey, out var cached))
         {
+            vm.ThumbnailSource = cached;
+            vm.ThumbnailLoaded = true;
             img.Source = cached;
+            img.Opacity = 1;
             return;
         }
 
@@ -401,15 +400,13 @@ public partial class SettingsWindow
 
                     if (!File.Exists(loadPath))
                     {
-                        if (sourcePath != null)
+                        if (sourcePath != null && ShouldCachePlaceholder(vm.Entry.Kind))
                         {
-                            var placeholder = VideoPlaceholder.Value;
+                            var placeholder = GetHistoryPlaceholder(vm.Entry.Kind);
+                            vm.ThumbnailSource = placeholder;
+                            vm.ThumbnailLoaded = true;
                             StoreThumbInCache(cacheKey, placeholder);
-                            _ = img.Dispatcher.BeginInvoke(() =>
-                            {
-                                if (img.Source == null)
-                                    img.Source = placeholder;
-                            });
+                            ApplyThumbnailToWaiters(cacheKey, placeholder, animate: false);
                         }
                         return;
                     }
@@ -417,18 +414,16 @@ public partial class SettingsWindow
                     var bmp = LoadThumbSource(loadPath);
                     if (bmp is null)
                     {
-                        if (sourcePath == null)
+                        if (sourcePath == null || !ShouldCachePlaceholder(vm.Entry.Kind))
                             return;
 
-                        bmp = VideoPlaceholder.Value;
+                        bmp = GetHistoryPlaceholder(vm.Entry.Kind);
                     }
 
+                    vm.ThumbnailSource = bmp;
+                    vm.ThumbnailLoaded = true;
                     StoreThumbInCache(cacheKey, bmp);
-                    _ = img.Dispatcher.BeginInvoke(() =>
-                    {
-                        if (img.Source == null)
-                            img.Source = bmp;
-                    });
+                    ApplyThumbnailToWaiters(cacheKey, bmp, animate: true);
                 }
                 finally
                 {
@@ -442,5 +437,154 @@ public partial class SettingsWindow
                     ThumbInflight.Remove(cacheKey);
             }
         });
+    }
+
+    private static void PrimeThumbLoad(string cacheKey, string thumbPath, HistoryKind kind, Action<BitmapSource>? onReady = null, Action? onLoaded = null)
+    {
+        if (TryGetThumbFromCache(cacheKey, out var cached))
+        {
+            if (onReady is not null)
+                onReady(cached!);
+            onLoaded?.Invoke();
+            return;
+        }
+
+        lock (ThumbInflight)
+        {
+            if (!ThumbInflight.Add(cacheKey))
+                return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await ThumbDecodeGate.WaitAsync();
+                try
+                {
+                    var loadPath = thumbPath;
+                    if (!File.Exists(loadPath))
+                    {
+                        if (kind == HistoryKind.Gif || kind == HistoryKind.Image || kind == HistoryKind.Sticker)
+                            loadPath = cacheKey;
+                        else
+                            loadPath = await EnsureVideoThumbnailAsync(cacheKey, thumbPath);
+                    }
+
+                    if (!File.Exists(loadPath))
+                        return;
+
+                    var bmp = LoadThumbSource(loadPath);
+                    if (bmp is null)
+                        return;
+
+                    StoreThumbInCache(cacheKey, bmp);
+                    onReady?.Invoke(bmp);
+                    ApplyThumbnailToWaiters(cacheKey, bmp, animate: false);
+                    onLoaded?.Invoke();
+                }
+                finally
+                {
+                    ThumbDecodeGate.Release();
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                lock (ThumbInflight)
+                    ThumbInflight.Remove(cacheKey);
+            }
+        });
+    }
+
+    private static void PrimeThumbLoad(HistoryItemVM vm, Action? onLoaded = null)
+    {
+        if (vm.ThumbnailLoaded && vm.ThumbnailSource != null)
+        {
+            ApplyThumbnailToBoundImage(vm, vm.ThumbnailSource, animate: false);
+            return;
+        }
+
+        var cacheKey = vm.Entry.FilePath;
+        PrimeThumbLoad(
+            cacheKey,
+            vm.ThumbPath,
+            vm.Entry.Kind,
+            bmp =>
+            {
+                vm.ThumbnailSource = bmp;
+                vm.ThumbnailLoaded = true;
+                ApplyThumbnailToBoundImage(vm, bmp, animate: false);
+            },
+            onLoaded);
+    }
+
+    private static void ApplyThumbnailToBoundImage(HistoryItemVM vm, BitmapSource bitmap, bool animate)
+    {
+        if (vm.ThumbnailImage is not Image image)
+            return;
+
+        _ = image.Dispatcher.BeginInvoke(() =>
+        {
+            image.Source = bitmap;
+            image.Opacity = 1;
+            if (animate)
+            {
+                image.BeginAnimation(OpacityProperty,
+                    Motion.FromTo(0, 1, 170, Motion.SmoothOut));
+            }
+        });
+    }
+
+    private static bool ShouldCachePlaceholder(HistoryKind kind) =>
+        kind != HistoryKind.Image && kind != HistoryKind.Gif && kind != HistoryKind.Sticker;
+
+    private static void RegisterThumbWaiter(string cacheKey, System.Windows.Controls.Image image)
+    {
+        lock (ThumbWaiters)
+        {
+            if (!ThumbWaiters.TryGetValue(cacheKey, out var waiters))
+            {
+                waiters = new List<WeakReference<System.Windows.Controls.Image>>();
+                ThumbWaiters[cacheKey] = waiters;
+            }
+
+            waiters.RemoveAll(waiter => !waiter.TryGetTarget(out var existing) || ReferenceEquals(existing, image));
+            waiters.Add(new WeakReference<System.Windows.Controls.Image>(image));
+        }
+    }
+
+    private static void ApplyThumbnailToWaiters(string cacheKey, BitmapSource bitmap, bool animate)
+    {
+        List<System.Windows.Controls.Image> targets = new();
+        lock (ThumbWaiters)
+        {
+            if (ThumbWaiters.TryGetValue(cacheKey, out var waiters))
+            {
+                foreach (var waiter in waiters)
+                {
+                    if (waiter.TryGetTarget(out var image))
+                        targets.Add(image);
+                }
+
+                ThumbWaiters.Remove(cacheKey);
+            }
+        }
+
+        foreach (var target in targets)
+        {
+            _ = target.Dispatcher.BeginInvoke(() =>
+            {
+                target.Source = bitmap;
+                target.Opacity = 1;
+                if (animate)
+                {
+                    target.BeginAnimation(OpacityProperty,
+                        Motion.FromTo(0, 1, 170, Motion.SmoothOut));
+                }
+            });
+        }
     }
 }

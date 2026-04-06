@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Threading.Tasks;
 using Microsoft.Win32;
+using Yoink.Capture;
 using Yoink.Models;
 using Yoink.Services;
 using Yoink.UI;
@@ -60,20 +61,17 @@ public partial class App
                     string.Equals(e.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
                 if (entry != null)
                 {
-                    lock (_historyGate)
+                    entry.UploadUrl = result.Url;
+                    if (string.IsNullOrWhiteSpace(entry.UploadProvider))
                     {
-                        entry.UploadUrl = result.Url;
-                        if (string.IsNullOrWhiteSpace(entry.UploadProvider))
-                        {
-                            entry.UploadProvider = UploadService.GetName(dest);
-                            var currentName = Path.GetFileName(entry.FilePath);
-                            var prefix = UploadService.GetName(dest).ToLowerInvariant() + "_";
-                            entry.FileName = currentName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                                ? currentName
-                                : prefix + currentName;
-                        }
-                        EnsureHistoryService().SaveIndex();
+                        entry.UploadProvider = UploadService.GetName(dest);
+                        var currentName = Path.GetFileName(entry.FilePath);
+                        var prefix = UploadService.GetName(dest).ToLowerInvariant() + "_";
+                        entry.FileName = currentName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                            ? currentName
+                            : prefix + currentName;
                     }
+                    EnsureHistoryService().SaveEntry(entry);
                 }
 
                 // Show success toast with the upload URL
@@ -122,6 +120,7 @@ public partial class App
             OverwritePrompt = true
         };
 
+        RegionOverlayForm.CloseTransientUi();
         var owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsVisible && w.IsActive)
             ?? Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsVisible);
         return owner is null

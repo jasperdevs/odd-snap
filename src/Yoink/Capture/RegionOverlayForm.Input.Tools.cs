@@ -35,6 +35,30 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
+        if (_mode == CaptureMode.Freeform && _isSelecting)
+        {
+            CloseCaptureMagnifier();
+            ClearCrosshairGuides();
+
+            if (_freeformPoints.Count == 0)
+            {
+                _freeformPoints.Add(e.Location);
+            }
+            else
+            {
+                var last = _freeformPoints[^1];
+                int dx = e.Location.X - last.X;
+                int dy = e.Location.Y - last.Y;
+                if ((dx * dx) + (dy * dy) >= 9)
+                {
+                    _freeformPoints.Add(e.Location);
+                    _hasDragged = true;
+                    Invalidate(InflateForRepaint(RectFromPoints(last, e.Location, 10)));
+                }
+            }
+            return;
+        }
+
         bool needsRepaint = false;
         bool toolbarDirty = false;
 
@@ -267,11 +291,6 @@ public sealed partial class RegionOverlayForm
                 else
                     Invalidate(Rectangle.Union(oldDirty, newDirty));
                 break;
-            case CaptureMode.Freeform when _isSelecting:
-                _freeformPoints.Add(e.Location);
-                _hasDragged = true;
-                Invalidate();
-                break;
             case CaptureMode.Highlight when _isHighlighting:
                 Invalidate();
                 break;
@@ -472,10 +491,18 @@ public sealed partial class RegionOverlayForm
                 bool isSticker = _mode == CaptureMode.Sticker;
                 if (!_hasDragged)
                 {
-                    var detectedAtRelease = WindowDetector.GetDetectionRectAtPoint(
-                        e.Location, _virtualBounds, _windowDetectionMode);
-                    if (detectedAtRelease.Width > 0 && detectedAtRelease.Height > 0)
-                        _autoDetectRect = detectedAtRelease;
+                    if (_windowDetectionMode != WindowDetectionMode.Off)
+                    {
+                        var detectedAtRelease = WindowDetector.GetDetectionRectAtPoint(
+                            e.Location, _virtualBounds, _windowDetectionMode);
+                        if (detectedAtRelease.Width > 0 && detectedAtRelease.Height > 0)
+                            _autoDetectRect = detectedAtRelease;
+                    }
+                    else
+                    {
+                        _autoDetectRect = Rectangle.Empty;
+                        _autoDetectActive = false;
+                    }
 
                     // Use auto-detected window region if available, else fullscreen
                     var clickRect = (_autoDetectRect.Width > 0 && _autoDetectRect.Height > 0)

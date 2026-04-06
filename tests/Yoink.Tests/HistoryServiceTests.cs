@@ -15,5 +15,6 @@ public sealed class HistoryServiceTests
         Assert.Equal(picturesRoot, HistoryService.HistoryDir);
         Assert.Contains(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), HistoryService.HistoryDir, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), HistoryService.HistoryDir, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(Path.Combine(picturesRoot, "history.db"), HistoryService.DatabasePath);
     }
 }

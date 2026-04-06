@@ -89,14 +89,6 @@ public sealed partial class RegionOverlayForm
             _pickerReady = true;
             _pickerCursorPos = overlayPoint;
             BuildMagnifier();
-            if (!ShowCaptureMagnifier)
-            {
-                CloseMagWindow();
-                _lastRenderedPickerPoint = overlayPoint;
-                _pickerStopwatch.Restart();
-                return;
-            }
-
             EnsurePickerForm();
             var pickerForm = _pickerForm;
             if (pickerForm is null)

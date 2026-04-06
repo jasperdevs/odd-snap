@@ -27,7 +27,7 @@ public sealed partial class RegionOverlayForm : Form
 
     private readonly List<Point> _freeformPoints = new();
 
-    // Dynamic toolbar built from enabled tools + fixed buttons (color, gear, close)
+    // Dynamic toolbar built from enabled tools + fixed buttons (color, close)
     private ToolDef[] _visibleTools = ToolDef.AllTools;
     private ToolDef[] _mainBarTools = Array.Empty<ToolDef>();
     private ToolDef[] _flyoutTools = Array.Empty<ToolDef>();
@@ -44,6 +44,10 @@ public sealed partial class RegionOverlayForm : Form
     private Rectangle _flyoutRect;
     private Rectangle[] _flyoutButtonRects = Array.Empty<Rectangle>();
     private int _hoveredFlyoutButton = -1;
+    private float _flyoutAnim;
+    private float _flyoutAnimStart;
+    private float _flyoutAnimTarget;
+    private DateTime _flyoutAnimStartedAt;
     private bool _showToolNumberBadges = true;
     private Rectangle _toolbarRect;
     private float _toolbarAnim;
@@ -56,6 +60,7 @@ public sealed partial class RegionOverlayForm : Form
     private readonly System.Windows.Forms.Timer _animTimer;
     private readonly System.Windows.Forms.Timer _autoDetectTimer;
     private DateTime _showTime;
+    private const float FlyoutAnimDurationMs = 135f;
     private ToolbarForm? _toolbarForm;
     private bool _allowDeactivation;
     private Point _pendingAutoDetectPoint = Point.Empty;
@@ -131,6 +136,8 @@ public sealed partial class RegionOverlayForm : Form
     private bool _colorPickerOpen;
     private Rectangle _colorPickerRect;
     private PickerMagnifierForm? _captureMagnifierForm;
+
+    private static RegionOverlayForm? _currentOverlay;
 
     // Select tool state
     private int _selectedAnnotationIndex = -1;
@@ -314,8 +321,6 @@ public sealed partial class RegionOverlayForm : Form
     public event Action<Rectangle>? ScanRegionSelected;
     public event Action<Rectangle>? StickerRegionSelected;
     public event Action? SelectionCancelled;
-    public event Action? SettingsRequested;
-
     public RegionOverlayForm(Bitmap screenshot, Rectangle virtualBounds,
         CaptureMode initialMode = CaptureMode.Rectangle,
         WindowDetectionMode windowDetectionMode = WindowDetectionMode.WindowOnly)
@@ -348,12 +353,34 @@ public sealed partial class RegionOverlayForm : Form
         _animTimer.Tick += (_, _) =>
         {
             float elapsed = (float)(DateTime.UtcNow - _showTime).TotalMilliseconds;
-            _toolbarAnim = Math.Min(1f, elapsed / 180f);
-            RefreshToolbar();
+            _toolbarAnim = EaseOutCubic(Math.Min(1f, elapsed / 180f));
+            if (Math.Abs(_flyoutAnim - _flyoutAnimTarget) > 0.01f)
+            {
+                float flyoutElapsed = (float)(DateTime.UtcNow - _flyoutAnimStartedAt).TotalMilliseconds;
+                float t = Math.Clamp(flyoutElapsed / FlyoutAnimDurationMs, 0f, 1f);
+                float eased = EaseInOutQuint(t);
+                _flyoutAnim = _flyoutAnimStart + ((_flyoutAnimTarget - _flyoutAnimStart) * eased);
+            }
+            else
+            {
+                _flyoutAnim = _flyoutAnimTarget;
+                if (_flyoutAnimTarget <= 0f)
+                {
+                    _flyoutAnim = 0f;
+                    _hoveredFlyoutButton = -1;
+                }
+            }
+            UpdateToolbarSurfaceOnly();
             Invalidate(new Rectangle(_toolbarRect.X - 12, _toolbarRect.Y - 48,
-                _toolbarRect.Width + 24, _toolbarRect.Height + 96));
-            if (_toolbarAnim >= 1f)
+                _toolbarRect.Width + 24, _toolbarRect.Height + 160));
+            if (_toolbarAnim >= 1f && Math.Abs(_flyoutAnim - _flyoutAnimTarget) <= 0.01f)
+            {
+                if (_flyoutAnimTarget <= 0f)
+                {
+                    _toolbarForm?.UpdateSurface();
+                }
                 _animTimer.Stop();
+            }
         };
 
         _pickerTimer = new System.Windows.Forms.Timer { Interval = 16 };
@@ -369,6 +396,19 @@ public sealed partial class RegionOverlayForm : Form
 
             UpdateAutoDetectRect(_pendingAutoDetectPoint);
         };
+
+        _currentOverlay = this;
+    }
+
+    private static float EaseOutCubic(float t)
+        => 1f - (float)Math.Pow(1f - Math.Clamp(t, 0f, 1f), 3f);
+
+    private static float EaseInOutQuint(float t)
+    {
+        t = Math.Clamp(t, 0f, 1f);
+        return t < 0.5f
+            ? 16f * t * t * t * t * t
+            : 1f - (float)Math.Pow(-2f * t + 2f, 5f) / 2f;
     }
 
     private void SetupForm()
@@ -435,8 +475,13 @@ public sealed partial class RegionOverlayForm : Form
         gaps.Add(_mainBarTools.Length - 1 + (hasMore ? 1 : 0)); // gap before color/gear/close
         _sepAfter = gaps.ToArray();
 
-        int pad = 12;
-        int w = UiChrome.ToolbarButtonSize * BtnCount + UiChrome.ToolbarButtonSpacing * (BtnCount - 1) + pad * 2 + _sepAfter.Length * UiChrome.ToolbarGroupGap;
+        int pad = UiChrome.ToolbarInnerPadding;
+        int primarySpan = UiChrome.ToolbarButtonSize * BtnCount
+                        + UiChrome.ToolbarButtonSpacing * (BtnCount - 1)
+                        + pad * 2
+                        + _sepAfter.Length * UiChrome.ToolbarGroupGap;
+        int w = IsVerticalDock ? UiChrome.ToolbarHeight : primarySpan;
+        int h = IsVerticalDock ? primarySpan : UiChrome.ToolbarHeight;
         Rectangle screenBounds;
         try
         {
@@ -447,41 +492,86 @@ public sealed partial class RegionOverlayForm : Form
             screenBounds = Screen.PrimaryScreen?.WorkingArea ?? _virtualBounds;
         }
 
-        _toolbarRect = ToolbarLayout.GetToolbarRect(_virtualBounds, screenBounds, w, UiChrome.ToolbarHeight);
+        _toolbarRect = ToolbarLayout.GetToolbarRect(_virtualBounds, screenBounds, w, h, CaptureDockSide);
         int cx = _toolbarRect.X + pad;
+        int cy = _toolbarRect.Y + pad;
         for (int i = 0; i < BtnCount; i++)
         {
-            _toolbarButtons[i] = new Rectangle(
-                cx, _toolbarRect.Y + (UiChrome.ToolbarHeight - UiChrome.ToolbarButtonSize) / 2,
-                UiChrome.ToolbarButtonSize, UiChrome.ToolbarButtonSize);
-            cx += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
-            if (Array.IndexOf(_sepAfter, i) >= 0) cx += GroupGap;
+            _toolbarButtons[i] = IsVerticalDock
+                ? new Rectangle(
+                    _toolbarRect.X + (UiChrome.ToolbarHeight - UiChrome.ToolbarButtonSize) / 2,
+                    cy,
+                    UiChrome.ToolbarButtonSize,
+                    UiChrome.ToolbarButtonSize)
+                : new Rectangle(
+                    cx,
+                    _toolbarRect.Y + (UiChrome.ToolbarHeight - UiChrome.ToolbarButtonSize) / 2,
+                    UiChrome.ToolbarButtonSize,
+                    UiChrome.ToolbarButtonSize);
+
+            if (IsVerticalDock)
+            {
+                cy += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
+                if (Array.IndexOf(_sepAfter, i) >= 0) cy += GroupGap;
+            }
+            else
+            {
+                cx += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
+                if (Array.IndexOf(_sepAfter, i) >= 0) cx += GroupGap;
+            }
         }
 
-        // Calculate flyout rect (positioned above the toolbar, centered on the "more" button)
+        // Calculate flyout rect adjacent to the main toolbar and toward the capture area.
         if (hasMore && _flyoutTools.Length > 0)
         {
-            int flyPad = 10;
-            int flyW = UiChrome.ToolbarButtonSize * _flyoutTools.Length
-                     + UiChrome.ToolbarButtonSpacing * (_flyoutTools.Length - 1) + flyPad * 2;
-            int flyH = UiChrome.ToolbarHeight;
-            int flyX = _moreButtonIndex >= 0
-                ? _toolbarButtons[_moreButtonIndex].X + _toolbarButtons[_moreButtonIndex].Width / 2 - flyW / 2
-                : _toolbarRect.X + _toolbarRect.Width / 2 - flyW / 2;
-            // Clamp horizontally to screen
-            flyX = Math.Max(4, Math.Min(flyX, ClientSize.Width - flyW - 4));
-            // Position below the toolbar
-            int flyY = _toolbarRect.Bottom + 8;
+            int flyPad = UiChrome.ToolbarFlyoutPadding;
+            int flyW = IsVerticalDock
+                ? UiChrome.ToolbarHeight
+                : UiChrome.ToolbarButtonSize * _flyoutTools.Length + UiChrome.ToolbarButtonSpacing * (_flyoutTools.Length - 1) + flyPad * 2;
+            int flyH = IsVerticalDock
+                ? UiChrome.ToolbarButtonSize * _flyoutTools.Length + UiChrome.ToolbarButtonSpacing * (_flyoutTools.Length - 1) + flyPad * 2
+                : UiChrome.ToolbarHeight;
+
+            var moreAnchor = _moreButtonIndex >= 0 ? _toolbarButtons[_moreButtonIndex] : _toolbarRect;
+            int flyX;
+            int flyY;
+            if (IsVerticalDock)
+            {
+                flyX = IsRightDock ? _toolbarRect.X - flyW - 8 : _toolbarRect.Right + 8;
+                flyY = moreAnchor.Y + (moreAnchor.Height / 2) - (flyH / 2);
+                flyX = Math.Clamp(flyX, 4, Math.Max(4, ClientSize.Width - flyW - 4));
+                flyY = Math.Clamp(flyY, 4, Math.Max(4, ClientSize.Height - flyH - 4));
+            }
+            else
+            {
+                flyX = _toolbarRect.Right - flyW;
+                flyY = IsBottomDock ? _toolbarRect.Y - flyH - 8 : _toolbarRect.Bottom + 8;
+                flyX = Math.Clamp(flyX, 4, Math.Max(4, ClientSize.Width - flyW - 4));
+                flyY = Math.Clamp(flyY, 4, Math.Max(4, ClientSize.Height - flyH - 4));
+            }
 
             _flyoutRect = new Rectangle(flyX, flyY, flyW, flyH);
             _flyoutButtonRects = new Rectangle[_flyoutTools.Length];
             int fcx = flyX + flyPad;
+            int fcy = flyY + flyPad;
             for (int i = 0; i < _flyoutTools.Length; i++)
             {
-                _flyoutButtonRects[i] = new Rectangle(
-                    fcx, flyY + (flyH - UiChrome.ToolbarButtonSize) / 2,
-                    UiChrome.ToolbarButtonSize, UiChrome.ToolbarButtonSize);
-                fcx += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
+                _flyoutButtonRects[i] = IsVerticalDock
+                    ? new Rectangle(
+                        flyX + (flyW - UiChrome.ToolbarButtonSize) / 2,
+                        fcy,
+                        UiChrome.ToolbarButtonSize,
+                        UiChrome.ToolbarButtonSize)
+                    : new Rectangle(
+                        fcx,
+                        flyY + (flyH - UiChrome.ToolbarButtonSize) / 2,
+                        UiChrome.ToolbarButtonSize,
+                        UiChrome.ToolbarButtonSize);
+
+                if (IsVerticalDock)
+                    fcy += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
+                else
+                    fcx += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
             }
         }
     }

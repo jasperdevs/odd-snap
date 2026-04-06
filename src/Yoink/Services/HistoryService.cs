@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Text.Json;
+using Microsoft.Data.Sqlite;
 using Yoink.Models;
 
 namespace Yoink.Services;
@@ -44,15 +45,17 @@ public sealed partial class HistoryService
         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Yoink History");
 
     public static readonly string StickerDir = Path.Combine(HistoryDir, "stickers");
+    public static readonly string ThumbnailDir = Path.Combine(HistoryDir, "cache", "video-thumbs");
+    public static readonly string DatabasePath = Path.Combine(HistoryDir, "history.db");
 
     private static readonly string LegacyHistoryDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history");
 
     private static readonly string LegacyStickerDir = Path.Combine(LegacyHistoryDir, "stickers");
 
-    private static readonly string IndexPath = Path.Combine(HistoryDir, "index.json");
-    private static readonly string OcrIndexPath = Path.Combine(HistoryDir, "ocr_index.json");
-    private static readonly string ColorIndexPath = Path.Combine(HistoryDir, "color_index.json");
+    private static readonly string MigrationIndexPath = Path.Combine(HistoryDir, "index.json");
+    private static readonly string MigrationOcrIndexPath = Path.Combine(HistoryDir, "ocr_index.json");
+    private static readonly string MigrationColorIndexPath = Path.Combine(HistoryDir, "color_index.json");
 
     private static readonly string LegacyIndexPath = Path.Combine(LegacyHistoryDir, "index.json");
     private static readonly string LegacyOcrIndexPath = Path.Combine(LegacyHistoryDir, "ocr_index.json");
@@ -68,9 +71,11 @@ public sealed partial class HistoryService
     private IReadOnlyList<HistoryEntry>? _stickerEntries;
     private readonly object _gate = new();
     private readonly System.Threading.Timer _flushTimer;
-    private bool _indexDirty;
+    private bool _entriesRewritePending;
     private bool _ocrDirty;
     private bool _colorDirty;
+    private readonly Dictionary<string, HistoryEntry> _pendingEntryUpserts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _pendingEntryDeletes = new(StringComparer.OrdinalIgnoreCase);
 
     public event Action? Changed;
 
@@ -78,7 +83,7 @@ public sealed partial class HistoryService
     {
         _flushTimer = new System.Threading.Timer(_ =>
         {
-            try { FlushPendingWrites(); } catch { }
+            try { FlushPendingWrites(); } catch (Exception ex) { AppDiagnostics.LogError("history.flush-timer", ex); }
         }, null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -104,9 +109,7 @@ public sealed partial class HistoryService
             AddDirectorySignature(hash, saveDirectory);
             AddDirectorySignature(hash, Path.Combine(saveDirectory, "Videos"));
 
-            AddFileSignature(hash, IndexPath);
-            AddFileSignature(hash, OcrIndexPath);
-            AddFileSignature(hash, ColorIndexPath);
+            AddFileSignature(hash, DatabasePath);
 
             hash.Add(_entries.Count);
             hash.Add(_ocrEntries.Count);
@@ -122,58 +125,36 @@ public sealed partial class HistoryService
         {
             Directory.CreateDirectory(HistoryDir);
             Directory.CreateDirectory(StickerDir);
-
-            if (File.Exists(IndexPath))
-            {
-                bool indexChanged = false;
-                try
-                {
-                    _entries = JsonSerializer.Deserialize<List<HistoryEntry>>(
-                        File.ReadAllText(IndexPath), JsonOpts) ?? new();
-                    indexChanged |= _entries.RemoveAll(e => !File.Exists(e.FilePath)) > 0;
-                    foreach (var entry in _entries)
-                    {
-                        var desiredKind = entry.FilePath.StartsWith(StickerDir, StringComparison.OrdinalIgnoreCase)
-                            ? HistoryKind.Sticker
-                            : Path.GetExtension(entry.FilePath).Equals(".gif", StringComparison.OrdinalIgnoreCase)
-                                ? HistoryKind.Gif
-                                : HistoryKind.Image;
-
-                        if (entry.Kind != desiredKind)
-                        {
-                            entry.Kind = desiredKind;
-                            indexChanged = true;
-                        }
-                    }
-                }
-                catch { _entries = new(); }
-                InvalidateFilteredCache();
-                if (indexChanged)
-                    SaveIndex();
-            }
-
-            if (File.Exists(OcrIndexPath))
-            {
-                try
-                {
-                    _ocrEntries = JsonSerializer.Deserialize<List<OcrHistoryEntry>>(
-                        File.ReadAllText(OcrIndexPath), JsonOpts) ?? new();
-                }
-                catch { _ocrEntries = new(); }
-            }
-
-            if (File.Exists(ColorIndexPath))
-            {
-                try
-                {
-                    _colorEntries = JsonSerializer.Deserialize<List<ColorHistoryEntry>>(
-                        File.ReadAllText(ColorIndexPath), JsonOpts) ?? new();
-                }
-                catch { _colorEntries = new(); }
-            }
+            Directory.CreateDirectory(ThumbnailDir);
+            EnsureDatabase_NoLock();
+            LoadFromDatabase_NoLock();
+            ImportLegacyJsonIndexes_NoLock();
 
             MigrateLegacyStorage();
+            CleanupLegacyThumbnailDirectories_NoLock();
             PruneByRetention(HistoryRetentionPeriod.Never);
+            FlushPendingWrites_NoLock();
+        }
+    }
+
+    private void CleanupLegacyThumbnailDirectories_NoLock()
+    {
+        var legacyThumbDirs = new[]
+        {
+            Path.Combine(HistoryDir, ".thumbs"),
+            Path.Combine(HistoryDir, "Videos", ".thumbs")
+        };
+
+        foreach (var dir in legacyThumbDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (Directory.Exists(dir))
+                    Directory.Delete(dir, recursive: true);
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -184,10 +165,10 @@ public sealed partial class HistoryService
 
     public HistoryEntry SaveGifEntry(string gifPath)
     {
+        var fi = new FileInfo(gifPath);
         HistoryEntry entry;
         lock (_gate)
         {
-            var fi = new FileInfo(gifPath);
             entry = new HistoryEntry
             {
                 FileName = fi.Name,
@@ -200,7 +181,8 @@ public sealed partial class HistoryService
             };
             _entries.Insert(0, entry);
             InvalidateFilteredCache();
-            SaveIndex();
+            QueueEntryUpsert_NoLock(entry);
+            ScheduleFlush_NoLock();
         }
         NotifyChanged();
         return entry;
@@ -208,16 +190,17 @@ public sealed partial class HistoryService
 
     public HistoryEntry SaveStickerEntry(Bitmap sticker, string? providerName = null)
     {
+        Directory.CreateDirectory(StickerDir);
+        var now = DateTime.Now;
+        var fileName = $"yoink_sticker_{now:yyyyMMdd_HHmmss_fff}.png";
+        var filePath = Path.Combine(StickerDir, fileName);
+
+        sticker.Save(filePath, ImageFormat.Png);
+        var fileSizeBytes = new FileInfo(filePath).Length;
+
         HistoryEntry entry;
         lock (_gate)
         {
-            Directory.CreateDirectory(StickerDir);
-            var now = DateTime.Now;
-            var fileName = $"yoink_sticker_{now:yyyyMMdd_HHmmss_fff}.png";
-            var filePath = Path.Combine(StickerDir, fileName);
-
-            sticker.Save(filePath, ImageFormat.Png);
-
             entry = new HistoryEntry
             {
                 FileName = fileName,
@@ -225,41 +208,76 @@ public sealed partial class HistoryService
                 CapturedAt = now,
                 Width = sticker.Width,
                 Height = sticker.Height,
-                FileSizeBytes = new FileInfo(filePath).Length,
+                FileSizeBytes = fileSizeBytes,
                 Kind = HistoryKind.Sticker,
                 UploadProvider = providerName
             };
             _entries.Insert(0, entry);
             InvalidateFilteredCache();
-            SaveIndex();
+            QueueEntryUpsert_NoLock(entry);
+            ScheduleFlush_NoLock();
         }
+        NotifyChanged();
+        return entry;
+    }
+
+    public HistoryEntry TrackExistingCapture(string filePath, int width, int height, HistoryKind kind = HistoryKind.Image, string? providerName = null)
+    {
+        var info = new FileInfo(filePath);
+        if (!info.Exists)
+            throw new FileNotFoundException("Capture file was not found.", filePath);
+
+        HistoryEntry entry;
+        lock (_gate)
+        {
+            entry = _entries.FirstOrDefault(existing => existing.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase))
+                ?? new HistoryEntry();
+
+            entry.FileName = info.Name;
+            entry.FilePath = filePath;
+            entry.CapturedAt = info.CreationTime;
+            entry.Width = width;
+            entry.Height = height;
+            entry.FileSizeBytes = info.Length;
+            entry.Kind = kind;
+            entry.UploadProvider = providerName;
+
+            _entries.RemoveAll(existing => existing.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase));
+            _entries.Insert(0, entry);
+            InvalidateFilteredCache();
+            QueueEntryUpsert_NoLock(entry);
+            ScheduleFlush_NoLock();
+        }
+
         NotifyChanged();
         return entry;
     }
 
     public HistoryEntry SaveCapture(Bitmap screenshot)
     {
+        Directory.CreateDirectory(HistoryDir);
+        var now = DateTime.Now;
+        string ext = CaptureOutputService.GetExtension(CaptureImageFormat);
+        var fileName = $"yoink_{now:yyyyMMdd_HHmmss_fff}.{ext}";
+        var filePath = Path.Combine(HistoryDir, fileName);
+
+        CaptureOutputService.SaveBitmap(screenshot, filePath, CaptureImageFormat, JpegQuality);
+        var fileSizeBytes = new FileInfo(filePath).Length;
+
         HistoryEntry entry;
         lock (_gate)
         {
-            Directory.CreateDirectory(HistoryDir);
-            var now = DateTime.Now;
-            string ext = CaptureOutputService.GetExtension(CaptureImageFormat);
-            var fileName = $"yoink_{now:yyyyMMdd_HHmmss_fff}.{ext}";
-            var filePath = Path.Combine(HistoryDir, fileName);
-
-            CaptureOutputService.SaveBitmap(screenshot, filePath, CaptureImageFormat, JpegQuality);
-
             entry = new HistoryEntry
             {
                 FileName = fileName, FilePath = filePath, CapturedAt = now,
                 Width = screenshot.Width, Height = screenshot.Height,
-                FileSizeBytes = new FileInfo(filePath).Length,
+                FileSizeBytes = fileSizeBytes,
                 Kind = HistoryKind.Image
             };
             _entries.Insert(0, entry);
             InvalidateFilteredCache();
-            SaveIndex();
+            QueueEntryUpsert_NoLock(entry);
+            ScheduleFlush_NoLock();
         }
         NotifyChanged();
         return entry;
@@ -284,7 +302,9 @@ public sealed partial class HistoryService
             _entries.Remove(entry);
             InvalidateFilteredCache();
             try { File.Delete(entry.FilePath); } catch { }
-            SaveIndex();
+            TryDeleteManagedThumbnail_NoLock(entry.FilePath);
+            QueueEntryDelete_NoLock(entry.FilePath);
+            ScheduleFlush_NoLock();
         }
         NotifyChanged();
     }
@@ -301,9 +321,11 @@ public sealed partial class HistoryService
             {
                 _entries.Remove(entry);
                 try { File.Delete(entry.FilePath); } catch { }
+                TryDeleteManagedThumbnail_NoLock(entry.FilePath);
             }
             InvalidateFilteredCache();
-            SaveIndex();
+            QueueEntryDeletes_NoLock(list.Select(entry => entry.FilePath));
+            ScheduleFlush_NoLock();
         }
         NotifyChanged();
     }
@@ -378,10 +400,12 @@ public sealed partial class HistoryService
             foreach (var e in images)
             {
                 try { File.Delete(e.FilePath); } catch { }
+                TryDeleteManagedThumbnail_NoLock(e.FilePath);
                 _entries.Remove(e);
             }
             InvalidateFilteredCache();
-            SaveIndex();
+            QueueEntryDeletes_NoLock(images.Select(entry => entry.FilePath));
+            ScheduleFlush_NoLock();
         }
         NotifyChanged();
     }
@@ -394,10 +418,12 @@ public sealed partial class HistoryService
             foreach (var e in gifs)
             {
                 try { File.Delete(e.FilePath); } catch { }
+                TryDeleteManagedThumbnail_NoLock(e.FilePath);
                 _entries.Remove(e);
             }
             InvalidateFilteredCache();
-            SaveIndex();
+            QueueEntryDeletes_NoLock(gifs.Select(entry => entry.FilePath));
+            ScheduleFlush_NoLock();
         }
         NotifyChanged();
     }
@@ -427,10 +453,14 @@ public sealed partial class HistoryService
         lock (_gate)
         {
             foreach (var e in _entries)
+            {
                 try { File.Delete(e.FilePath); } catch { }
+                TryDeleteManagedThumbnail_NoLock(e.FilePath);
+            }
             _entries.Clear();
             InvalidateFilteredCache();
-            SaveIndex();
+            MarkEntriesRewrite_NoLock();
+            ScheduleFlush_NoLock();
         }
         NotifyChanged();
     }
@@ -443,10 +473,22 @@ public sealed partial class HistoryService
             foreach (var e in stickers)
             {
                 try { File.Delete(e.FilePath); } catch { }
+                TryDeleteManagedThumbnail_NoLock(e.FilePath);
                 _entries.Remove(e);
             }
             InvalidateFilteredCache();
-            SaveIndex();
+            QueueEntryDeletes_NoLock(stickers.Select(entry => entry.FilePath));
+            ScheduleFlush_NoLock();
+        }
+        NotifyChanged();
+    }
+
+    public void SaveEntry(HistoryEntry entry)
+    {
+        lock (_gate)
+        {
+            QueueEntryUpsert_NoLock(entry);
+            ScheduleFlush_NoLock();
         }
         NotifyChanged();
     }

@@ -18,6 +18,7 @@ namespace Yoink.UI;
 
 public partial class PreviewWindow : Window
 {
+    private const double PreviewCornerRadius = 12;
     private readonly Bitmap? _screenshot;
     private DispatcherTimer _fadeTimer = null!;
     private bool _isFading;
@@ -73,6 +74,7 @@ public partial class PreviewWindow : Window
         ApplyTheme();
         SetThumbnail();
         FitToImage();
+        SizeChanged += (_, _) => UpdatePreviewClip();
         InitCommon();
     }
 
@@ -97,6 +99,7 @@ public partial class PreviewWindow : Window
         ApplyTheme();
         SetGifThumbnail(gifFilePath);
         FitToImage();
+        SizeChanged += (_, _) => UpdatePreviewClip();
         InitCommon();
     }
 
@@ -136,9 +139,8 @@ public partial class PreviewWindow : Window
     private void ApplyTheme()
     {
         Theme.Refresh();
-        RootBorder.BorderBrush = Theme.StrokeBrush();
-        RootBorder.BorderThickness = new System.Windows.Thickness(Theme.StrokeThickness);
-        ImageBorder.Background = Theme.Brush(Theme.BgElevated);
+        ImageBorder.BorderBrush = Theme.Brush(System.Windows.Media.Color.FromArgb(188, 255, 255, 255));
+        PreviewFrame.Background = Theme.Brush(Theme.BgElevated);
     }
 
     private void FitToImage()
@@ -154,9 +156,19 @@ public partial class PreviewWindow : Window
         double fitW = Math.Max(100, imgW * scale);
         double fitH = Math.Max(60, imgH * scale);
 
-        ImageBorder.Width = fitW;
-        ImageBorder.Height = fitH;
-        ImageClip.Rect = new System.Windows.Rect(0, 0, fitW, fitH);
+        PreviewFrame.Width = fitW;
+        PreviewFrame.Height = fitH;
+        UpdatePreviewClip();
+    }
+
+    private void UpdatePreviewClip()
+    {
+        if (PreviewFrame.ActualWidth <= 0 || PreviewFrame.ActualHeight <= 0)
+            return;
+
+        ImageClip.Rect = new System.Windows.Rect(0, 0, PreviewFrame.ActualWidth, PreviewFrame.ActualHeight);
+        ImageClip.RadiusX = PreviewCornerRadius;
+        ImageClip.RadiusY = PreviewCornerRadius;
     }
 
     private void SetThumbnail()
@@ -195,9 +207,10 @@ public partial class PreviewWindow : Window
 
         Dispatcher.BeginInvoke(() =>
         {
+            UpdatePreviewClip();
             Opacity = 1;
-            var dur = TimeSpan.FromMilliseconds(280);
-            var ease = new QuarticEase { EasingMode = EasingMode.EaseOut };
+            var dur = TimeSpan.FromMilliseconds(300);
+            var ease = Motion.SmoothOut;
 
             if (animateLeft)
             {
@@ -276,10 +289,9 @@ public partial class PreviewWindow : Window
 
     private void AnimateButtons(double to)
     {
-        var dur = TimeSpan.FromMilliseconds(120);
-        CloseBtn.BeginAnimation(OpacityProperty, new DoubleAnimation { To = to, Duration = dur });
-        PinBtn.BeginAnimation(OpacityProperty, new DoubleAnimation { To = _isPinned ? 1 : to, Duration = dur });
-        SaveBtn.BeginAnimation(OpacityProperty, new DoubleAnimation { To = to, Duration = dur });
+        CloseBtn.BeginAnimation(OpacityProperty, Motion.To(to, 150, Motion.SmoothOut));
+        PinBtn.BeginAnimation(OpacityProperty, Motion.To(_isPinned ? 1 : to, 150, Motion.SmoothOut));
+        SaveBtn.BeginAnimation(OpacityProperty, Motion.To(to, 150, Motion.SmoothOut));
     }
 
 }

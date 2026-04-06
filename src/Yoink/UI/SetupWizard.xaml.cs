@@ -206,13 +206,13 @@ public partial class SetupWizard : Window
                 _pages[i].Opacity = 0;
                 _pages[i].Visibility = Visibility.Visible;
                 _pages[i].BeginAnimation(OpacityProperty,
-                    new DoubleAnimation(0, 1, new Duration(TimeSpan.FromMilliseconds(200))));
+                    Motion.FromTo(0, 1, 220, Motion.SmoothOut));
             }
             else
                 _pages[i].Visibility = Visibility.Collapsed;
 
             _dots[i].BeginAnimation(OpacityProperty,
-                new DoubleAnimation(i == page - 1 ? 0.7 : 0.2, new Duration(TimeSpan.FromMilliseconds(200))));
+                Motion.To(i == page - 1 ? 0.7 : 0.2, 220, Motion.SmoothOut));
         }
         BackBtn.Visibility = page > 1 ? Visibility.Visible : Visibility.Collapsed;
         NextBtn.Content = page == TotalPages ? "Get Started" : "Next";

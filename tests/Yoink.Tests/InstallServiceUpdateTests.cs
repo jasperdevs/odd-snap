@@ -79,9 +79,8 @@ public sealed class InstallServiceUpdateTests
         try
         {
             Directory.CreateDirectory(root);
-            Directory.CreateDirectory(Path.Combine(root, "Python"));
             File.WriteAllText(Path.Combine(root, "Yoink.exe"), "installer");
-            File.WriteAllText(Path.Combine(root, "Python", "local_clip_service.py"), "print('ok')");
+            File.WriteAllText(Path.Combine(root, "ffmpeg.exe"), "binary");
 
             Assert.True(InvokeShouldCopyFullPayloadTree(root));
         }
@@ -94,6 +93,17 @@ public sealed class InstallServiceUpdateTests
             }
             catch { }
         }
+    }
+
+    [Fact]
+    public void OptionalPayloadEntries_IncludeBundledClipAssets()
+    {
+        var method = typeof(InstallService).GetMethod("GetOptionalPayloadEntries", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var entries = Assert.IsAssignableFrom<IEnumerable<string>>(method!.Invoke(null, Array.Empty<object>()));
+
+        Assert.Contains(Path.Combine("Assets", "Clip"), entries);
     }
 
     private static bool InvokeShouldCopyFullPayloadTree(string sourceDir)

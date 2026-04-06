@@ -58,7 +58,9 @@ public partial class App
                 var persisted = task.Result;
                 Dispatcher.BeginInvoke(() =>
                 {
-                    ClipboardService.CopyToClipboard(persisted.Output);
+                    var action = NormalizeAfterCaptureAction(settings.AfterCapture);
+                    if (ShouldCopyAfterCapture(action))
+                        ClipboardService.CopyToClipboard(persisted.Output);
                     _isCapturing = false;
 
                     bool willUpload = persisted.FilePath != null
@@ -73,16 +75,14 @@ public partial class App
                     }
                     else
                     {
-                        var action = settings.AfterCapture;
-                        if (action == AfterCaptureAction.ShowPreview)
+                        if (ShouldPreviewAfterCapture(action))
                         {
                             ToastWindow.ShowImagePreview(persisted.Output, persisted.FilePath, settings.AutoPinPreviews);
                         }
                         else
                         {
-                            var dims = $"{persisted.Output.Width}x{persisted.Output.Height}";
                             persisted.Output.Dispose();
-                            ToastWindow.Show("Copied to clipboard", dims, persisted.FilePath);
+                            ToastWindow.Show("Screenshot ready", "", persisted.FilePath);
                         }
                     }
 
@@ -128,18 +128,19 @@ public partial class App
                 var persisted = task.Result;
                 Dispatcher.BeginInvoke(() =>
                 {
-                    ClipboardService.CopyToClipboard(persisted.Output);
+                    var action = NormalizeAfterCaptureAction(settings.AfterCapture);
+                    if (ShouldCopyAfterCapture(action))
+                        ClipboardService.CopyToClipboard(persisted.Output);
                     _isCapturing = false;
 
-                    var action = settings.AfterCapture;
-                    if (action == AfterCaptureAction.ShowPreview)
+                    if (ShouldPreviewAfterCapture(action))
                     {
                         ToastWindow.ShowImagePreview(persisted.Output, persisted.FilePath, settings.AutoPinPreviews);
                     }
                     else
                     {
                         persisted.Output.Dispose();
-                        ToastWindow.Show("Sticker copied");
+                        ToastWindow.Show(ShouldCopyAfterCapture(action) ? "Sticker copied" : "Sticker ready");
                     }
 
                     if (persisted.FilePath != null && settings.AutoUploadScreenshots
@@ -169,33 +170,49 @@ public partial class App
         {
             using (source)
             {
-                var output = CaptureOutputService.PrepareBitmap(source, maxLongEdge);
+                var prepared = CaptureOutputService.PrepareBitmap(source, maxLongEdge);
+                var output = prepared;
                 string? filePath = requestedPath;
                 Services.HistoryEntry? historyEntry = null;
-
-                if (saveHistory)
-                {
-                    lock (_historyGate)
-                    {
-                        historyEntry = isSticker
-                            ? EnsureHistoryService().SaveStickerEntry(output, providerName)
-                            : EnsureHistoryService().SaveCapture(output);
-                    }
-                    filePath ??= historyEntry.FilePath;
-                }
+                var historyService = saveHistory ? EnsureHistoryService() : null;
 
                 if (requestedPath != null)
                 {
-                    var directory = Path.GetDirectoryName(filePath!);
+                    var directory = Path.GetDirectoryName(requestedPath);
                     if (string.IsNullOrWhiteSpace(directory))
                         throw new InvalidOperationException("Save path must include a directory.");
 
                     Directory.CreateDirectory(directory);
                     if (isSticker)
-                        output.Save(filePath!, ImageFormat.Png);
+                        output.Save(requestedPath, ImageFormat.Png);
                     else
-                        CaptureOutputService.SaveBitmap(output, filePath!, captureFormat, jpegQuality);
+                        CaptureOutputService.SaveBitmap(output, requestedPath, captureFormat, jpegQuality);
+
+                    filePath = requestedPath;
                 }
+
+                if (historyService != null)
+                {
+                    if (filePath != null && !isSticker)
+                    {
+                        historyEntry = historyService.TrackExistingCapture(
+                            filePath,
+                            output.Width,
+                            output.Height,
+                            isSticker ? HistoryKind.Sticker : HistoryKind.Image,
+                            providerName);
+                    }
+                    else
+                    {
+                        historyEntry = isSticker
+                            ? historyService.SaveStickerEntry(output, providerName)
+                            : historyService.SaveCapture(output);
+                        filePath = historyEntry.FilePath;
+                    }
+                }
+
+                if (historyEntry is not null)
+                    SettingsWindow.WarmRecentHistoryThumbs(new[] { historyEntry }, maxCount: 1);
 
                 return new PersistedCaptureResult
                 {
@@ -206,6 +223,17 @@ public partial class App
             }
         });
     }
+
+    private static AfterCaptureAction NormalizeAfterCaptureAction(AfterCaptureAction action) =>
+        Enum.IsDefined(typeof(AfterCaptureAction), action)
+            ? action
+            : AfterCaptureAction.PreviewAndCopy;
+
+    private static bool ShouldCopyAfterCapture(AfterCaptureAction action) =>
+        action is AfterCaptureAction.CopyToClipboard or AfterCaptureAction.PreviewAndCopy;
+
+    private static bool ShouldPreviewAfterCapture(AfterCaptureAction action) =>
+        action is AfterCaptureAction.PreviewAndCopy or AfterCaptureAction.PreviewOnly;
 
     private void HandleOcrResult(Bitmap result)
     {

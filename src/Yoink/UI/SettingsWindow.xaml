@@ -316,7 +316,7 @@
                             <Line X1="0" Y1="1" X2="12" Y2="1" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.4"/>
                         </Canvas>
                     </Border>
-                    <Border Width="40" Height="34" CornerRadius="0,11,0,0" Cursor="Hand" Background="Transparent"
+                    <Border x:Name="CloseTitleBtn" Width="40" Height="34" CornerRadius="0,11,0,0" Cursor="Hand" Background="Transparent"
                             MouseLeftButtonDown="CloseBtn_Click" MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave">
                         <Canvas Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Line X1="0" Y1="0" X2="12" Y2="12" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.4"/>
@@ -410,51 +410,66 @@
                         </StackPanel>
                     </Border>
 
+                    <TextBlock Text="Behavior" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
                     <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Window detection" FontSize="13" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="WindowDetectionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
-                                      SelectionChanged="WindowDetectionCombo_SelectionChanged">
-                                <ComboBoxItem Content="Off"/>
-                                <ComboBoxItem Content="Windows only"/>
-                            </ComboBox>
-                        </Grid>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="After capture" FontSize="13" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="AfterCaptureCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
-                                      SelectionChanged="AfterCaptureCombo_SelectionChanged">
-                                <ComboBoxItem Content="Copy to clipboard"/>
-                                <ComboBoxItem Content="Show preview"/>
-                            </ComboBox>
-                        </Grid>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Capture delay" FontSize="13" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="CaptureDelayCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
-                                      SelectionChanged="CaptureDelayCombo_SelectionChanged">
-                                <ComboBoxItem Content="None"/>
-                                <ComboBoxItem Content="3 seconds"/>
-                                <ComboBoxItem Content="5 seconds"/>
-                                <ComboBoxItem Content="10 seconds"/>
-                            </ComboBox>
-                        </Grid>
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Window detection" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="WindowDetectionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                          SelectionChanged="WindowDetectionCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Off"/>
+                                    <ComboBoxItem Content="Windows only"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Capture dock" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CaptureDockSideCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="CaptureDockSideCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Top"/>
+                                    <ComboBoxItem Content="Bottom"/>
+                                    <ComboBoxItem Content="Left"/>
+                                    <ComboBoxItem Content="Right"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="After capture" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="AfterCaptureCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                          SelectionChanged="AfterCaptureCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Copy to clipboard"/>
+                                    <ComboBoxItem Content="Preview + Copy"/>
+                                    <ComboBoxItem Content="Preview only"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Capture delay" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CaptureDelayCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                          SelectionChanged="CaptureDelayCombo_SelectionChanged">
+                                    <ComboBoxItem Content="None"/>
+                                    <ComboBoxItem Content="3 seconds"/>
+                                    <ComboBoxItem Content="5 seconds"/>
+                                    <ComboBoxItem Content="10 seconds"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
                     </Border>
 
                     <TextBlock Text="Saving" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
@@ -470,10 +485,7 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="File name pattern" FontSize="13"/>
-                                    <TextBlock x:Name="FileNamePreviewText" FontSize="10.5" Opacity="0.35" Margin="0,2,0,0"/>
-                                </StackPanel>
+                                <TextBlock Text="File name pattern" FontSize="13" VerticalAlignment="Center"/>
                                 <ComboBox x:Name="FileNameTemplateCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="200"
                                           SelectionChanged="FileNameTemplateCombo_Changed"/>
                             </Grid>
@@ -533,13 +545,12 @@
                         <StackPanel>
                             <CheckBox x:Name="SaveHistoryCheck" Content="Save capture history" FontSize="13"
                                       Checked="SaveHistoryCheck_Changed" Unchecked="SaveHistoryCheck_Changed"/>
-
-                            <Grid Margin="0,8,0,0">
+                            <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Auto-clear" FontSize="13" VerticalAlignment="Center"/>
+                                <TextBlock Text="Auto-clear history" FontSize="13" VerticalAlignment="Center"/>
                                 <ComboBox x:Name="HistoryRetentionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
                                           SelectionChanged="HistoryRetentionCombo_SelectionChanged">
                                     <ComboBoxItem Content="Never"/>
@@ -672,6 +683,7 @@
                                 <TextBlock Text="Translation engine" FontSize="13" VerticalAlignment="Center"/>
                                 <ComboBox x:Name="TranslateModelCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="160"
                                           SelectionChanged="TranslateModelCombo_Changed">
+                                    <ComboBoxItem Content="Open-source Local" Tag="2"/>
                                     <ComboBoxItem Content="Argos Translate" Tag="0"/>
                                     <ComboBoxItem Content="Google Translate" Tag="1"/>
                                 </ComboBox>
@@ -688,11 +700,31 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock FontSize="13">
+                                        <Run Text="Open-source Local"/>
+                                        <Run Text=" — CTranslate2 + M2M100, fully local" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
+                                    </TextBlock>
+                                    <TextBlock x:Name="OpenSourceLocalStatusText" Text="Checking install state..." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
+                                    <ProgressBar x:Name="OpenSourceLocalProgressBar" Height="3" Margin="0,4,0,0"
+                                                 IsIndeterminate="True" Visibility="Collapsed"/>
+                                </StackPanel>
+                                <Button x:Name="OpenSourceLocalInstallBtn" Grid.Column="1" Content="Install" FontSize="11" Padding="12,5"
+                                        Click="OpenSourceLocalInstallBtn_Click"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock FontSize="13">
                                         <Hyperlink NavigateUri="https://github.com/argosopentech/argos-translate" RequestNavigate="Hyperlink_Navigate"
                                                    Foreground="{DynamicResource ThemeAccentBrush}" FontSize="13">Argos Translate</Hyperlink>
-                                        <Run Text=" — open source, local, no API key" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
+                                        <Run Text=" — open source, local, smaller but lower quality" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
                                     </TextBlock>
-                                    <TextBlock x:Name="ArgosStatusText" Text="Not installed" FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="ArgosStatusText" Text="Checking install state..." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
                                     <ProgressBar x:Name="ArgosProgressBar" Height="3" Margin="0,4,0,0"
                                                  IsIndeterminate="True" Visibility="Collapsed"/>
                                 </StackPanel>
@@ -785,11 +817,31 @@
                                     <ComboBoxItem Content="5 seconds" Tag="5"/>
                                 </ComboBox>
                             </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <CheckBox x:Name="AutoPinPreviewsCheck" Content="Auto-pin screenshot previews" FontSize="13"
+                                      Checked="AutoPinPreviewsCheck_Changed" Unchecked="AutoPinPreviewsCheck_Changed"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <CheckBox x:Name="ToastFadeOutCheck" Content="Fade out instead of sliding away" FontSize="13"
+                                      Checked="ToastFadeOutCheck_Changed" Unchecked="ToastFadeOutCheck_Changed"/>
+                            <Grid x:Name="ToastFadeDurationRow" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Fade-out duration" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="ToastFadeDurationCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="ToastFadeDurationCombo_SelectionChanged">
+                                    <ComboBoxItem Content="1 second" Tag="1"/>
+                                    <ComboBoxItem Content="2 seconds" Tag="2"/>
+                                    <ComboBoxItem Content="3 seconds" Tag="3"/>
+                                    <ComboBoxItem Content="5 seconds" Tag="5"/>
+                                </ComboBox>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
                     <TextBlock Text="Search" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
-                    <Border Style="{StaticResource Card}">
+                    <Border x:Name="GeneralImageSearchSettingsCard" Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="ShowImageSearchBarCheck" Content="Show image search bar" FontSize="13"
                                       Checked="ShowImageSearchBarCheck_Changed" Unchecked="ShowImageSearchBarCheck_Changed"/>
@@ -797,7 +849,24 @@
                                       Checked="AutoIndexImagesCheck_Changed" Unchecked="AutoIndexImagesCheck_Changed"/>
                             <CheckBox x:Name="ShowImageSearchDiagnosticsCheck" Content="Show search diagnostics" FontSize="13" Margin="0,6,0,0"
                                       Checked="ShowImageSearchDiagnosticsCheck_Changed" Unchecked="ShowImageSearchDiagnosticsCheck_Changed"/>
-                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <StackPanel x:Name="SemanticRuntimeSection" Visibility="Collapsed">
+                                <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                                <Grid x:Name="SemanticRuntimeRow">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Semantic runtime (CLIP)" FontSize="13"/>
+                                        <TextBlock x:Name="SemanticRuntimeStatusText" Text="Preparing automatically..." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
+                                        <ProgressBar x:Name="SemanticRuntimeProgressBar" Height="3" Margin="0,4,0,0"
+                                                     IsIndeterminate="True" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                    <Button x:Name="SemanticRuntimeInstallBtn" Grid.Column="1" Content="Repair" FontSize="11" Padding="12,5"
+                                            Margin="8,0,0,0" Click="SemanticRuntimeInstallBtn_Click"/>
+                                </Grid>
+                                <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            </StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -807,24 +876,6 @@
                                 <Button x:Name="ResetImageIndexesBtn" Grid.Column="1" Content="Reset" FontSize="11" Padding="10,5"
                                         Margin="8,0,0,0" Click="ResetImageIndexesBtn_Click"/>
                             </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <TextBlock Text="System" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
-                    <Border Style="{StaticResource Card}">
-                        <StackPanel>
-                            <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
-                                      Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
-                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
-                            <CheckBox x:Name="AutoPinPreviewsCheck" Content="Auto-pin screenshot previews" FontSize="13"
-                                      Checked="AutoPinPreviewsCheck_Changed" Unchecked="AutoPinPreviewsCheck_Changed"/>
-                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="Export settings" FontSize="12" Padding="10,6"
-                                        Margin="0,0,8,0" Click="ExportSettingsButton_Click"/>
-                                <Button Content="Import settings" FontSize="12" Padding="10,6"
-                                        Click="ImportSettingsButton_Click"/>
-                            </StackPanel>
                         </StackPanel>
                     </Border>
 
@@ -885,12 +936,19 @@
 
                     <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,12,0,12"/>
 
-                    <StackPanel Orientation="Horizontal">
+                    <WrapPanel ItemHeight="32" ItemWidth="Auto">
+                        <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
+                                  VerticalAlignment="Center" Margin="0,4,14,0"
+                                  Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
                         <Button Content="Reset Settings" FontSize="12" Padding="10,6"
                                 HorizontalAlignment="Left" Click="ResetSettingsButton_Click" Margin="0,0,10,0"/>
                         <Button Content="Uninstall Yoink" FontSize="12" Padding="10,6"
-                                HorizontalAlignment="Left" Click="UninstallButton_Click"/>
-                    </StackPanel>
+                                HorizontalAlignment="Left" Click="UninstallButton_Click" Margin="0,0,10,0"/>
+                        <Button Content="Export settings" FontSize="12" Padding="10,6"
+                                Margin="0,0,10,0" Click="ExportSettingsButton_Click"/>
+                        <Button Content="Import settings" FontSize="12" Padding="10,6"
+                                Click="ImportSettingsButton_Click"/>
+                    </WrapPanel>
                 </StackPanel>
             </ScrollViewer>
 
@@ -914,7 +972,7 @@
                                 <Button x:Name="DeleteSelectedBtn" Content="Delete selected" FontSize="12"
                                          Padding="10,0" Margin="4,0,0,0" VerticalAlignment="Stretch" MinHeight="0" Visibility="Collapsed" Click="DeleteSelectedClick"/>
                             </StackPanel>
-                            <ComboBox x:Name="HistoryCategoryCombo" FontSize="12" Padding="8,5" MinWidth="130"
+                            <ComboBox x:Name="HistoryCategoryCombo" FontSize="12" Padding="8,5" MinWidth="130" Margin="0,0,8,0"
                                       VerticalAlignment="Center" SelectionChanged="HistoryCategoryCombo_Changed"
                                       PreviewMouseLeftButtonDown="HistoryCategoryCombo_PreviewMouseLeftButtonDown">
                                 <ComboBoxItem Content="Images" IsSelected="True"/>
@@ -990,6 +1048,7 @@
                             </Border>
                             </StackPanel>
                         </Grid>
+
                     </StackPanel>
                 </Border>
 
@@ -1008,13 +1067,15 @@
 
                 <!-- Text history -->
                 <ScrollViewer x:Name="TextPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                              Padding="14,2,14,14" Visibility="Collapsed">
+                              Padding="14,2,14,14" Visibility="Collapsed"
+                              ScrollChanged="OcrPanel_ScrollChanged">
                     <StackPanel x:Name="OcrStack"/>
                 </ScrollViewer>
 
                 <!-- Color history -->
                 <ScrollViewer x:Name="ColorsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                              Padding="14,2,14,14" Visibility="Collapsed">
+                              Padding="14,2,14,14" Visibility="Collapsed"
+                              ScrollChanged="ColorsPanel_ScrollChanged">
                     <StackPanel x:Name="ColorStack"/>
                 </ScrollViewer>
 

@@ -29,6 +29,15 @@ public sealed partial class RegionOverlayForm
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool ShowCaptureMagnifier { get; set; }
 
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public CaptureDockSide CaptureDockSide { get; set; } = CaptureDockSide.Top;
+
+    private bool IsVerticalDock => CaptureDockSide is CaptureDockSide.Left or CaptureDockSide.Right;
+    private bool IsBottomDock => CaptureDockSide == CaptureDockSide.Bottom;
+    private bool IsTopDock => CaptureDockSide == CaptureDockSide.Top;
+    private bool IsLeftDock => CaptureDockSide == CaptureDockSide.Left;
+    private bool IsRightDock => CaptureDockSide == CaptureDockSide.Right;
+
     public void SetEnabledTools(List<string>? enabledIds)
     {
         var flyoutIds = ToolDef.FlyoutToolIds();
@@ -108,13 +117,61 @@ public sealed partial class RegionOverlayForm
     {
         var tbBounds = _toolbarRect;
         tbBounds.Inflate(8, 8);
-        tbBounds.Height += 10;
+        if (IsVerticalDock)
+            tbBounds.Width += 10;
+        else
+            tbBounds.Height += 10;
         if (tbBounds.Contains(p)) return true;
         if (_flyoutOpen) { var fb = _flyoutRect; fb.Inflate(8, 8); if (fb.Contains(p)) return true; }
         if (_emojiPickerOpen && _emojiPickerRect.Contains(p)) return true;
         if (_fontPickerOpen && _fontPickerRect.Contains(p)) return true;
         if (_colorPickerOpen && _colorPickerRect.Contains(p)) return true;
         return false;
+    }
+
+    private Rectangle PositionPopupFromAnchor(Rectangle anchor, int width, int height, int gap = 8)
+    {
+        int x;
+        int y;
+
+        if (IsVerticalDock)
+        {
+            x = IsRightDock ? anchor.X - width - gap : anchor.Right + gap;
+            y = anchor.Y + (anchor.Height / 2) - (height / 2);
+            y = Math.Clamp(y, 8, Math.Max(8, ClientSize.Height - height - 8));
+            x = Math.Clamp(x, 8, Math.Max(8, ClientSize.Width - width - 8));
+        }
+        else
+        {
+            x = anchor.X + (anchor.Width / 2) - (width / 2);
+            y = IsBottomDock ? anchor.Y - height - gap : anchor.Bottom + gap;
+            x = Math.Clamp(x, 8, Math.Max(8, ClientSize.Width - width - 8));
+            y = Math.Clamp(y, 8, Math.Max(8, ClientSize.Height - height - 8));
+        }
+
+        return new Rectangle(x, y, width, height);
+    }
+
+    private PointF GetTooltipOrigin(Rectangle anchor, SizeF size, float gap = 6f)
+    {
+        float x;
+        float y;
+
+        if (IsVerticalDock)
+        {
+            x = IsRightDock ? anchor.X - size.Width - gap : anchor.Right + gap;
+            y = anchor.Y + (anchor.Height / 2f) - (size.Height / 2f);
+            y = Math.Clamp(y, 4f, Math.Max(4f, Height - size.Height - 4f));
+        }
+        else
+        {
+            x = anchor.X + (anchor.Width / 2f) - (size.Width / 2f);
+            y = IsBottomDock ? anchor.Y - size.Height - gap : anchor.Bottom + gap;
+            x = Math.Clamp(x, 4f, Math.Max(4f, Width - size.Width - 4f));
+            y = Math.Clamp(y, 4f, Math.Max(4f, Height - size.Height - 4f));
+        }
+
+        return new PointF(x, y);
     }
 
     private bool ShouldShowCaptureMagnifierAt(Point p)
@@ -139,6 +196,16 @@ public sealed partial class RegionOverlayForm
 
     private void UpdateAutoDetectRect(Point location)
     {
+        if (_windowDetectionMode == WindowDetectionMode.Off)
+        {
+            var previousDetect = _autoDetectRect;
+            _autoDetectRect = Rectangle.Empty;
+            _autoDetectActive = false;
+            if (!previousDetect.IsEmpty)
+                Invalidate(InflateForRepaint(previousDetect));
+            return;
+        }
+
         var oldDetect = _autoDetectRect;
         var detected = WindowDetector.GetDetectionRectAtPoint(
             location, _virtualBounds, _windowDetectionMode);

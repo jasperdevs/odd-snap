@@ -5,6 +5,8 @@ using ZXing.Windows.Compatibility;
 
 namespace Yoink.Services;
 
+public sealed record BarcodeDecodeResult(string Text, BarcodeFormat Format);
+
 public static class BarcodeService
 {
     private static readonly List<BarcodeFormat> Formats = new()
@@ -24,9 +26,11 @@ public static class BarcodeService
         BarcodeFormat.UPC_E
     };
 
-    public static string? Decode(Bitmap bitmap)
+    public static string? Decode(Bitmap bitmap) => DecodeDetailed(bitmap)?.Text;
+
+    public static BarcodeDecodeResult? DecodeDetailed(Bitmap bitmap)
     {
-        static string? TryDecode(Bitmap bmp, bool harder, bool inverted)
+        static BarcodeDecodeResult? TryDecode(Bitmap bmp, bool harder, bool inverted)
         {
             var reader = new BarcodeReaderGeneric
             {
@@ -39,11 +43,14 @@ public static class BarcodeService
                 }
             };
             var lum = new BitmapLuminanceSource(bmp);
-            return reader.Decode(lum)?.Text;
+            var result = reader.Decode(lum);
+            return result is null || string.IsNullOrWhiteSpace(result.Text)
+                ? null
+                : new BarcodeDecodeResult(result.Text, result.BarcodeFormat);
         }
 
-        var text = TryDecode(bitmap, true, true);
-        if (!string.IsNullOrWhiteSpace(text)) return text;
+        var result = TryDecode(bitmap, true, true);
+        if (result is not null) return result;
 
         // 1D barcodes often decode better when cropped to a horizontal middle band.
         int bandY = bitmap.Height / 3;
@@ -52,16 +59,16 @@ public static class BarcodeService
         if (bandRect.Width > 20 && bandRect.Height > 20)
         {
             using var band = bitmap.Clone(bandRect, bitmap.PixelFormat);
-            text = TryDecode(band, true, true);
-            if (!string.IsNullOrWhiteSpace(text)) return text;
+            result = TryDecode(band, true, true);
+            if (result is not null) return result;
         }
 
         // Vertical 1D barcodes may need a rotated band pass.
-        using (var rotated = (Bitmap)bitmap.Clone())
+            using (var rotated = (Bitmap)bitmap.Clone())
         {
             rotated.RotateFlip(RotateFlipType.Rotate90FlipNone);
-            text = TryDecode(rotated, true, true);
-            if (!string.IsNullOrWhiteSpace(text)) return text;
+            result = TryDecode(rotated, true, true);
+            if (result is not null) return result;
 
             int rBandY = rotated.Height / 3;
             int rBandH = Math.Max(32, rotated.Height / 3);
@@ -69,16 +76,16 @@ public static class BarcodeService
             if (rBandRect.Width > 20 && rBandRect.Height > 20)
             {
                 using var rBand = rotated.Clone(rBandRect, rotated.PixelFormat);
-                text = TryDecode(rBand, true, true);
-                if (!string.IsNullOrWhiteSpace(text)) return text;
+                result = TryDecode(rBand, true, true);
+                if (result is not null) return result;
             }
         }
 
         // Thresholded black/white pass helps faint linear barcodes.
         using (var threshold = ToThreshold(bitmap, 150))
         {
-            text = TryDecode(threshold, true, true);
-            if (!string.IsNullOrWhiteSpace(text)) return text;
+            result = TryDecode(threshold, true, true);
+            if (result is not null) return result;
         }
 
         // Try a 2x upscaled pass for thin 1D barcodes.
@@ -89,11 +96,26 @@ public static class BarcodeService
             g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
             g.DrawImage(bitmap, new Rectangle(0, 0, scaled.Width, scaled.Height));
         }
-        text = TryDecode(scaled, true, true);
-        if (!string.IsNullOrWhiteSpace(text)) return text;
+        result = TryDecode(scaled, true, true);
+        if (result is not null) return result;
 
         using var scaledThreshold = ToThreshold(scaled, 150);
         return TryDecode(scaledThreshold, true, true);
+    }
+
+    public static Bitmap RenderPreview(string text, BarcodeFormat format)
+    {
+        var options = format == BarcodeFormat.QR_CODE
+            ? new EncodingOptions { Width = 200, Height = 200, Margin = 1, PureBarcode = true }
+            : new EncodingOptions { Width = 360, Height = 120, Margin = 4, PureBarcode = true };
+
+        var writer = new BarcodeWriter
+        {
+            Format = format,
+            Options = options
+        };
+
+        return writer.Write(text);
     }
 
     private static unsafe Bitmap ToThreshold(Bitmap input, byte threshold)

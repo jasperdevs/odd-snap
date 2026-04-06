@@ -84,7 +84,10 @@ public partial class SettingsWindow
         try { LoadOcrLanguageOptions(); } catch { }
 
         DefaultCaptureModeCombo.SelectedIndex = s.DefaultCaptureMode == Yoink.Models.CaptureMode.Freeform ? 1 : 0;
-        AfterCaptureCombo.SelectedIndex = (int)s.AfterCapture;
+        var afterCapture = Enum.IsDefined(typeof(AfterCaptureAction), s.AfterCapture)
+            ? s.AfterCapture
+            : AfterCaptureAction.PreviewAndCopy;
+        AfterCaptureCombo.SelectedIndex = (int)afterCapture;
         SaveToFileCheck.IsChecked = s.SaveToFile;
         CaptureFormatCombo.SelectedIndex = (int)s.CaptureImageFormat;
         JpegQualityCombo.SelectedIndex = s.JpegQuality switch
@@ -124,6 +127,7 @@ public partial class SettingsWindow
         AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
         LoadFileNameTemplateCombo(s.FileNameTemplate);
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
+        CaptureDockSideCombo.SelectedIndex = (int)s.CaptureDockSide;
         WindowDetectionCombo.SelectedIndex = (int)s.WindowDetection;
         ShowCursorCheck.IsChecked = s.ShowCursor;
         AnnotationStrokeShadowCheck.IsChecked = s.AnnotationStrokeShadow;
@@ -140,6 +144,11 @@ public partial class SettingsWindow
         double dur = s.ToastDurationSeconds;
         int durIdx = dur switch { 1.5 => 0, 2.0 => 1, 2.5 => 2, 3.0 => 3, 4.0 => 4, 5.0 => 5, _ => 2 };
         ToastDurationCombo.SelectedIndex = durIdx;
+        ToastFadeOutCheck.IsChecked = s.ToastFadeOutEnabled;
+        double fadeDur = s.ToastFadeOutSeconds;
+        int fadeDurIdx = fadeDur switch { 1.0 => 0, 2.0 => 1, 3.0 => 2, 5.0 => 3, _ => 2 };
+        ToastFadeDurationCombo.SelectedIndex = fadeDurIdx;
+        ToastFadeDurationRow.Visibility = s.ToastFadeOutEnabled ? Visibility.Visible : Visibility.Collapsed;
 
         SelectUploadDestByTag((int)s.ImageUploadDestination);
         AutoUploadScreenshotsCheck.IsChecked = s.AutoUploadScreenshots;
@@ -150,6 +159,7 @@ public partial class SettingsWindow
         UpdateUploadSettingsVisibility();
         UpdateUploadTabVisibility();
         VersionText.Text = $"Yoink {UpdateService.GetCurrentVersionLabel()}";
+        _ = RefreshSemanticRuntimeStatusAsync();
 
         try { PopulateToolToggles(); } catch { }
         try { UpdateCaptureFormatControls(); } catch { }
@@ -157,7 +167,7 @@ public partial class SettingsWindow
 
         if (HistoryTab.IsChecked == true)
         {
-            try { LoadCurrentHistoryTab(); } catch { }
+            try { ScheduleHistoryTabLoad(); } catch { }
         }
     }
 
@@ -176,6 +186,11 @@ public partial class SettingsWindow
 
     private void TabChanged(object sender, RoutedEventArgs e)
     {
+        ApplyMainTabSelection();
+    }
+
+    private void ApplyMainTabSelection()
+    {
         SettingsPanel.Visibility = SettingsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         HotkeysPanel.Visibility = HotkeysTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         CapturePanel.Visibility = CaptureTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
@@ -188,9 +203,12 @@ public partial class SettingsWindow
         if (HistoryTab.IsChecked != true || HistoryCategoryCombo.SelectedIndex != 0)
             CancelImageSearchWork();
 
-        if (HistoryTab.IsChecked == true) LoadCurrentHistoryTab();
-        if (UploadsTab.IsChecked == true) UpdateUploadTabVisibility();
-        if (OcrTab.IsChecked == true) LoadOcrTab();
+        if (HistoryTab.IsChecked == true)
+            ScheduleHistoryTabLoad();
+        if (UploadsTab.IsChecked == true)
+            UpdateUploadTabVisibility();
+        if (OcrTab.IsChecked == true)
+            LoadOcrTab();
         UpdateHistoryMonitorState();
     }
 
@@ -198,7 +216,7 @@ public partial class SettingsWindow
     {
         if (!IsLoaded) return;
         UpdateImageSearchUi();
-        LoadCurrentHistoryTab();
+        ScheduleHistoryTabLoad();
     }
 
     private void HistoryCategoryCombo_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -218,16 +236,20 @@ public partial class SettingsWindow
         UpdateUploadTabVisibility();
     }
 
-    private void LoadCurrentHistoryTab()
+    private void LoadCurrentHistoryTab(bool preserveTransientState = false)
     {
-        // Reset selection mode and search state when switching tabs
-        _selectMode = false;
-        SelectBtn.Content = "Select";
-        DeleteSelectedBtn.Visibility = Visibility.Collapsed;
-        _ocrSearchGrid = null;
-        _ocrSearchQuery = "";
-        _imageSearchQuery = "";
-        if (ImageSearchBox != null) ImageSearchBox.Text = "";
+        if (!preserveTransientState)
+        {
+            _selectMode = false;
+            SelectBtn.Content = "Select";
+            DeleteSelectedBtn.Visibility = Visibility.Collapsed;
+            _ocrSearchSurface = null;
+            _colorSearchSurface = null;
+            _ocrSearchQuery = "";
+            _colorSearchQuery = "";
+            _imageSearchQuery = "";
+            if (ImageSearchBox != null) ImageSearchBox.Text = "";
+        }
 
         ImagesPanel.Visibility = Visibility.Collapsed;
         GifsPanel.Visibility = Visibility.Collapsed;
@@ -241,7 +263,13 @@ public partial class SettingsWindow
 
         switch (HistoryCategoryCombo.SelectedIndex)
         {
-            case 0: ImagesPanel.Visibility = Visibility.Visible; LoadHistory(); break;
+            case 0:
+                ImagesPanel.Visibility = Visibility.Visible;
+                if (CanReuseLoadedImageHistory())
+                    ApplyImageSearchFilter();
+                else
+                    LoadHistory();
+                break;
             case 1: TextPanel.Visibility = Visibility.Visible; LoadOcrHistory(); break;
             case 2: GifsPanel.Visibility = Visibility.Visible; LoadMediaHistory(); break;
             case 3: ColorsPanel.Visibility = Visibility.Visible; LoadColorHistory(); break;

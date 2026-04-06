@@ -320,7 +320,6 @@ public static class InstallService
         var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Yoink.exe",
-            "Python",
             "ffmpeg.exe"
         };
 
@@ -329,8 +328,8 @@ public static class InstallService
 
     private static IEnumerable<string> GetOptionalPayloadEntries()
     {
-        yield return "Python";
         yield return "ffmpeg.exe";
+        yield return Path.Combine("Assets", "Clip");
     }
 
     private static void CopyFileWithRetry(string source, string destination)

@@ -89,16 +89,54 @@ public partial class SettingsWindow
         var engine = executionProvider == StickerExecutionProvider.Gpu
             ? GetSelectedStickerEngine(StickerLocalGpuEngineCombo)
             : GetSelectedStickerEngine(StickerLocalCpuEngineCombo);
-        bool downloaded = LocalStickerEngineService.IsModelDownloaded(engine);
+        if (BackgroundRuntimeJobService.TryGetSnapshot(GetStickerRuntimeJobKey(executionProvider), out var runtimeJob) && runtimeJob.IsRunning)
+        {
+            StickerInstallDriversBtn.IsEnabled = false;
+            StickerDownloadRembgBtn.IsEnabled = false;
+            StickerOpenLocalEngineRepoBtn.IsEnabled = false;
+            StickerRemoveAllModelsBtn.IsEnabled = false;
+            StickerLocalEngineStatusText.Text = runtimeJob.Status;
+            StickerLocalEngineProgress.IsIndeterminate = true;
+            SetStickerDownloadUi(true, null, runtimeJob.Status);
+            return;
+        }
 
-        StickerLocalEngineStatusText.Text = downloaded
-            ? $"{LocalStickerEngineService.GetEngineLabel(engine)} is downloaded and ready to use for sticker captures."
-            : $"{LocalStickerEngineService.GetQualityHint(engine)}: {LocalStickerEngineService.GetEngineDescription(engine)}";
+        if (BackgroundRuntimeJobService.TryGetSnapshot(GetStickerModelJobKey(engine), out var modelJob) && modelJob.IsRunning)
+        {
+            StickerInstallDriversBtn.IsEnabled = true;
+            StickerLocalEngineStatusText.Text = modelJob.Status;
+            StickerLocalEngineProgress.IsIndeterminate = true;
+            SetStickerDownloadUi(true, null, modelJob.Status);
+            return;
+        }
+
+        StickerLocalEngineProgress.IsIndeterminate = false;
+        bool downloaded = LocalStickerEngineService.IsModelDownloaded(engine);
+        var hasRuntimeFailure = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerRuntimeJobKey(executionProvider), out runtimeJob) &&
+                                runtimeJob is { LastSucceeded: false };
+        var hasRuntimeStatus = RembgRuntimeService.TryGetCachedStatus(executionProvider, out var runtimeReady, out var runtimeStatus);
+
+        if (hasRuntimeFailure)
+        {
+            StickerLocalEngineStatusText.Text = $"Failed: {runtimeJob.LastError}";
+        }
+        else if (hasRuntimeStatus && !runtimeReady)
+        {
+            StickerLocalEngineStatusText.Text = runtimeStatus;
+        }
+        else
+        {
+            StickerLocalEngineStatusText.Text = downloaded
+                ? $"{LocalStickerEngineService.GetEngineLabel(engine)} is downloaded and ready to use for sticker captures."
+                : $"{LocalStickerEngineService.GetQualityHint(engine)}: {LocalStickerEngineService.GetEngineDescription(engine)}";
+        }
 
         StickerDownloadRembgBtn.Visibility = Visibility.Visible;
         StickerOpenLocalEngineRepoBtn.Content = "Open rembg";
         StickerDownloadRembgBtn.Content = downloaded ? "Remove model" : "Download model";
         StickerRemoveAllModelsBtn.Visibility = RembgRuntimeService.HasAnyCachedModels() ? Visibility.Visible : Visibility.Collapsed;
+        StickerInstallDriversBtn.IsEnabled = true;
+        SetStickerDownloadUi(false, null, null);
 
         if (!IsLoaded)
             return;
@@ -156,6 +194,7 @@ public partial class SettingsWindow
         StickerRemoveAllModelsBtn.IsEnabled = !isBusy;
 
         StickerLocalEngineProgress.Visibility = isBusy || percent.HasValue ? Visibility.Visible : Visibility.Collapsed;
+        StickerLocalEngineProgress.IsIndeterminate = isBusy && !percent.HasValue;
         StickerLocalEngineProgressText.Visibility = !string.IsNullOrWhiteSpace(message) || isBusy ? Visibility.Visible : Visibility.Collapsed;
 
         if (percent.HasValue)

@@ -23,10 +23,9 @@ public sealed partial class RegionOverlayForm
         int pw = cols * (emojiSize + pad) + pad;
         int ph = searchBarH + pad + gridH + pad;
 
-        // Center below toolbar
-        int px = _toolbarRect.X + _toolbarRect.Width / 2 - pw / 2;
-        int py = _toolbarRect.Bottom + 8;
-        _emojiPickerRect = new Rectangle(px, py, pw, ph);
+        _emojiPickerRect = PositionPopupFromAnchor(_toolbarRect, pw, ph);
+        int px = _emojiPickerRect.X;
+        int py = _emojiPickerRect.Y;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
         PaintShadow(g, _emojiPickerRect, 12f, 58, 1f);
@@ -127,8 +126,9 @@ public sealed partial class RegionOverlayForm
         }
         else
         {
-            px = _toolbarRect.X + _toolbarRect.Width / 2 - pw / 2;
-            py = _toolbarRect.Bottom + 8;
+            var popupRect = PositionPopupFromAnchor(_toolbarRect, pw, ph);
+            px = popupRect.X;
+            py = popupRect.Y;
         }
         _fontPickerRect = new Rectangle(px, py, pw, ph);
 

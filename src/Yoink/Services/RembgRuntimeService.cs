@@ -8,13 +8,17 @@ namespace Yoink.Services;
 public static class RembgRuntimeService
 {
     private const string PythonLauncherArg = "-3";
+    private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
 
     private sealed record PythonRunResult(int ExitCode, string StdOut, string StdErr);
+    private sealed record ProbeState(bool? Ready, string Status, DateTime CheckedUtc);
 
     private static readonly string RootDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "rembg");
 
     private static readonly string ModelCacheDir = Path.Combine(RootDir, "models");
+    private static readonly object ProbeGate = new();
+    private static readonly Dictionary<StickerExecutionProvider, ProbeState> ProbeCache = new();
 
     public static string RootDirectory => RootDir;
     public static string ModelCacheDirectory => ModelCacheDir;
@@ -75,6 +79,7 @@ public static class RembgRuntimeService
 
         var package = provider == StickerExecutionProvider.Gpu ? "rembg[gpu]" : "rembg[cpu]";
         progress?.Report($"Installing {package}...");
+        AppDiagnostics.LogInfo("stickers.runtime.install", $"Installing {package} for {provider}.");
 
         var install = await RunPythonAsync(new[]
         {
@@ -87,16 +92,25 @@ public static class RembgRuntimeService
                 ? install.StdErr.Trim()
                 : install.StdOut.Trim();
 
+            AppDiagnostics.LogWarning("stickers.runtime.install", string.IsNullOrWhiteSpace(message) ? $"Couldn't install {package}." : message);
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(message)
                 ? $"Couldn't install {package}."
                 : message);
         }
+
+        UpdateProbeCache(provider, true, "Installed");
     }
 
     public static async Task<bool> IsRuntimeReadyAsync(StickerExecutionProvider provider, CancellationToken cancellationToken = default)
     {
+        if (TryGetCachedStatus(provider, out var cachedReady, out _))
+            return cachedReady;
+
         if (!await IsPythonLauncherAvailableAsync(cancellationToken).ConfigureAwait(false))
+        {
+            UpdateProbeCache(provider, false, "Python not found");
             return false;
+        }
 
         var checkCommand = provider == StickerExecutionProvider.Gpu
             ? "import rembg, onnxruntime as ort; print('CUDAExecutionProvider' in ort.get_available_providers())"
@@ -108,12 +122,39 @@ public static class RembgRuntimeService
         }, cancellationToken).ConfigureAwait(false);
 
         if (result.ExitCode != 0)
+        {
+            UpdateProbeCache(provider, false, "Not installed");
             return false;
+        }
 
         if (provider == StickerExecutionProvider.Gpu)
-            return result.StdOut.Contains("True", StringComparison.OrdinalIgnoreCase);
+        {
+            var ready = result.StdOut.Contains("True", StringComparison.OrdinalIgnoreCase);
+            UpdateProbeCache(provider, ready, ready ? "Installed" : "CUDA not available");
+            return ready;
+        }
 
+        UpdateProbeCache(provider, true, "Installed");
         return true;
+    }
+
+    public static bool TryGetCachedStatus(StickerExecutionProvider provider, out bool isReady, out string status)
+    {
+        lock (ProbeGate)
+        {
+            if (ProbeCache.TryGetValue(provider, out var state) &&
+                state.Ready.HasValue &&
+                DateTime.UtcNow - state.CheckedUtc <= ProbeCacheTtl)
+            {
+                isReady = state.Ready.Value;
+                status = state.Status;
+                return true;
+            }
+        }
+
+        isReady = false;
+        status = "Checking runtime...";
+        return false;
     }
 
     public static async Task<Bitmap> RemoveBackgroundAsync(Bitmap input, LocalStickerEngine engine, StickerExecutionProvider provider, CancellationToken cancellationToken = default)
@@ -140,6 +181,7 @@ public static class RembgRuntimeService
                 var message = !string.IsNullOrWhiteSpace(result.StdErr)
                     ? result.StdErr.Trim()
                     : result.StdOut.Trim();
+                AppDiagnostics.LogWarning("stickers.runtime.remove-background", string.IsNullOrWhiteSpace(message) ? "rembg failed to process the image." : message);
                 throw new InvalidOperationException(string.IsNullOrWhiteSpace(message)
                     ? "rembg failed to process the image."
                     : message);
@@ -210,9 +252,13 @@ public static class RembgRuntimeService
         foreach (var arg in arguments)
             psi.ArgumentList.Add(arg);
 
+        using var errorMode = WindowsErrorModeScope.SuppressSystemDialogs();
         using var process = new Process { StartInfo = psi };
         if (!process.Start())
+        {
+            AppDiagnostics.LogWarning("stickers.runtime.python-start", "Could not start Python launcher.");
             return new PythonRunResult(-1, "", "Could not start Python launcher.");
+        }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
@@ -247,4 +293,10 @@ output_data = remove(input_data, session=session)
 with open(output_path, "wb") as f:
     f.write(output_data)
 """;
+
+    private static void UpdateProbeCache(StickerExecutionProvider provider, bool ready, string status)
+    {
+        lock (ProbeGate)
+            ProbeCache[provider] = new ProbeState(ready, status, DateTime.UtcNow);
+    }
 }

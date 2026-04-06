@@ -44,23 +44,23 @@ public partial class SettingsWindow
             : GetSelectedStickerEngine(StickerLocalCpuEngineCombo);
     }
 
-    private async void StickerInstallDriversBtn_Click(object sender, RoutedEventArgs e)
+    private void StickerInstallDriversBtn_Click(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            var executionProvider = (StickerExecutionProvider)StickerLocalExecutionCombo.SelectedIndex;
-            StickerInstallDriversBtn.IsEnabled = false;
-            await RembgRuntimeService.EnsureInstalledAsync(executionProvider);
-            ToastWindow.Show("rembg", $"{RembgRuntimeService.GetSetupTargetName(executionProvider)} complete.");
-        }
-        catch (Exception ex)
-        {
-            ToastWindow.ShowError("rembg setup failed", ex.Message);
-        }
-        finally
-        {
-            StickerInstallDriversBtn.IsEnabled = true;
-        }
+        var executionProvider = (StickerExecutionProvider)StickerLocalExecutionCombo.SelectedIndex;
+        var started = BackgroundRuntimeJobService.Start(
+            new BackgroundRuntimeJobOptions(
+                GetStickerRuntimeJobKey(executionProvider),
+                RembgRuntimeService.GetSetupTargetName(executionProvider),
+                $"Installing {RembgRuntimeService.GetSetupTargetName(executionProvider)}...",
+                "Sticker runtime ready",
+                $"{RembgRuntimeService.GetSetupTargetName(executionProvider)} finished installing.",
+                "Sticker runtime setup failed"),
+            (progress, cancellationToken) => RembgRuntimeService.EnsureInstalledAsync(executionProvider, progress, cancellationToken));
+
+        if (!started)
+            ToastWindow.Show("Sticker runtime", "That setup is already running in the background.");
+
+        UpdateLocalEngineUi();
     }
 
     private void StickerShadowCheck_Changed(object sender, RoutedEventArgs e)
@@ -91,7 +91,7 @@ public partial class SettingsWindow
         _settingsService.Save();
     }
 
-    private async void StickerDownloadRembgBtn_Click(object sender, RoutedEventArgs e)
+    private void StickerDownloadRembgBtn_Click(object sender, RoutedEventArgs e)
     {
         var engine = GetSelectedLocalStickerEngine();
 
@@ -107,31 +107,26 @@ public partial class SettingsWindow
             return;
         }
 
-        SetStickerDownloadUi(true, 0, "Preparing download...");
-        try
-        {
-            var progress = new Progress<LocalStickerEngineDownloadProgress>(p =>
+        var started = BackgroundRuntimeJobService.Start(
+            new BackgroundRuntimeJobOptions(
+                GetStickerModelJobKey(engine),
+                LocalStickerEngineService.GetEngineLabel(engine),
+                $"Preparing {LocalStickerEngineService.GetEngineLabel(engine)}...",
+                "Sticker model ready",
+                $"Downloaded {LocalStickerEngineService.GetEngineLabel(engine)}.",
+                "Sticker model download failed"),
+            async (progress, cancellationToken) =>
             {
-                SetStickerDownloadUi(true, p.TotalBytes is > 0 ? p.Percent : null, p.StatusMessage);
+                var modelProgress = new Progress<LocalStickerEngineDownloadProgress>(p => progress.Report(p.StatusMessage));
+                var result = await LocalStickerEngineService.DownloadModelAsync(engine, modelProgress, cancellationToken);
+                if (!result.Success || string.IsNullOrWhiteSpace(result.ModelPath))
+                    throw new InvalidOperationException(result.Message);
             });
 
-            var result = await LocalStickerEngineService.DownloadModelAsync(engine, progress);
-            if (!result.Success || string.IsNullOrWhiteSpace(result.ModelPath))
-            {
-                SetStickerDownloadUi(false, null, result.Message);
-                ToastWindow.ShowError("Sticker engine error", result.Message);
-                return;
-            }
+        if (!started)
+            ToastWindow.Show("Sticker engine", "That model is already downloading in the background.");
 
-            SetStickerDownloadUi(false, 100, "Download complete. The model is ready to use.");
-            ToastWindow.Show("Sticker engine", $"Downloaded {LocalStickerEngineService.GetEngineLabel(engine)}. Sticker captures will now use it automatically.");
-            UpdateLocalEngineUi();
-        }
-        catch (Exception ex)
-        {
-            SetStickerDownloadUi(false, null, ex.Message);
-            ToastWindow.ShowError("Sticker engine error", ex.Message);
-        }
+        UpdateLocalEngineUi();
     }
 
     private void StickerOpenLocalEngineRepoBtn_Click(object sender, RoutedEventArgs e)

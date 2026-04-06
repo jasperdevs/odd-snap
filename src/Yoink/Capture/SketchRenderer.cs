@@ -160,8 +160,8 @@ public static partial class SketchRenderer
         // Shorten the curve: pull the last point back so the line doesn't poke through the arrowhead
         var shortenedPts = points.ToArray();
         shortenedPts[^1] = new Point(
-            (int)(tip.X - nx * headSize * 0.6f),
-            (int)(tip.Y - ny * headSize * 0.6f));
+            (int)(tip.X - nx * headSize * 0.4f),
+            (int)(tip.Y - ny * headSize * 0.4f));
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -180,13 +180,10 @@ public static partial class SketchRenderer
         if (strokeShadow)
         {
             using var s1Pen = new Pen(AnnotShadow1, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
-            using var s2Pen = new Pen(AnnotShadow2, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
             using var stPen = new Pen(AnnotStroke, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
 
-            var buf = OffsetPointsInPlace(shortenedPts, 2, 2);
-            DrawCurveAndHead(buf, ptCount, new PointF(tip.X + 2, tip.Y + 2), AnnotShadow1, s1Pen);
-            buf = OffsetPointsInPlace(shortenedPts, 3, 3);
-            DrawCurveAndHead(buf, ptCount, new PointF(tip.X + 3, tip.Y + 3), AnnotShadow2, s2Pen);
+            var buf = OffsetPointsInPlace(shortenedPts, 1, 1);
+            DrawCurveAndHead(buf, ptCount, new PointF(tip.X + 1, tip.Y + 1), AnnotShadow1, s1Pen);
 
             foreach (var (ox, oy) in StrokeOffsets)
             {

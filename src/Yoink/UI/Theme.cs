@@ -34,6 +34,7 @@ public static class Theme
     public static Color Accent => IsDark ? C(255, 255, 255) : C(0, 0, 0);
     public static Color AccentSubtle => IsDark ? CA(255, 255, 255, 15) : CA(0, 0, 0, 18);
     public static Color AccentHover => IsDark ? CA(255, 255, 255, 25) : CA(0, 0, 0, 28);
+    public static Color DangerHover => IsDark ? CA(196, 43, 28, 210) : CA(196, 43, 28, 225);
 
     // Selection
     public static Color SelectionBg => IsDark ? CA(255, 255, 255, 20) : CA(0, 0, 0, 10);

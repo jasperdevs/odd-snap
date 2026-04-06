@@ -13,7 +13,12 @@ public partial class SettingsWindow
 {
     private void RefreshImageSearchTexts()
     {
-        foreach (var item in _allHistoryItems)
+        RefreshImageSearchTexts(_allHistoryItems);
+    }
+
+    private void RefreshImageSearchTexts(IEnumerable<HistoryItemVM> items)
+    {
+        foreach (var item in items)
         {
             var searchText = _imageSearchIndexService.BuildSearchText(item.Entry.FilePath, item.Entry.FileName);
             item.SearchText = searchText;
@@ -37,23 +42,27 @@ public partial class SettingsWindow
         if (HistoryCategoryCombo.SelectedIndex != 0)
             return;
 
+        var sources = _settingsService.Settings.ImageSearchSources;
+        var exactMatch = _settingsService.Settings.ImageSearchExactMatch;
+
         if (!_settingsService.Settings.ShowImageSearchBar)
         {
             CancelImageSearchWork();
-            ApplyImmediateImageFilter("", _settingsService.Settings.ImageSearchSources, _settingsService.Settings.ImageSearchExactMatch);
+            ApplyImmediateImageFilter("", sources, exactMatch);
             return;
         }
 
         var query = _imageSearchQuery.Trim();
-        var sources = _settingsService.Settings.ImageSearchSources;
         CancelImageSearchWork();
         if (string.IsNullOrWhiteSpace(query) || sources == ImageSearchSourceOptions.None)
         {
-            ApplyImmediateImageFilter(query, sources, _settingsService.Settings.ImageSearchExactMatch);
+            ApplyImmediateImageFilter(query, sources, exactMatch);
             SetImageSearchLoading(false, forceSemantic: true);
             return;
         }
 
+        // Show a lightweight local result set immediately, then refine with the indexed search.
+        ApplyImmediateImageFilter(query, sources, exactMatch);
         SetImageSearchLoading(true, forceSemantic: true);
         _searchFilterCts = new CancellationTokenSource();
         _ = ApplySemanticImageSearchAsync(++_searchFilterVersion, query, sources, _searchFilterCts.Token);
@@ -62,7 +71,11 @@ public partial class SettingsWindow
     private void ApplyImmediateImageFilter(string query, ImageSearchSourceOptions sources, bool exactMatch)
     {
         var rankedItems = RankLocalImageItems(query, sources, exactMatch);
-        _filteredHistoryItems = rankedItems;
+        var filteredItems = FilterSearchResultsForLoadedThumbnails(rankedItems, query);
+        var shouldVirtualize = ShouldUseVirtualizedImageHistory(filteredItems);
+        var renderModeChanged = _useVirtualizedImageHistory != shouldVirtualize;
+        var resultSetChanged = !HasSameHistorySequence(_filteredHistoryItems, filteredItems);
+        _filteredHistoryItems = filteredItems;
         _historyRenderCount = Math.Min(HistoryPageSize, _filteredHistoryItems.Count);
 
         long visibleBytes = 0;
@@ -91,7 +104,10 @@ public partial class SettingsWindow
                 ? "No screenshots match your search"
                 : "No captures yet";
 
-        RenderHistoryItems();
+        if (resultSetChanged || renderModeChanged)
+            RenderHistoryItems();
+        else if (_useVirtualizedImageHistory)
+            UpdateVirtualizedHistoryViewport();
         UpdateImageSearchStatus();
         UpdateImageSearchActionButtons();
     }
@@ -100,14 +116,26 @@ public partial class SettingsWindow
     {
         var normalizedQuery = ImageSearchQueryMatcher.Normalize(query);
         if (string.IsNullOrWhiteSpace(normalizedQuery))
-            return _allHistoryItems.OrderByDescending(item => item.Entry.CapturedAt).ToList();
+        {
+            var fullList = _allHistoryItems.OrderByDescending(item => item.Entry.CapturedAt).ToList();
+            RememberImmediateSearch(normalizedQuery, sources, exactMatch, fullList);
+            return fullList;
+        }
 
         var allowFileName = sources.HasFlag(ImageSearchSourceOptions.FileName);
         var allowOcr = sources.HasFlag(ImageSearchSourceOptions.Ocr);
         if (!allowFileName && !allowOcr)
-            return _allHistoryItems.OrderByDescending(item => item.Entry.CapturedAt).ToList();
+        {
+            var fullList = _allHistoryItems.OrderByDescending(item => item.Entry.CapturedAt).ToList();
+            RememberImmediateSearch(normalizedQuery, sources, exactMatch, fullList);
+            return fullList;
+        }
 
-        return _allHistoryItems
+        IEnumerable<HistoryItemVM> candidateItems = _allHistoryItems;
+        if (CanReuseImmediateSearchScope(normalizedQuery, sources, exactMatch))
+            candidateItems = _lastImmediateSearchResults;
+
+        var rankedItems = candidateItems
             .Select(item => new
             {
                 Item = item,
@@ -118,6 +146,9 @@ public partial class SettingsWindow
             .ThenByDescending(x => x.Item.Entry.CapturedAt)
             .Select(x => x.Item)
             .ToList();
+
+        RememberImmediateSearch(normalizedQuery, sources, exactMatch, rankedItems);
+        return rankedItems;
     }
 
     private static int ScoreLocalImageItem(string normalizedQuery, HistoryItemVM item, bool allowFileName, bool allowOcr, bool exactMatch)
@@ -165,7 +196,11 @@ public partial class SettingsWindow
             if (!IsLoaded || version != _searchFilterVersion || cancellationToken.IsCancellationRequested)
                 return;
 
-            _filteredHistoryItems = filtered;
+            var filteredItems = FilterSearchResultsForLoadedThumbnails(filtered, query);
+            var shouldVirtualize = ShouldUseVirtualizedImageHistory(filteredItems);
+            var renderModeChanged = _useVirtualizedImageHistory != shouldVirtualize;
+            var resultSetChanged = !HasSameHistorySequence(_filteredHistoryItems, filteredItems);
+            _filteredHistoryItems = filteredItems;
             _historyRenderCount = Math.Min(HistoryPageSize, _filteredHistoryItems.Count);
 
             var sizeStr = FormatStorageSize(visibleBytes);
@@ -177,7 +212,10 @@ public partial class SettingsWindow
                 ? "No screenshots match your search"
                 : "";
 
-            RenderHistoryItems();
+            if (resultSetChanged || renderModeChanged)
+                RenderHistoryItems();
+            else if (_useVirtualizedImageHistory)
+                UpdateVirtualizedHistoryViewport();
             UpdateImageSearchStatus();
             SetImageSearchLoading(false, forceSemantic: true);
             UpdateImageSearchActionButtons();
@@ -202,6 +240,59 @@ public partial class SettingsWindow
     private bool ApplySemanticSearchIfNeeded()
     {
         return false;
+    }
+
+    private List<HistoryItemVM> FilterSearchResultsForLoadedThumbnails(List<HistoryItemVM> rankedItems, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return rankedItems;
+
+        var visible = new List<HistoryItemVM>(rankedItems.Count);
+        int queued = 0;
+        foreach (var item in rankedItems)
+        {
+            if (item.ThumbnailLoaded && item.ThumbnailSource != null)
+            {
+                visible.Add(item);
+                continue;
+            }
+
+            if (queued < 48)
+            {
+                queued++;
+                PrimeThumbLoad(item, () =>
+                {
+                    _ = Dispatcher.BeginInvoke(() =>
+                    {
+                        if (!IsLoaded || HistoryTab.IsChecked != true || HistoryCategoryCombo.SelectedIndex != 0)
+                            return;
+
+                        if (string.IsNullOrWhiteSpace(_imageSearchQuery))
+                            return;
+
+                        QueueImageSearchRefresh();
+                    }, System.Windows.Threading.DispatcherPriority.Background);
+                });
+            }
+        }
+
+        return visible;
+    }
+
+    private static bool HasSameHistorySequence(IReadOnlyList<HistoryItemVM> left, IReadOnlyList<HistoryItemVM> right)
+    {
+        if (ReferenceEquals(left, right))
+            return true;
+        if (left.Count != right.Count)
+            return false;
+
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (!left[i].Entry.FilePath.Equals(right[i].Entry.FilePath, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        return true;
     }
 
     private void UpdateImageSearchStatus()
@@ -264,6 +355,22 @@ public partial class SettingsWindow
         SetImageSearchLoading(false, forceSemantic: true);
     }
 
+    private bool CanReuseImmediateSearchScope(string normalizedQuery, ImageSearchSourceOptions sources, bool exactMatch)
+    {
+        return !string.IsNullOrWhiteSpace(_lastImmediateSearchQuery) &&
+               sources == _lastImmediateSearchSources &&
+               exactMatch == _lastImmediateSearchExactMatch &&
+               normalizedQuery.StartsWith(_lastImmediateSearchQuery, StringComparison.Ordinal);
+    }
+
+    private void RememberImmediateSearch(string normalizedQuery, ImageSearchSourceOptions sources, bool exactMatch, List<HistoryItemVM> results)
+    {
+        _lastImmediateSearchQuery = normalizedQuery;
+        _lastImmediateSearchSources = sources;
+        _lastImmediateSearchExactMatch = exactMatch;
+        _lastImmediateSearchResults = results;
+    }
+
     private void UpdateImageSearchUi()
     {
         var isImages = HistoryCategoryCombo.SelectedIndex == 0;
@@ -275,7 +382,7 @@ public partial class SettingsWindow
             ImageSearchPlaceholder.Visibility = string.IsNullOrWhiteSpace(ImageSearchBox.Text) && !ImageSearchBox.IsKeyboardFocused
                 ? Visibility.Visible
                 : Visibility.Collapsed;
-            ImageSearchSemanticCheck.IsEnabled = !_settingsService.Settings.ImageSearchExactMatch;
+            ImageSearchSemanticCheck.IsEnabled = !_settingsService.Settings.ImageSearchExactMatch && _semanticRuntimeInstalled;
         }
         else
         {

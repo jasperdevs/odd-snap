@@ -27,6 +27,14 @@
         <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#12FFFFFF"/>
         <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FFFFFFFF"/>
         <SolidColorBrush x:Key="ThemeSeparatorBrush" Color="#0CFFFFFF"/>
+        <LinearGradientBrush x:Key="TranslationShimmerBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#08FFFFFF" Offset="0"/>
+            <GradientStop Color="#22FFFFFF" Offset="0.45"/>
+            <GradientStop Color="#08FFFFFF" Offset="1"/>
+            <LinearGradientBrush.RelativeTransform>
+                <TranslateTransform X="-1.2"/>
+            </LinearGradientBrush.RelativeTransform>
+        </LinearGradientBrush>
     </Window.Resources>
 
     <Border x:Name="RootBorder" CornerRadius="12" ClipToBounds="True">
@@ -58,7 +66,7 @@
                                 <Line X1="0" Y1="0" X2="10" Y2="0" Stroke="{DynamicResource ThemeTextPrimaryBrush}" StrokeThickness="1" Opacity="0.6"/>
                             </Canvas>
                         </Border>
-                        <Border Width="30" Height="30" CornerRadius="6" Cursor="Hand" Background="Transparent"
+                        <Border x:Name="CloseTitleBtn" Width="30" Height="30" CornerRadius="6" Cursor="Hand" Background="Transparent"
                                 MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
                                 MouseDown="CloseBtn_Click" VerticalAlignment="Center" Margin="2,0,0,0">
                             <Canvas Width="9" Height="9" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -100,6 +108,7 @@
                         <Border Width="1" Height="18" Background="{DynamicResource ThemeInputBorderBrush}" Margin="8,0"/>
                         <ComboBox x:Name="ModelCombo" FontSize="10" Padding="5,4" MinWidth="115"
                                   SelectionChanged="ModelCombo_Changed">
+                            <ComboBoxItem Content="Open-source Local" Tag="2"/>
                             <ComboBoxItem Content="Argos Translate" Tag="0"/>
                             <ComboBoxItem Content="Google Translate" Tag="1"/>
                         </ComboBox>
@@ -129,6 +138,27 @@
                              Background="Transparent" BorderThickness="0"
                              Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                              CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"/>
+                    <Border x:Name="TranslationLoadingOverlay"
+                            Background="#0DFFFFFF"
+                            CornerRadius="6"
+                            Margin="6"
+                            Visibility="Collapsed"
+                            IsHitTestVisible="False">
+                        <Grid>
+                            <Rectangle x:Name="TranslationShimmerRect" Fill="{StaticResource TranslationShimmerBrush}" RadiusX="6" RadiusY="6"/>
+                            <StackPanel Margin="12,12,12,10" VerticalAlignment="Center">
+                                <Border Height="11" Width="150" CornerRadius="5.5" Background="#12FFFFFF" HorizontalAlignment="Left"/>
+                                <Border Height="9" Margin="0,10,0,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
+                                <Border Height="9" Margin="0,8,42,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
+                                <Border Height="9" Margin="0,8,86,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
+                                <ProgressBar x:Name="TranslateProgressBar"
+                                             Height="3"
+                                             Margin="0,14,0,0"
+                                             IsIndeterminate="True"
+                                             Opacity="0.9"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
                     <TextBlock x:Name="TranslateStatus" FontSize="11"
                                Opacity="0.25" HorizontalAlignment="Center" VerticalAlignment="Center"
                                Foreground="{DynamicResource ThemeTextPrimaryBrush}"
@@ -146,7 +176,7 @@
                                 Background="{DynamicResource ThemeInputBackgroundBrush}"
                                 BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
                                 Cursor="Hand" MinHeight="30" Visibility="Collapsed"/>
-                        <Button x:Name="CopyBtn" Content="Copy Text" FontSize="11" Padding="10,6"
+                        <Button x:Name="CopyBtn" Content="Copy OCR" FontSize="11" Padding="10,6"
                                 Click="CopyBtn_Click" Style="{StaticResource ChromeButtonBase}"
                                 Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                                 Background="{DynamicResource ThemeInputBackgroundBrush}"

@@ -1,7 +1,6 @@
 using System.Drawing;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
 using Yoink.Models;
@@ -53,6 +52,8 @@ public sealed class ImageSearchRecordDiagnostics
 
 public static class ImageSearchQueryMatcher
 {
+    private const float SemanticSimilarityThreshold = 0.18f;
+
     public static IReadOnlyList<T> Rank<T>(IEnumerable<T> items, string query, Func<T, string> searchableTextSelector, Func<T, string> fileNameSelector, Func<T, DateTime> capturedAtSelector, bool exactMatch = false)
     {
         var normalizedQuery = Normalize(query);
@@ -142,8 +143,20 @@ public static class ImageSearchQueryMatcher
             searchTokenSet.Contains(token) ||
             fileTokens.Any(value => value.StartsWith(token, StringComparison.Ordinal)) ||
             searchTokens.Any(value => value.StartsWith(token, StringComparison.Ordinal)));
+        var minimumMatchedTokens = queryTokens.Length switch
+        {
+            <= 1 => 1,
+            2 => 2,
+            3 => 2,
+            _ => queryTokens.Length - 1
+        };
+        if (matchedTokens < minimumMatchedTokens)
+            return 0;
+
         if (matchedTokens == queryTokens.Length)
             score += 50;
+        else
+            score += matchedTokens * 8;
 
         return score;
     }
@@ -154,7 +167,7 @@ public static class ImageSearchQueryMatcher
             return 0;
 
         var similarity = CosineSimilarity(queryEmbedding, imageEmbedding);
-        return similarity <= 0 ? 0 : (int)Math.Round(similarity * 140.0);
+        return similarity < SemanticSimilarityThreshold ? 0 : (int)Math.Round(similarity * 140.0);
     }
 
     public static float CosineSimilarity(IReadOnlyList<float> left, IReadOnlyList<float> right)
@@ -258,17 +271,14 @@ public static class ImageSearchQueryMatcher
 
 public sealed partial class ImageSearchIndexService : IDisposable
 {
+    private const int SearchDatabaseSchemaVersion = 2;
     private const int MaxOcrRetryCount = 4;
     private const int MaxConcurrentIndexTasks = 3;
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNameCaseInsensitive = true
-    };
-
-    private static readonly string IndexPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history", "image_search_index.json");
-    private static readonly string DbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history", "image_search_index.db");
-    private static readonly string LegacyIndexPath = Path.Combine(HistoryService.HistoryDir, "image_search_index.json");
+    private static readonly string LegacyAppDataIndexPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history", "image_search_index.json");
+    private static readonly string LegacyDbPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history", "image_search_index.db");
+    private static readonly string LegacyHistoryIndexPath = Path.Combine(HistoryService.HistoryDir, "image_search_index.json");
 
     private readonly object _gate = new();
     private readonly SemaphoreSlim _syncGate = new(1, 1);
@@ -309,11 +319,23 @@ public sealed partial class ImageSearchIndexService : IDisposable
         lock (_gate)
         {
             Directory.CreateDirectory(HistoryService.HistoryDir);
-            LoadIndex_NoLock();
-            PruneMissingEntries_NoLock();
-            Persist_NoLock();
             EnsureDatabase_NoLock();
-            RebuildDatabase_NoLock();
+            if (!IsDatabaseCurrent_NoLock())
+            {
+                LoadIndex_NoLock();
+                PruneMissingEntries_NoLock();
+                RecreateDatabaseSchema_NoLock();
+                RebuildDatabase_NoLock();
+                SetDatabaseSchemaVersion_NoLock();
+            }
+            else
+            {
+                LoadIndex_NoLock();
+                PruneMissingEntries_NoLock();
+            }
+
+            Persist_NoLock();
+            CleanupLegacySearchArtifacts_NoLock();
         }
 
         SetStatus("Search index ready");

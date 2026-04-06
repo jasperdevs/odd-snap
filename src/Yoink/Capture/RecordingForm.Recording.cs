@@ -12,6 +12,8 @@ namespace Yoink.Capture;
 
 public sealed partial class RecordingForm
 {
+    private const string VideoPreviewSeekOffset = "0.40";
+
     // ─── Recording lifecycle ──────────────────────────────────────────
 
     private void StartRecording()
@@ -95,6 +97,7 @@ public sealed partial class RecordingForm
                 try { System.Windows.Application.Current?.Dispatcher.Invoke(() => ToastWindow.Show("Recording", "Encoding, please wait...")); } catch { }
                 gifRec?.StopAndEncode(_savePath);
                 vidRec?.StopAndEncode(_savePath);
+                firstFrame ??= TryCreateToastPreviewFrame(_savePath);
                 RecordingCompleted?.Invoke(_savePath, firstFrame);
             }
             catch (Exception ex)
@@ -153,5 +156,50 @@ public sealed partial class RecordingForm
     {
         if (_state == State.Recording)
             BeginInvoke(new Action(StopRecording));
+    }
+
+    private static Bitmap? TryCreateToastPreviewFrame(string path)
+    {
+        try
+        {
+            var ext = Path.GetExtension(path);
+            if (ext.Equals(".gif", StringComparison.OrdinalIgnoreCase))
+            {
+                using var image = Image.FromFile(path);
+                return new Bitmap(image);
+            }
+
+            var ffmpeg = VideoRecorder.FindFfmpeg();
+            if (ffmpeg == null)
+                return null;
+
+            var tempPath = Path.Combine(Path.GetTempPath(), $"yoink_media_preview_{Guid.NewGuid():N}.jpg");
+            try
+            {
+                using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = ffmpeg,
+                    Arguments = $"-y -ss {VideoPreviewSeekOffset} -i \"{path}\" -vf \"scale=480:-1\" -frames:v 1 \"{tempPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true
+                });
+
+                proc?.WaitForExit(8000);
+                if (proc is null || proc.ExitCode != 0 || !File.Exists(tempPath))
+                    return null;
+
+                using var frame = Image.FromFile(tempPath);
+                return new Bitmap(frame);
+            }
+            finally
+            {
+                try { File.Delete(tempPath); } catch { }
+            }
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

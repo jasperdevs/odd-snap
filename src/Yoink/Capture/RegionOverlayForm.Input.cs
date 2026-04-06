@@ -19,7 +19,6 @@ public sealed partial class RegionOverlayForm
             if (fb >= 0 && _flyoutTools[fb].Mode.HasValue)
             {
                 SetMode(_flyoutTools[fb].Mode!.Value);
-                _flyoutOpen = false;
                 RefreshToolbar();
                 return;
             }
@@ -32,20 +31,12 @@ public sealed partial class RegionOverlayForm
             if (btn == BtnCount - 2) { ToggleColorPicker(); return; } // color dot
             if (_moreButtonIndex >= 0 && btn == _moreButtonIndex)
             {
-                _flyoutOpen = !_flyoutOpen;
-                RefreshToolbar();
+                SetFlyoutOpen(!_flyoutOpen);
                 return;
             }
             if (btn < _mainBarTools.Length && _mainBarTools[btn].Mode.HasValue)
                 SetMode(_mainBarTools[btn].Mode!.Value);
             return;
-        }
-
-        // Close flyout when clicking elsewhere
-        if (_flyoutOpen)
-        {
-            _flyoutOpen = false;
-            RefreshToolbar();
         }
 
         // Color picker popup: check if clicked a swatch
@@ -226,9 +217,17 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Scan:
             case CaptureMode.Sticker:
                 HideToolbarForCaptureTool();
-                _autoDetectRect = WindowDetector.GetDetectionRectAtPoint(
-                    e.Location, _virtualBounds, _windowDetectionMode);
-                _autoDetectActive = _autoDetectRect.Width > 0 && _autoDetectRect.Height > 0;
+                if (_windowDetectionMode == WindowDetectionMode.Off)
+                {
+                    _autoDetectRect = Rectangle.Empty;
+                    _autoDetectActive = false;
+                }
+                else
+                {
+                    _autoDetectRect = WindowDetector.GetDetectionRectAtPoint(
+                        e.Location, _virtualBounds, _windowDetectionMode);
+                    _autoDetectActive = _autoDetectRect.Width > 0 && _autoDetectRect.Height > 0;
+                }
                 _isSelecting = true;
                 _selectionStart = _selectionEnd = e.Location;
                 _hasSelection = false;
