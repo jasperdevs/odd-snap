@@ -18,9 +18,6 @@
             BorderThickness="0"
             Padding="0"
             SnapsToDevicePixels="True">
-        <Border.CacheMode>
-            <BitmapCache RenderAtScale="1"/>
-        </Border.CacheMode>
         <Border.RenderTransform>
             <TransformGroup>
                 <ScaleTransform x:Name="DragScale" ScaleX="1" ScaleY="1"/>
@@ -32,86 +29,94 @@
                 MaxWidth="360" MinWidth="196"
                 SnapsToDevicePixels="True">
             <Grid>
-            <Grid x:Name="ContentGrid">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="3"/>
             </Grid.RowDefinitions>
 
-            <!-- Image preview area (hidden for text-only toasts) -->
-            <Grid x:Name="ImageArea" Grid.Row="0" Visibility="Collapsed" MaxHeight="176" HorizontalAlignment="Center">
-                <Border x:Name="ImageFrame" CornerRadius="14,14,0,0" ClipToBounds="True">
-                    <Image x:Name="PreviewImage" Stretch="Uniform"
-                           UseLayoutRounding="True"
-                           SnapsToDevicePixels="True"
-                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                </Border>
+            <Grid x:Name="ContentGrid" Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                <!-- Overlay buttons (shown on hover) -->
-                <Border x:Name="CloseBtn" Width="28" Height="28" CornerRadius="8"
-                        Background="#660B0D10" BorderBrush="#26FFFFFF" BorderThickness="1"
-                        Cursor="Hand"
-                        HorizontalAlignment="Right" VerticalAlignment="Top"
-                        Margin="0,8,8,0" Opacity="0" Visibility="Collapsed">
-                    <Canvas Width="8" Height="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Line X1="0" Y1="0" X2="8" Y2="8" Stroke="White" StrokeThickness="1.3"/>
-                        <Line X1="8" Y1="0" X2="0" Y2="8" Stroke="White" StrokeThickness="1.3"/>
-                    </Canvas>
-                </Border>
-                <Border x:Name="PinBtn" Width="28" Height="28" CornerRadius="8"
-                        Background="#660B0D10" BorderBrush="#26FFFFFF" BorderThickness="1"
-                        Cursor="Hand"
-                        HorizontalAlignment="Left" VerticalAlignment="Top"
-                        Margin="8,8,0,0" Opacity="0" Visibility="Collapsed">
-                    <Path x:Name="PinIcon"
-                          Data="M16,12V4h1V2H7V4h1v8l-2,2v2h5.2v6h1.6v-6H18v-2Z"
-                          Fill="White" Stretch="Uniform" Width="10" Height="10" Opacity="0.9"
-                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-                <Border x:Name="SaveBtn" Width="28" Height="28" CornerRadius="8"
-                        Background="#660B0D10" BorderBrush="#26FFFFFF" BorderThickness="1"
-                        Cursor="Hand"
-                        HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                        Margin="0,0,8,8" Opacity="0" Visibility="Collapsed">
-                    <Path Data="M19,12v7H5v-7H3v7c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2v-7H19z M13,12.67l2.59-2.58L17,11.5l-5,5l-5-5l1.41-1.41L11,12.67V3h2V12.67z"
-                          Fill="White" Stretch="Uniform" Width="10" Height="10" Opacity="0.9"
-                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Border>
-            </Grid>
+                <!-- Image preview area (hidden for text-only toasts) -->
+                <Grid x:Name="ImageArea" Grid.Row="0" Visibility="Collapsed" MaxHeight="176" HorizontalAlignment="Center">
+                    <Border x:Name="ImageFrame" CornerRadius="14,14,0,0" ClipToBounds="True">
+                        <Image x:Name="PreviewImage" Stretch="Uniform"
+                               UseLayoutRounding="True"
+                               SnapsToDevicePixels="True"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
 
-            <!-- Text content -->
-            <StackPanel x:Name="TextContentPanel" Grid.Row="1" Orientation="Horizontal" Margin="14,12,14,10">
-                <Border x:Name="ColorSwatch" Width="28" Height="28" CornerRadius="8"
-                        Margin="0,0,12,0" Visibility="Collapsed" VerticalAlignment="Center"/>
-                <Border x:Name="InlinePreviewHost" Width="44" Height="44" CornerRadius="8"
-                        Margin="0,0,12,0" Visibility="Collapsed" VerticalAlignment="Center"
-                        Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
-                    <Image x:Name="InlinePreviewImage" Stretch="Uniform" Margin="4"
-                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                </Border>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="TitleText" FontSize="12.75" FontWeight="SemiBold"
-                               FontFamily="Segoe UI Variable Text"/>
-                    <TextBlock x:Name="BodyText" FontSize="11.5" Opacity="0.72" TextWrapping="Wrap"
-                               FontFamily="Segoe UI Variable Text"
-                               MaxWidth="292" Margin="0,2,0,0"/>
+                    <!-- Overlay buttons (shown on hover) -->
+                    <Border x:Name="CloseBtn" Width="28" Height="28" CornerRadius="8"
+                            Background="#660B0D10" BorderBrush="#26FFFFFF" BorderThickness="1"
+                            Cursor="Hand"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Margin="0,8,8,0" Opacity="0" Visibility="Collapsed">
+                        <Canvas Width="8" Height="8" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Line X1="0" Y1="0" X2="8" Y2="8" Stroke="White" StrokeThickness="1.3"/>
+                            <Line X1="8" Y1="0" X2="0" Y2="8" Stroke="White" StrokeThickness="1.3"/>
+                        </Canvas>
+                    </Border>
+                    <Border x:Name="PinBtn" Width="28" Height="28" CornerRadius="8"
+                            Background="#660B0D10" BorderBrush="#26FFFFFF" BorderThickness="1"
+                            Cursor="Hand"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Margin="8,8,0,0" Opacity="0" Visibility="Collapsed">
+                        <Path x:Name="PinIcon"
+                              Data="M16,12V4h1V2H7V4h1v8l-2,2v2h5.2v6h1.6v-6H18v-2Z"
+                              Fill="White" Stretch="Uniform" Width="10" Height="10" Opacity="0.9"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <Border x:Name="SaveBtn" Width="28" Height="28" CornerRadius="8"
+                            Background="#660B0D10" BorderBrush="#26FFFFFF" BorderThickness="1"
+                            Cursor="Hand"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Margin="0,0,8,8" Opacity="0" Visibility="Collapsed">
+                        <Path Data="M19,12v7H5v-7H3v7c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2v-7H19z M13,12.67l2.59-2.58L17,11.5l-5,5l-5-5l1.41-1.41L11,12.67V3h2V12.67z"
+                              Fill="White" Stretch="Uniform" Width="10" Height="10" Opacity="0.9"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </Grid>
+
+                <!-- Text content -->
+                <StackPanel x:Name="TextContentPanel" Grid.Row="1" Orientation="Horizontal" Margin="14,12,14,10">
+                    <Border x:Name="ColorSwatch" Width="28" Height="28" CornerRadius="8"
+                            Margin="0,0,12,0" Visibility="Collapsed" VerticalAlignment="Center"/>
+                    <Border x:Name="InlinePreviewHost" Width="44" Height="44" CornerRadius="8"
+                            Margin="0,0,12,0" Visibility="Collapsed" VerticalAlignment="Center"
+                            Background="#12FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
+                        <Image x:Name="InlinePreviewImage" Stretch="Uniform" Margin="4"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="TitleText" FontSize="12.75" FontWeight="SemiBold"
+                                   FontFamily="Segoe UI Variable Text"/>
+                        <TextBlock x:Name="BodyText" FontSize="11.5" Opacity="0.72" TextWrapping="Wrap"
+                                   FontFamily="Segoe UI Variable Text"
+                                   MaxWidth="292" Margin="0,2,0,0"/>
+                    </StackPanel>
                 </StackPanel>
-            </StackPanel>
             </Grid>
 
-            <!-- Progress bar -->
-            <Border x:Name="ProgressBar" Height="4"
-                    Margin="0"
-                    Background="#8CFFFFFF" CornerRadius="0,0,14,14"
-                    VerticalAlignment="Bottom"
-                    HorizontalAlignment="Stretch"
-                    RenderTransformOrigin="0,0.5">
-                <Border.RenderTransform>
-                    <ScaleTransform x:Name="ProgressScale" ScaleX="1" ScaleY="1"/>
-                </Border.RenderTransform>
-            </Border>
+            <Grid Grid.Row="1" ClipToBounds="True">
+                <Border x:Name="ProgressTrack"
+                        Background="Transparent"
+                        HorizontalAlignment="Stretch"/>
+                <Border x:Name="ProgressBar"
+                        Background="#8CFFFFFF"
+                        HorizontalAlignment="Stretch"
+                        RenderTransformOrigin="0,0.5">
+                    <Border.RenderTransform>
+                        <ScaleTransform x:Name="ProgressScale" ScaleX="1" ScaleY="1"/>
+                    </Border.RenderTransform>
+                </Border>
+            </Grid>
 
             <Border x:Name="ShellStroke"
+                    Grid.RowSpan="2"
                     Margin="0"
                     CornerRadius="14"
                     Background="Transparent"

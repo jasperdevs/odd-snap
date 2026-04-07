@@ -60,6 +60,7 @@ public sealed partial class RegionOverlayForm
         if (_pickerForm != null) return;
         _pickerForm = new PickerMagnifierForm();
         var _ = _pickerForm.Handle;
+        WindowDetector.RegisterIgnoredWindow(_pickerForm.Handle);
     }
 
     private void EnsureCaptureMagnifierForm()
@@ -67,6 +68,7 @@ public sealed partial class RegionOverlayForm
         if (_captureMagnifierForm != null) return;
         _captureMagnifierForm = new PickerMagnifierForm();
         var _ = _captureMagnifierForm.Handle;
+        WindowDetector.RegisterIgnoredWindow(_captureMagnifierForm.Handle);
     }
 
     internal void UpdateColorPicker(Point overlayPoint)
@@ -162,6 +164,8 @@ public sealed partial class RegionOverlayForm
 
     private void CloseMagWindow()
     {
+        if (_pickerForm != null)
+            WindowDetector.UnregisterIgnoredWindow(_pickerForm.Handle);
         _pickerForm?.Close();
         _pickerForm?.Dispose();
         _pickerForm = null;
@@ -172,6 +176,8 @@ public sealed partial class RegionOverlayForm
 
     private void CloseCaptureMagnifier()
     {
+        if (_captureMagnifierForm != null)
+            WindowDetector.UnregisterIgnoredWindow(_captureMagnifierForm.Handle);
         _captureMagnifierForm?.Close();
         _captureMagnifierForm?.Dispose();
         _captureMagnifierForm = null;
@@ -184,10 +190,11 @@ public sealed partial class RegionOverlayForm
 
     private void BuildMagnifier()
     {
+        var pixelData = GetPixelData();
         int cx = Math.Clamp(_pickerCursorPos.X, 0, _bmpW - 1);
         int cy = Math.Clamp(_pickerCursorPos.Y, 0, _bmpH - 1);
         var samplePoint = new Point(cx, cy);
-        int argb = _pixelData[cy * _bmpW + cx];
+        int argb = pixelData[cy * _bmpW + cx];
         bool colorChanged = argb != _lastPickedArgb;
         bool sampleChanged = samplePoint != _lastMagnifierSamplePoint;
         _lastPickedArgb = argb;
@@ -214,7 +221,7 @@ public sealed partial class RegionOverlayForm
             {
                 int sx = cx - half + gx;
                 int c = ((uint)sx < (uint)_bmpW && (uint)sy < (uint)_bmpH)
-                    ? _pixelData[sy * _bmpW + sx] : unchecked((int)0xFF000000);
+                    ? pixelData[sy * _bmpW + sx] : unchecked((int)0xFF000000);
 
                 int ox = PPad + gx * Cell;
                 int oy = PPad + gy * Cell;

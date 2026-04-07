@@ -195,11 +195,7 @@ public static class ToolListBuilder
                 or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape)
                 return;
 
-            uint mod = 0;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Windows)) mod |= Native.User32.MOD_WIN;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) mod |= Native.User32.MOD_ALT;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) mod |= Native.User32.MOD_CONTROL;
-            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) mod |= Native.User32.MOD_SHIFT;
+            uint mod = HotkeyFormatter.GetActiveModifiers();
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(rawKey);
             if (vk == 0) return;
 

@@ -33,7 +33,7 @@ public partial class SettingsWindow
             if (!_recordingFlags.GetValueOrDefault(box)) return;
             if (IsModifierOnly(rawKey)) return;
 
-            uint mod = GetModifiers();
+            uint mod = HotkeyFormatter.GetActiveModifiers();
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(rawKey);
             if (vk == 0) return;
 
@@ -152,16 +152,6 @@ public partial class SettingsWindow
     private static bool IsModifierOnly(Key k) =>
         k is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
             or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape;
-
-    private static uint GetModifiers()
-    {
-        uint m = 0;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Windows)) m |= User32.MOD_WIN;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) m |= User32.MOD_ALT;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) m |= User32.MOD_CONTROL;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) m |= User32.MOD_SHIFT;
-        return m;
-    }
 
     private void WireHotkeyBoxes() { }
 }

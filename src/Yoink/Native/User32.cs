@@ -12,6 +12,11 @@ internal static partial class User32
     public const uint MOD_WIN = 0x0008;
     public const uint MOD_NOREPEAT = 0x4000;
     public const uint VK_SNAPSHOT = 0x2C;
+    public const int VK_SHIFT = 0x10;
+    public const int VK_CONTROL = 0x11;
+    public const int VK_MENU = 0x12;
+    public const int VK_LWIN = 0x5B;
+    public const int VK_RWIN = 0x5C;
 
     public const int SRCCOPY = 0x00CC0020;
 
@@ -20,10 +25,15 @@ internal static partial class User32
     public const int SM_CXVIRTUALSCREEN = 78;
     public const int SM_CYVIRTUALSCREEN = 79;
 
+    public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
+    public const int WS_CHILD = unchecked((int)0x40000000);
+    public const int WS_DISABLED = 0x08000000;
     public const int WS_EX_TOOLWINDOW = 0x80;
     public const int WS_EX_APPWINDOW = 0x40000;
+    public const int WS_EX_LAYERED = 0x80000;
     public const int WS_EX_TRANSPARENT = 0x20;
+    public const int WS_EX_NOACTIVATE = 0x08000000;
     public const uint GA_ROOTOWNER = 3;
     public const uint GA_ROOT = 2;
     public const uint GW_HWNDNEXT = 2;
@@ -50,6 +60,9 @@ internal static partial class User32
 
     [LibraryImport("user32.dll")]
     public static partial int GetLastError();
+
+    [LibraryImport("user32.dll")]
+    public static partial short GetKeyState(int nVirtKey);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

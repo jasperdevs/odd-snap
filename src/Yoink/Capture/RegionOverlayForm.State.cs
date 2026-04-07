@@ -194,6 +194,34 @@ public sealed partial class RegionOverlayForm
         return dirty;
     }
 
+    private bool IsSelectionCaptureMode()
+        => _mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker;
+
+    private void InvalidateAutoDetectChrome(Rectangle oldDetect, Rectangle newDetect)
+    {
+        if (!IsSelectionCaptureMode() || _isSelecting || _hasSelection)
+            return;
+
+        if (oldDetect.IsEmpty != newDetect.IsEmpty)
+        {
+            Invalidate();
+            Update();
+            return;
+        }
+
+        var oldDirty = InflateForRepaint(oldDetect);
+        var newDirty = InflateForRepaint(newDetect);
+        if (!oldDirty.IsEmpty && !newDirty.IsEmpty)
+        {
+            Invalidate(Rectangle.Union(oldDirty, newDirty));
+            Update();
+        }
+        else if (!oldDirty.IsEmpty)
+            Invalidate(oldDirty);
+        else if (!newDirty.IsEmpty)
+            Invalidate(newDirty);
+    }
+
     private void UpdateAutoDetectRect(Point location)
     {
         if (_windowDetectionMode == WindowDetectionMode.Off)
@@ -201,8 +229,7 @@ public sealed partial class RegionOverlayForm
             var previousDetect = _autoDetectRect;
             _autoDetectRect = Rectangle.Empty;
             _autoDetectActive = false;
-            if (!previousDetect.IsEmpty)
-                Invalidate(InflateForRepaint(previousDetect));
+            InvalidateAutoDetectChrome(previousDetect, Rectangle.Empty);
             return;
         }
 
@@ -215,17 +242,7 @@ public sealed partial class RegionOverlayForm
         if (oldDetect == detected)
             return;
 
-        var oldDirty = InflateForRepaint(oldDetect);
-        var newDirty = InflateForRepaint(detected);
-        if (!oldDirty.IsEmpty && !newDirty.IsEmpty)
-        {
-            Invalidate(Rectangle.Union(oldDirty, newDirty));
-            Update(); // Force immediate repaint for responsive feel
-        }
-        else if (!oldDirty.IsEmpty)
-            Invalidate(oldDirty);
-        else if (!newDirty.IsEmpty)
-            Invalidate(newDirty);
+        InvalidateAutoDetectChrome(oldDetect, detected);
     }
 
     private void MarkCommittedAnnotationsDirty()

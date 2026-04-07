@@ -68,6 +68,8 @@ public sealed partial class RegionOverlayForm
         _mode = m;
         _hasSelection = false;
         _hasDragged = false;
+        _selectionRect = Rectangle.Empty;
+        _lastSelectionRect = Rectangle.Empty;
         _freeformPoints.Clear();
         _isSelecting = false;
         _isBlurring = false;
@@ -80,6 +82,8 @@ public sealed partial class RegionOverlayForm
         _isCurvedArrowDragging = false;
         _isEraserDragging = false;
         _autoDetectActive = false;
+        _autoDetectRect = Rectangle.Empty;
+        _lastAutoDetectRect = Rectangle.Empty;
 
         if (m == CaptureMode.ColorPicker)
         {

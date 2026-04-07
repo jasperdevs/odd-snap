@@ -35,6 +35,76 @@
                 <TranslateTransform X="-1.2"/>
             </LinearGradientBrush.RelativeTransform>
         </LinearGradientBrush>
+
+        <Style x:Key="OcrThumbStyle" TargetType="{x:Type Thumb}">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border CornerRadius="3"
+                                Background="#66FFFFFF"
+                                Margin="0,2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OcrScrollBarStyle" TargetType="{x:Type ScrollBar}">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid Background="Transparent" Width="{TemplateBinding Width}">
+                            <Track x:Name="PART_Track"
+                                   IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Focusable="False"
+                                                  IsTabStop="False"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource OcrThumbStyle}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Focusable="False"
+                                                  IsTabStop="False"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Height" Value="10"/>
+                    <Setter Property="Width" Value="Auto"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="OcrTextBoxStyle" TargetType="{x:Type TextBox}">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, Malgun Gothic, Yu Gothic UI, Arial Unicode MS, Segoe UI Symbol"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TextBox}">
+                        <Grid>
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border x:Name="RootBorder" CornerRadius="12" ClipToBounds="True">
@@ -88,7 +158,12 @@
                          Padding="10,8"
                          Background="Transparent" BorderThickness="0"
                          Foreground="{DynamicResource ThemeTextPrimaryBrush}"
-                         CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"/>
+                         CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"
+                         Style="{StaticResource OcrTextBoxStyle}">
+                    <TextBox.Resources>
+                        <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource OcrScrollBarStyle}"/>
+                    </TextBox.Resources>
+                </TextBox>
             </Border>
 
             <!-- Translation controls -->
@@ -137,7 +212,12 @@
                              Padding="10,8"
                              Background="Transparent" BorderThickness="0"
                              Foreground="{DynamicResource ThemeTextPrimaryBrush}"
-                             CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"/>
+                             CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"
+                             Style="{StaticResource OcrTextBoxStyle}">
+                        <TextBox.Resources>
+                            <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource OcrScrollBarStyle}"/>
+                        </TextBox.Resources>
+                    </TextBox>
                     <Border x:Name="TranslationLoadingOverlay"
                             Background="#0DFFFFFF"
                             CornerRadius="6"

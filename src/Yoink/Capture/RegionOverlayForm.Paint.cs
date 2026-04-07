@@ -78,7 +78,7 @@ public sealed partial class RegionOverlayForm
         if (_mode == CaptureMode.ColorPicker)
             return; // magnifier is its own layered window, overlay stays static
 
-        if (isSelectionMode && !_isSelecting && _autoDetectActive && _autoDetectRect.Width > 0)
+        if (isSelectionMode && !_isSelecting && !_hasSelection && _autoDetectActive && _autoDetectRect.Width > 0)
         {
             // Clamp the rect so dashes stay within the visible client area
             var drawRect = ClampRectToClient(_autoDetectRect);

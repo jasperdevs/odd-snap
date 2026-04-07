@@ -326,8 +326,19 @@ public sealed partial class RegionOverlayForm
             return;
 
         var color = Color.FromArgb(72, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B);
-        _verticalCrosshairForm ??= new CrosshairGuideForm(color);
-        _horizontalCrosshairForm ??= new CrosshairGuideForm(color);
+        if (_verticalCrosshairForm == null)
+        {
+            _verticalCrosshairForm = new CrosshairGuideForm(color);
+            var _ = _verticalCrosshairForm.Handle;
+            WindowDetector.RegisterIgnoredWindow(_verticalCrosshairForm.Handle);
+        }
+
+        if (_horizontalCrosshairForm == null)
+        {
+            _horizontalCrosshairForm = new CrosshairGuideForm(color);
+            var _ = _horizontalCrosshairForm.Handle;
+            WindowDetector.RegisterIgnoredWindow(_horizontalCrosshairForm.Handle);
+        }
     }
 
     private void UpdateCrosshairGuides(Point point)
@@ -371,8 +382,12 @@ public sealed partial class RegionOverlayForm
             if (_currentOverlay == this)
                 _currentOverlay = null;
             ClearCrosshairGuides();
+            if (_verticalCrosshairForm != null)
+                WindowDetector.UnregisterIgnoredWindow(_verticalCrosshairForm.Handle);
             _verticalCrosshairForm?.Close();
             _verticalCrosshairForm?.Dispose();
+            if (_horizontalCrosshairForm != null)
+                WindowDetector.UnregisterIgnoredWindow(_horizontalCrosshairForm.Handle);
             _horizontalCrosshairForm?.Close();
             _horizontalCrosshairForm?.Dispose();
             WindowDetector.UnregisterIgnoredWindow(Handle);

@@ -30,11 +30,7 @@ public static class HotkeyFormatter
 
     public static (uint mod, uint key) Parse(System.Windows.Input.KeyEventArgs e)
     {
-        uint mod = 0;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) mod |= Native.User32.MOD_CONTROL;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) mod |= Native.User32.MOD_ALT;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) mod |= Native.User32.MOD_SHIFT;
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Windows)) mod |= Native.User32.MOD_WIN;
+        uint mod = GetActiveModifiers();
 
         var k = e.Key == Key.System ? e.SystemKey : e.Key;
         // Skip modifier-only keys
@@ -45,4 +41,39 @@ public static class HotkeyFormatter
         uint vk = (uint)KeyInterop.VirtualKeyFromKey(k);
         return (mod, vk);
     }
+
+    public static uint GetActiveModifiers() => GetActiveModifiers(Keyboard.Modifiers);
+
+    public static uint GetActiveModifiers(ModifierKeys modifiers, Func<int, short>? getKeyState = null)
+    {
+        getKeyState ??= Native.User32.GetKeyState;
+
+        uint mod = 0;
+        if (HasModifier(modifiers, ModifierKeys.Control, getKeyState, Native.User32.VK_CONTROL))
+            mod |= Native.User32.MOD_CONTROL;
+        if (HasModifier(modifiers, ModifierKeys.Alt, getKeyState, Native.User32.VK_MENU))
+            mod |= Native.User32.MOD_ALT;
+        if (HasModifier(modifiers, ModifierKeys.Shift, getKeyState, Native.User32.VK_SHIFT))
+            mod |= Native.User32.MOD_SHIFT;
+        if (HasModifier(modifiers, ModifierKeys.Windows, getKeyState, Native.User32.VK_LWIN, Native.User32.VK_RWIN))
+            mod |= Native.User32.MOD_WIN;
+
+        return mod;
+    }
+
+    private static bool HasModifier(ModifierKeys modifiers, ModifierKeys flag, Func<int, short> getKeyState, params int[] virtualKeys)
+    {
+        if (modifiers.HasFlag(flag))
+            return true;
+
+        foreach (var virtualKey in virtualKeys)
+        {
+            if (IsPressed(getKeyState(virtualKey)))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsPressed(short state) => (state & 0x8000) != 0;
 }

@@ -12,7 +12,7 @@ namespace Yoink.Capture;
 public sealed partial class RegionOverlayForm : Form
 {
     private readonly Bitmap _screenshot;
-    private readonly int[] _pixelData;
+    private int[]? _pixelData;
     private readonly int _bmpW, _bmpH;
     private readonly Rectangle _virtualBounds;
     private readonly WindowDetectionMode _windowDetectionMode;
@@ -333,13 +333,6 @@ public sealed partial class RegionOverlayForm : Form
         _mode = initialMode;
         _showTime = DateTime.UtcNow;
 
-        // Cache pixels for color picker
-        _pixelData = new int[_bmpW * _bmpH];
-        var bits = _screenshot.LockBits(new Rectangle(0, 0, _bmpW, _bmpH),
-            ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        Marshal.Copy(bits.Scan0, _pixelData, 0, _pixelData.Length);
-        _screenshot.UnlockBits(bits);
-
         // Magnifier bitmap for color picker
         _magBitmap = new Bitmap(PW, PH, PixelFormat.Format32bppArgb);
         _magPixels = new int[PW * PH];
@@ -398,6 +391,27 @@ public sealed partial class RegionOverlayForm : Form
         };
 
         _currentOverlay = this;
+    }
+
+    private int[] GetPixelData()
+    {
+        if (_pixelData != null)
+            return _pixelData;
+
+        var pixelData = new int[_bmpW * _bmpH];
+        var bits = _screenshot.LockBits(new Rectangle(0, 0, _bmpW, _bmpH),
+            ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            Marshal.Copy(bits.Scan0, pixelData, 0, pixelData.Length);
+        }
+        finally
+        {
+            _screenshot.UnlockBits(bits);
+        }
+
+        _pixelData = pixelData;
+        return pixelData;
     }
 
     private static float EaseOutCubic(float t)

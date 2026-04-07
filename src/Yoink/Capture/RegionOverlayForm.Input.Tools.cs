@@ -259,8 +259,7 @@ public sealed partial class RegionOverlayForm
                     _autoDetectRect = Rectangle.Empty;
                     _autoDetectActive = false;
                     _autoDetectTimer.Stop();
-                    if (!oldDetect.IsEmpty)
-                        Invalidate(InflateForRepaint(oldDetect));
+                    InvalidateAutoDetectChrome(oldDetect, Rectangle.Empty);
                 }
                 else
                 {
@@ -515,6 +514,8 @@ public sealed partial class RegionOverlayForm
                 }
                 else if (_selectionRect.Width > 2 && _selectionRect.Height > 2)
                 {
+                    _autoDetectRect = Rectangle.Empty;
+                    _autoDetectActive = false;
                     if (isOcr) OcrRegionSelected?.Invoke(_selectionRect);
                     else if (isScan) ScanRegionSelected?.Invoke(_selectionRect);
                     else if (isSticker) StickerRegionSelected?.Invoke(_selectionRect);
