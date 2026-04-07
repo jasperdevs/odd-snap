@@ -142,15 +142,15 @@ dotnet publish src/Yoink/Yoink.csproj -c Release -r win-x64 --self-contained tru
   <picture>
     <source
       media="(prefers-color-scheme: dark)"
-      srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&theme=dark&legend=top-left&cache_bust=yoink_v2"
+      srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&theme=dark&legend=top-left&v=20260407-1"
     />
     <source
       media="(prefers-color-scheme: light)"
-      srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&cache_bust=yoink_v2"
+      srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&v=20260407-1"
     />
     <img
       alt="Star History Chart"
-      src="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&cache_bust=yoink_v2"
+      src="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&v=20260407-1"
     />
   </picture>
 </a>
