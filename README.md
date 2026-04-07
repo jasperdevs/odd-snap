@@ -136,24 +136,21 @@ git clone https://github.com/jasperdevs/yoink.git
 cd yoink
 dotnet publish src/Yoink/Yoink.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o release
 ```
-
-Requires [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0).
-
 ## Star History
 
 <a href="https://www.star-history.com/?repos=jasperdevs%2Fyoink&type=timeline&legend=top-left">
   <picture>
     <source
       media="(prefers-color-scheme: dark)"
-      srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&theme=dark&legend=top-left&t=1743916800"
+      srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&theme=dark&legend=top-left&cache_bust=yoink_v2"
     />
     <source
       media="(prefers-color-scheme: light)"
-      srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&t=1743916800"
+      srcset="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&cache_bust=yoink_v2"
     />
     <img
       alt="Star History Chart"
-      src="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&t=1743916800"
+      src="https://api.star-history.com/chart?repos=jasperdevs/yoink&type=timeline&legend=top-left&cache_bust=yoink_v2"
     />
   </picture>
 </a>
