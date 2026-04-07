@@ -5,6 +5,46 @@ namespace Yoink.Helpers;
 
 public static class ToolbarLayout
 {
+    public static Rectangle ResolveToolbarAnchorArea(
+        Rectangle overlayBounds,
+        Point? cursorScreenPoint,
+        Rectangle lastAnchorArea,
+        IReadOnlyList<Rectangle> screenWorkingAreas)
+    {
+        if (cursorScreenPoint is { } cursor && overlayBounds.Contains(cursor))
+        {
+            for (int i = 0; i < screenWorkingAreas.Count; i++)
+            {
+                var candidate = Rectangle.Intersect(screenWorkingAreas[i], overlayBounds);
+                if (!candidate.IsEmpty && candidate.Contains(cursor))
+                    return candidate;
+            }
+        }
+
+        if (!lastAnchorArea.IsEmpty)
+        {
+            var persisted = Rectangle.Intersect(lastAnchorArea, overlayBounds);
+            if (!persisted.IsEmpty)
+                return persisted;
+        }
+
+        Rectangle best = Rectangle.Empty;
+        long bestArea = -1;
+
+        for (int i = 0; i < screenWorkingAreas.Count; i++)
+        {
+            var candidate = Rectangle.Intersect(screenWorkingAreas[i], overlayBounds);
+            long area = (long)candidate.Width * candidate.Height;
+            if (area > bestArea)
+            {
+                best = candidate;
+                bestArea = area;
+            }
+        }
+
+        return best.IsEmpty ? overlayBounds : best;
+    }
+
     public static Rectangle GetToolbarRect(
         Rectangle virtualBounds,
         Rectangle screenBounds,

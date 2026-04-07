@@ -50,6 +50,7 @@ public sealed partial class RegionOverlayForm : Form
     private DateTime _flyoutAnimStartedAt;
     private bool _showToolNumberBadges = true;
     private Rectangle _toolbarRect;
+    private Rectangle _toolbarAnchorArea;
     private float _toolbarAnim;
     private Point _lastCursorPos;
     private Point _prevCursorPos; // crosshair ghosting fix
@@ -496,15 +497,22 @@ public sealed partial class RegionOverlayForm : Form
                         + _sepAfter.Length * UiChrome.ToolbarGroupGap;
         int w = IsVerticalDock ? UiChrome.ToolbarHeight : primarySpan;
         int h = IsVerticalDock ? primarySpan : UiChrome.ToolbarHeight;
-        Rectangle screenBounds;
+        Point? cursorScreenPoint = null;
         try
         {
-            screenBounds = Screen.FromPoint(System.Windows.Forms.Cursor.Position).WorkingArea;
+            var cursorPos = System.Windows.Forms.Cursor.Position;
+            if (_virtualBounds.Contains(cursorPos))
+                cursorScreenPoint = cursorPos;
         }
-        catch
-        {
-            screenBounds = Screen.PrimaryScreen?.WorkingArea ?? _virtualBounds;
-        }
+        catch { }
+
+        Rectangle[] screenWorkingAreas = GetScreenWorkingAreas();
+        _toolbarAnchorArea = ToolbarLayout.ResolveToolbarAnchorArea(
+            _virtualBounds,
+            cursorScreenPoint,
+            _toolbarAnchorArea,
+            screenWorkingAreas);
+        Rectangle screenBounds = _toolbarAnchorArea.IsEmpty ? _virtualBounds : _toolbarAnchorArea;
 
         _toolbarRect = ToolbarLayout.GetToolbarRect(_virtualBounds, screenBounds, w, h, CaptureDockSide);
         int cx = _toolbarRect.X + pad;

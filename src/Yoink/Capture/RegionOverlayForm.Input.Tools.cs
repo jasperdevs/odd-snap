@@ -62,6 +62,9 @@ public sealed partial class RegionOverlayForm
         bool needsRepaint = false;
         bool toolbarDirty = false;
 
+        if (UpdateToolbarAnchorForClientPoint(e.Location))
+            toolbarDirty = true;
+
         // Text move drag
         if (_textDragging && _isTyping)
         {

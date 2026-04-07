@@ -111,6 +111,30 @@ public sealed partial class RegionOverlayForm
         _toolbarForm.Bounds = bounds;
     }
 
+    private static Rectangle[] GetScreenWorkingAreas()
+    {
+        var screens = Screen.AllScreens;
+        var workingAreas = new Rectangle[screens.Length];
+        for (int i = 0; i < screens.Length; i++)
+            workingAreas[i] = screens[i].WorkingArea;
+        return workingAreas;
+    }
+
+    private bool UpdateToolbarAnchorForClientPoint(Point clientPoint)
+    {
+        var screenPoint = new Point(_virtualBounds.X + clientPoint.X, _virtualBounds.Y + clientPoint.Y);
+        var resolved = ToolbarLayout.ResolveToolbarAnchorArea(
+            _virtualBounds,
+            screenPoint,
+            _toolbarAnchorArea,
+            GetScreenWorkingAreas());
+        if (resolved == _toolbarAnchorArea)
+            return false;
+
+        _toolbarAnchorArea = resolved;
+        return true;
+    }
+
     private void ShowTextBox()
     {
         if (_textBox == null)
