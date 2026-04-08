@@ -17,6 +17,9 @@
   <a href="https://github.com/jasperdevs/yoink/releases">
     <img src="https://img.shields.io/github/downloads/jasperdevs/yoink/total?style=flat-square&cacheSeconds=300" alt="Downloads" />
   </a>
+  <a href="https://github.com/jasperdevs/yoink/releases/latest">
+    <img src="https://img.shields.io/github/downloads/jasperdevs/yoink/latest/total?style=flat-square&cacheSeconds=300" alt="Latest release downloads" />
+  </a>
   <a href="https://github.com/jasperdevs/yoink/stargazers">
   <img src="https://img.shields.io/github/stars/jasperdevs/yoink?style=flat-square" alt="Stars" />
 </a>
