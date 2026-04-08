@@ -140,24 +140,6 @@ Yoink also includes smaller utilities built into the capture flow.
 - Ruler
 - Step numbering
 
-## Default hotkeys
-
-| Action | Hotkey |
-|---|---|
-| Screenshot | `Alt + `` ` |
-| OCR | `Alt + Shift + `` ` |
-| Color picker | `Alt + C` |
-| QR/barcode scanner | `Unassigned` |
-| Sticker | `Unassigned` |
-| Fullscreen capture | `Unassigned` |
-| Active window capture | `Unassigned` |
-| Scroll capture | `Unassigned` |
-| Ruler | `Unassigned` |
-| Record | `Unassigned` |
-| Annotation tools | `1-9`, `0`, `-`, `=`, `[`, `]`, `\` |
-
-Annotation tool hotkeys can be configured in settings, and hover tooltips reflect the real assigned key.
-
 ## Uploads
 
 Yoink can upload screenshots, stickers, and recordings after capture. Upload targets include:
