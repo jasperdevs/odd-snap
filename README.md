@@ -67,7 +67,7 @@ winget upgrade --id JasperDevs.Yoink -e
 Yoink can open a new chat or Lens page in your browser after capture, then keep the image ready to drag in or paste.
 
 <p align="left">
-  <img src="" alt="AI Redirects" width="60%" />
+  <img src="assets/airedirects.png" alt="AI Redirects" width="60%" />
 </p>
 
 - Open `ChatGPT`, `Claude`, `Claude Opus`, `Gemini`, or `Google Lens`
@@ -153,13 +153,6 @@ Availability depends on the target service and your credentials.
 
 Sticker uploads use the same upload destinations as normal image uploads.
 
-## Build from source
-
-```
-git clone https://github.com/jasperdevs/yoink.git
-cd yoink
-dotnet publish src/Yoink/Yoink.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o release
-```
 ## Star History
 
 <a href="https://www.star-history.com/#jasperdevs/yoink&Date">
