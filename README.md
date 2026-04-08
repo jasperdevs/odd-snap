@@ -125,14 +125,6 @@ Search your image history by filename, OCR text, and semantic matching, so you c
 - Search by text inside the image with OCR
 - Search by semantic similarity to find visually related screenshots
 
-## Quick Tools
-
-Yoink also includes smaller utilities built into the capture flow.
-
-- Color picker
-- QR and barcode scanner
-- Ruler
-- Step numbering
 
 ## Uploads
 
