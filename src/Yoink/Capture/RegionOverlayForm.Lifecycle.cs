@@ -33,6 +33,16 @@ public sealed partial class RegionOverlayForm
         Activate();
         Focus();
         EnsureToolbarReady();
+
+        // Open the flyout (annotation tools) by default for quick access
+        if (_flyoutTools.Length > 0)
+        {
+            _flyoutOpen = true;
+            _flyoutAnim = 1f;
+            _flyoutAnimTarget = 1f;
+            RefreshToolbar();
+        }
+
         Invalidate();
         Update();
 
