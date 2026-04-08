@@ -53,6 +53,7 @@ winget upgrade --id JasperDevs.Yoink -e
 
 - Region, fullscreen, active-window, and scrolling capture
 - Built-in annotation tools (arrows, text, shapes, blur, freehand) with stroke/shadow effects
+- AI Redirects for opening ChatGPT, Claude, Gemini, or Google Lens with the captured image ready to drag or paste
 - OCR text extraction with built-in translation (Argos Translate offline, Google Translate API)
 - Auto-download language packs for 100+ OCR languages
 - Color picking, QR/barcode scanning, ruler, and step numbering
@@ -60,6 +61,28 @@ winget upgrade --id JasperDevs.Yoink -e
 - Screen recording (GIF, MP4, WebM, MKV) with microphone and desktop audio
 - Local history with image search using OCR and semantic matching
 - Optional uploads to 15+ services including Imgur, S3, Dropbox, and self-hosted targets
+
+## AI Redirects
+
+Yoink can open a new chat or Lens page in your browser after capture, then keep the image ready to drag in or paste.
+
+<p align="left">
+  <img src="" alt="AI Redirects" width="60%" />
+</p>
+
+- Open `ChatGPT`, `Claude`, `Claude Opus`, `Gemini`, or `Google Lens`
+- Keep the captured image on screen as a toast for drag and drop or `Ctrl+V`
+- Optional dedicated hotkey for redirect-only capture
+- Google Lens support with hosted image links when needed
+
+## Capture & Annotate
+
+Yoink covers the core screenshot flow, from quick capture to markup and export.
+
+- Rectangle, fullscreen, active-window, and scrolling capture
+- Annotation tools for arrows, text, shapes, blur, highlight, draw, and step numbers
+- Stroke and shadow options for cleaner callouts
+- Configurable tool hotkeys and toolbar layout
 
 ## Stickers
 
@@ -86,6 +109,15 @@ Yoink can extract text from any region of your screen and translate it instantly
 - Translate with Argos Translate (offline) or Google Translate API
 - Dedicated result window with copy and translate buttons
 
+## Recording
+
+Yoink can record screen clips as GIFs or videos without leaving the app.
+
+- Record `GIF`, `MP4`, `WebM`, or `MKV`
+- Optional microphone and desktop audio capture
+- Fullscreen or region-based recording flow
+- Upload recorded output with the same destinations as screenshots
+
 ## Search
 
 Search your image history by filename, OCR text, and semantic matching, so you can find screenshots by what they say or by what they show.
@@ -98,6 +130,15 @@ Search your image history by filename, OCR text, and semantic matching, so you c
 
 - Search by text inside the image with OCR
 - Search by semantic similarity to find visually related screenshots
+
+## Quick Tools
+
+Yoink also includes smaller utilities built into the capture flow.
+
+- Color picker
+- QR and barcode scanner
+- Ruler
+- Step numbering
 
 ## Default hotkeys
 
@@ -122,6 +163,7 @@ Annotation tool hotkeys can be configured in settings, and hover tooltips reflec
 Yoink can upload screenshots, stickers, and recordings after capture. Upload targets include:
 
 - Public hosts like `Imgur`, `ImgBB`, `Catbox`, `Litterbox`, `Gyazo`, `file.io`, and `Uguu`
+- Rotating temporary-host mode that falls through free temporary hosts automatically
 - Cloud targets like `Dropbox`, `Google Drive`, `OneDrive`, `Azure Blob`, and `S3-compatible storage`
 - Self-hosted and developer targets like `GitHub`, `Immich`, `FTP`, `SFTP`, `WebDAV`, and `Custom HTTP`
 

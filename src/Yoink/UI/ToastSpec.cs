@@ -13,6 +13,8 @@ internal sealed record ToastSpec
     public Bitmap? PreviewBitmap { get; init; }
     public Bitmap? InlinePreviewBitmap { get; init; }
     public string? FilePath { get; init; }
+    public string? ClickActionUrl { get; init; }
+    public string? ClickActionLabel { get; init; }
     public bool PlayCaptureSound { get; init; }
     public bool PlayErrorSound { get; init; }
     public bool IsError { get; init; }
@@ -65,12 +67,16 @@ internal sealed record ToastSpec
         string? filePath,
         bool autoPin,
         bool transparentShell,
-        bool showOverlayButtons) => new()
+        bool showOverlayButtons,
+        string? clickActionUrl = null,
+        string? clickActionLabel = null) => new()
     {
         Title = title,
         Body = body,
         PreviewBitmap = preview,
         FilePath = filePath,
+        ClickActionUrl = clickActionUrl,
+        ClickActionLabel = clickActionLabel,
         AutoPin = autoPin,
         TransparentShell = transparentShell,
         ShowOverlayButtons = showOverlayButtons

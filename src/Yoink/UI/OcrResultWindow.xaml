@@ -10,7 +10,9 @@
         WindowStyle="None"
         AllowsTransparency="True"
         Topmost="True"
-        Icon="pack://application:,,,/yoink.ico">
+        Icon="pack://application:,,,/yoink.ico"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        Deactivated="Window_Deactivated">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" GlassFrameThickness="0" CornerRadius="12"

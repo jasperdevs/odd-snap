@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using Yoink.Helpers;
 using Yoink.Models;
 using Yoink.Services;
 
@@ -12,6 +13,10 @@ public partial class SettingsWindow
 
     private void LoadUploadSettingsIntoUi(UploadSettings s)
     {
+        SelectAiChatProviderByValue((int)s.AiChatProvider);
+        SelectAiChatUploadDestByValue((int)UploadService.NormalizeAiChatUploadDestination(s.AiChatUploadDestination));
+        AiRedirectHotkeyOnlyCheck.IsChecked = _settingsService.Settings.AiRedirectHotkeyOnly;
+        AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
         ImgurClientIdBox.Text = s.ImgurClientId;
         ImgurTokenBox.Text = s.ImgurAccessToken;
         ImgBBKeyBox.Text = s.ImgBBApiKey;

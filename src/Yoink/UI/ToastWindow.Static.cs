@@ -70,6 +70,20 @@ public partial class ToastWindow
             showOverlayButtons: true));
     }
 
+    public static void ShowImagePreview(Bitmap screenshot, string title, string body, string? filePath, bool autoPin, string? clickActionUrl, string? clickActionLabel)
+    {
+        Show(ToastSpec.ImagePreview(
+            screenshot,
+            title,
+            body,
+            filePath,
+            autoPin,
+            transparentShell: false,
+            showOverlayButtons: true,
+            clickActionUrl,
+            clickActionLabel));
+    }
+
     private static void OpenFileLocation(string? filePath)
     {
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;

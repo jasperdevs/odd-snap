@@ -12,7 +12,7 @@ namespace Yoink;
 
 public partial class App
 {
-    private void HandleCaptureResult(Bitmap result)
+    private void HandleCaptureResult(Bitmap result, bool useAiRedirect = false)
     {
         SoundService.PlayCaptureSound();
 
@@ -63,9 +63,10 @@ public partial class App
                         ClipboardService.CopyToClipboard(persisted.Output);
                     _isCapturing = false;
 
-                    bool willUpload = persisted.FilePath != null
-                        && settings.AutoUploadScreenshots
-                        && settings.ImageUploadDestination != UploadDestination.None;
+                    bool willUpload = UploadService.ShouldUploadScreenshot(
+                        settings,
+                        hasFilePath: persisted.FilePath != null,
+                        useAiRedirect: useAiRedirect);
 
                     if (willUpload)
                     {

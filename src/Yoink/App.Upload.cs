@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Threading.Tasks;
@@ -14,6 +15,13 @@ namespace Yoink;
 
 public partial class App
 {
+    private static readonly UploadDestination[] GoogleLensFallbackHosts =
+    {
+        UploadDestination.Catbox,
+        UploadDestination.ImgBB,
+        UploadDestination.Litterbox
+    };
+
     private static string CleanErrorMessage(string? msg)
     {
         if (string.IsNullOrWhiteSpace(msg)) return "Unknown error";
@@ -38,9 +46,56 @@ public partial class App
         Interlocked.Increment(ref _activeUploadCount);
         try
         {
-            // Validate credentials before attempting upload
             var dest = _settingsService!.Settings.ImageUploadDestination;
             var settings = _settingsService.Settings.ImageUploadSettings;
+            if (UploadService.IsAiChatDestination(dest))
+            {
+                SoundService.PlayUploadStartSound();
+                var previewBitmap = TryLoadPreviewBitmap(filePath);
+                var providerName = UploadService.GetAiChatProviderName(settings.AiChatProvider);
+                if (settings.AiChatProvider == AiChatProvider.GoogleLens)
+                {
+                    var lensUpload = await TryUploadForGoogleLensAsync(filePath, settings);
+                    if (!lensUpload.Success || string.IsNullOrWhiteSpace(lensUpload.Url))
+                    {
+                        var errMsg = CleanErrorMessage(lensUpload.Error);
+                        var saved = Path.GetFileName(filePath);
+                        ToastWindow.ShowError("Google Lens upload failed", $"Saved to {saved}\n{errMsg}", filePath);
+                        return;
+                    }
+
+                    var lensUrl = UploadService.BuildGoogleLensUrl(lensUpload.Url);
+                    OpenExternalUrl(lensUrl);
+                    SoundService.PlayUploadDoneSound();
+                    previewBitmap?.Dispose();
+                    ToastWindow.Show("Google Lens Ready", $"Opened from {lensUpload.ProviderName}.", filePath);
+
+                    return;
+                }
+
+                var startUrl = UploadService.BuildAiChatStartUrl(settings.AiChatProvider);
+                OpenExternalUrl(startUrl);
+                SoundService.PlayUploadDoneSound();
+                if (previewBitmap is not null)
+                {
+                    ClipboardService.CopyToClipboard(previewBitmap, filePath);
+                    ToastWindow.ShowImagePreview(
+                        previewBitmap,
+                        "AI Redirect Ready",
+                        $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V.",
+                        filePath,
+                        autoPin: true,
+                        clickActionUrl: startUrl,
+                        clickActionLabel: providerName);
+                }
+                else
+                {
+                    ToastWindow.Show("AI Redirect Ready", $"Opened {providerName}. Use Ctrl+V in the chat box.", filePath);
+                }
+                return;
+            }
+
+            // Validate credentials before attempting upload
             if (!UploadService.HasCredentials(dest, settings))
             {
                 var saved = filePath != null ? Path.GetFileName(filePath) : null;
@@ -55,18 +110,20 @@ public partial class App
             if (result.Success)
             {
                 SoundService.PlayUploadDoneSound();
-                ClipboardService.CopyTextToClipboard(result.Url);
 
                 var entry = historyEntry ?? _historyService?.Entries.FirstOrDefault(e =>
                     string.Equals(e.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
                 if (entry != null)
                 {
                     entry.UploadUrl = result.Url;
+                    var providerName = string.IsNullOrWhiteSpace(result.ProviderName)
+                        ? UploadService.GetName(dest)
+                        : result.ProviderName;
                     if (string.IsNullOrWhiteSpace(entry.UploadProvider))
                     {
-                        entry.UploadProvider = UploadService.GetName(dest);
+                        entry.UploadProvider = providerName;
                         var currentName = Path.GetFileName(entry.FilePath);
-                        var prefix = UploadService.GetName(dest).ToLowerInvariant() + "_";
+                        var prefix = providerName.ToLowerInvariant() + "_";
                         entry.FileName = currentName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
                             ? currentName
                             : prefix + currentName;
@@ -74,8 +131,10 @@ public partial class App
                     EnsureHistoryService().SaveEntry(entry);
                 }
 
-                // Show success toast with the upload URL
-                var host = new Uri(result.Url).Host;
+                var host = Uri.TryCreate(result.Url, UriKind.Absolute, out var uploadUri)
+                    ? uploadUri.Host
+                    : "link";
+                ClipboardService.CopyTextToClipboard(result.Url);
                 ToastWindow.Show("Uploaded", $"Link copied · {host}", filePath);
             }
             else
@@ -99,6 +158,18 @@ public partial class App
             Interlocked.Decrement(ref _activeUploadCount);
             ScheduleIdleMemoryTrim();
         }
+    }
+
+    private static void OpenExternalUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            throw new InvalidOperationException("No browser URL was generated for the upload.");
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true
+        });
     }
 
     private string? ResolveSavePath(string defaultPath, CaptureImageFormat format)
@@ -126,5 +197,69 @@ public partial class App
         return owner is null
             ? (dlg.ShowDialog() == true ? dlg.FileName : null)
             : (dlg.ShowDialog(owner) == true ? dlg.FileName : null);
+    }
+
+    private static Bitmap? TryLoadPreviewBitmap(string filePath)
+    {
+        try
+        {
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var source = new Bitmap(stream);
+            return new Bitmap(source);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static async Task<GoogleLensUploadAttempt> TryUploadForGoogleLensAsync(string filePath, UploadSettings settings)
+    {
+        var primary = UploadService.NormalizeAiChatUploadDestination(settings.AiChatUploadDestination);
+        var candidates = new List<UploadDestination> { primary };
+        foreach (var fallback in GoogleLensFallbackHosts)
+        {
+            if (!candidates.Contains(fallback))
+                candidates.Add(fallback);
+        }
+
+        var errors = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            if (!UploadService.HasCredentials(candidate, settings))
+            {
+                errors.Add($"{UploadService.GetName(candidate)} not configured");
+                continue;
+            }
+
+            var result = await UploadService.UploadAsync(filePath, candidate, settings);
+            if (result.Success && !string.IsNullOrWhiteSpace(result.Url))
+            {
+                return new GoogleLensUploadAttempt
+                {
+                    Success = true,
+                    Url = result.Url,
+                    Destination = candidate,
+                    ProviderName = string.IsNullOrWhiteSpace(result.ProviderName) ? UploadService.GetName(candidate) : result.ProviderName
+                };
+            }
+
+            errors.Add($"{UploadService.GetName(candidate)}: {CleanErrorMessage(result.Error)}");
+        }
+
+        return new GoogleLensUploadAttempt
+        {
+            Error = string.Join(" | ", errors.Where(error => !string.IsNullOrWhiteSpace(error))),
+            Destination = primary
+        };
+    }
+
+    private sealed class GoogleLensUploadAttempt
+    {
+        public bool Success { get; init; }
+        public string Url { get; init; } = "";
+        public string Error { get; init; } = "";
+        public UploadDestination Destination { get; init; }
+        public string ProviderName { get; init; } = "";
     }
 }

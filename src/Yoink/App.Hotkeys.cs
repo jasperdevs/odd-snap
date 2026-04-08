@@ -24,6 +24,7 @@ public partial class App
         _hotkeyService.FullscreenHotkeyPressed += OnFullscreenHotkeyPressed;
         _hotkeyService.ActiveWindowHotkeyPressed += OnActiveWindowHotkeyPressed;
         _hotkeyService.ScrollCaptureHotkeyPressed += OnScrollCaptureHotkeyPressed;
+        _hotkeyService.AiRedirectHotkeyPressed += OnAiRedirectHotkeyPressed;
 
         var s = _settingsService!.Settings;
         var failed = new List<string>();
@@ -43,6 +44,7 @@ public partial class App
         TryRegister(_hotkeyService.RegisterFullscreen(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey), "Fullscreen", s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey);
         TryRegister(_hotkeyService.RegisterActiveWindow(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey), "Active Window", s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey);
         TryRegister(_hotkeyService.RegisterScrollCapture(s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey), "Scroll Capture", s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey);
+        TryRegister(_hotkeyService.RegisterAiRedirect(s.AiRedirectHotkeyModifiers, s.AiRedirectHotkeyKey), "AI Redirects", s.AiRedirectHotkeyModifiers, s.AiRedirectHotkeyKey);
 
         if (failed.Count > 0)
             ToastWindow.ShowError("Hotkey conflict", $"{string.Join(", ", failed)} — already in use by another app");
@@ -93,6 +95,13 @@ public partial class App
         if (_isCapturing) return;
         _isCapturing = true;
         LaunchScrollingCapture();
+    }
+
+    private void OnAiRedirectHotkeyPressed()
+    {
+        if (_isCapturing) return;
+        _isCapturing = true;
+        LaunchOverlay(_settingsService!.Settings.DefaultCaptureMode, useAiRedirect: true);
     }
 
     private void OnFullscreenHotkeyPressed()

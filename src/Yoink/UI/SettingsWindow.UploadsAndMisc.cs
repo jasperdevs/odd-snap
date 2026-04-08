@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Yoink.Helpers;
 using Yoink.Models;
 using Yoink.Services;
@@ -28,6 +29,9 @@ public partial class SettingsWindow
     private void UpdateUploadSettingsVisibility()
     {
         var dest = GetSelectedUploadDest();
+        var isAiRedirects = dest == Services.UploadDestination.AiChat;
+        AiChatSettings.Visibility = dest == Services.UploadDestination.AiChat ? Visibility.Visible : Visibility.Collapsed;
+        UpdateAiChatProviderVisibility();
         ImgurSettings.Visibility = dest == Services.UploadDestination.Imgur ? Visibility.Visible : Visibility.Collapsed;
         ImgBBSettings.Visibility = dest == Services.UploadDestination.ImgBB ? Visibility.Visible : Visibility.Collapsed;
         CatboxSettings.Visibility = dest == Services.UploadDestination.Catbox ? Visibility.Visible : Visibility.Collapsed;
@@ -48,6 +52,8 @@ public partial class SettingsWindow
         S3Settings.Visibility = dest == Services.UploadDestination.S3Compatible ? Visibility.Visible : Visibility.Collapsed;
         CustomUploadSettings.Visibility = dest == Services.UploadDestination.CustomHttp ? Visibility.Visible : Visibility.Collapsed;
         TestUploadCard.Visibility = dest != Services.UploadDestination.None ? Visibility.Visible : Visibility.Collapsed;
+        AutoUploadHeader.Visibility = isAiRedirects ? Visibility.Collapsed : Visibility.Visible;
+        AutoUploadCard.Visibility = isAiRedirects ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void AutoUploadScreenshotsCheck_Changed(object sender, RoutedEventArgs e)
@@ -68,6 +74,169 @@ public partial class SettingsWindow
     {
         if (!IsLoaded) return;
         _settingsService.Settings.AutoUploadVideos = AutoUploadVideosCheck.IsChecked == true;
+        _settingsService.Save();
+    }
+
+    private Services.AiChatProvider GetSelectedAiChatProvider()
+    {
+        if (AiChatProviderCombo.SelectedItem is ComboBoxItem item &&
+            item.Tag is string tag && int.TryParse(tag, out var value))
+            return (Services.AiChatProvider)value;
+        return Services.AiChatProvider.ChatGpt;
+    }
+
+    private Services.UploadDestination GetSelectedAiChatUploadDest()
+    {
+        if (AiChatLensUploadDestCombo.SelectedItem is ComboBoxItem item &&
+            item.Tag is string tag && int.TryParse(tag, out var value))
+        {
+            return Services.UploadService.NormalizeAiChatUploadDestination((Services.UploadDestination)value);
+        }
+
+        return Services.UploadDestination.Catbox;
+    }
+
+    private void AiChatProviderCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        ActiveUploadSettings.AiChatProvider = GetSelectedAiChatProvider();
+        UpdateAiChatProviderVisibility();
+        _settingsService.Save();
+    }
+
+    private void AiChatLensUploadDestCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        ActiveUploadSettings.AiChatUploadDestination = GetSelectedAiChatUploadDest();
+        _settingsService.Save();
+    }
+
+    private void UpdateAiChatProviderVisibility()
+    {
+        var isLens = GetSelectedAiChatProvider() == Services.AiChatProvider.GoogleLens;
+        AiChatLensUploadHostRow.Visibility = isLens ? Visibility.Visible : Visibility.Collapsed;
+        AiChatLensUploadHint.Visibility = isLens ? Visibility.Visible : Visibility.Collapsed;
+        AiRedirectHotkeyOnlyRow.Visibility = Visibility.Visible;
+        AiRedirectHotkeyRow.Visibility = AiRedirectHotkeyOnlyCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void AiRedirectHotkeyOnlyCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.AiRedirectHotkeyOnly = AiRedirectHotkeyOnlyCheck.IsChecked == true;
+        UpdateAiChatProviderVisibility();
+        _settingsService.Save();
+    }
+
+    private void AiRedirectHotkeyBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        AiRedirectHotkeyBox.Text = "Press keys...";
+    }
+
+    private void AiRedirectHotkeyBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
+    }
+
+    private void AiRedirectHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        HandleAiRedirectHotkeyKeyInput(e, e.Key == Key.System ? e.SystemKey : e.Key);
+    }
+
+    private void AiRedirectHotkeyBox_PreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.Snapshot or Key.Pause or Key.Cancel)
+            HandleAiRedirectHotkeyKeyInput(e, key);
+    }
+
+    private void AiRedirectHotkeyClearBtn_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsService.Settings.AiRedirectHotkeyModifiers = 0;
+        _settingsService.Settings.AiRedirectHotkeyKey = 0;
+        _settingsService.Save();
+        AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
+        HotkeyChanged?.Invoke();
+    }
+
+    private void HandleAiRedirectHotkeyKeyInput(System.Windows.Input.KeyEventArgs e, Key key)
+    {
+        if (!AiRedirectHotkeyBox.IsKeyboardFocusWithin)
+            return;
+
+        e.Handled = true;
+        if (IsModifierOnly(key))
+            return;
+
+        uint modifiers = HotkeyFormatter.GetActiveModifiers();
+        uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
+        if (vk == 0)
+            return;
+
+        var conflict = FindAiRedirectConflict(modifiers, vk);
+        if (conflict != null)
+        {
+            var combo = HotkeyFormatter.Format(modifiers, vk);
+            var result = MessageBox.Show(
+                $"{combo} is already used by \"{conflict}\".\n\nReplace it?",
+                "Hotkey conflict",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes)
+            {
+                AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
+                Keyboard.ClearFocus();
+                return;
+            }
+
+            ClearAiRedirectConflict(modifiers, vk);
+        }
+
+        _settingsService.Settings.AiRedirectHotkeyModifiers = modifiers;
+        _settingsService.Settings.AiRedirectHotkeyKey = vk;
+        _settingsService.Save();
+        AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(modifiers, vk);
+        Keyboard.ClearFocus();
+        HotkeyChanged?.Invoke();
+    }
+
+    private string? FindAiRedirectConflict(uint modifiers, uint key)
+    {
+        var settings = _settingsService.Settings;
+        foreach (var tool in ToolDef.AllTools.Where(t => t.Group == 0))
+        {
+            var (existingModifiers, existingKey) = settings.GetToolHotkey(tool.Id);
+            if (existingModifiers == modifiers && existingKey == key)
+                return tool.Label;
+        }
+
+        foreach (var (id, label, _) in ExtraTools)
+        {
+            var (existingModifiers, existingKey) = settings.GetToolHotkey(id);
+            if (existingModifiers == modifiers && existingKey == key)
+                return label;
+        }
+
+        return null;
+    }
+
+    private void ClearAiRedirectConflict(uint modifiers, uint key)
+    {
+        var settings = _settingsService.Settings;
+        foreach (var tool in ToolDef.AllTools.Where(t => t.Group == 0))
+        {
+            var (existingModifiers, existingKey) = settings.GetToolHotkey(tool.Id);
+            if (existingModifiers == modifiers && existingKey == key)
+                settings.SetToolHotkey(tool.Id, 0, 0);
+        }
+
+        foreach (var (id, _, _) in ExtraTools)
+        {
+            var (existingModifiers, existingKey) = settings.GetToolHotkey(id);
+            if (existingModifiers == modifiers && existingKey == key)
+                settings.SetToolHotkey(id, 0, 0);
+        }
+
         _settingsService.Save();
     }
 
@@ -279,15 +448,50 @@ public partial class SettingsWindow
             using (var bmp = new Bitmap(1, 1))
                 bmp.Save(tempPath, System.Drawing.Imaging.ImageFormat.Png);
 
-            var result = await Services.UploadService.UploadAsync(
-                tempPath,
-                _settingsService.Settings.ImageUploadDestination,
-                ActiveUploadSettings);
-
-            if (result.Success)
-                ToastWindow.Show("Upload works", result.Url);
+            if (_settingsService.Settings.ImageUploadDestination == Services.UploadDestination.AiChat)
+            {
+                if (ActiveUploadSettings.AiChatProvider == Services.AiChatProvider.GoogleLens)
+                {
+                    var hostDest = Services.UploadService.NormalizeAiChatUploadDestination(ActiveUploadSettings.AiChatUploadDestination);
+                    var uploadResult = await Services.UploadService.UploadAsync(tempPath, hostDest, ActiveUploadSettings);
+                    if (uploadResult.Success)
+                    {
+                        var lensUrl = Services.UploadService.BuildGoogleLensUrl(uploadResult.Url);
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = lensUrl,
+                            UseShellExecute = true
+                        });
+                        ToastWindow.Show("Google Lens works", uploadResult.Url);
+                    }
+                    else
+                    {
+                        ToastWindow.ShowError("Google Lens upload failed", uploadResult.Error);
+                    }
+                }
+                else
+                {
+                    var startUrl = Services.UploadService.BuildAiChatStartUrl(ActiveUploadSettings.AiChatProvider);
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = startUrl,
+                        UseShellExecute = true
+                    });
+                    ToastWindow.Show("AI redirect works", Services.UploadService.GetAiChatProviderName(ActiveUploadSettings.AiChatProvider));
+                }
+            }
             else
-                ToastWindow.ShowError("Upload failed", result.Error);
+            {
+                var result = await Services.UploadService.UploadAsync(
+                    tempPath,
+                    _settingsService.Settings.ImageUploadDestination,
+                    ActiveUploadSettings);
+
+                if (result.Success)
+                    ToastWindow.Show("Upload works", result.Url);
+                else
+                    ToastWindow.ShowError("Upload failed", result.Error);
+            }
         }
         catch (Exception ex)
         {
@@ -326,6 +530,38 @@ public partial class SettingsWindow
         }
         if (UploadDestCombo.Items.Count > 0)
             UploadDestCombo.SelectedIndex = 0;
+    }
+
+    private void SelectAiChatProviderByValue(int providerValue)
+    {
+        var tag = providerValue.ToString();
+        foreach (ComboBoxItem item in AiChatProviderCombo.Items)
+        {
+            if (item.Tag as string == tag)
+            {
+                AiChatProviderCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (AiChatProviderCombo.Items.Count > 0)
+            AiChatProviderCombo.SelectedIndex = 0;
+    }
+
+    private void SelectAiChatUploadDestByValue(int destValue)
+    {
+        var tag = destValue.ToString();
+        foreach (ComboBoxItem item in AiChatLensUploadDestCombo.Items)
+        {
+            if (item.Tag as string == tag)
+            {
+                AiChatLensUploadDestCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (AiChatLensUploadDestCombo.Items.Count > 0)
+            AiChatLensUploadDestCombo.SelectedIndex = 0;
     }
 
     private void UploadDestCombo_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)

@@ -259,7 +259,11 @@ public partial class ToastWindow : Window
         }
 
         ToolTip = null;
-        if (!string.IsNullOrWhiteSpace(spec.FilePath))
+        if (!string.IsNullOrWhiteSpace(spec.ClickActionUrl) && !string.IsNullOrWhiteSpace(spec.FilePath))
+            ToolTip = $"Drag to move the file or click to reopen {spec.ClickActionLabel ?? "the chat"}";
+        else if (!string.IsNullOrWhiteSpace(spec.ClickActionUrl))
+            ToolTip = $"Click to reopen {spec.ClickActionLabel ?? "the chat"}";
+        else if (!string.IsNullOrWhiteSpace(spec.FilePath))
             ToolTip = "Drag to move the file or click to open its location";
 
         if (spec.AutoPin)
@@ -499,10 +503,12 @@ public partial class ToastWindow : Window
             GiveFeedback += feedback;
             var result = System.Windows.DragDrop.DoDragDrop(this, data, System.Windows.DragDropEffects.Copy | System.Windows.DragDropEffects.Move);
             GiveFeedback -= feedback;
-            if (result != System.Windows.DragDropEffects.None)
-                DismissAnimated();
-            else
+            if (result == System.Windows.DragDropEffects.None)
                 EndDragFeedback(cancelled: true);
+
+            // Many browser drop targets report inconsistent effects even when
+            // the file was accepted, so dismiss after the drag session ends.
+            DismissAnimated();
         }
         finally
         {
@@ -524,6 +530,24 @@ public partial class ToastWindow : Window
         ReleaseMouseCapture();
         if (_isDragging)
             return;
+
+        if (!string.IsNullOrWhiteSpace(_spec.ClickActionUrl))
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = _spec.ClickActionUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                if (_savedFilePath != null && File.Exists(_savedFilePath))
+                    OpenFileLocation(_savedFilePath);
+            }
+            return;
+        }
 
         if (_savedFilePath != null && File.Exists(_savedFilePath))
         {

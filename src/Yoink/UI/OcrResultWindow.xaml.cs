@@ -60,6 +60,12 @@ public partial class OcrResultWindow : Window
         TranslationService.SetGoogleApiKey(settingsService.Settings.GoogleTranslateApiKey);
     }
 
+    private void CloseWindow()
+    {
+        _translateCts?.Cancel();
+        Close();
+    }
+
     private void ApplyTheme()
     {
         RootBorder.Background = Theme.Brush(Theme.BgPrimary);
@@ -134,8 +140,7 @@ public partial class OcrResultWindow : Window
 
     private void CloseBtn_Click(object sender, MouseButtonEventArgs e)
     {
-        _translateCts?.Cancel();
-        Close();
+        CloseWindow();
     }
 
     private void MinimizeBtn_Click(object sender, MouseButtonEventArgs e) => WindowState = WindowState.Minimized;
@@ -171,6 +176,23 @@ public partial class OcrResultWindow : Window
             SoundService.PlayTextSound();
             ToastWindow.Show("Copied translation", text.Length > 80 ? text[..80] + "..." : text);
         }
+    }
+
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape)
+            return;
+
+        e.Handled = true;
+        CloseWindow();
+    }
+
+    private void Window_Deactivated(object? sender, EventArgs e)
+    {
+        if (!IsLoaded || WindowState == WindowState.Minimized)
+            return;
+
+        CloseWindow();
     }
 
     private void FromLanguageCombo_Changed(object sender, SelectionChangedEventArgs e) { }

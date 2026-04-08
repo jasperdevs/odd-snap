@@ -1133,6 +1133,8 @@
                                           PreviewTextInput="UploadDestCombo_PreviewTextInput" PreviewKeyDown="UploadDestCombo_PreviewKeyDown"
                                           SelectionChanged="UploadDestCombo_Changed">
                                     <ComboBoxItem Content="None" Tag="0"/>
+                                    <ComboBoxItem Content="✽ AI Redirects" Tag="20"/>
+                                    <ComboBoxItem Content="Filter between free temporary hosts" Tag="21"/>
                                     <ComboBoxItem Content="Litterbox (temp)" Tag="4"/>
                                     <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
                                     <ComboBoxItem Content="file.io (temp)" Tag="6"/>
@@ -1156,6 +1158,90 @@
                             </Grid>
                         </StackPanel>
                     </Border>
+
+                    <controls:ProviderSection x:Name="AiChatSettings" Header="AI REDIRECTS" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="Yoink opens the selected target in your default browser and keeps a pinned image toast on screen so you can drag the image in or press Ctrl+V." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                            <TextBlock Text="Google Lens is different: it still needs a public image URL, so Yoink uploads the screenshot to a host first and then opens Lens with that hosted image embedded in the link." FontSize="11" Opacity="0.24" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Redirect target" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="AiChatProviderCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="160"
+                                          SelectionChanged="AiChatProviderCombo_Changed">
+                                    <ComboBoxItem Content="ChatGPT" Tag="0"/>
+                                    <ComboBoxItem Content="Claude" Tag="1"/>
+                                    <ComboBoxItem Content="Claude Opus" Tag="2"/>
+                                    <ComboBoxItem Content="Gemini" Tag="3"/>
+                                    <ComboBoxItem Content="Google Lens" Tag="4"/>
+                                </ComboBox>
+                            </Grid>
+
+                            <CheckBox x:Name="AiRedirectHotkeyOnlyCheck"
+                                      Content="Only trigger redirects from a dedicated hotkey"
+                                      Margin="0,10,0,0"
+                                      Checked="AiRedirectHotkeyOnlyCheck_Changed"
+                                      Unchecked="AiRedirectHotkeyOnlyCheck_Changed"/>
+
+                            <Grid x:Name="AiRedirectHotkeyOnlyRow" Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Redirect hotkey" FontSize="13" VerticalAlignment="Center"/>
+                                <StackPanel x:Name="AiRedirectHotkeyRow" Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="AiRedirectHotkeyBox"
+                                             Style="{StaticResource HotkeyBox}"
+                                             GotFocus="AiRedirectHotkeyBox_GotFocus"
+                                             LostFocus="AiRedirectHotkeyBox_LostFocus"
+                                             PreviewKeyDown="AiRedirectHotkeyBox_PreviewKeyDown"
+                                             PreviewKeyUp="AiRedirectHotkeyBox_PreviewKeyUp"/>
+                                    <Button x:Name="AiRedirectHotkeyClearBtn"
+                                            Content="X"
+                                            Style="{StaticResource ClearBtn}"
+                                            Click="AiRedirectHotkeyClearBtn_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid x:Name="AiChatLensUploadHostRow" Visibility="Collapsed" Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Lens upload host" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="AiChatLensUploadDestCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="180"
+                                          SelectionChanged="AiChatLensUploadDestCombo_Changed">
+                                    <ComboBoxItem Content="Filter between free temporary hosts" Tag="21"/>
+                                    <ComboBoxItem Content="Litterbox (temp)" Tag="4"/>
+                                    <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
+                                    <ComboBoxItem Content="file.io (temp)" Tag="6"/>
+                                    <ComboBoxItem Content="transfer.sh (temp)" Tag="8"/>
+                                    <ComboBoxItem Content="Catbox" Tag="3"/>
+                                    <ComboBoxItem Content="Imgur" Tag="1"/>
+                                    <ComboBoxItem Content="ImgBB" Tag="2"/>
+                                    <ComboBoxItem Content="Gyazo" Tag="5"/>
+                                    <ComboBoxItem Content="Dropbox" Tag="9"/>
+                                    <ComboBoxItem Content="Google Drive" Tag="10"/>
+                                    <ComboBoxItem Content="OneDrive" Tag="11"/>
+                                    <ComboBoxItem Content="Azure Blob" Tag="12"/>
+                                    <ComboBoxItem Content="GitHub" Tag="13"/>
+                                    <ComboBoxItem Content="Immich" Tag="14"/>
+                                    <ComboBoxItem Content="FTP" Tag="15"/>
+                                    <ComboBoxItem Content="SFTP" Tag="16"/>
+                                    <ComboBoxItem Content="WebDAV" Tag="17"/>
+                                    <ComboBoxItem Content="S3 / R2 / B2" Tag="18"/>
+                                    <ComboBoxItem Content="Custom HTTP" Tag="19"/>
+                                </ComboBox>
+                            </Grid>
+
+                            <TextBlock x:Name="AiChatLensUploadHint" Visibility="Collapsed"
+                                       Text="Use a host that returns a direct public image URL. Catbox is the default because it works without API keys."
+                                       FontSize="11" Opacity="0.22" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
 
                     <!-- Imgur settings -->
                     <controls:ProviderSection x:Name="ImgurSettings" Header="IMGUR" IconSource="pack://application:,,,/Assets/imgur_sq.png" Visibility="Collapsed">
@@ -1523,9 +1609,9 @@
                         </StackPanel>
                     </controls:ProviderSection>
 
-                    <TextBlock Text="Auto-upload" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
+                    <TextBlock x:Name="AutoUploadHeader" Text="Auto-upload" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
 
-                    <Border Style="{StaticResource Card}">
+                    <Border x:Name="AutoUploadCard" Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="AutoUploadScreenshotsCheck" Content="Auto-upload screenshots" FontSize="13"
                                       ToolTip="Uploads after every capture"

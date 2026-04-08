@@ -250,12 +250,12 @@ public partial class App
         }
     }
 
-    private void LaunchOverlay(CaptureMode initialMode)
+    private void LaunchOverlay(CaptureMode initialMode, bool useAiRedirect = false)
     {
-        LaunchWithDelay(() => LaunchOverlayNow(initialMode));
+        LaunchWithDelay(() => LaunchOverlayNow(initialMode, useAiRedirect));
     }
 
-    private void LaunchOverlayNow(CaptureMode initialMode)
+    private void LaunchOverlayNow(CaptureMode initialMode, bool useAiRedirect = false)
     {
         var thread = new Thread(() =>
         {
@@ -284,7 +284,7 @@ public partial class App
                     var cropped = ScreenCapture.CropRegion(annotated, sel);
                     overlay.Close();
                     System.Windows.Forms.Application.ExitThread();
-                    HandleCaptureResult(cropped);
+                    HandleCaptureResult(cropped, useAiRedirect);
                 };
 
                 overlay.FreeformSelected += fbmp =>
@@ -292,7 +292,7 @@ public partial class App
                     overlay.Hide();
                     overlay.Close();
                     System.Windows.Forms.Application.ExitThread();
-                    HandleCaptureResult(fbmp);
+                    HandleCaptureResult(fbmp, useAiRedirect);
                 };
 
                 overlay.OcrRegionSelected += sel =>

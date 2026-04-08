@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Collections.Specialized;
 
 namespace Yoink.Services;
 
@@ -9,7 +10,7 @@ public static class ClipboardService
     private static readonly ImageCodecInfo? PngEncoder =
         ImageCodecInfo.GetImageEncoders().FirstOrDefault(e => e.MimeType == "image/png");
 
-    public static void CopyToClipboard(Bitmap bitmap)
+    public static void CopyToClipboard(Bitmap bitmap, string? filePath = null)
     {
         // Use WinForms clipboard since we may be called from a WinForms context.
         // SetImage handles the format conversion automatically.
@@ -32,6 +33,13 @@ public static class ClipboardService
             bitmap.Save(pngStream, ImageFormat.Png);
         }
         dataObject.SetData("PNG", false, new MemoryStream(pngStream.ToArray()));
+
+        // Also include the original file when available. Some web apps treat
+        // pasted image files more reliably than raw bitmap clipboard formats.
+        if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+        {
+            dataObject.SetFileDropList(new StringCollection { filePath });
+        }
 
         try
         {

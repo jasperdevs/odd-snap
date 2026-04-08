@@ -9,6 +9,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using FluentFTP;
 using Renci.SshNet;
+using Yoink.Models;
 
 namespace Yoink.Services;
 
@@ -33,7 +34,18 @@ public enum UploadDestination
     Sftp,
     WebDav,
     S3Compatible,
-    CustomHttp
+    CustomHttp,
+    AiChat,
+    TempHosts
+}
+
+public enum AiChatProvider
+{
+    ChatGpt,
+    Claude,
+    ClaudeOpus,
+    Gemini,
+    GoogleLens
 }
 
 public sealed class UploadResult
@@ -43,6 +55,7 @@ public sealed class UploadResult
     public string DeleteUrl { get; init; } = "";
     public string Error { get; init; } = "";
     public bool IsRateLimit { get; init; }
+    public string ProviderName { get; init; } = "";
 }
 
 /// <summary>
@@ -55,6 +68,14 @@ public static partial class UploadService
     {
         Timeout = TimeSpan.FromSeconds(120),
         DefaultRequestHeaders = { { "User-Agent", "Yoink/1.0" } }
+    };
+
+    private static readonly UploadDestination[] TemporaryHostFallbacks =
+    {
+        UploadDestination.Litterbox,
+        UploadDestination.Uguu,
+        UploadDestination.FileIo,
+        UploadDestination.TransferSh
     };
 
     private static JsonNode? TryParseJson(string text)
@@ -100,7 +121,7 @@ public static partial class UploadService
 
     private static StreamContent CreateFileStreamContent(string filePath, string contentType = "application/octet-stream")
     {
-        var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
+        var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.SequentialScan);
         var content = new StreamContent(stream);
         content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
         return content;
@@ -128,6 +149,8 @@ public static partial class UploadService
         UploadDestination.WebDav => "WebDAV",
         UploadDestination.S3Compatible => "S3",
         UploadDestination.CustomHttp => "Custom",
+        UploadDestination.AiChat => "AI Redirects",
+        UploadDestination.TempHosts => "Filter between free temporary hosts",
         _ => ""
     };
 
@@ -193,6 +216,62 @@ public static partial class UploadService
         _ => string.Empty
     };
 
+    public static bool IsAiChatDestination(UploadDestination dest) =>
+        dest == UploadDestination.AiChat;
+
+    public static bool AiChatProviderRequiresHostedImage(AiChatProvider provider) =>
+        provider == AiChatProvider.GoogleLens;
+
+    public static UploadDestination NormalizeAiChatUploadDestination(UploadDestination destination) =>
+        destination is UploadDestination.None or UploadDestination.AiChat
+            ? UploadDestination.Catbox
+            : destination;
+
+    public static bool ShouldUploadScreenshot(AppSettings settings, bool hasFilePath, bool useAiRedirect)
+    {
+        if (!hasFilePath || settings.ImageUploadDestination == UploadDestination.None)
+            return false;
+
+        if (settings.ImageUploadDestination == UploadDestination.AiChat)
+            return !settings.AiRedirectHotkeyOnly || useAiRedirect;
+
+        return settings.AutoUploadScreenshots;
+    }
+
+    public static string GetAiChatProviderName(AiChatProvider provider) => provider switch
+    {
+        AiChatProvider.ChatGpt => "ChatGPT",
+        AiChatProvider.Claude => "Claude",
+        AiChatProvider.ClaudeOpus => "Claude Opus",
+        AiChatProvider.Gemini => "Gemini",
+        AiChatProvider.GoogleLens => "Google Lens",
+        _ => "AI Redirects"
+    };
+
+    public static string BuildAiChatStartUrl(AiChatProvider provider)
+    {
+        return provider switch
+        {
+            AiChatProvider.ChatGpt => "https://chatgpt.com/",
+            AiChatProvider.Claude => "https://claude.ai/new",
+            AiChatProvider.ClaudeOpus => "https://claude.ai/new?model=claude-opus-4-1",
+            AiChatProvider.Gemini => "https://gemini.google.com/app",
+            AiChatProvider.GoogleLens => "https://lens.google.com/search?hl=en&country=us",
+            _ => "https://chatgpt.com/"
+        };
+    }
+
+    public static string BuildGoogleLensUrl(string imageUrl)
+    {
+        if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException("Google Lens needs an absolute image URL.");
+        }
+
+        return $"https://lens.google.com/uploadbyurl?url={Uri.EscapeDataString(uri.ToString())}&hl=en&country=us";
+    }
+
     /// <summary>Max file size in bytes per destination.</summary>
     public static long GetMaxSize(UploadDestination dest, string filePath)
     {
@@ -217,6 +296,8 @@ public static partial class UploadService
             UploadDestination.Sftp => 5L * 1024 * 1024 * 1024,
             UploadDestination.WebDav => 5L * 1024 * 1024 * 1024,
             UploadDestination.S3Compatible => 5L * 1024 * 1024 * 1024,
+            UploadDestination.AiChat => long.MaxValue,
+            UploadDestination.TempHosts => 100L * 1024 * 1024,
             _ => long.MaxValue
         };
     }
@@ -238,11 +319,39 @@ public static partial class UploadService
         UploadDestination.Sftp => !string.IsNullOrWhiteSpace(settings.SftpHost),
         UploadDestination.Ftp => !string.IsNullOrWhiteSpace(settings.FtpUrl),
         UploadDestination.CustomHttp => !string.IsNullOrWhiteSpace(settings.CustomUploadUrl),
+        UploadDestination.AiChat => true,
+        UploadDestination.TempHosts => true,
         // These don't need credentials
         UploadDestination.Catbox or UploadDestination.Litterbox or UploadDestination.FileIo
             or UploadDestination.Uguu or UploadDestination.TransferSh => true,
         _ => true,
     };
+
+    private static async Task<UploadResult> UploadTemporaryHostsAsync(string filePath, UploadSettings settings)
+    {
+        var errors = new List<string>();
+        foreach (var destination in TemporaryHostFallbacks)
+        {
+            var result = await UploadAsync(filePath, destination, settings);
+            if (result.Success)
+            {
+                return new UploadResult
+                {
+                    Success = true,
+                    Url = result.Url,
+                    DeleteUrl = result.DeleteUrl,
+                    ProviderName = string.IsNullOrWhiteSpace(result.ProviderName) ? GetName(destination) : result.ProviderName
+                };
+            }
+
+            errors.Add($"{GetName(destination)}: {result.Error}");
+        }
+
+        return new UploadResult
+        {
+            Error = string.Join(" | ", errors.Where(e => !string.IsNullOrWhiteSpace(e)))
+        };
+    }
 
     public static async Task<UploadResult> UploadAsync(
         string filePath, UploadDestination dest, UploadSettings settings)
@@ -259,6 +368,9 @@ public static partial class UploadService
                     : $"{maxSize / 1024}KB";
                 return new UploadResult { Error = $"File too large ({fileSize / (1024 * 1024)}MB). {GetName(dest)} limit is {maxStr}." };
             }
+
+            if (IsAiChatDestination(dest))
+                return new UploadResult { Error = "AI Redirects uses browser redirects instead of host upload." };
 
             return dest switch
             {
@@ -281,6 +393,7 @@ public static partial class UploadService
                 UploadDestination.WebDav => await UploadWebDav(filePath, settings),
                 UploadDestination.S3Compatible => await UploadS3(filePath, settings),
                 UploadDestination.CustomHttp => await UploadCustom(filePath, settings),
+                UploadDestination.TempHosts => await UploadTemporaryHostsAsync(filePath, settings),
                 _ => new UploadResult { Error = "No upload destination configured" }
             };
         }
@@ -364,4 +477,8 @@ public sealed class UploadSettings
     public string CustomFileFormName { get; set; } = "file";
     public string CustomResponseUrlPath { get; set; } = "url";
     public string CustomHeaders { get; set; } = "";
+
+    // AI Chat
+    public AiChatProvider AiChatProvider { get; set; } = AiChatProvider.ChatGpt;
+    public UploadDestination AiChatUploadDestination { get; set; } = UploadDestination.Catbox;
 }

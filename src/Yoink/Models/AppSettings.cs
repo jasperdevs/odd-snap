@@ -164,6 +164,9 @@ public sealed class AppSettings
     public bool AutoUploadGifs { get; set; }
     public bool AutoUploadVideos { get; set; }
     public Services.UploadDestination ImageUploadDestination { get; set; } = Services.UploadDestination.None;
+    public bool AiRedirectHotkeyOnly { get; set; }
+    public uint AiRedirectHotkeyModifiers { get; set; }
+    public uint AiRedirectHotkeyKey { get; set; }
     public Services.UploadSettings ImageUploadSettings { get; set; } = new();
     public Services.StickerSettings StickerUploadSettings { get; set; } = new();
 

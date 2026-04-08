@@ -14,9 +14,14 @@ internal static partial class User32
     public const uint VK_SNAPSHOT = 0x2C;
     public const int VK_SHIFT = 0x10;
     public const int VK_CONTROL = 0x11;
+    public const int VK_V = 0x56;
     public const int VK_MENU = 0x12;
     public const int VK_LWIN = 0x5B;
     public const int VK_RWIN = 0x5C;
+    public const int SW_RESTORE = 9;
+    public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    public const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
     public const int SRCCOPY = 0x00CC0020;
 
@@ -111,6 +116,7 @@ internal static partial class User32
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_SHOWWINDOW = 0x0040;
     public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint ASFW_ANY = 0xFFFFFFFF;
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -124,6 +130,25 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool BringWindowToTop(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr SetActiveWindow(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool fAttach);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AllowSetForegroundWindow(uint dwProcessId);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetCursorPos(int X, int Y);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -253,4 +278,10 @@ internal static partial class User32
 
     [LibraryImport("user32.dll")]
     public static partial IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+
+    [LibraryImport("user32.dll")]
+    public static partial void keybd_event(byte bVk, byte bScan, uint dwFlags, nuint dwExtraInfo);
+
+    [LibraryImport("user32.dll")]
+    public static partial void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, nuint dwExtraInfo);
 }
