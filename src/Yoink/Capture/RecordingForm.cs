@@ -17,6 +17,8 @@ namespace Yoink.Capture;
 /// </summary>
 public sealed partial class RecordingForm : Form
 {
+    private const int RecordingWarmupDelayMs = 260;
+
     /// <summary>Fires with (filePath, firstFrameBitmap). Caller must dispose the bitmap.</summary>
     public event Action<string, Bitmap?>? RecordingCompleted;
     public event Action<Exception>? RecordingFailed;
@@ -178,23 +180,10 @@ public sealed partial class RecordingForm : Form
     {
         if (_state == State.Selecting && _isDragging)
         {
-            var oldSel = _selection;
-            var oldMag = _showMagnifier ? _lastMagnifierRect : Rectangle.Empty;
             _selection = NormRect(_dragStart, e.Location);
-            var oldBounds = oldSel;
-            oldBounds.Inflate(4, 4);
-            var newBounds = _selection;
-            newBounds.Inflate(4, 4);
-            var dirty = Rectangle.Union(oldBounds, newBounds);
             if (_showMagnifier)
-            {
                 _lastMagnifierRect = InflateForRepaint(GetMagnifierBounds(e.Location), 12);
-                if (!oldMag.IsEmpty)
-                    dirty = Rectangle.Union(dirty, oldMag);
-                if (!_lastMagnifierRect.IsEmpty)
-                    dirty = Rectangle.Union(dirty, _lastMagnifierRect);
-            }
-            Invalidate(dirty);
+            Invalidate();
         }
         else if (_state == State.Recording)
         {
@@ -212,22 +201,13 @@ public sealed partial class RecordingForm : Form
         if (_state == State.Selecting && _isDragging && e.Button == MouseButtons.Left)
         {
             _isDragging = false;
-            var oldSel = _selection;
-            var oldMag = _lastMagnifierRect;
             _selection = NormRect(_dragStart, e.Location);
             if (_selection.Width > 10 && _selection.Height > 10)
                 StartRecording();
             else
             {
-                var oldBounds = oldSel;
-                oldBounds.Inflate(4, 4);
-                var newBounds = _selection;
-                newBounds.Inflate(4, 4);
-                var dirty = Rectangle.Union(oldBounds, newBounds);
-                if (!oldMag.IsEmpty)
-                    dirty = Rectangle.Union(dirty, oldMag);
                 _lastMagnifierRect = Rectangle.Empty;
-                Invalidate(dirty);
+                Invalidate();
             }
         }
     }
@@ -312,10 +292,8 @@ public sealed partial class RecordingForm : Form
         shadowRect.Offset(0, 2);
         var shadowPasses = new (float dx, float dy, int a)[]
         {
-            (5f, 6f, 14),
-            (3f, 4f, 24),
-            (1.5f, 2.5f, 38),
-            (0f, 2f, 60),
+            (0f, 3f, 24),
+            (0f, 1.5f, 36),
         };
         foreach (var (dx, dy, a) in shadowPasses)
         {
@@ -494,4 +472,5 @@ public sealed partial class RecordingForm : Form
         }
         base.Dispose(disposing);
     }
+
 }

@@ -40,28 +40,17 @@ public sealed partial class RecordingForm
             };
             _videoRecorder = new VideoRecorder(screenRegion, vfmt, _fps, _maxDuration, _maxHeight,
                 _showCursor, _recordMic, _micDeviceId, _recordDesktop, _desktopDeviceId);
-            _videoRecorder.Start(_savePath);
         }
         _state = State.Recording;
         Cursor = Cursors.Default;
 
-        // The selection screenshot is only needed before recording starts.
-        _screenshot?.Dispose();
-        _screenshot = null;
-
-        // Switch to transparent mode: form stays fullscreen but only the
-        // dashed border + toolbar are visible. Everything else is see-through.
-        BackColor = TransKey;
-        TransparencyKey = TransKey;
-
-        // Exclude this form from capture so the border/toolbar don't appear in the GIF
-        User32.SetWindowDisplayAffinity(Handle, User32.WDA_EXCLUDEFROMCAPTURE);
-
         CalcToolbarLayout();
+        TransitionToRecordingSurface();
 
         Current = this;
         SoundService.PlayRecordStartSound();
-        _recorder?.Start();
+        _recorder?.Start(RecordingWarmupDelayMs);
+        _videoRecorder?.Start(_savePath, RecordingWarmupDelayMs);
 
         _tickTimer = new System.Windows.Forms.Timer { Interval = 200 };
         _tickTimer.Tick += (_, _) =>
@@ -149,6 +138,23 @@ public sealed partial class RecordingForm
         int btnH = 28;
         _stopBtn = new Rectangle(_toolbarRect.X + 100, btnY, 80, btnH);
         _discardBtn = new Rectangle(_stopBtn.Right + 8, btnY, 80, btnH);
+    }
+
+    private void TransitionToRecordingSurface()
+    {
+        // Hide the style flip into transparent mode so the user does not see
+        // the fullscreen surface blink before the recording chrome repaints.
+        Visible = false;
+
+        // The selection screenshot is only needed before recording starts.
+        _screenshot?.Dispose();
+        _screenshot = null;
+
+        BackColor = TransKey;
+        TransparencyKey = TransKey;
+        Refresh();
+        Update();
+        Visible = true;
     }
 
     /// <summary>External stop (called from tray menu).</summary>

@@ -122,16 +122,8 @@ public sealed partial class ScrollingCaptureForm : Form
     {
         if (_state == State.Selecting && _isDragging)
         {
-            var oldSel = _selection;
             _selection = NormRect(_dragStart, e.Location);
-            var oldBounds = GetSelectionOverlayBounds(oldSel);
-            var newBounds = GetSelectionOverlayBounds(_selection);
-            if (oldBounds.IsEmpty)
-                Invalidate(newBounds);
-            else if (newBounds.IsEmpty)
-                Invalidate(oldBounds);
-            else
-                Invalidate(Rectangle.Union(oldBounds, newBounds));
+            Invalidate();
         }
     }
 
@@ -140,21 +132,11 @@ public sealed partial class ScrollingCaptureForm : Form
         if (_state == State.Selecting && _isDragging && e.Button == MouseButtons.Left)
         {
             _isDragging = false;
-            var oldSel = _selection;
             _selection = NormRect(_dragStart, e.Location);
             if (_selection.Width > 20 && _selection.Height > 20)
                 ShowControlBar();
             else
-            {
-                var oldBounds = GetSelectionOverlayBounds(oldSel);
-                var newBounds = GetSelectionOverlayBounds(_selection);
-                if (oldBounds.IsEmpty)
-                    Invalidate(newBounds);
-                else if (newBounds.IsEmpty)
-                    Invalidate(oldBounds);
-                else
-                    Invalidate(Rectangle.Union(oldBounds, newBounds));
-            }
+                Invalidate();
         }
     }
 
@@ -169,7 +151,7 @@ public sealed partial class ScrollingCaptureForm : Form
             _selection.Y + _virtualBounds.Y,
             _selection.Width, _selection.Height);
 
-        // Make the overlay transparent so the user can see content, but keep the border visible
+        // Make the overlay transparent so the user can see content, but keep the border visible.
         BackColor = TransKey;
         TransparencyKey = TransKey;
         Invalidate();
@@ -400,23 +382,6 @@ public sealed partial class ScrollingCaptureForm : Form
         return rect;
     }
 
-    private Rectangle GetSelectionOverlayBounds(Rectangle rect)
-    {
-        if (rect.Width <= 0 || rect.Height <= 0)
-            return Rectangle.Empty;
-
-        var dirty = InflateForRepaint(rect, 8);
-        using var g = CreateGraphics();
-        string label = $"Scroll  {rect.Width} x {rect.Height}";
-        var sz = g.MeasureString(label, _labelFont);
-        float lx = rect.X + rect.Width / 2f - sz.Width / 2f;
-        float ly = rect.Bottom + 6;
-        if (ly + sz.Height > Height - 10)
-            ly = rect.Y - sz.Height - 6;
-        var labelRect = Rectangle.Ceiling(new RectangleF(lx - 8, ly - 2, sz.Width + 16, sz.Height + 4));
-        return Rectangle.Union(dirty, InflateForRepaint(labelRect, 8));
-    }
-
     private void DisposeFrames()
     {
         foreach (var f in _frames) f.Dispose();
@@ -527,10 +492,8 @@ public sealed partial class ScrollingCaptureForm : Form
             // Shadow (dark rect behind, offset)
             var shadowPasses = new (float dx, float dy, int a)[]
             {
-                (5f, 7f, 14),
-                (3f, 5f, 24),
-                (1.5f, 3f, 38),
-                (0f, 2f, 60),
+                (0f, 3f, 24),
+                (0f, 1.5f, 36),
             };
             foreach (var (dx, dy, a) in shadowPasses)
             {

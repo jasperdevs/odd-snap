@@ -936,19 +936,27 @@
 
                     <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,12,0,12"/>
 
-                    <WrapPanel ItemHeight="32" ItemWidth="Auto">
-                        <CheckBox x:Name="StartWithWindowsCheck" Content="Launch on startup" FontSize="13"
-                                  VerticalAlignment="Center" Margin="0,4,14,0"
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <CheckBox x:Name="StartWithWindowsCheck" Grid.Row="0" Content="Launch on startup" FontSize="13"
+                                  VerticalAlignment="Center"
                                   Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
-                        <Button Content="Reset Settings" FontSize="12" Padding="10,6"
-                                HorizontalAlignment="Left" Click="ResetSettingsButton_Click" Margin="0,0,10,0"/>
-                        <Button Content="Uninstall Yoink" FontSize="12" Padding="10,6"
-                                HorizontalAlignment="Left" Click="UninstallButton_Click" Margin="0,0,10,0"/>
-                        <Button Content="Export settings" FontSize="12" Padding="10,6"
-                                Margin="0,0,10,0" Click="ExportSettingsButton_Click"/>
-                        <Button Content="Import settings" FontSize="12" Padding="10,6"
-                                Click="ImportSettingsButton_Click"/>
-                    </WrapPanel>
+
+                        <WrapPanel Grid.Row="1" Margin="0,12,0,0" Orientation="Horizontal">
+                            <Button Content="Reset Settings" FontSize="12" Padding="10,6" MinWidth="108"
+                                    HorizontalAlignment="Left" Click="ResetSettingsButton_Click" Margin="0,0,10,10"/>
+                            <Button Content="Uninstall Yoink" FontSize="12" Padding="10,6" MinWidth="108"
+                                    HorizontalAlignment="Left" Click="UninstallButton_Click" Margin="0,0,10,10"/>
+                            <Button Content="Export settings" FontSize="12" Padding="10,6" MinWidth="108"
+                                    Margin="0,0,10,10" Click="ExportSettingsButton_Click"/>
+                            <Button Content="Import settings" FontSize="12" Padding="10,6" MinWidth="108"
+                                    Margin="0,0,10,10" Click="ImportSettingsButton_Click"/>
+                        </WrapPanel>
+                    </Grid>
                 </StackPanel>
             </ScrollViewer>
 

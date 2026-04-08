@@ -13,6 +13,7 @@ namespace Yoink.Capture;
 /// </summary>
 public sealed class VideoRecorder : IDisposable
 {
+    private const int DefaultInitialCaptureDelayMs = 0;
     public enum Format { MP4, WebM, MKV }
     private static readonly object FfmpegPathLock = new();
     private static string? _cachedFfmpegPath;
@@ -40,6 +41,8 @@ public sealed class VideoRecorder : IDisposable
     private bool _isPaused;
     private bool _disposed;
     private readonly object _pauseLock = new();
+    private int _initialCaptureDelayMs = DefaultInitialCaptureDelayMs;
+    private Thread? _delayedAudioStartThread;
 
     // Audio capture
     private WaveInEvent? _micCapture;
@@ -114,12 +117,13 @@ public sealed class VideoRecorder : IDisposable
         return null;
     }
 
-    public void Start(string outputPath)
+    public void Start(string outputPath, int initialCaptureDelayMs = DefaultInitialCaptureDelayMs)
     {
         var ffmpegPath = FindFfmpeg();
         if (ffmpegPath == null)
             throw new FileNotFoundException("FFmpeg not found. Place ffmpeg.exe in the app folder or install it to PATH.");
 
+        _initialCaptureDelayMs = Math.Max(0, initialCaptureDelayMs);
         _startTime = DateTime.UtcNow;
 
         // Compute output dimensions
@@ -170,7 +174,32 @@ public sealed class VideoRecorder : IDisposable
         _captureThread = new Thread(CaptureLoop) { IsBackground = true, Name = "VideoCapture" };
         _captureThread.Start();
 
-        StartAudioCapture(outputPath);
+        StartAudioCaptureWithDelay(outputPath);
+    }
+
+    private void StartAudioCaptureWithDelay(string outputPath)
+    {
+        if (!_recordDesktop && !_recordMic)
+            return;
+
+        _delayedAudioStartThread = new Thread(() =>
+        {
+            if (_initialCaptureDelayMs > 0)
+            {
+                try { Thread.Sleep(_initialCaptureDelayMs); }
+                catch (ThreadInterruptedException) { return; }
+            }
+
+            if (_cts.IsCancellationRequested)
+                return;
+
+            StartAudioCapture(outputPath);
+        })
+        {
+            IsBackground = true,
+            Name = "VideoAudioStart"
+        };
+        _delayedAudioStartThread.Start();
     }
 
     private void StartAudioCapture(string outputPath)
@@ -249,6 +278,12 @@ public sealed class VideoRecorder : IDisposable
         var ct = _cts.Token;
         byte[]? buffer = null;
 
+        if (_initialCaptureDelayMs > 0)
+        {
+            try { Thread.Sleep(_initialCaptureDelayMs); }
+            catch (ThreadInterruptedException) { return; }
+        }
+
         while (!ct.IsCancellationRequested)
         {
             if ((DateTime.UtcNow - _startTime).TotalMilliseconds >= _maxDurationMs)
@@ -296,6 +331,7 @@ public sealed class VideoRecorder : IDisposable
     public string StopAndEncode(string outputPath)
     {
         _cts.Cancel();
+        try { _delayedAudioStartThread?.Join(5_000); } catch { }
         // Unpause if paused so capture thread can exit
         lock (_pauseLock) { _isPaused = false; Monitor.PulseAll(_pauseLock); }
         _captureThread?.Join(10_000);
@@ -420,6 +456,7 @@ public sealed class VideoRecorder : IDisposable
     public void Discard()
     {
         _cts.Cancel();
+        try { _delayedAudioStartThread?.Join(3_000); } catch { }
         lock (_pauseLock) { _isPaused = false; Monitor.PulseAll(_pauseLock); }
         _captureThread?.Join(3000);
         StopAudioCapture();
@@ -436,6 +473,7 @@ public sealed class VideoRecorder : IDisposable
         _disposed = true;
         _cts.Cancel();
         lock (_pauseLock) { _isPaused = false; Monitor.PulseAll(_pauseLock); }
+        try { _delayedAudioStartThread?.Join(3_000); } catch { }
         StopAudioCapture();
         try { _ffmpegBufferedStdin?.Dispose(); } catch { }
         try { _ffmpegStdin?.Dispose(); } catch { }

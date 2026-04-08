@@ -125,7 +125,6 @@ Search your image history by filename, OCR text, and semantic matching, so you c
 - Search by text inside the image with OCR
 - Search by semantic similarity to find visually related screenshots
 
-
 ## Uploads
 
 Yoink can upload screenshots, stickers, and recordings after capture. Upload targets include:

@@ -13,6 +13,7 @@ namespace Yoink.Capture;
 /// </summary>
 public sealed class GifRecorder : IDisposable
 {
+    private const int DefaultInitialCaptureDelayMs = 0;
     private readonly Rectangle _region;
     private readonly int _fps;
     private readonly int _maxDurationMs;
@@ -26,6 +27,7 @@ public sealed class GifRecorder : IDisposable
     private int _frameCount;
     private DateTime _startTime;
     private bool _disposed;
+    private int _initialCaptureDelayMs = DefaultInitialCaptureDelayMs;
 
     public int FrameCount => _frameCount;
     public TimeSpan Elapsed => DateTime.UtcNow - _startTime;
@@ -41,8 +43,9 @@ public sealed class GifRecorder : IDisposable
         Directory.CreateDirectory(_tempDir);
     }
 
-    public void Start()
+    public void Start(int initialCaptureDelayMs = DefaultInitialCaptureDelayMs)
     {
+        _initialCaptureDelayMs = Math.Max(0, initialCaptureDelayMs);
         _startTime = DateTime.UtcNow;
 
         // Producer: capture frames
@@ -59,6 +62,12 @@ public sealed class GifRecorder : IDisposable
         int delayMs = 1000 / _fps;
         var ct = _cts.Token;
         int index = 0;
+
+        if (_initialCaptureDelayMs > 0)
+        {
+            try { Thread.Sleep(_initialCaptureDelayMs); }
+            catch (ThreadInterruptedException) { return; }
+        }
 
         while (!ct.IsCancellationRequested)
         {
