@@ -60,6 +60,9 @@ public sealed partial class RegionOverlayForm
 
     private void SetMode(CaptureMode m)
     {
+        if (ToolDef.IsCaptureTool(m))
+            _lastCaptureMode = m;
+
         if (_isTyping) CommitText();
         _colorPickerOpen = false;
         _fontPickerOpen = false;

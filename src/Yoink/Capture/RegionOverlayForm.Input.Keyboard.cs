@@ -44,6 +44,14 @@ public sealed partial class RegionOverlayForm
                 RefreshToolbar();
                 return true;
             }
+
+            // If in an annotation tool, return to the last capture mode instead of closing
+            if (ToolDef.IsAnnotationTool(_mode))
+            {
+                SetMode(_lastCaptureMode);
+                return true;
+            }
+
             Cancel();
             return true;
         }

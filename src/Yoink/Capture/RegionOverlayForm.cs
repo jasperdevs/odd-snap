@@ -18,6 +18,7 @@ public sealed partial class RegionOverlayForm : Form
     private readonly WindowDetectionMode _windowDetectionMode;
 
     private CaptureMode _mode = CaptureMode.Rectangle;
+    private CaptureMode _lastCaptureMode = CaptureMode.Rectangle;
     private bool _isSelecting;
     private Point _selectionStart;
     private Point _selectionEnd;
@@ -331,6 +332,7 @@ public sealed partial class RegionOverlayForm : Form
         _bmpW = _screenshot.Width;
         _bmpH = _screenshot.Height;
         _mode = initialMode;
+        _lastCaptureMode = initialMode;
         _showTime = DateTime.UtcNow;
 
         // Cache pixels for color picker
