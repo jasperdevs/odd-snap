@@ -112,6 +112,9 @@ Yoink can extract text from any region of your screen and translate it instantly
 ## Recording
 
 Yoink can record screen clips as GIFs or videos without leaving the app.
+<p align="left">
+  <img src="assets/recording.png" alt="OCR result window with translation" width="60%" />
+</p>
 
 - Record `GIF`, `MP4`, `WebM`, or `MKV`
 - Optional microphone and desktop audio capture
