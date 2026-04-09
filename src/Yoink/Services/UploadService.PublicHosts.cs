@@ -87,6 +87,9 @@ public static partial class UploadService
         var resp = await Http.PostAsync("https://catbox.moe/user/api.php", content);
         var url = (await resp.Content.ReadAsStringAsync()).Trim();
 
+        if (!resp.IsSuccessStatusCode)
+            return new UploadResult { Error = BuildHttpError("Catbox", resp, url), IsRateLimit = (int)resp.StatusCode == 429 };
+
         if (url.StartsWith("https://"))
             return new UploadResult { Success = true, Url = url };
 
@@ -182,15 +185,10 @@ public static partial class UploadService
 
     private static async Task<UploadResult> UploadTransferSh(string filePath)
     {
-        using var content = new MultipartFormDataContent();
-        content.Add(CreateFileStreamContent(filePath), "file", Path.GetFileName(filePath));
-
-        var resp = await Http.PostAsync("https://transfer.sh", content);
-        var url = (await resp.Content.ReadAsStringAsync()).Trim();
-
-        if (url.StartsWith("https://") || url.StartsWith("http://"))
-            return new UploadResult { Success = true, Url = url };
-
-        return new UploadResult { Error = $"transfer.sh error: {url}" };
+        await Task.CompletedTask;
+        return new UploadResult
+        {
+            Error = "The public transfer.sh service is unavailable. Choose Temp Hosts, Catbox, Litterbox, Uguu, or file.io."
+        };
     }
 }

@@ -126,4 +126,24 @@ public sealed class UploadServiceTests
         settings.AutoUploadScreenshots = true;
         Assert.True(UploadService.ShouldUploadScreenshot(settings, hasFilePath: true, useAiRedirect: false));
     }
+
+    [Fact]
+    public async Task UploadAsync_TransferShFailsFastWithActionableMessage()
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), "yoink-transfer-test-" + Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            await File.WriteAllTextAsync(filePath, "yoink");
+
+            var result = await UploadService.UploadAsync(filePath, UploadDestination.TransferSh, new UploadSettings());
+
+            Assert.False(result.Success);
+            Assert.Contains("transfer.sh", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("unavailable", result.Error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { File.Delete(filePath); } catch { }
+        }
+    }
 }

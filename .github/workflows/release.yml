@@ -116,5 +116,4 @@ jobs:
           files: |
             dist/**/*.exe
             dist/**/*.zip
-            dist/winget-manifests/**/*.yaml
           body_path: RELEASE_NOTES.md

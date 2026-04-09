@@ -74,8 +74,7 @@ public static partial class UploadService
     {
         UploadDestination.Litterbox,
         UploadDestination.Uguu,
-        UploadDestination.FileIo,
-        UploadDestination.TransferSh
+        UploadDestination.FileIo
     };
 
     private static JsonNode? TryParseJson(string text)
@@ -372,7 +371,7 @@ public static partial class UploadService
             if (IsAiChatDestination(dest))
                 return new UploadResult { Error = "AI Redirects uses browser redirects instead of host upload." };
 
-            return dest switch
+            var result = dest switch
             {
                 UploadDestination.Imgur => await UploadImgur(filePath, settings),
                 UploadDestination.ImgBB => await UploadImgBB(filePath, settings),
@@ -396,11 +395,23 @@ public static partial class UploadService
                 UploadDestination.TempHosts => await UploadTemporaryHostsAsync(filePath, settings),
                 _ => new UploadResult { Error = "No upload destination configured" }
             };
+
+            if (!result.Success)
+                LogUploadFailure(dest, filePath, result.Error);
+
+            return result;
         }
         catch (Exception ex)
         {
+            AppDiagnostics.LogError("upload.error", ex, $"{GetName(dest)} upload failed for {Path.GetFileName(filePath)}.");
             return new UploadResult { Error = ex.Message };
         }
+    }
+
+    private static void LogUploadFailure(UploadDestination dest, string filePath, string error)
+    {
+        var message = $"{GetName(dest)} upload failed for {Path.GetFileName(filePath)}: {error}";
+        AppDiagnostics.LogWarning("upload.failed", message);
     }
 
 }

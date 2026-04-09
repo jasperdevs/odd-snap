@@ -139,6 +139,7 @@ public partial class App
             }
             else
             {
+                AppDiagnostics.LogWarning("upload.toast-failed", $"{UploadService.GetName(dest)} upload failed for {Path.GetFileName(filePath)}: {result.Error}");
                 var errTitle = result.IsRateLimit ? "Upload rate-limited" : "Upload failed";
                 var errMsg = CleanErrorMessage(result.Error);
                 var saved = filePath != null ? Path.GetFileName(filePath) : null;
@@ -148,6 +149,7 @@ public partial class App
         }
         catch (Exception ex)
         {
+            AppDiagnostics.LogError("upload.toast-error", ex, $"Unexpected upload error for {Path.GetFileName(filePath)}.");
             var errMsg = CleanErrorMessage(ex.Message);
             var saved = filePath != null ? Path.GetFileName(filePath) : null;
             var body = saved != null ? $"Saved to {saved}\n{errMsg}" : errMsg;
