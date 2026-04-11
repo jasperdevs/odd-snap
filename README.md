@@ -10,6 +10,9 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/jasperdevs/yoink/releases">
+    <img src="https://img.shields.io/github/downloads/jasperdevs/yoink/total?style=flat&logo=github&label=downloads&color=555" alt="GitHub downloads" />
+  </a>
   <a href="https://github.com/jasperdevs/yoink/stargazers">
     <img src="https://img.shields.io/github/stars/jasperdevs/yoink?style=flat&logo=github&label=stars&color=4c71f2" alt="GitHub stars" />
   </a>
