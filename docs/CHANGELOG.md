@@ -1,3 +1,15 @@
+# Yoink v0.8.4.9
+
+## Highlights
+- Switched Yoink to a portable-first flow: no custom install wizard on launch and no self-applying updater in Settings.
+
+## Changed
+- Yoink no longer auto-opens the custom installer wizard when run from an arbitrary folder.
+- Settings update actions now open the latest GitHub release instead of trying to self-apply an in-place update.
+
+## Fixed
+- Removes the broken custom install/update path from normal user flows while a better installer/updater solution is chosen.
+
 # Yoink v0.8.4.8
 
 ## Highlights

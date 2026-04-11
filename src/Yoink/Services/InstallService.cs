@@ -79,16 +79,8 @@ public static class InstallService
     /// <summary>Check if we should show the installer.</summary>
     public static bool ShouldShowInstaller()
     {
-        // Never show installer for debug/release builds — devs run from Visual Studio.
-        if (LooksLikeBuildOutputPath(GetAppDirectory()))
-            return false;
-
-        // Running from the installed location — no installer needed.
-        if (IsInstalled())
-            return false;
-
-        // Everything else (downloaded exe, random folder, etc.) should show the installer.
-        return true;
+        // Portable-first: never block app startup behind the custom installer wizard.
+        return false;
     }
 
     /// <summary>Kill any running Yoink processes (other than this one).</summary>

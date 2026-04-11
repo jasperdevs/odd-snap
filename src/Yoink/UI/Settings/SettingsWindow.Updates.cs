@@ -17,13 +17,8 @@ public partial class SettingsWindow
         if (_latestUpdate is null)
             return;
 
-        if (!CanInstallUpdate(_latestUpdate))
-        {
-            OpenExternalUrl(_latestUpdate.ReleaseUrl);
-            return;
-        }
-
-        await InstallUpdateAsync();
+        OpenExternalUrl(_latestUpdate.ReleaseUrl);
+        await Task.CompletedTask;
     }
 
     private async Task RefreshUpdateStatusAsync(bool isManualCheck)
@@ -48,10 +43,8 @@ public partial class SettingsWindow
                 var published = _latestUpdate.PublishedAt.HasValue
                     ? $"Published {FormatTimeAgo(_latestUpdate.PublishedAt.Value.LocalDateTime)}"
                     : "Published recently";
-                UpdateDetailText.Text = $"Current build: {UpdateService.GetCurrentVersionLabel()}. {published}. Yoink will update itself and restart.";
-                DownloadUpdateButton.Content = CanInstallUpdate(_latestUpdate)
-                    ? "Update now"
-                    : "Open release";
+                UpdateDetailText.Text = $"Current build: {UpdateService.GetCurrentVersionLabel()}. {published}. Download the latest release to update.";
+                DownloadUpdateButton.Content = "Open release";
                 DownloadUpdateButton.Visibility = Visibility.Visible;
             }
             else
@@ -77,46 +70,6 @@ public partial class SettingsWindow
         }
     }
 
-    private async Task InstallUpdateAsync()
-    {
-        if (_latestUpdate is null)
-            return;
-
-        if (_updateCheckInFlight)
-            return;
-
-        _updateCheckInFlight = true;
-        CheckUpdatesButton.IsEnabled = false;
-        DownloadUpdateButton.IsEnabled = false;
-        CheckUpdatesButton.Content = "Checking...";
-        DownloadUpdateButton.Content = "Updating...";
-        UpdateStatusText.Text = "Downloading update...";
-        UpdateDetailText.Text = "Yoink will download the update, apply it, and relaunch automatically.";
-
-        try
-        {
-            var packagePath = await UpdateService.DownloadUpdatePackageAsync(_latestUpdate);
-            var targetDir = InstallService.GetPreferredUpdateTargetDirectory();
-            var helperPath = CreateUpdateHelper();
-            StartUpdateHelper(helperPath, packagePath, targetDir, _latestUpdate.LatestVersionLabel);
-            ToastWindow.Show("Updating Yoink", "Yoink will close, update, and reopen.");
-            Application.Current.Shutdown();
-        }
-        catch (Exception ex)
-        {
-            UpdateStatusText.Text = "Update install failed";
-            UpdateDetailText.Text = ex.Message;
-            ToastWindow.ShowError("Update install failed", ex.Message);
-        }
-        finally
-        {
-            _updateCheckInFlight = false;
-            CheckUpdatesButton.IsEnabled = true;
-            DownloadUpdateButton.IsEnabled = true;
-            CheckUpdatesButton.Content = "Check now";
-        }
-    }
-
     private static void OpenExternalUrl(string url)
     {
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
@@ -124,44 +77,5 @@ public partial class SettingsWindow
             FileName = url,
             UseShellExecute = true
         });
-    }
-
-    private static bool CanInstallUpdate(UpdateCheckResult update)
-    {
-        return !string.IsNullOrWhiteSpace(update.DownloadUrl) &&
-               !string.IsNullOrWhiteSpace(update.AssetName) &&
-               string.Equals(Path.GetExtension(update.AssetName), ".zip", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string CreateUpdateHelper()
-    {
-        var currentExe = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(currentExe))
-            throw new InvalidOperationException("Unable to locate the running Yoink executable.");
-
-        var helperDir = Path.Combine(Path.GetTempPath(), "Yoink", "Updates", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(helperDir);
-        var helperPath = Path.Combine(helperDir, "Yoink-Updater.exe");
-        File.Copy(currentExe, helperPath, true);
-        return helperPath;
-    }
-
-    private static void StartUpdateHelper(string helperPath, string packagePath, string targetDir, string versionLabel)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = helperPath,
-            WorkingDirectory = Path.GetDirectoryName(helperPath) ?? Path.GetTempPath(),
-            UseShellExecute = false
-        };
-        startInfo.ArgumentList.Add("--apply-update");
-        startInfo.ArgumentList.Add(packagePath);
-        startInfo.ArgumentList.Add(targetDir);
-        startInfo.ArgumentList.Add(versionLabel);
-        startInfo.ArgumentList.Add("--wait-pid");
-        startInfo.ArgumentList.Add(Environment.ProcessId.ToString());
-
-        if (Process.Start(startInfo) is null)
-            throw new InvalidOperationException("Failed to launch the update helper.");
     }
 }
