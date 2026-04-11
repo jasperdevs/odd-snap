@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="154" height="20" role="img" aria-label="Windows download">
+  <title>Windows download</title>
+  <rect width="84" height="20" rx="3" fill="#555"/>
+  <rect x="84" width="70" height="20" rx="3" fill="#4c71f2"/>
+  <rect x="81" width="6" height="20" fill="#4c71f2"/>
+  <g fill="#fff">
+    <path d="M10 4.5 15.4 3.7v5.3H10V4.5Zm6.3-.9 7.7-1.1V9h-7.7V3.6ZM10 10h5.4v5.3L10 14.5V10Zm6.3 0H24v6.5l-7.7-1.1V10Z"/>
+    <path d="M103.5 5v6.2l2.1-2.1 1.1 1.1-4 4-4-4 1.1-1.1 2.1 2.1V5h1.6Zm-4.8 10.5h9.6v1.5h-9.6v-1.5Z"/>
+  </g>
+  <g fill="#fff" font-family="Verdana,DejaVu Sans,sans-serif" font-size="11" text-rendering="geometricPrecision">
+    <text x="29" y="14">Windows</text>
+    <text x="115" y="14" text-anchor="middle" font-weight="700">Download</text>
+  </g>
+</svg>
