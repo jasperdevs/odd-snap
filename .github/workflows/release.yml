@@ -122,13 +122,16 @@ jobs:
         run: |
           $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
           $repoUrl = "https://github.com/${{ github.repository }}"
-          vpk upload github `
-            --repoUrl $repoUrl `
-            --releaseName "Yoink v${{ steps.version.outputs.version }}" `
-            --tag "v${{ steps.version.outputs.version }}" `
-            --publish `
-            --merge `
-            --outputDir dist
+          foreach ($channel in @('win-x64', 'win-x86', 'win-arm64')) {
+            vpk upload github `
+              --repoUrl $repoUrl `
+              --releaseName "Yoink v${{ steps.version.outputs.version }}" `
+              --tag "v${{ steps.version.outputs.version }}" `
+              --channel $channel `
+              --publish `
+              --merge `
+              --outputDir dist
+          }
 
       - name: Generate winget manifests
         shell: pwsh
