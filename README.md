@@ -52,18 +52,69 @@ winget install --id JasperDevs.Yoink -e
 winget upgrade --id JasperDevs.Yoink -e
 ```
 
-## Why Yoink
+## Features
 
-- Region, fullscreen, active-window, and scrolling capture
-- Built-in annotation tools (arrows, text, shapes, blur, freehand) with stroke/shadow effects
-- AI Redirects for opening ChatGPT, Claude, Gemini, or Google Lens with the captured image ready to drag or paste
-- OCR text extraction with built-in translation (Argos Translate offline, Google Translate API)
-- Auto-download language packs for 100+ OCR languages
-- Color picking, QR/barcode scanning, ruler, and step numbering
-- Sticker creation with background removal
-- Screen recording (GIF, MP4, WebM, MKV) with microphone and desktop audio
-- Local history with image search using OCR and semantic matching
-- Optional uploads to 15+ services including Imgur, S3, Dropbox, and self-hosted targets
+<table>
+<tr>
+<td width="40%" valign="middle">
+<h3>Capture modes</h3>
+Region, fullscreen, active-window, and scrolling capture in one ShareX-style workflow.
+</td>
+<td width="60%">
+<img src="assets/screenshot-main.png" alt="Yoink main capture workflow" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>AI Redirects</h3>
+Open ChatGPT, Claude, Gemini, or Google Lens right after capture with the image ready to drag, paste, or inspect.
+</td>
+<td width="60%">
+<img src="assets/airedirects.png" alt="Yoink AI Redirects" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Sticker creation</h3>
+Remove backgrounds and turn screenshots into polished stickers with optional stroke and shadow finishing.
+</td>
+<td width="60%">
+<img src="assets/sticker-showcase.png" alt="Yoink sticker creation" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>OCR + translation</h3>
+Extract text from any screen region, edit the result, and translate it with local or cloud-backed providers.
+</td>
+<td width="60%">
+<img src="assets/screenshot-ocr.png" alt="Yoink OCR and translation" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Recording</h3>
+Record GIFs and videos in multiple formats with optional microphone and desktop audio capture.
+</td>
+<td width="60%">
+<img src="assets/recording.png" alt="Yoink recording" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Searchable history</h3>
+Find past captures by filename, OCR text, or semantic similarity so you can recover screenshots by meaning, not just date.
+</td>
+<td width="60%">
+<img src="assets/screenshot-search.png" alt="Yoink searchable history" width="100%" />
+</td>
+</tr>
+</table>
+
+- **Built-in annotation** - Arrows, text, shapes, blur, freehand markup, and polished stroke/shadow effects
+- **100+ OCR languages** - Download language packs on demand for multilingual text extraction
+- **Utility tools** - Color picker, QR/barcode scanner, ruler, and step numbering built into the capture flow
+- **Flexible uploads** - Send screenshots, stickers, and recordings to 15+ services including Imgur, S3, Dropbox, and self-hosted targets
 
 ## AI Redirects
 
