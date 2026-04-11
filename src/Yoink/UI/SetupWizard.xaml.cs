@@ -23,6 +23,7 @@ public partial class SetupWizard : Window
         ("ocr",            "Text capture",      '\uE53C'),
         ("picker",         "Color picker",      '\uE13E'),
         ("sticker",        "Sticker",           ToolGlyphs.StickerGlyph),
+        ("upscale",        "Upscale",           ToolGlyphs.UpscaleGlyph),
         ("_record",        "Record",             ToolGlyphs.RecordGlyph),
     };
 

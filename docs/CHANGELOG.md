@@ -1,3 +1,21 @@
+# Yoink v0.8.10
+
+## Highlights
+- Added the new Upscale capture flow and cleaned up the surrounding uploads, AI Redirect, toast, and settings UX so the release is consistent end to end.
+
+## Changed
+- Added the Upscale tool, local model/runtime management, preview window, model switching, and multiplier controls.
+- Added an AI Redirect uploads tab and toast button flow, including direct reuse of the active screenshot toast for ChatGPT, Claude, and Gemini.
+- Simplified the settings window layout by trimming redundant headers and copy, tightening toast/button layout editing, and reducing provider-card clutter.
+- Updated the embedded Streamline icon set for Upscale and AI Redirects and refreshed theme-aware tray icon rendering.
+
+## Fixed
+- Fixed local upscale model download file-lock failures.
+- Fixed multiple null/initialization errors in the upscale preview window.
+- Fixed the before/after compare behavior so the drag direction and fitted-image alignment behave correctly.
+- Fixed the AI Redirect toast button so it appears when placed, follows the toast layout editor, and no longer spawns an extra toast for non-Lens providers.
+- Fixed shimmer/loading behavior so status text animates more cleanly and duplicate progress copy is suppressed.
+
 # Yoink v0.8.9
 
 ## Highlights

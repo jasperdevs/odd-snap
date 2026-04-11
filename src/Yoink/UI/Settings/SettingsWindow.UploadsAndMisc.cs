@@ -22,16 +22,16 @@ public partial class SettingsWindow
     {
         if (!IsLoaded) return;
         _settingsService.Settings.ImageUploadDestination = GetSelectedUploadDest();
+        if (ActiveUploadSettings.AiChatUploadDestinationSynced)
+            ActiveUploadSettings.AiChatUploadDestination = Services.UploadService.NormalizeAiChatUploadDestination(GetSelectedUploadDest());
         _settingsService.Save();
         UpdateUploadSettingsVisibility();
+        UpdateAiRedirectPanelVisibility();
     }
 
     private void UpdateUploadSettingsVisibility()
     {
         var dest = GetSelectedUploadDest();
-        var isAiRedirects = dest == Services.UploadDestination.AiChat;
-        AiChatSettings.Visibility = dest == Services.UploadDestination.AiChat ? Visibility.Visible : Visibility.Collapsed;
-        UpdateAiChatProviderVisibility();
         ImgurSettings.Visibility = dest == Services.UploadDestination.Imgur ? Visibility.Visible : Visibility.Collapsed;
         ImgBBSettings.Visibility = dest == Services.UploadDestination.ImgBB ? Visibility.Visible : Visibility.Collapsed;
         CatboxSettings.Visibility = dest == Services.UploadDestination.Catbox ? Visibility.Visible : Visibility.Collapsed;
@@ -52,8 +52,8 @@ public partial class SettingsWindow
         S3Settings.Visibility = dest == Services.UploadDestination.S3Compatible ? Visibility.Visible : Visibility.Collapsed;
         CustomUploadSettings.Visibility = dest == Services.UploadDestination.CustomHttp ? Visibility.Visible : Visibility.Collapsed;
         TestUploadCard.Visibility = dest != Services.UploadDestination.None ? Visibility.Visible : Visibility.Collapsed;
-        AutoUploadHeader.Visibility = isAiRedirects ? Visibility.Collapsed : Visibility.Visible;
-        AutoUploadCard.Visibility = isAiRedirects ? Visibility.Collapsed : Visibility.Visible;
+        AutoUploadHeader.Visibility = Visibility.Visible;
+        AutoUploadCard.Visibility = Visibility.Visible;
     }
 
     private void AutoUploadScreenshotsCheck_Changed(object sender, RoutedEventArgs e)
@@ -77,9 +77,9 @@ public partial class SettingsWindow
         _settingsService.Save();
     }
 
-    private Services.AiChatProvider GetSelectedAiChatProvider()
+    private Services.AiChatProvider GetSelectedAiRedirectPanelProvider()
     {
-        if (AiChatProviderCombo.SelectedItem is ComboBoxItem item &&
+        if (AiRedirectProviderCombo.SelectedItem is ComboBoxItem item &&
             item.Tag is string tag && int.TryParse(tag, out var value))
         {
             if (value == (int)Services.AiChatProvider.ClaudeOpus)
@@ -89,83 +89,91 @@ public partial class SettingsWindow
         return Services.AiChatProvider.ChatGpt;
     }
 
-    private Services.UploadDestination GetSelectedAiChatUploadDest()
+    private Services.UploadDestination GetSelectedAiRedirectPanelUploadDest()
     {
-        if (AiChatLensUploadDestCombo.SelectedItem is ComboBoxItem item &&
+        if (AiRedirectLensUploadSyncCheck.IsChecked == true)
+            return Services.UploadService.NormalizeAiChatUploadDestination(GetSelectedUploadDest());
+
+        if (AiRedirectLensUploadDestPanelCombo.SelectedItem is ComboBoxItem item &&
             item.Tag is string tag && int.TryParse(tag, out var value))
-        {
             return Services.UploadService.NormalizeAiChatUploadDestination((Services.UploadDestination)value);
-        }
 
         return Services.UploadDestination.Catbox;
     }
 
-    private void AiChatProviderCombo_Changed(object sender, SelectionChangedEventArgs e)
+    private void UpdateAiRedirectPanelVisibility()
+    {
+        var isLens = GetSelectedAiRedirectPanelProvider() == Services.AiChatProvider.GoogleLens;
+        AiRedirectLensUploadHostPanelRow.Visibility = isLens ? Visibility.Visible : Visibility.Collapsed;
+        AiRedirectLensUploadPanelHint.Visibility = isLens ? Visibility.Visible : Visibility.Collapsed;
+        AiRedirectLensUploadDestPanelCombo.IsEnabled = isLens && AiRedirectLensUploadSyncCheck.IsChecked != true;
+        if (isLens && AiRedirectLensUploadSyncCheck.IsChecked == true)
+            SelectAiRedirectPanelUploadDestByValue((int)GetSelectedUploadDest());
+    }
+
+    private void AiRedirectProviderCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
-        ActiveUploadSettings.AiChatProvider = GetSelectedAiChatProvider();
-        UpdateAiChatProviderVisibility();
+        ActiveUploadSettings.AiChatProvider = GetSelectedAiRedirectPanelProvider();
+        UpdateAiRedirectPanelVisibility();
         _settingsService.Save();
     }
 
-    private void AiChatLensUploadDestCombo_Changed(object sender, SelectionChangedEventArgs e)
+    private void AiRedirectLensUploadDestPanelCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
-        ActiveUploadSettings.AiChatUploadDestination = GetSelectedAiChatUploadDest();
+        if (AiRedirectLensUploadSyncCheck.IsChecked == true)
+            return;
+        ActiveUploadSettings.AiChatUploadDestination = GetSelectedAiRedirectPanelUploadDest();
         _settingsService.Save();
     }
 
-    private void UpdateAiChatProviderVisibility()
-    {
-        var isLens = GetSelectedAiChatProvider() == Services.AiChatProvider.GoogleLens;
-        AiChatLensUploadHostRow.Visibility = isLens ? Visibility.Visible : Visibility.Collapsed;
-        AiChatLensUploadHint.Visibility = isLens ? Visibility.Visible : Visibility.Collapsed;
-        AiRedirectHotkeyOnlyRow.Visibility = Visibility.Visible;
-        AiRedirectHotkeyRow.Visibility = AiRedirectHotkeyOnlyCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void AiRedirectHotkeyOnlyCheck_Changed(object sender, RoutedEventArgs e)
+    private void AiRedirectLensUploadSyncCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded) return;
-        _settingsService.Settings.AiRedirectHotkeyOnly = AiRedirectHotkeyOnlyCheck.IsChecked == true;
-        UpdateAiChatProviderVisibility();
+        ActiveUploadSettings.AiChatUploadDestinationSynced = AiRedirectLensUploadSyncCheck.IsChecked == true;
+        if (ActiveUploadSettings.AiChatUploadDestinationSynced)
+            ActiveUploadSettings.AiChatUploadDestination = Services.UploadService.NormalizeAiChatUploadDestination(GetSelectedUploadDest());
+        else
+            ActiveUploadSettings.AiChatUploadDestination = GetSelectedAiRedirectPanelUploadDest();
+        UpdateAiRedirectPanelVisibility();
         _settingsService.Save();
     }
 
-    private void AiRedirectHotkeyBox_GotFocus(object sender, RoutedEventArgs e)
+    private void AiRedirectPanelHotkeyBox_GotFocus(object sender, RoutedEventArgs e)
     {
-        AiRedirectHotkeyBox.Text = "Press keys...";
+        AiRedirectPanelHotkeyBox.Text = "Press keys...";
     }
 
-    private void AiRedirectHotkeyBox_LostFocus(object sender, RoutedEventArgs e)
+    private void AiRedirectPanelHotkeyBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
+        AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
     }
 
-    private void AiRedirectHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void AiRedirectPanelHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         HandleAiRedirectHotkeyKeyInput(e, e.Key == Key.System ? e.SystemKey : e.Key);
     }
 
-    private void AiRedirectHotkeyBox_PreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
+    private void AiRedirectPanelHotkeyBox_PreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key is Key.Snapshot or Key.Pause or Key.Cancel)
             HandleAiRedirectHotkeyKeyInput(e, key);
     }
 
-    private void AiRedirectHotkeyClearBtn_Click(object sender, RoutedEventArgs e)
+    private void AiRedirectPanelHotkeyClearBtn_Click(object sender, RoutedEventArgs e)
     {
         _settingsService.Settings.AiRedirectHotkeyModifiers = 0;
         _settingsService.Settings.AiRedirectHotkeyKey = 0;
         _settingsService.Save();
-        AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
+        AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
         HotkeyChanged?.Invoke();
     }
 
     private void HandleAiRedirectHotkeyKeyInput(System.Windows.Input.KeyEventArgs e, Key key)
     {
-        if (!AiRedirectHotkeyBox.IsKeyboardFocusWithin)
+        if (!AiRedirectPanelHotkeyBox.IsKeyboardFocusWithin)
             return;
 
         e.Handled = true;
@@ -188,7 +196,7 @@ public partial class SettingsWindow
                 MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes)
             {
-                AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
+                AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
                 Keyboard.ClearFocus();
                 return;
             }
@@ -199,7 +207,7 @@ public partial class SettingsWindow
         _settingsService.Settings.AiRedirectHotkeyModifiers = modifiers;
         _settingsService.Settings.AiRedirectHotkeyKey = vk;
         _settingsService.Save();
-        AiRedirectHotkeyBox.Text = HotkeyFormatter.Format(modifiers, vk);
+        AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(modifiers, vk);
         Keyboard.ClearFocus();
         HotkeyChanged?.Invoke();
     }
@@ -537,39 +545,61 @@ public partial class SettingsWindow
             UploadDestCombo.SelectedIndex = 0;
     }
 
-    private void SelectAiChatProviderByValue(int providerValue)
+    private void SelectAiRedirectPanelProviderByValue(int providerValue)
     {
         if (providerValue == (int)Services.AiChatProvider.ClaudeOpus)
             providerValue = (int)Services.AiChatProvider.Claude;
 
-        var tag = providerValue.ToString();
-        foreach (ComboBoxItem item in AiChatProviderCombo.Items)
+        foreach (ComboBoxItem item in AiRedirectProviderCombo.Items)
         {
-            if (item.Tag as string == tag)
+            if (item.Tag is string tag && int.TryParse(tag, out var value) && value == providerValue)
             {
-                AiChatProviderCombo.SelectedItem = item;
+                AiRedirectProviderCombo.SelectedItem = item;
+                UpdateAiRedirectPanelVisibility();
                 return;
             }
         }
 
-        if (AiChatProviderCombo.Items.Count > 0)
-            AiChatProviderCombo.SelectedIndex = 0;
+        if (AiRedirectProviderCombo.Items.Count > 0)
+            AiRedirectProviderCombo.SelectedIndex = 0;
     }
 
-    private void SelectAiChatUploadDestByValue(int destValue)
+    private void SelectAiRedirectPanelUploadDestByValue(int destValue)
     {
-        var tag = destValue.ToString();
-        foreach (ComboBoxItem item in AiChatLensUploadDestCombo.Items)
+        destValue = (int)Services.UploadService.NormalizeAiChatUploadDestination((Services.UploadDestination)destValue);
+        foreach (ComboBoxItem item in AiRedirectLensUploadDestPanelCombo.Items)
         {
-            if (item.Tag as string == tag)
+            if (item.Tag is string tag && int.TryParse(tag, out var value) && value == destValue)
             {
-                AiChatLensUploadDestCombo.SelectedItem = item;
+                AiRedirectLensUploadDestPanelCombo.SelectedItem = item;
                 return;
             }
         }
 
-        if (AiChatLensUploadDestCombo.Items.Count > 0)
-            AiChatLensUploadDestCombo.SelectedIndex = 0;
+        if (AiRedirectLensUploadDestPanelCombo.Items.Count > 0)
+            AiRedirectLensUploadDestPanelCombo.SelectedIndex = 0;
+    }
+
+    private void RebuildAiRedirectPanelUploadDestItems()
+    {
+        CacheUploadDestItems();
+        AiRedirectLensUploadDestPanelCombo.Items.Clear();
+
+        foreach (var source in _uploadDestItems)
+        {
+            if (source.Tag is not string tag || !int.TryParse(tag, out var raw))
+                continue;
+
+            var destination = (Services.UploadDestination)raw;
+            if (destination is Services.UploadDestination.None or Services.UploadDestination.AiChat)
+                continue;
+
+            AiRedirectLensUploadDestPanelCombo.Items.Add(new ComboBoxItem
+            {
+                Content = source.Content,
+                Tag = source.Tag
+            });
+        }
     }
 
     private void UploadDestCombo_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)

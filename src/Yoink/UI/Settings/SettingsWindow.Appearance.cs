@@ -45,6 +45,7 @@ public partial class SettingsWindow
             : System.Drawing.Color.FromArgb(170, 0, 0, 0);
 
         StickerUploadsPanel.IconSource = ToolIcons.RenderStickerWpf(iconColor, 16);
+        UpscaleUploadsPanel.IconSource = ToolIcons.RenderToolIconWpf("upscale", ToolGlyphs.UpscaleGlyph, iconColor, 16);
     }
 
     private void ApplyThemeToVisualTree(DependencyObject root)
@@ -161,6 +162,7 @@ public partial class SettingsWindow
         AutoUploadVideosCheck.IsChecked = s.AutoUploadVideos;
         TryLoadSettingsSection("settings.load-upload-settings", () => LoadUploadSettingsIntoUi(s.ImageUploadSettings));
         TryLoadSettingsSection("settings.load-sticker-settings", () => LoadStickerSettingsIntoUi(s.StickerUploadSettings));
+        TryLoadSettingsSection("settings.load-upscale-settings", () => LoadUpscaleSettingsIntoUi(s.UpscaleUploadSettings));
         UpdateUploadSettingsVisibility();
         UpdateUploadTabVisibility();
         VersionText.Text = $"Yoink {UpdateService.GetCurrentVersionLabel()}";

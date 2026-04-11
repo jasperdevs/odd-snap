@@ -80,6 +80,16 @@
                                RenderOptions.BitmapScalingMode="HighQuality"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
+                    <Border x:Name="AiRedirectBtn" Width="32" Height="32" CornerRadius="8"
+                            Background="#E0202024" BorderBrush="#30FFFFFF" BorderThickness="0.8"
+                            ToolTipService.IsEnabled="False"
+                            Cursor="Hand"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Margin="0,0,48,8" Opacity="0" Visibility="Collapsed">
+                        <Image x:Name="AiRedirectIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
                     <Border x:Name="DeleteBtn" Width="32" Height="32" CornerRadius="8"
                             Background="#E0202024" BorderBrush="#30FFFFFF" BorderThickness="0.8"
                             ToolTipService.IsEnabled="False"

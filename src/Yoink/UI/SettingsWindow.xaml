@@ -203,30 +203,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type controls:ProviderSection}">
-                        <StackPanel>
-                            <Grid Margin="4,16,0,6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Border x:Name="IconFrame" Style="{StaticResource ProviderIconFrame}">
-                                    <Image Source="{TemplateBinding IconSource}" Style="{StaticResource ProviderIconImage}"/>
-                                </Border>
-                                <TextBlock Grid.Column="1" Text="{TemplateBinding Header}" Style="{StaticResource SectionLabel}" Margin="0"/>
-                                <ContentPresenter Grid.Column="2" Content="{TemplateBinding HeaderExtras}" VerticalAlignment="Center"/>
-                            </Grid>
-                            <Border Style="{StaticResource Card}">
-                                <ContentPresenter Content="{TemplateBinding Content}"/>
-                            </Border>
-                        </StackPanel>
+                        <Border Style="{StaticResource Card}">
+                            <ContentPresenter Content="{TemplateBinding Content}"/>
+                        </Border>
                         <ControlTemplate.Triggers>
-                            <DataTrigger Binding="{Binding IconSource, RelativeSource={RelativeSource TemplatedParent}}" Value="">
-                                <Setter TargetName="IconFrame" Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding IconSource, RelativeSource={RelativeSource TemplatedParent}}" Value="{x:Null}">
-                                <Setter TargetName="IconFrame" Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -368,7 +348,6 @@
             <!-- Tools (unified hotkeys + toolbar) -->
             <ScrollViewer x:Name="HotkeysPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
-                    <TextBlock Text="Tools" Style="{StaticResource SectionLabel}"/>
                     <CheckBox x:Name="ShowToolNumberBadgesCheck" Visibility="Collapsed"
                               Checked="ShowToolNumberBadgesCheck_Changed" Unchecked="ShowToolNumberBadgesCheck_Changed"/>
                     <StackPanel x:Name="ToolTogglePanel"/>
@@ -378,8 +357,6 @@
             <!-- Capture + Saving -->
             <ScrollViewer x:Name="CapturePanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
-                    <TextBlock Text="Capture" Style="{StaticResource SectionLabel}"/>
-
                     <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -574,7 +551,6 @@
             <!-- Recording -->
             <ScrollViewer x:Name="RecordingPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
-                    <TextBlock Text="Recording" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <Grid>
@@ -629,8 +605,6 @@
             <!-- OCR & Translation -->
             <ScrollViewer x:Name="OcrPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
-                    <TextBlock Text="OCR" Style="{StaticResource SectionLabel}"/>
-
                     <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -706,7 +680,7 @@
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock FontSize="13">
                                         <Run Text="Open-source Local"/>
-                                        <Run Text=" — CTranslate2 + M2M100, fully local" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
+                                        <Run Text=" — fully local" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
                                     </TextBlock>
                                     <TextBlock x:Name="OpenSourceLocalStatusText" Text="Checking install state..." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
                                     <ProgressBar x:Name="OpenSourceLocalProgressBar" Height="3" Margin="0,4,0,0"
@@ -727,7 +701,7 @@
                                     <TextBlock FontSize="13">
                                         <Hyperlink NavigateUri="https://github.com/argosopentech/argos-translate" RequestNavigate="Hyperlink_Navigate"
                                                    Foreground="{DynamicResource ThemeAccentBrush}" FontSize="13">Argos Translate</Hyperlink>
-                                        <Run Text=" — open source, local, smaller but lower quality" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
+                                        <Run Text=" — local fallback engine" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
                                     </TextBlock>
                                     <TextBlock x:Name="ArgosStatusText" Text="Checking install state..." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
                                     <ProgressBar x:Name="ArgosProgressBar" Height="3" Margin="0,4,0,0"
@@ -766,7 +740,6 @@
             <!-- We need to close and reopen for the General section -->
             <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
-                    <TextBlock Text="Sounds" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="MuteSoundsCheck" Content="Mute capture sounds" FontSize="13"
@@ -808,7 +781,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="Semantic runtime (CLIP)" FontSize="13"/>
-                                        <TextBlock x:Name="SemanticRuntimeStatusText" Text="Preparing automatically..." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="SemanticRuntimeStatusText" Text="Managed automatically." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
                                         <ProgressBar x:Name="SemanticRuntimeProgressBar" Height="3" Margin="0,4,0,0"
                                                      IsIndeterminate="True" Visibility="Collapsed"/>
                                     </StackPanel>
@@ -836,7 +809,6 @@
                           PreviewMouseMove="ToastPanel_PreviewMouseMove"
                           PreviewMouseLeftButtonUp="ToastPanel_PreviewMouseLeftButtonUp">
                 <StackPanel>
-                    <TextBlock Text="Placement" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <Grid>
@@ -907,7 +879,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="Drag a button to a slot, another button, or the shelf. Click also works: select one, then click a slot or another button to swap." FontSize="13" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Drag buttons to move them. You can also select one, then click a slot or another button." FontSize="13" TextWrapping="Wrap"/>
                                     <TextBlock x:Name="ToastEditorSelectionText" Text="Selected: Close" Style="{StaticResource InfoText}" Margin="0,4,0,0"/>
                                 </StackPanel>
                                 <Button x:Name="ResetToastButtonsBtn" Grid.Column="1" Content="Reset Layout" FontSize="11" Padding="10,5"
@@ -1077,6 +1049,21 @@
                                                                RenderOptions.BitmapScalingMode="HighQuality"
                                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     </Border>
+                                                    <Border x:Name="ToastEditorAiRedirectBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="#E0202024" BorderBrush="#30FFFFFF" BorderThickness="0.8"
+                                                            Cursor="Hand"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastEditorButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastEditorButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastEditorButton_DragEnter"
+                                                            Drop="ToastEditorButton_Drop"
+                                                            Tag="AiRedirect">
+                                                        <Image x:Name="ToastEditorAiRedirectIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
                                                     <Border x:Name="ToastEditorDeleteBtn"
                                                             Width="30" Height="30" CornerRadius="9"
                                                             Background="#E0202024" BorderBrush="#30FFFFFF" BorderThickness="0.8"
@@ -1100,7 +1087,7 @@
                                                 <StackPanel>
                                                     <TextBlock Text="Screenshot saved" FontSize="12.5" FontWeight="SemiBold"
                                                                Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
-                                                    <TextBlock Text="Pinned, saved, or dismissed from the toast." FontSize="11.5" Opacity="0.62"
+                                                    <TextBlock Text="Preview toast with overlay buttons." FontSize="11.5" Opacity="0.62"
                                                                Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
                                                 </StackPanel>
                                             </StackPanel>
@@ -1118,7 +1105,7 @@
                                         <StackPanel>
                                             <TextBlock Text="Shelf" FontSize="12.5" FontWeight="SemiBold"
                                                        Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
-                                            <TextBlock Text="Hidden buttons live here. Drag them back out or click one, then click a slot." Style="{StaticResource InfoText}" Margin="0,4,0,10"/>
+                                            <TextBlock Text="Hidden buttons live here. Drag one back out or select it, then click a slot." Style="{StaticResource InfoText}" Margin="0,4,0,10"/>
 
                                             <Border x:Name="ToastHiddenShelf"
                                                     CornerRadius="12"
@@ -1182,7 +1169,6 @@
             <!-- About -->
             <ScrollViewer x:Name="AboutPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
-                    <TextBlock Text="Updates" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="AutoUpdateCheck" Content="Automatically check for updates" FontSize="13"
@@ -1417,14 +1403,16 @@
                         <StackPanel Orientation="Horizontal">
                             <RadioButton x:Name="UploadImagesSubTab" Content="Images" GroupName="UploadSub"
                                          IsChecked="True" Click="UploadSubTabChanged" Style="{StaticResource SubTab}"/>
+                            <RadioButton x:Name="UploadAiRedirectsSubTab" Content="AI Redirects" GroupName="UploadSub"
+                                         Click="UploadSubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
                             <RadioButton x:Name="UploadStickersSubTab" Content="Stickers" GroupName="UploadSub"
+                                         Click="UploadSubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
+                            <RadioButton x:Name="UploadUpscaleSubTab" Content="Upscale" GroupName="UploadSub"
                                          Click="UploadSubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
                         </StackPanel>
                     </Border>
 
                     <StackPanel x:Name="ImageUploadsPanel">
-                    <TextBlock Text="Destination" Style="{StaticResource SectionLabel}"/>
-
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <Grid>
@@ -1438,7 +1426,6 @@
                                           PreviewTextInput="UploadDestCombo_PreviewTextInput" PreviewKeyDown="UploadDestCombo_PreviewKeyDown"
                                           SelectionChanged="UploadDestCombo_Changed">
                                     <ComboBoxItem Content="None" Tag="0"/>
-                                    <ComboBoxItem Content="✽ AI Redirects" Tag="20"/>
                                     <ComboBoxItem Content="Filter between free temporary hosts" Tag="21"/>
                                     <ComboBoxItem Content="Litterbox (temp)" Tag="4"/>
                                     <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
@@ -1464,90 +1451,6 @@
                             </Grid>
                         </StackPanel>
                     </Border>
-
-                    <controls:ProviderSection x:Name="AiChatSettings" Header="AI REDIRECTS" Visibility="Collapsed">
-                        <StackPanel>
-                            <TextBlock Text="Yoink opens the selected target in your default browser and keeps a pinned image toast on screen so you can drag the image in or press Ctrl+V." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
-                            <TextBlock Text="Google Lens is different: it still needs a public image URL, so Yoink uploads the screenshot to a host first and then opens Lens with that hosted image embedded in the link." FontSize="11" Opacity="0.24" Margin="0,0,0,8" TextWrapping="Wrap"/>
-
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Redirect target" FontSize="13" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="AiChatProviderCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="160"
-                                          SelectionChanged="AiChatProviderCombo_Changed">
-                                    <ComboBoxItem Content="ChatGPT" Tag="0"/>
-                                    <ComboBoxItem Content="Claude" Tag="1"/>
-                                    <ComboBoxItem Content="Gemini" Tag="3"/>
-                                    <ComboBoxItem Content="Google Lens" Tag="4"/>
-                                </ComboBox>
-                            </Grid>
-
-                            <CheckBox x:Name="AiRedirectHotkeyOnlyCheck"
-                                      Content="Only trigger redirects from a dedicated hotkey"
-                                      Margin="0,10,0,0"
-                                      Checked="AiRedirectHotkeyOnlyCheck_Changed"
-                                      Unchecked="AiRedirectHotkeyOnlyCheck_Changed"/>
-
-                            <Grid x:Name="AiRedirectHotkeyOnlyRow" Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Redirect hotkey" FontSize="13" VerticalAlignment="Center"/>
-                                <StackPanel x:Name="AiRedirectHotkeyRow" Grid.Column="1" Orientation="Horizontal">
-                                    <TextBox x:Name="AiRedirectHotkeyBox"
-                                             Style="{StaticResource HotkeyBox}"
-                                             GotFocus="AiRedirectHotkeyBox_GotFocus"
-                                             LostFocus="AiRedirectHotkeyBox_LostFocus"
-                                             PreviewKeyDown="AiRedirectHotkeyBox_PreviewKeyDown"
-                                             PreviewKeyUp="AiRedirectHotkeyBox_PreviewKeyUp"/>
-                                    <Button x:Name="AiRedirectHotkeyClearBtn"
-                                            Content="X"
-                                            Style="{StaticResource ClearBtn}"
-                                            Click="AiRedirectHotkeyClearBtn_Click"/>
-                                </StackPanel>
-                            </Grid>
-
-                            <Grid x:Name="AiChatLensUploadHostRow" Visibility="Collapsed" Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Lens upload host" FontSize="13" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="AiChatLensUploadDestCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="180"
-                                          SelectionChanged="AiChatLensUploadDestCombo_Changed">
-                                    <ComboBoxItem Content="Filter between free temporary hosts" Tag="21"/>
-                                    <ComboBoxItem Content="Litterbox (temp)" Tag="4"/>
-                                    <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
-                                    <ComboBoxItem Content="file.io (temp)" Tag="6"/>
-                                    <ComboBoxItem Content="tmpfiles.org (temp)" Tag="22"/>
-                                    <ComboBoxItem Content="transfer.sh (temp)" Tag="8"/>
-                                    <ComboBoxItem Content="Catbox" Tag="3"/>
-                                    <ComboBoxItem Content="Imgur" Tag="1"/>
-                                    <ComboBoxItem Content="ImgBB" Tag="2"/>
-                                    <ComboBoxItem Content="Gyazo" Tag="5"/>
-                                    <ComboBoxItem Content="Dropbox" Tag="9"/>
-                                    <ComboBoxItem Content="Google Drive" Tag="10"/>
-                                    <ComboBoxItem Content="OneDrive" Tag="11"/>
-                                    <ComboBoxItem Content="Azure Blob" Tag="12"/>
-                                    <ComboBoxItem Content="GitHub" Tag="13"/>
-                                    <ComboBoxItem Content="Immich" Tag="14"/>
-                                    <ComboBoxItem Content="FTP" Tag="15"/>
-                                    <ComboBoxItem Content="SFTP" Tag="16"/>
-                                    <ComboBoxItem Content="WebDAV" Tag="17"/>
-                                    <ComboBoxItem Content="S3 / R2 / B2" Tag="18"/>
-                                    <ComboBoxItem Content="Custom HTTP" Tag="19"/>
-                                </ComboBox>
-                            </Grid>
-
-                            <TextBlock x:Name="AiChatLensUploadHint" Visibility="Collapsed"
-                                       Text="Use a host that returns a direct public image URL. Catbox is the default because it works without API keys."
-                                       FontSize="11" Opacity="0.22" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </controls:ProviderSection>
 
                     <!-- Imgur settings -->
                     <controls:ProviderSection x:Name="ImgurSettings" Header="IMGUR" IconSource="pack://application:,,,/Assets/imgur_sq.png" Visibility="Collapsed">
@@ -1564,8 +1467,6 @@
                                 </Border>
                                 <TextBlock Text="  20MB images · 200MB GIF · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="1,250 uploads/day anonymous · 12,500/day with account" FontSize="10" Opacity="0.25" Margin="0,0,0,8"/>
-
                             <TextBlock Text="Client ID" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
                             <TextBox x:Name="ImgurClientIdBox" FontSize="11" Padding="7,4"
                                      ToolTip="Optional — has built-in default for anonymous uploads"
@@ -1597,8 +1498,6 @@
                                 </Border>
                                 <TextBlock Text="  32MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="100 uploads/hour on free tier" FontSize="10" Opacity="0.25" Margin="0,0,0,8"/>
-
                             <TextBlock Text="API key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
                             <TextBox x:Name="ImgBBKeyBox" FontSize="11" Padding="7,4"
                                      ToolTip="Get a free API key at api.imgbb.com"
@@ -1616,7 +1515,7 @@
                                 </Border>
                                 <TextBlock Text="  200MB max · Free · Permanent" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="No rate limits · No account required · No configuration needed" FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                            <TextBlock Text="No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
                         </StackPanel>
                     </controls:ProviderSection>
 
@@ -1632,7 +1531,7 @@
                                 </Border>
                                 <TextBlock Text="  200MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="No rate limits · No account required · No configuration needed" FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                            <TextBlock Text="Temporary host. No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
                         </StackPanel>
                     </controls:ProviderSection>
 
@@ -1670,7 +1569,7 @@
                                 </Border>
                                 <TextBlock Text="  100MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="No configuration needed. Files auto-delete after first download." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                            <TextBlock Text="No setup required. Files delete after the first download." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
                         </StackPanel>
                     </controls:ProviderSection>
 
@@ -1686,7 +1585,7 @@
                                 </Border>
                                 <TextBlock Text="  128MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <TextBlock Text="No configuration needed. No account required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                            <TextBlock Text="Temporary host. No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
                         </StackPanel>
                     </controls:ProviderSection>
 
@@ -1697,7 +1596,7 @@
                                     <Border Style="{StaticResource InlineTagChip}">
                                         <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
                                     </Border>
-                                    <TextBlock Text="  Works with AWS S3, Cloudflare R2, Backblaze B2, MinIO, etc." FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                                    <TextBlock Text="  AWS S3, Cloudflare R2, Backblaze B2, MinIO, and similar services" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                                 </StackPanel>
 
                                 <TextBlock Text="Endpoint URL" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
@@ -1762,7 +1661,7 @@
                                     </Border>
                                     <TextBlock Text="  10GB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <TextBlock Text="No configuration needed. Public temporary file hosting." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                                <TextBlock Text="Temporary host. No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
                         </StackPanel>
                     </controls:ProviderSection>
 
@@ -1939,6 +1838,72 @@
                     </Border>
                     </StackPanel>
 
+                    <controls:ProviderSection x:Name="AiRedirectUploadsPanel" Header="AI Redirects" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="Choose where image redirects open." FontSize="11" Opacity="0.32" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="AI tool" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="AiRedirectProviderCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="160"
+                                          SelectionChanged="AiRedirectProviderCombo_Changed">
+                                    <ComboBoxItem Content="ChatGPT" Tag="0"/>
+                                    <ComboBoxItem Content="Claude" Tag="1"/>
+                                    <ComboBoxItem Content="Gemini" Tag="3"/>
+                                    <ComboBoxItem Content="Google Lens" Tag="4"/>
+                                </ComboBox>
+                            </Grid>
+
+                            <Grid x:Name="AiRedirectHotkeyPanelRow" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="AI Redirect hotkey" FontSize="13" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="AiRedirectPanelHotkeyBox"
+                                             Style="{StaticResource HotkeyBox}"
+                                             GotFocus="AiRedirectPanelHotkeyBox_GotFocus"
+                                             LostFocus="AiRedirectPanelHotkeyBox_LostFocus"
+                                             PreviewKeyDown="AiRedirectPanelHotkeyBox_PreviewKeyDown"
+                                             PreviewKeyUp="AiRedirectPanelHotkeyBox_PreviewKeyUp"/>
+                                    <Button x:Name="AiRedirectPanelHotkeyClearBtn"
+                                            Content="X"
+                                            Style="{StaticResource ClearBtn}"
+                                            Click="AiRedirectPanelHotkeyClearBtn_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Use Toast settings to place the AI Redirect button on image toasts. Leave the hotkey empty if you only want the toast button." FontSize="11" Opacity="0.24" Margin="0,6,0,0" TextWrapping="Wrap"/>
+
+                            <Grid x:Name="AiRedirectLensUploadHostPanelRow" Visibility="Collapsed" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Lens hosted-image upload" FontSize="13" VerticalAlignment="Center"/>
+                                    <CheckBox x:Name="AiRedirectLensUploadSyncCheck"
+                                              Content="Synced with Images uploads"
+                                              FontSize="11.5"
+                                              Margin="0,6,0,0"
+                                              Checked="AiRedirectLensUploadSyncCheck_Changed"
+                                              Unchecked="AiRedirectLensUploadSyncCheck_Changed"/>
+                                </StackPanel>
+                                <ComboBox x:Name="AiRedirectLensUploadDestPanelCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="180"
+                                          SelectionChanged="AiRedirectLensUploadDestPanelCombo_Changed"/>
+                            </Grid>
+
+                            <TextBlock x:Name="AiRedirectLensUploadPanelHint" Visibility="Collapsed"
+                                       Text="Google Lens needs a public image URL, so Yoink uploads first and then opens Lens."
+                                       FontSize="11" Opacity="0.24" Margin="0,8,0,0" TextWrapping="Wrap"/>
+
+                        </StackPanel>
+                    </controls:ProviderSection>
+
                     <controls:ProviderSection x:Name="StickerUploadsPanel" Header="Sticker" Visibility="Collapsed">
                         <StackPanel>
                                 <Grid>
@@ -1988,7 +1953,7 @@
                                         </ComboBox>
                                     </Grid>
 
-                                    <TextBlock Text="List is ordered from best quality to fastest. U2Netp is the lightest option." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Pick a runtime lane first, then choose the model." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
                                     <Grid x:Name="StickerLocalCpuEnginePanel" Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
@@ -2050,6 +2015,134 @@
                                             Click="StickerOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
                                     <Button x:Name="StickerRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="StickerRemoveAllModelsBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
+                                </StackPanel>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="UpscaleUploadsPanel" Header="Upscale" Visibility="Collapsed">
+                        <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Upscale provider" FontSize="13" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="UpscaleProviderCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                              SelectionChanged="UpscaleProviderCombo_Changed">
+                                        <ComboBoxItem Content="None"/>
+                                        <ComboBoxItem Content="Local (CPU/GPU)"/>
+                                        <ComboBoxItem Content="DeepAI Super Resolution"/>
+                                        <ComboBoxItem Content="DeepAI Waifu2x"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                                <StackPanel x:Name="UpscaleDeepAiPanel" Visibility="Collapsed" Margin="0,0,0,10">
+                                    <TextBlock Text="DeepAI API key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="UpscaleDeepAiApiKeyBox" FontSize="11" Padding="7,4"
+                                             Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                             TextChanged="UpscaleDeepAiApiKeyBox_Changed"/>
+                                    <TextBlock Text="Optional cloud providers. Local remains the default." FontSize="11" Opacity="0.32" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="UpscaleLocalPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Local upscale models" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Execution mode" FontSize="13" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="UpscaleLocalExecutionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="180"
+                                                  SelectionChanged="UpscaleLocalExecutionCombo_Changed">
+                                            <ComboBoxItem Content="CPU"/>
+                                            <ComboBoxItem Content="GPU (CUDA)"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <TextBlock Text="Pick a runtime lane first, then choose the model." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                                    <Grid x:Name="UpscaleLocalCpuEnginePanel" Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="CPU model" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                            <ComboBox x:Name="UpscaleLocalCpuEngineCombo" FontSize="12" Padding="8,5" MinWidth="180"
+                                                      SelectionChanged="UpscaleLocalCpuEngineCombo_Changed">
+                                                <ComboBoxItem Content="SwinIR x4 (Faithful / UI)" Tag="SwinIrRealWorld"/>
+                                                <ComboBoxItem Content="Real-ESRGAN x4plus (Heavier)" Tag="RealEsrganX4Plus"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid x:Name="UpscaleLocalGpuEnginePanel" Margin="0,0,0,8" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="GPU model" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                            <ComboBox x:Name="UpscaleLocalGpuEngineCombo" FontSize="12" Padding="8,5" MinWidth="180"
+                                                      SelectionChanged="UpscaleLocalGpuEngineCombo_Changed">
+                                                <ComboBoxItem Content="Real-ESRGAN x4plus (Best quality)" Tag="RealEsrganX4Plus"/>
+                                                <ComboBoxItem Content="SwinIR x4 (Faithful / UI)" Tag="SwinIrRealWorld"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <Button x:Name="UpscaleInstallDriversBtn" Grid.Column="1" Content="Install onnxruntime" FontSize="12"
+                                                Padding="12,6" Margin="10,22,0,0" VerticalAlignment="Top"
+                                                Click="UpscaleInstallDriversBtn_Click" Cursor="Hand"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Result Behavior" Style="{StaticResource SectionLabel}" Margin="0,2,0,6"/>
+
+                                    <CheckBox x:Name="UpscaleShowPreviewWindowCheck"
+                                              Content="Show upscale preview window after selection"
+                                              FontSize="13"
+                                              Margin="0,0,0,0"
+                                              Checked="UpscaleShowPreviewWindowCheck_Changed"
+                                              Unchecked="UpscaleShowPreviewWindowCheck_Changed"/>
+
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Default multiplier" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="UpscaleDefaultScaleHelpText"
+                                                       Text="Used when preview is off."
+                                                       FontSize="11"
+                                                       Opacity="0.32"
+                                                       Margin="0,0,0,6"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ComboBox x:Name="UpscaleDefaultScaleCombo"
+                                                  Grid.Column="1"
+                                                  FontSize="12"
+                                                  Padding="8,5"
+                                                  MinWidth="120"
+                                                  Margin="10,0,0,0"
+                                                  SelectionChanged="UpscaleDefaultScaleCombo_Changed"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Output Styling" Style="{StaticResource SectionLabel}" Margin="0,10,0,6"/>
+
+                                    <TextBlock x:Name="UpscaleLocalEngineStatusText" Text="Pick a model. Models download automatically on first use." FontSize="11" Opacity="0.35" TextWrapping="Wrap"/>
+                                    <ProgressBar x:Name="UpscaleLocalEngineProgress" Height="6" Margin="0,8,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="UpscaleLocalEngineProgressText" FontSize="10" Opacity="0.25" Margin="0,4,0,0" Visibility="Collapsed"/>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <Button x:Name="UpscaleDownloadModelBtn" Content="Download model" FontSize="12" Padding="12,6"
+                                            Click="UpscaleDownloadModelBtn_Click" Cursor="Hand"/>
+                                    <Button x:Name="UpscaleOpenLocalEngineRepoBtn" Content="Open project" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                            Click="UpscaleOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
+                                    <Button x:Name="UpscaleRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                            Click="UpscaleRemoveAllModelsBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
                                 </StackPanel>
                         </StackPanel>
                     </controls:ProviderSection>

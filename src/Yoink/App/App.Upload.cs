@@ -173,6 +173,75 @@ public partial class App
         }
     }
 
+    private async Task StartAiRedirectAsync(string filePath, Services.HistoryEntry? historyEntry = null)
+    {
+        try
+        {
+            var settings = _settingsService!.Settings.ImageUploadSettings;
+            SoundService.PlayUploadStartSound();
+            var previewBitmap = TryLoadPreviewBitmap(filePath);
+            try
+            {
+                var providerName = UploadService.GetAiChatProviderName(settings.AiChatProvider);
+                if (settings.AiChatProvider == AiChatProvider.GoogleLens)
+                {
+                    var lensUpload = await TryUploadForGoogleLensAsync(filePath, settings);
+                    if (!lensUpload.Success || string.IsNullOrWhiteSpace(lensUpload.Url))
+                    {
+                        var errMsg = CleanErrorMessage(lensUpload.Error);
+                        var saved = Path.GetFileName(filePath);
+                        ToastWindow.ShowError("Google Lens upload failed", $"Saved to {saved}\n{errMsg}", filePath);
+                        return;
+                    }
+
+                    var lensUrl = UploadService.BuildGoogleLensUrl(lensUpload.Url);
+                    OpenExternalUrl(lensUrl);
+                    SoundService.PlayUploadDoneSound();
+                    previewBitmap?.Dispose();
+                    previewBitmap = null;
+                    ToastWindow.Show(ToastSpec.Standard("Google Lens Ready", $"Opened from {lensUpload.ProviderName}.", filePath) with { SuppressSound = true });
+                    return;
+                }
+
+                var startUrl = UploadService.BuildAiChatStartUrl(settings.AiChatProvider);
+                OpenExternalUrl(startUrl);
+                SoundService.PlayUploadDoneSound();
+                if (previewBitmap is not null)
+                {
+                    ClipboardService.CopyToClipboard(previewBitmap, filePath);
+                    ToastWindow.Show(ToastSpec.ImagePreview(
+                        previewBitmap,
+                        "AI Redirect Ready",
+                        $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V.",
+                        filePath,
+                        autoPin: true,
+                        transparentShell: false,
+                        showOverlayButtons: true,
+                        clickActionUrl: startUrl,
+                        clickActionLabel: providerName) with { SuppressSound = true });
+                    previewBitmap = null;
+                }
+                else
+                {
+                    ToastWindow.Show(ToastSpec.Standard("AI Redirect Ready", $"Opened {providerName}. Use Ctrl+V in the chat box.", filePath) with { SuppressSound = true });
+                }
+            }
+            finally
+            {
+                previewBitmap?.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("ai-redirect.error", ex, $"Unexpected AI redirect error for {Path.GetFileName(filePath)}.");
+            ToastWindow.ShowError("AI Redirect failed", CleanErrorMessage(ex.Message), filePath);
+        }
+        finally
+        {
+            ScheduleIdleMemoryTrim();
+        }
+    }
+
     private static void OpenExternalUrl(string url)
     {
         if (string.IsNullOrWhiteSpace(url))

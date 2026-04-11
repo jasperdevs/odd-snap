@@ -28,6 +28,7 @@ public sealed class TrayIcon : IDisposable
     public TrayIcon(AppSettings? settings = null)
     {
         _settings = settings;
+        Theme.Refresh();
         _defaultIcon = CreateDefaultIcon();
         _notifyIcon = new NotifyIcon
         {
@@ -189,6 +190,7 @@ public sealed class TrayIcon : IDisposable
 
     private void ShowMenu()
     {
+        RefreshTrayIconTheme();
         var fresh = CreateThemedMenu();
         var previous = _notifyIcon.ContextMenuStrip;
         _notifyIcon.ContextMenuStrip = fresh;
@@ -203,32 +205,36 @@ public sealed class TrayIcon : IDisposable
 
     private static Icon CreateDefaultIcon()
     {
+        Theme.Refresh();
+        var tint = Theme.IsDark ? Color.White : Color.Black;
         try
         {
             var exe = Environment.ProcessPath;
             if (!string.IsNullOrEmpty(exe) && System.IO.File.Exists(exe))
             {
                 var icon = Icon.ExtractAssociatedIcon(exe);
-                if (icon != null) return ToGrayscaleIcon(icon);
+                if (icon != null) return ToMonochromeIcon(icon, tint);
             }
         }
         catch { }
-        return CreateFallbackIcon(false);
+        return CreateFallbackIcon(false, tint);
     }
 
     private static Icon CreateRecordingIcon()
     {
+        Theme.Refresh();
+        var tint = Theme.IsDark ? Color.White : Color.Black;
         try
         {
             var exe = Environment.ProcessPath;
             if (!string.IsNullOrEmpty(exe) && System.IO.File.Exists(exe))
             {
                 var icon = Icon.ExtractAssociatedIcon(exe);
-                if (icon != null) return OverlayRecordingDot(ToGrayscaleIcon(icon));
+                if (icon != null) return OverlayRecordingDot(ToMonochromeIcon(icon, tint));
             }
         }
         catch { }
-        return CreateFallbackIcon(true);
+        return CreateFallbackIcon(true, tint);
     }
 
     private static Icon OverlayRecordingDot(Icon baseIcon)
@@ -249,44 +255,49 @@ public sealed class TrayIcon : IDisposable
         return result;
     }
 
-    private static Icon CreateFallbackIcon(bool recording)
+    private static Icon CreateFallbackIcon(bool recording, Color strokeColor)
     {
         var bmp = new Bitmap(32, 32);
         using var g = Graphics.FromImage(bmp);
         g.Clear(Color.FromArgb(0, 0, 0, 0));
-        using var pen = new Pen(Color.White, 3f);
+        using var pen = new Pen(strokeColor, 3f);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.DrawLine(pen, 6, 4, 16, 16);
         g.DrawLine(pen, 26, 4, 16, 16);
         g.DrawLine(pen, 16, 16, 16, 28);
         if (recording)
         {
-            using var white = new SolidBrush(Color.White);
-            g.FillEllipse(white, 20, 21, 12, 12);
+            using var halo = new SolidBrush(strokeColor);
+            g.FillEllipse(halo, 20, 21, 12, 12);
             using var red = new SolidBrush(Color.FromArgb(239, 68, 68));
             g.FillEllipse(red, 21, 22, 10, 10);
         }
         return CreateOwnedIcon(bmp);
     }
 
-    private static Icon ToGrayscaleIcon(Icon icon)
+    private static Icon ToMonochromeIcon(Icon icon, Color tint)
     {
         using var bmp = icon.ToBitmap();
-        var gray = new Bitmap(bmp.Width, bmp.Height);
-        using var g = Graphics.FromImage(gray);
-        var matrix = new System.Drawing.Imaging.ColorMatrix(new[]
+        var mono = new Bitmap(bmp.Width, bmp.Height);
+        for (int y = 0; y < bmp.Height; y++)
         {
-            new[] { 0.299f, 0.299f, 0.299f, 0f, 0f },
-            new[] { 0.587f, 0.587f, 0.587f, 0f, 0f },
-            new[] { 0.114f, 0.114f, 0.114f, 0f, 0f },
-            new[] { 0f, 0f, 0f, 1f, 0f },
-            new[] { 0f, 0f, 0f, 0f, 1f }
-        });
-        using var attrs = new System.Drawing.Imaging.ImageAttributes();
-        attrs.SetColorMatrix(matrix);
-        g.DrawImage(bmp, new Rectangle(0, 0, gray.Width, gray.Height),
-            0, 0, bmp.Width, bmp.Height, GraphicsUnit.Pixel, attrs);
-        return CreateOwnedIcon(gray);
+            for (int x = 0; x < bmp.Width; x++)
+            {
+                var px = bmp.GetPixel(x, y);
+                mono.SetPixel(x, y, Color.FromArgb(px.A, tint.R, tint.G, tint.B));
+            }
+        }
+
+        return CreateOwnedIcon(mono);
+    }
+
+    private void RefreshTrayIconTheme()
+    {
+        _defaultIcon?.Dispose();
+        _recordingIcon?.Dispose();
+        _defaultIcon = CreateDefaultIcon();
+        _recordingIcon = null;
+        _notifyIcon.Icon = _isShowingRecording ? (_recordingIcon = CreateRecordingIcon()) : _defaultIcon;
     }
 
     private static Icon CreateOwnedIcon(Bitmap bitmap)

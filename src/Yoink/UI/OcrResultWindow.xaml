@@ -124,30 +124,31 @@
             </Grid.RowDefinitions>
 
             <!-- Title bar -->
-            <Border Grid.Row="0" MouseDown="TitleBar_MouseDown" Background="Transparent">
-                <DockPanel Margin="14,0,6,0">
-                    <TextBlock Text="Text Capture" FontSize="12" FontFamily="Segoe UI Variable Text"
-                               FontWeight="SemiBold" VerticalAlignment="Center" Opacity="0.7"
-                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Border Grid.Row="0" Padding="16,8,0,0" MouseDown="TitleBar_MouseDown" Background="Transparent">
+                <Grid>
+                    <TextBlock Text="Text Capture" FontSize="12.5" FontWeight="SemiBold"
+                               FontFamily="Segoe UI Variable Display"
+                               Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.85"
+                               VerticalAlignment="Center"/>
 
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <Border Width="32" Height="32" CornerRadius="6" Cursor="Hand" Background="Transparent"
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-8,0,0">
+                        <Border Width="40" Height="34" CornerRadius="0" Cursor="Hand" Background="Transparent"
                                 MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
-                                MouseDown="MinimizeBtn_Click" VerticalAlignment="Center">
+                                MouseDown="MinimizeBtn_Click">
                             <Canvas Width="12" Height="2" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Line X1="0" Y1="1" X2="12" Y2="1" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.4"/>
                             </Canvas>
                         </Border>
-                        <Border x:Name="CloseTitleBtn" Width="32" Height="32" CornerRadius="6" Cursor="Hand" Background="Transparent"
+                        <Border x:Name="CloseTitleBtn" Width="40" Height="34" CornerRadius="0,11,0,0" Cursor="Hand" Background="Transparent"
                                 MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
-                                MouseDown="CloseBtn_Click" VerticalAlignment="Center" Margin="2,0,0,0">
+                                MouseDown="CloseBtn_Click">
                             <Canvas Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <Line X1="0" Y1="0" X2="12" Y2="12" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.4"/>
                                 <Line X1="12" Y1="0" X2="0" Y2="12" Stroke="{DynamicResource ThemeTextSecondaryBrush}" StrokeThickness="1.4"/>
                             </Canvas>
                         </Border>
                     </StackPanel>
-                </DockPanel>
+                </Grid>
             </Border>
 
             <!-- OCR text -->

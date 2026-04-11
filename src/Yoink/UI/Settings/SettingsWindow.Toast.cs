@@ -41,6 +41,7 @@ public partial class SettingsWindow
         ToastEditorCloseIcon.Source = Helpers.StreamlineIcons.RenderWpf("close", white, 20);
         ToastEditorPinIcon.Source = Helpers.StreamlineIcons.RenderWpf("pin", white, 20);
         ToastEditorSaveIcon.Source = Helpers.StreamlineIcons.RenderWpf("download", white, 20);
+        ToastEditorAiRedirectIcon.Source = Helpers.ToolIcons.RenderAiRedirectWpf(white, 20);
         ToastEditorDeleteIcon.Source = Helpers.StreamlineIcons.RenderWpf("trash", white, 20);
     }
 
@@ -52,6 +53,7 @@ public partial class SettingsWindow
         UpdateToastEditorButton(ToastEditorCloseBtn, ToastButtonKind.Close);
         UpdateToastEditorButton(ToastEditorPinBtn, ToastButtonKind.Pin);
         UpdateToastEditorButton(ToastEditorSaveBtn, ToastButtonKind.Save);
+        UpdateToastEditorButton(ToastEditorAiRedirectBtn, ToastButtonKind.AiRedirect);
         UpdateToastEditorButton(ToastEditorDeleteBtn, ToastButtonKind.Delete);
         UpdateToastEditorSlot(ToastSlotTopLeft, ToastButtonSlot.TopLeft);
         UpdateToastEditorSlot(ToastSlotTopInnerLeft, ToastButtonSlot.TopInnerLeft);
@@ -268,6 +270,7 @@ public partial class SettingsWindow
     {
         "Pin" => ToastButtonKind.Pin,
         "Save" => ToastButtonKind.Save,
+        "AiRedirect" => ToastButtonKind.AiRedirect,
         "Delete" => ToastButtonKind.Delete,
         _ => ToastButtonKind.Close
     };
@@ -290,7 +293,7 @@ public partial class SettingsWindow
         ToastHiddenShelfDropCue.Visibility = Visibility.Collapsed;
         ToastHiddenButtonsPanel.Children.Clear();
 
-        foreach (var button in new[] { ToastButtonKind.Close, ToastButtonKind.Pin, ToastButtonKind.Save, ToastButtonKind.Delete })
+        foreach (var button in new[] { ToastButtonKind.Close, ToastButtonKind.Pin, ToastButtonKind.Save, ToastButtonKind.AiRedirect, ToastButtonKind.Delete })
         {
             if (ToastButtonLayout.IsVisible(ToastButtons, button))
                 continue;
@@ -323,6 +326,7 @@ public partial class SettingsWindow
             ToastButtonKind.Close => BuildCloseGlyph(),
             ToastButtonKind.Pin => BuildPinGlyph(),
             ToastButtonKind.Save => BuildSaveGlyph(),
+            ToastButtonKind.AiRedirect => BuildAiRedirectGlyph(),
             _ => BuildDeleteGlyph()
         };
 
@@ -394,6 +398,7 @@ public partial class SettingsWindow
         if (IsPointOverElement(ToastEditorCloseBtn, pos) && ToastEditorCloseBtn.Visibility == Visibility.Visible) return ToastButtonKind.Close;
         if (IsPointOverElement(ToastEditorPinBtn, pos) && ToastEditorPinBtn.Visibility == Visibility.Visible) return ToastButtonKind.Pin;
         if (IsPointOverElement(ToastEditorSaveBtn, pos) && ToastEditorSaveBtn.Visibility == Visibility.Visible) return ToastButtonKind.Save;
+        if (IsPointOverElement(ToastEditorAiRedirectBtn, pos) && ToastEditorAiRedirectBtn.Visibility == Visibility.Visible) return ToastButtonKind.AiRedirect;
         if (IsPointOverElement(ToastEditorDeleteBtn, pos) && ToastEditorDeleteBtn.Visibility == Visibility.Visible) return ToastButtonKind.Delete;
         return null;
     }
@@ -442,6 +447,7 @@ public partial class SettingsWindow
                 ToastButtonKind.Close => BuildCloseGlyph(),
                 ToastButtonKind.Pin => BuildPinGlyph(),
                 ToastButtonKind.Save => BuildSaveGlyph(),
+                ToastButtonKind.AiRedirect => BuildAiRedirectGlyph(),
                 _ => BuildDeleteGlyph()
             });
             ToastDragGhost.Tag = button;
@@ -530,5 +536,20 @@ public partial class SettingsWindow
     private static System.Windows.Controls.Image BuildCloseGlyph() => BuildStreamlineIcon("close");
     private static System.Windows.Controls.Image BuildPinGlyph() => BuildStreamlineIcon("pin");
     private static System.Windows.Controls.Image BuildSaveGlyph() => BuildStreamlineIcon("download");
+    private static System.Windows.Controls.Image BuildAiRedirectGlyph()
+    {
+        var white = System.Drawing.Color.FromArgb(230, 255, 255, 255);
+        var img = new System.Windows.Controls.Image
+        {
+            Source = Helpers.ToolIcons.RenderAiRedirectWpf(white, 20),
+            Width = 14,
+            Height = 14,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center
+        };
+        System.Windows.Media.RenderOptions.SetBitmapScalingMode(img, System.Windows.Media.BitmapScalingMode.HighQuality);
+        return img;
+    }
     private static System.Windows.Controls.Image BuildDeleteGlyph() => BuildStreamlineIcon("trash");
 }

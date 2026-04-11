@@ -8,6 +8,7 @@ public enum CaptureMode
     Ocr,
     Scan,
     Sticker,
+    Upscale,
 
     Select,
     Ruler,

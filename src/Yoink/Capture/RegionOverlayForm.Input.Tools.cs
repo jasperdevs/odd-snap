@@ -302,6 +302,7 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Ocr when !_isSelecting:
             case CaptureMode.Scan when !_isSelecting:
             case CaptureMode.Sticker when !_isSelecting:
+            case CaptureMode.Upscale when !_isSelecting:
                 if (IsPointInOverlayUi(e.Location))
                 {
                     var oldDetect = _autoDetectRect;
@@ -319,6 +320,7 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Ocr when _isSelecting:
             case CaptureMode.Scan when _isSelecting:
             case CaptureMode.Sticker when _isSelecting:
+            case CaptureMode.Upscale when _isSelecting:
                 var oldSelectionRect = _selectionRect;
                 bool wasOcrSelection = _mode == CaptureMode.Ocr;
                 bool wasScanSelection = _mode == CaptureMode.Scan;
@@ -538,10 +540,12 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Ocr when _isSelecting:
             case CaptureMode.Scan when _isSelecting:
             case CaptureMode.Sticker when _isSelecting:
+            case CaptureMode.Upscale when _isSelecting:
                 _isSelecting = false;
                 bool isOcr = _mode == CaptureMode.Ocr;
                 bool isScan = _mode == CaptureMode.Scan;
                 bool isSticker = _mode == CaptureMode.Sticker;
+                bool isUpscale = _mode == CaptureMode.Upscale;
                 if (!_hasDragged)
                 {
                     if (_windowDetectionMode != WindowDetectionMode.Off)
@@ -564,6 +568,7 @@ public sealed partial class RegionOverlayForm
                     if (isOcr) OcrRegionSelected?.Invoke(clickRect);
                     else if (isScan) ScanRegionSelected?.Invoke(clickRect);
                     else if (isSticker) StickerRegionSelected?.Invoke(clickRect);
+                    else if (isUpscale) UpscaleRegionSelected?.Invoke(clickRect);
                     else RegionSelected?.Invoke(clickRect);
                 }
                 else if (_selectionRect.Width > 2 && _selectionRect.Height > 2)
@@ -573,6 +578,7 @@ public sealed partial class RegionOverlayForm
                     if (isOcr) OcrRegionSelected?.Invoke(_selectionRect);
                     else if (isScan) ScanRegionSelected?.Invoke(_selectionRect);
                     else if (isSticker) StickerRegionSelected?.Invoke(_selectionRect);
+                    else if (isUpscale) UpscaleRegionSelected?.Invoke(_selectionRect);
                     else RegionSelected?.Invoke(_selectionRect);
                 }
                 else { _hasSelection = false; Invalidate(); }

@@ -18,6 +18,8 @@ public static class StreamlineIcons
     private static readonly string[] KnownIcons =
     {
         "rect", "free", "ocr", "sticker", "picker", "scan",
+        "upscale",
+        "ai_redirect",
         "select", "arrow", "curvedArrow", "text", "highlight", "blur",
         "step", "draw", "line", "ruler", "rectShape", "circleShape",
         "emoji", "eraser", "gear", "close", "more", "record", "folder",
@@ -84,7 +86,7 @@ public static class StreamlineIcons
             bounds.Width - iconInset * 2f,
             bounds.Height - iconInset * 2f);
 
-        // Icons are white — tint to the requested color via ColorMatrix
+        // Icons are stored as white-on-transparent PNGs and tinted to the requested color.
         float r = color.R / 255f;
         float gr = color.G / 255f;
         float b2 = color.B / 255f;

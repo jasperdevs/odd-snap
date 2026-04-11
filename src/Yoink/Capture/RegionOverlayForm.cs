@@ -336,6 +336,7 @@ public sealed partial class RegionOverlayForm : Form
     public event Action<string>? ColorPicked;
     public event Action<Rectangle>? ScanRegionSelected;
     public event Action<Rectangle>? StickerRegionSelected;
+    public event Action<Rectangle>? UpscaleRegionSelected;
     public event Action? SelectionCancelled;
     public RegionOverlayForm(Bitmap screenshot, Rectangle virtualBounds,
         CaptureMode initialMode = CaptureMode.Rectangle,

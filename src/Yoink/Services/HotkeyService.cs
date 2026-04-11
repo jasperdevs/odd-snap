@@ -11,17 +11,19 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_SCAN = 9004;
     private const int HOTKEY_RULER = 9005;
     private const int HOTKEY_STICKER = 9006;
-    private const int HOTKEY_GIF = 9007;
-    private const int HOTKEY_FULLSCREEN = 9008;
-    private const int HOTKEY_ACTIVE_WINDOW = 9009;
-    private const int HOTKEY_SCROLL_CAPTURE = 9010;
-    private const int HOTKEY_AI_REDIRECT = 9011;
+    private const int HOTKEY_UPSCALE = 9007;
+    private const int HOTKEY_GIF = 9008;
+    private const int HOTKEY_FULLSCREEN = 9009;
+    private const int HOTKEY_ACTIVE_WINDOW = 9010;
+    private const int HOTKEY_SCROLL_CAPTURE = 9011;
+    private const int HOTKEY_AI_REDIRECT = 9012;
     private bool _captureRegistered;
     private bool _ocrRegistered;
     private bool _pickerRegistered;
     private bool _scanRegistered;
     private bool _rulerRegistered;
     private bool _stickerRegistered;
+    private bool _upscaleRegistered;
     private bool _gifRegistered;
     private bool _fullscreenRegistered;
     private bool _activeWindowRegistered;
@@ -35,6 +37,7 @@ public sealed class HotkeyService : IDisposable
     public event Action? ScanHotkeyPressed;
     public event Action? RulerHotkeyPressed;
     public event Action? StickerHotkeyPressed;
+    public event Action? UpscaleHotkeyPressed;
     public event Action? GifHotkeyPressed;
     public event Action? FullscreenHotkeyPressed;
     public event Action? ActiveWindowHotkeyPressed;
@@ -77,6 +80,7 @@ public sealed class HotkeyService : IDisposable
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCAN);
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_RULER);
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_STICKER);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_UPSCALE);
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_GIF);
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_FULLSCREEN);
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_ACTIVE_WINDOW);
@@ -88,6 +92,7 @@ public sealed class HotkeyService : IDisposable
         _scanRegistered = false;
         _rulerRegistered = false;
         _stickerRegistered = false;
+        _upscaleRegistered = false;
         _gifRegistered = false;
         _fullscreenRegistered = false;
         _activeWindowRegistered = false;
@@ -125,6 +130,11 @@ public sealed class HotkeyService : IDisposable
         return RegisterHotkey(ref _stickerRegistered, HOTKEY_STICKER, modifiers, key);
     }
 
+    public bool RegisterUpscale(uint modifiers, uint key)
+    {
+        return RegisterHotkey(ref _upscaleRegistered, HOTKEY_UPSCALE, modifiers, key);
+    }
+
     public bool RegisterGif(uint modifiers, uint key)
     {
         return RegisterHotkey(ref _gifRegistered, HOTKEY_GIF, modifiers, key);
@@ -158,6 +168,7 @@ public sealed class HotkeyService : IDisposable
         if (_scanRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCAN); _scanRegistered = false; }
         if (_rulerRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_RULER); _rulerRegistered = false; }
         if (_stickerRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_STICKER); _stickerRegistered = false; }
+        if (_upscaleRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_UPSCALE); _upscaleRegistered = false; }
         if (_gifRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_GIF); _gifRegistered = false; }
         if (_fullscreenRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_FULLSCREEN); _fullscreenRegistered = false; }
         if (_activeWindowRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_ACTIVE_WINDOW); _activeWindowRegistered = false; }
@@ -180,6 +191,7 @@ public sealed class HotkeyService : IDisposable
         else if (id == HOTKEY_SCAN) { InvokeHandlersSafely(ScanHotkeyPressed, "hotkey.scan"); handled = true; }
         else if (id == HOTKEY_RULER) { InvokeHandlersSafely(RulerHotkeyPressed, "hotkey.ruler"); handled = true; }
         else if (id == HOTKEY_STICKER) { InvokeHandlersSafely(StickerHotkeyPressed, "hotkey.sticker"); handled = true; }
+        else if (id == HOTKEY_UPSCALE) { InvokeHandlersSafely(UpscaleHotkeyPressed, "hotkey.upscale"); handled = true; }
         else if (id == HOTKEY_GIF) { InvokeHandlersSafely(GifHotkeyPressed, "hotkey.gif"); handled = true; }
         else if (id == HOTKEY_FULLSCREEN) { InvokeHandlersSafely(FullscreenHotkeyPressed, "hotkey.fullscreen"); handled = true; }
         else if (id == HOTKEY_ACTIVE_WINDOW) { InvokeHandlersSafely(ActiveWindowHotkeyPressed, "hotkey.active-window"); handled = true; }

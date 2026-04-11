@@ -106,13 +106,12 @@ public sealed class UploadServiceTests
     }
 
     [Fact]
-    public void ShouldUploadScreenshot_AllowsAiRedirectHotkeyEvenWhenAutoUploadScreenshotsIsOff()
+    public void ShouldUploadScreenshot_AllowsAiRedirectCaptureWhenAiRedirectDestinationIsUsed()
     {
         var settings = new AppSettings
         {
             AutoUploadScreenshots = false,
-            ImageUploadDestination = UploadDestination.AiChat,
-            AiRedirectHotkeyOnly = true
+            ImageUploadDestination = UploadDestination.AiChat
         };
 
         Assert.True(UploadService.ShouldUploadScreenshot(settings, hasFilePath: true, useAiRedirect: true));

@@ -393,6 +393,53 @@ public partial class App
                     });
                 };
 
+                overlay.UpscaleRegionSelected += sel =>
+                {
+                    overlay.Hide();
+                    using var annotated = overlay.RenderAnnotatedBitmap();
+                    var upscaled = ScreenCapture.CropRegion(annotated, sel);
+                    overlay.Close();
+                    System.Windows.Forms.Application.ExitThread();
+
+                    Dispatcher.BeginInvoke(async () =>
+                    {
+                        try
+                        {
+                            var upscaleSettings = _settingsService!.Settings.UpscaleUploadSettings ?? new UpscaleSettings();
+                            if (upscaleSettings.ShowPreviewWindow)
+                            {
+                                var previewWindow = new UpscaleResultWindow(upscaled, _settingsService!, (result, providerName) =>
+                                {
+                                    HandleUpscaleResult(result, providerName);
+                                });
+                                previewWindow.Show();
+                            }
+                            else
+                            {
+                                ToastWindow.Show("Upscale", "Processing, please wait...");
+                                var processed = await UpscaleService.ProcessAsync(upscaled, upscaleSettings);
+                                if (processed.Success && processed.Image is not null)
+                                {
+                                    HandleUpscaleResult(processed.Image, processed.ProviderName);
+                                }
+                                else
+                                {
+                                    ToastWindow.ShowError("Upscale failed", processed.Error ?? "No upscale model configured");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            AppDiagnostics.LogError("capture.upscale", ex);
+                            ToastWindow.ShowError("Upscale failed", ex.Message);
+                        }
+                        finally
+                        {
+                            upscaled.Dispose();
+                        }
+                    });
+                };
+
                 overlay.ColorPicked += hex =>
                 {
                     Dispatcher.BeginInvoke(() =>

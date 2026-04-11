@@ -44,7 +44,7 @@ public sealed partial class RegionOverlayForm
 
         bool isOcr = _mode == CaptureMode.Ocr;
         bool isScan = _mode == CaptureMode.Scan;
-        bool isSelectionMode = _mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker;
+        bool isSelectionMode = _mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker or CaptureMode.Upscale;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -103,6 +103,7 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Ocr when _hasSelection:
             case CaptureMode.Scan when _hasSelection:
             case CaptureMode.Sticker when _hasSelection:
+            case CaptureMode.Upscale when _hasSelection:
                 // Subtle outer shadow
                 {
                     var sr = _selectionRect;

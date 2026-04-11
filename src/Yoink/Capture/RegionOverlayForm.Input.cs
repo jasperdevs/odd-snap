@@ -232,6 +232,7 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Ocr:
             case CaptureMode.Scan:
             case CaptureMode.Sticker:
+            case CaptureMode.Upscale:
                 HideToolbarForCaptureTool();
                 if (_windowDetectionMode == WindowDetectionMode.Off)
                 {

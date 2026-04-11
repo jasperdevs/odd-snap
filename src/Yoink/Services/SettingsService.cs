@@ -219,6 +219,9 @@ public sealed class SettingsService : IDisposable
     private static AppSettings DeserializeSettings(string json)
     {
         var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
+        settings.ImageUploadSettings ??= new UploadSettings();
+        settings.StickerUploadSettings ??= new StickerSettings();
+        settings.UpscaleUploadSettings ??= new UpscaleSettings();
 
         if (settings.CompressHistory && settings.CaptureImageFormat == CaptureImageFormat.Png)
             settings.CaptureImageFormat = CaptureImageFormat.Jpeg;
@@ -253,6 +256,9 @@ public sealed class SettingsService : IDisposable
 
         if (settings.StickerUploadSettings.Provider == StickerProvider.None)
             settings.StickerUploadSettings.Provider = StickerProvider.LocalCpu;
+
+        if (settings.UpscaleUploadSettings.Provider == UpscaleProvider.None)
+            settings.UpscaleUploadSettings.Provider = UpscaleProvider.Local;
 
         if (settings.ImageUploadDestination == UploadDestination.TransferSh)
             settings.ImageUploadDestination = UploadDestination.TempHosts;

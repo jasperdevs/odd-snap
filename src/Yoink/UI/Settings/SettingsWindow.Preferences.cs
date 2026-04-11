@@ -261,6 +261,7 @@ public partial class SettingsWindow
                 SemanticRuntimeInstallBtn.IsEnabled = false;
                 SemanticRuntimeProgressBar.Visibility = Visibility.Visible;
                 SemanticRuntimeSection.Visibility = Visibility.Visible;
+                SetLoadingTextShimmer(SemanticRuntimeStatusText, true, 0.7, 0.45);
                 LoadImageSearchSources();
                 return Task.CompletedTask;
             }
@@ -291,6 +292,7 @@ public partial class SettingsWindow
             SemanticRuntimeInstallBtn.IsEnabled = true;
             SemanticRuntimeProgressBar.Visibility = Visibility.Collapsed;
             SemanticRuntimeSection.Visibility = hasActionableIssue ? Visibility.Visible : Visibility.Collapsed;
+            SetLoadingTextShimmer(SemanticRuntimeStatusText, false, 0.7, 0.45);
             LoadImageSearchSources();
         }
         catch (Exception ex)
@@ -303,6 +305,7 @@ public partial class SettingsWindow
             SemanticRuntimeInstallBtn.IsEnabled = true;
             SemanticRuntimeProgressBar.Visibility = Visibility.Collapsed;
             SemanticRuntimeSection.Visibility = Visibility.Visible;
+            SetLoadingTextShimmer(SemanticRuntimeStatusText, false, 0.7, 0.45);
             LoadImageSearchSources();
         }
 

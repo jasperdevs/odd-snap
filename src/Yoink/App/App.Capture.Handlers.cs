@@ -61,12 +61,18 @@ public partial class App
                         ClipboardService.CopyToClipboard(persisted.Output);
                     ResetCapturing();
 
-                    bool willUpload = UploadService.ShouldUploadScreenshot(
+                    bool willAiRedirect = useAiRedirect && persisted.FilePath != null;
+                    bool willUpload = !willAiRedirect && UploadService.ShouldUploadScreenshot(
                         settings,
                         hasFilePath: persisted.FilePath != null,
                         useAiRedirect: useAiRedirect);
 
-                    if (willUpload)
+                    if (willAiRedirect)
+                    {
+                        persisted.Output.Dispose();
+                        _ = StartAiRedirectAsync(persisted.FilePath!, persisted.HistoryEntry);
+                    }
+                    else if (willUpload)
                     {
                         // Don't show preview toast yet — upload handler will show result
                         persisted.Output.Dispose();
@@ -144,6 +150,67 @@ public partial class App
                         && settings.ImageUploadDestination != UploadDestination.None)
                     {
                         _ = UploadFileAsync(persisted.FilePath, "Sticker", persisted.HistoryEntry);
+                    }
+
+                    ScheduleIdleMemoryTrim();
+                });
+            }, TaskScheduler.Default);
+    }
+
+    private void HandleUpscaleResult(Bitmap result, string providerName)
+    {
+        var settings = _settingsService!.Settings;
+        string? requestedPath = null;
+        if (settings.SaveToFile)
+        {
+            var defaultUpscalePath = Path.Combine(settings.SaveDirectory, $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_upscale.png");
+            requestedPath = settings.AskForFileNameOnSave
+                ? ResolveSavePath(defaultUpscalePath, CaptureImageFormat.Png)
+                : defaultUpscalePath;
+            if (requestedPath is null)
+            {
+                result.Dispose();
+                ResetCapturing();
+                return;
+            }
+        }
+
+        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: false, providerName: providerName)
+            .ContinueWith(task =>
+            {
+                if (task.IsFaulted)
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        ResetCapturing();
+                        ToastWindow.ShowError("Upscale error", task.Exception?.GetBaseException().Message ?? "Upscale processing failed");
+                        ScheduleIdleMemoryTrim();
+                    });
+                    return;
+                }
+
+                var persisted = task.Result;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    var action = NormalizeAfterCaptureAction(settings.AfterCapture);
+                    if (ShouldCopyAfterCapture(action))
+                        ClipboardService.CopyToClipboard(persisted.Output);
+                    ResetCapturing();
+
+                    if (ShouldPreviewAfterCapture(action))
+                    {
+                        ToastWindow.ShowImagePreview(persisted.Output, persisted.FilePath, settings.AutoPinPreviews);
+                    }
+                    else
+                    {
+                        persisted.Output.Dispose();
+                        ToastWindow.Show(ShouldCopyAfterCapture(action) ? "Upscale copied" : "Upscale ready");
+                    }
+
+                    if (persisted.FilePath != null && settings.AutoUploadScreenshots
+                        && settings.ImageUploadDestination != UploadDestination.None)
+                    {
+                        _ = UploadFileAsync(persisted.FilePath, "Upscale", persisted.HistoryEntry);
                     }
 
                     ScheduleIdleMemoryTrim();

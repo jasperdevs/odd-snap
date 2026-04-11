@@ -103,6 +103,8 @@ public sealed class AppSettings
         public ToastButtonSlot PinSlot { get; set; } = ToastButtonSlot.TopLeft;
         public bool ShowSave { get; set; } = true;
         public ToastButtonSlot SaveSlot { get; set; } = ToastButtonSlot.BottomRight;
+        public bool ShowAiRedirect { get; set; }
+        public ToastButtonSlot AiRedirectSlot { get; set; } = ToastButtonSlot.BottomInnerRight;
         public bool ShowDelete { get; set; }
         public ToastButtonSlot DeleteSlot { get; set; } = ToastButtonSlot.BottomLeft;
     }
@@ -131,6 +133,8 @@ public sealed class AppSettings
     public uint ScanHotkeyKey { get; set; }
     public uint StickerHotkeyModifiers { get; set; }
     public uint StickerHotkeyKey { get; set; }
+    public uint UpscaleHotkeyModifiers { get; set; }
+    public uint UpscaleHotkeyKey { get; set; }
     public uint FullscreenHotkeyModifiers { get; set; }
     public uint FullscreenHotkeyKey { get; set; }
     public uint ActiveWindowHotkeyModifiers { get; set; }
@@ -190,11 +194,11 @@ public sealed class AppSettings
     public bool AutoUploadGifs { get; set; }
     public bool AutoUploadVideos { get; set; }
     public Services.UploadDestination ImageUploadDestination { get; set; } = Services.UploadDestination.None;
-    public bool AiRedirectHotkeyOnly { get; set; }
     public uint AiRedirectHotkeyModifiers { get; set; }
     public uint AiRedirectHotkeyKey { get; set; }
     public Services.UploadSettings ImageUploadSettings { get; set; } = new();
     public Services.StickerSettings StickerUploadSettings { get; set; } = new();
+    public Services.UpscaleSettings UpscaleUploadSettings { get; set; } = new();
 
     public double ToastDurationSeconds { get; set; } = 2.5;
     public bool ToastFadeOutEnabled { get; set; }
@@ -248,6 +252,7 @@ public sealed class AppSettings
         "picker" => (PickerHotkeyModifiers, PickerHotkeyKey),
         "scan" => (ScanHotkeyModifiers, ScanHotkeyKey),
         "sticker" => (StickerHotkeyModifiers, StickerHotkeyKey),
+        "upscale" => (UpscaleHotkeyModifiers, UpscaleHotkeyKey),
         "_fullscreen" => (FullscreenHotkeyModifiers, FullscreenHotkeyKey),
         "_activeWindow" => (ActiveWindowHotkeyModifiers, ActiveWindowHotkeyKey),
         "_scrollCapture" => (ScrollCaptureHotkeyModifiers, ScrollCaptureHotkeyKey),
@@ -281,6 +286,7 @@ public sealed class AppSettings
             case "picker": PickerHotkeyModifiers = mod; PickerHotkeyKey = key; break;
             case "scan": ScanHotkeyModifiers = mod; ScanHotkeyKey = key; break;
             case "sticker": StickerHotkeyModifiers = mod; StickerHotkeyKey = key; break;
+            case "upscale": UpscaleHotkeyModifiers = mod; UpscaleHotkeyKey = key; break;
             // ruler handled by generic path (annotation tool with default key 9)
             case "_fullscreen": FullscreenHotkeyModifiers = mod; FullscreenHotkeyKey = key; break;
             case "_activeWindow": ActiveWindowHotkeyModifiers = mod; ActiveWindowHotkeyKey = key; break;
@@ -326,6 +332,7 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
         new("free",        "Freeform Select",  '\uE1CE', CaptureMode.Freeform,  0), // lasso-select
         new("ocr",         "OCR",          '\uE53C', CaptureMode.Ocr,         0), // scan-text
         new("sticker",     "Sticker",      ToolGlyphs.StickerGlyph, CaptureMode.Sticker,     0), // sticker
+        new("upscale",     "Upscale",      ToolGlyphs.UpscaleGlyph, CaptureMode.Upscale,     0),
         new("picker",      "Color Picker", '\uE13E', CaptureMode.ColorPicker, 0), // pipette
         new("scan",        "QR/Barcode",   '\uE1DE', CaptureMode.Scan,        0), // qr-code
         new("select",      "Select",       '\uE1E3', CaptureMode.Select,      1), // cursor-click

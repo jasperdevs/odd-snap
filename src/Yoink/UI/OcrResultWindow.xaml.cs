@@ -329,6 +329,7 @@ public partial class OcrResultWindow : Window
         ModelCombo.IsEnabled = false;
         TranslateProgressBar.IsIndeterminate = true;
         TranslateStatus.Text = GetTranslationStatusLabel(model, 0);
+        LoadingTextShimmer.Start(TranslateStatus, Colors.White, opacity: 0.7);
 
         if (TranslationShimmerRect.Fill is LinearGradientBrush shimmerBrush &&
             shimmerBrush.RelativeTransform is TranslateTransform shimmerTransform)
@@ -360,6 +361,7 @@ public partial class OcrResultWindow : Window
         FromLanguageCombo.IsEnabled = true;
         ToLanguageCombo.IsEnabled = true;
         ModelCombo.IsEnabled = true;
+        LoadingTextShimmer.Stop(TranslateStatus, Theme.Brush(Theme.TextPrimary), 0.25);
         if (!keepStatusVisible)
             TranslateStatus.Visibility = Visibility.Collapsed;
     }

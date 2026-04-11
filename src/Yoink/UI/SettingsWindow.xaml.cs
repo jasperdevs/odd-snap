@@ -95,6 +95,7 @@ public partial class SettingsWindow : Window
         {
             ApplyThemeColors();
             UpdateLocalEngineUi();
+            UpdateUpscaleLocalEngineUi();
         };
         SizeChanged += (_, _) =>
         {
@@ -135,6 +136,7 @@ public partial class SettingsWindow : Window
             if (_ocrTabLoaded)
                 _ = CheckModelStatusAsync();
             UpdateLocalEngineUi();
+            UpdateUpscaleLocalEngineUi();
         }
         catch (Exception ex)
         {
@@ -147,6 +149,12 @@ public partial class SettingsWindow : Window
 
     private static string GetStickerModelJobKey(LocalStickerEngine engine)
         => $"runtime:sticker-model:{engine}";
+
+    private static string GetUpscaleRuntimeJobKey(UpscaleExecutionProvider provider)
+        => $"runtime:upscale-onnx:{provider}";
+
+    private static string GetUpscaleModelJobKey(LocalUpscaleEngine engine)
+        => $"runtime:upscale-model:{engine}";
 
     public void OpenHistoryFromTray()
     {

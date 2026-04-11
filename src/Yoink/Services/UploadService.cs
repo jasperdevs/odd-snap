@@ -236,7 +236,7 @@ public static partial class UploadService
             return false;
 
         if (settings.ImageUploadDestination == UploadDestination.AiChat)
-            return !settings.AiRedirectHotkeyOnly || useAiRedirect;
+            return useAiRedirect;
 
         return settings.AutoUploadScreenshots;
     }
@@ -518,5 +518,6 @@ public sealed class UploadSettings
 
     // AI Chat
     public AiChatProvider AiChatProvider { get; set; } = AiChatProvider.ChatGpt;
+    public bool AiChatUploadDestinationSynced { get; set; }
     public UploadDestination AiChatUploadDestination { get; set; } = UploadDestination.Catbox;
 }

@@ -195,7 +195,7 @@ public sealed partial class RegionOverlayForm
     }
 
     private bool IsSelectionCaptureMode()
-        => _mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker;
+        => _mode is CaptureMode.Rectangle or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker or CaptureMode.Upscale;
 
     private void InvalidateAutoDetectChrome(Rectangle oldDetect, Rectangle newDetect)
     {

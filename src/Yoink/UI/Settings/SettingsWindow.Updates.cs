@@ -33,11 +33,13 @@ public partial class SettingsWindow
         DownloadUpdateButton.Visibility = Visibility.Collapsed;
         UpdateStatusText.Text = "Checking GitHub releases...";
         UpdateDetailText.Text = "Looking for the newest production build.";
+        SetLoadingTextShimmer(UpdateStatusText, true, 1.0, 1.0);
 
         try
         {
             _latestUpdate = await UpdateService.CheckForUpdatesAsync(forceRefresh: isManualCheck);
             UpdateStatusText.Text = _latestUpdate.StatusMessage;
+            SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
 
             if (_latestUpdate.IsUpdateAvailable)
             {
@@ -60,6 +62,7 @@ public partial class SettingsWindow
             _latestUpdate = null;
             UpdateStatusText.Text = "Update check failed";
             UpdateDetailText.Text = ex.Message;
+            SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
             if (isManualCheck)
                 ToastWindow.ShowError("Update check failed", ex.Message);
         }
@@ -101,6 +104,7 @@ public partial class SettingsWindow
         DownloadUpdateButton.Content = "Updating...";
         UpdateStatusText.Text = "Preparing update...";
         UpdateDetailText.Text = "Yoink will close, update, and reopen automatically.";
+        SetLoadingTextShimmer(UpdateStatusText, true, 1.0, 1.0);
 
         try
         {
@@ -110,10 +114,12 @@ public partial class SettingsWindow
             {
                 UpdateStatusText.Text = "You're up to date";
                 UpdateDetailText.Text = UpdateService.GetCurrentVersionLabel();
+                SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
                 return;
             }
 
             UpdateStatusText.Text = "Downloading update...";
+            SetLoadingTextShimmer(UpdateStatusText, true, 1.0, 1.0);
             await manager.DownloadUpdatesAsync(update);
             ToastWindow.Show("Updating Yoink", "Yoink will close, update, and reopen.");
             manager.ApplyUpdatesAndRestart(update);
@@ -122,6 +128,7 @@ public partial class SettingsWindow
         {
             UpdateStatusText.Text = "Update failed";
             UpdateDetailText.Text = "Open the GitHub release and install the latest setup manually.";
+            SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
             ToastWindow.ShowError("Update failed", ex.Message);
         }
         finally

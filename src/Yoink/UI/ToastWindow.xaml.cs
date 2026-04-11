@@ -262,13 +262,7 @@ public partial class ToastWindow : Window
             TitleText.Foreground = Theme.Brush(red);
         }
 
-        ToolTip = null;
-        if (!string.IsNullOrWhiteSpace(spec.ClickActionUrl) && !string.IsNullOrWhiteSpace(spec.FilePath))
-            ToolTip = $"Drag to move the file or click to reopen {spec.ClickActionLabel ?? "the chat"}";
-        else if (!string.IsNullOrWhiteSpace(spec.ClickActionUrl))
-            ToolTip = $"Click to reopen {spec.ClickActionLabel ?? "the chat"}";
-        else if (!string.IsNullOrWhiteSpace(spec.FilePath))
-            ToolTip = "Drag to move the file or click to open its location";
+        RefreshInteractiveTooltip(spec);
 
         if (spec.AutoPin)
             ApplyPinnedState(true);
@@ -362,11 +356,13 @@ public partial class ToastWindow : Window
         CloseIcon.Source = StreamlineIcons.RenderWpf("close", IconWhite, 20);
         PinIcon.Source = StreamlineIcons.RenderWpf("pin", IconWhite, 20);
         SaveIcon.Source = StreamlineIcons.RenderWpf("download", IconWhite, 20);
+        AiRedirectIcon.Source = ToolIcons.RenderAiRedirectWpf(System.Drawing.Color.FromArgb(230, 255, 255, 255), 20);
         DeleteIcon.Source = StreamlineIcons.RenderWpf("trash", IconWhite, 20);
 
         HookOverlayHover(CloseBtn, CloseIcon, "close");
         HookOverlayHover(PinBtn, PinIcon, "pin");
         HookOverlayHover(SaveBtn, SaveIcon, "download");
+        HookAiRedirectHover(AiRedirectBtn, AiRedirectIcon);
         HookOverlayHover(DeleteBtn, DeleteIcon, "trash");
     }
 
@@ -389,6 +385,7 @@ public partial class ToastWindow : Window
         CloseBtn.MouseLeftButtonDown -= CloseBtn_MouseLeftButtonDown;
         PinBtn.MouseLeftButtonDown -= PinBtn_MouseLeftButtonDown;
         SaveBtn.MouseLeftButtonDown -= SaveBtn_MouseLeftButtonDown;
+        AiRedirectBtn.MouseLeftButtonDown -= AiRedirectBtn_MouseLeftButtonDown;
         DeleteBtn.MouseLeftButtonDown -= DeleteBtn_MouseLeftButtonDown;
 
         if (!_spec.ShowOverlayButtons || _previewBitmap is null)
@@ -397,6 +394,7 @@ public partial class ToastWindow : Window
         CloseBtn.MouseLeftButtonDown += CloseBtn_MouseLeftButtonDown;
         PinBtn.MouseLeftButtonDown += PinBtn_MouseLeftButtonDown;
         SaveBtn.MouseLeftButtonDown += SaveBtn_MouseLeftButtonDown;
+        AiRedirectBtn.MouseLeftButtonDown += AiRedirectBtn_MouseLeftButtonDown;
         DeleteBtn.MouseLeftButtonDown += DeleteBtn_MouseLeftButtonDown;
     }
 
@@ -405,6 +403,7 @@ public partial class ToastWindow : Window
         ApplyOverlayButton(CloseBtn, Helpers.ToastButtonKind.Close);
         ApplyOverlayButton(PinBtn, Helpers.ToastButtonKind.Pin);
         ApplyOverlayButton(SaveBtn, Helpers.ToastButtonKind.Save);
+        ApplyOverlayButton(AiRedirectBtn, Helpers.ToastButtonKind.AiRedirect);
         ApplyOverlayButton(DeleteBtn, Helpers.ToastButtonKind.Delete);
     }
 
@@ -413,6 +412,7 @@ public partial class ToastWindow : Window
         bool visible = _previewBitmap is not null &&
                        _spec.ShowOverlayButtons &&
                        Helpers.ToastButtonLayout.IsVisible(_buttonLayout, kind) &&
+                       (kind != Helpers.ToastButtonKind.AiRedirect || CanShowAiRedirectButton()) &&
                        (kind != Helpers.ToastButtonKind.Delete || !string.IsNullOrWhiteSpace(_savedFilePath));
 
         button.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
@@ -473,6 +473,84 @@ public partial class ToastWindow : Window
         }
     }
 
+    private async void AiRedirectBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (string.IsNullOrWhiteSpace(_savedFilePath) || !File.Exists(_savedFilePath))
+            return;
+
+        var settings = SettingsService.LoadStatic();
+        if (settings is null)
+            return;
+
+        try
+        {
+            var uploadSettings = settings.ImageUploadSettings;
+            var providerName = UploadService.GetAiChatProviderName(uploadSettings.AiChatProvider);
+            if (uploadSettings.AiChatProvider == AiChatProvider.GoogleLens)
+            {
+                var hostDest = UploadService.NormalizeAiChatUploadDestination(uploadSettings.AiChatUploadDestination);
+                var result = await UploadService.UploadAsync(_savedFilePath, hostDest, uploadSettings);
+                if (!result.Success || string.IsNullOrWhiteSpace(result.Url))
+                {
+                    Show(ToastSpec.Error("Google Lens upload failed", result.Error));
+                    return;
+                }
+
+                OpenExternalUrl(UploadService.BuildGoogleLensUrl(result.Url));
+                Show(ToastSpec.Standard("AI Redirect Ready", $"Opened {providerName}.", _savedFilePath) with { SuppressSound = true });
+                return;
+            }
+
+            if (_previewBitmap is not null)
+                ClipboardService.CopyToClipboard(_previewBitmap, _savedFilePath);
+
+            var startUrl = UploadService.BuildAiChatStartUrl(uploadSettings.AiChatProvider);
+            OpenExternalUrl(startUrl);
+            _spec = _spec with { ClickActionUrl = startUrl, ClickActionLabel = providerName };
+            RefreshInteractiveTooltip(_spec);
+            ApplyPinnedState(true);
+        }
+        catch (Exception ex)
+        {
+            Show(ToastSpec.Error("AI Redirect failed", ex.Message));
+        }
+    }
+
+    private bool CanShowAiRedirectButton()
+    {
+        return !string.IsNullOrWhiteSpace(_savedFilePath);
+    }
+
+    private static void OpenExternalUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return;
+
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true
+        });
+    }
+
+    private void HookAiRedirectHover(System.Windows.Controls.Border btn, System.Windows.Controls.Image icon)
+    {
+        btn.MouseEnter += (_, _) => icon.Source = ToolIcons.RenderAiRedirectWpf(System.Drawing.Color.FromArgb(255, 255, 255, 255), 20, active: true);
+        btn.MouseLeave += (_, _) => icon.Source = ToolIcons.RenderAiRedirectWpf(System.Drawing.Color.FromArgb(230, 255, 255, 255), 20);
+    }
+
+    private void RefreshInteractiveTooltip(ToastSpec spec)
+    {
+        ToolTip = null;
+        if (!string.IsNullOrWhiteSpace(spec.ClickActionUrl) && !string.IsNullOrWhiteSpace(spec.FilePath))
+            ToolTip = $"Drag to move the file or click to reopen {spec.ClickActionLabel ?? "the chat"}";
+        else if (!string.IsNullOrWhiteSpace(spec.ClickActionUrl))
+            ToolTip = $"Click to reopen {spec.ClickActionLabel ?? "the chat"}";
+        else if (!string.IsNullOrWhiteSpace(spec.FilePath))
+            ToolTip = "Drag to move the file or click to open its location";
+    }
+
     private void DeleteBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
@@ -521,6 +599,7 @@ public partial class ToastWindow : Window
     {
         CloseBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         SaveBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
+        AiRedirectBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         DeleteBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         PinBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity == 0 ? pinnedOpacity : targetOpacity, 150, Motion.SmoothOut));
     }

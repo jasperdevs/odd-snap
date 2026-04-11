@@ -19,6 +19,7 @@ public partial class App
         _hotkeyService.PickerHotkeyPressed += OnPickerHotkeyPressed;
         _hotkeyService.ScanHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Scan);
         _hotkeyService.StickerHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Sticker);
+        _hotkeyService.UpscaleHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Upscale);
         _hotkeyService.RulerHotkeyPressed += () => OnToolHotkeyPressed(CaptureMode.Ruler);
         _hotkeyService.GifHotkeyPressed += OnGifHotkeyPressed;
         _hotkeyService.FullscreenHotkeyPressed += OnFullscreenHotkeyPressed;
@@ -39,6 +40,7 @@ public partial class App
         TryRegister(_hotkeyService.RegisterPicker(s.PickerHotkeyModifiers, s.PickerHotkeyKey), "Color Picker", s.PickerHotkeyModifiers, s.PickerHotkeyKey);
         TryRegister(_hotkeyService.RegisterScan(s.ScanHotkeyModifiers, s.ScanHotkeyKey), "Scanner", s.ScanHotkeyModifiers, s.ScanHotkeyKey);
         TryRegister(_hotkeyService.RegisterSticker(s.StickerHotkeyModifiers, s.StickerHotkeyKey), "Sticker", s.StickerHotkeyModifiers, s.StickerHotkeyKey);
+        TryRegister(_hotkeyService.RegisterUpscale(s.UpscaleHotkeyModifiers, s.UpscaleHotkeyKey), "Upscale", s.UpscaleHotkeyModifiers, s.UpscaleHotkeyKey);
         TryRegister(_hotkeyService.RegisterRuler(s.RulerHotkeyModifiers, s.RulerHotkeyKey), "Ruler", s.RulerHotkeyModifiers, s.RulerHotkeyKey);
         TryRegister(_hotkeyService.RegisterGif(s.GifHotkeyModifiers, s.GifHotkeyKey), "GIF", s.GifHotkeyModifiers, s.GifHotkeyKey);
         TryRegister(_hotkeyService.RegisterFullscreen(s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey), "Fullscreen", s.FullscreenHotkeyModifiers, s.FullscreenHotkeyKey);

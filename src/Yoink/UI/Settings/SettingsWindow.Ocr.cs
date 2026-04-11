@@ -39,6 +39,7 @@ public partial class SettingsWindow
             OpenSourceLocalStatusText.Text = openSourceJob.Status;
             OpenSourceLocalProgressBar.Visibility = openSourceJob.IsRunning ? Visibility.Visible : Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = !openSourceJob.IsRunning;
+            SetLoadingTextShimmer(OpenSourceLocalStatusText, true, 0.7, 0.45);
         }
         else if (OpenSourceTranslationRuntimeService.TryGetCachedStatus(out var openSourceReady, out var openSourceStatus))
         {
@@ -47,6 +48,7 @@ public partial class SettingsWindow
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = true;
             OpenSourceLocalInstallBtn.Content = openSourceReady ? "Uninstall" : "Install";
+            SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
         }
         else if (hasOpenSourceJob && openSourceJob is { LastSucceeded: false })
         {
@@ -54,12 +56,14 @@ public partial class SettingsWindow
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = true;
             OpenSourceLocalInstallBtn.Content = "Install";
+            SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
         }
         else
         {
             OpenSourceLocalStatusText.Text = "Checking install state...";
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = false;
+            SetLoadingTextShimmer(OpenSourceLocalStatusText, true, 0.7, 0.45);
         }
 
         var hasArgosJob = BackgroundRuntimeJobService.TryGetSnapshot(ArgosTranslationJobKey, out var argosJob);
@@ -68,6 +72,7 @@ public partial class SettingsWindow
             ArgosStatusText.Text = argosJob.Status;
             ArgosProgressBar.Visibility = argosJob.IsRunning ? Visibility.Visible : Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = !argosJob.IsRunning;
+            SetLoadingTextShimmer(ArgosStatusText, true, 0.7, 0.45);
         }
         else if (TranslationService.TryGetArgosCachedStatus(out var argosReady, out var argosStatus))
         {
@@ -76,6 +81,7 @@ public partial class SettingsWindow
             ArgosProgressBar.Visibility = Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = true;
             ArgosInstallBtn.Content = argosReady ? "Uninstall" : "Install";
+            SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
         }
         else if (hasArgosJob && argosJob is { LastSucceeded: false })
         {
@@ -83,12 +89,14 @@ public partial class SettingsWindow
             ArgosProgressBar.Visibility = Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = true;
             ArgosInstallBtn.Content = "Install";
+            SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
         }
         else
         {
             ArgosStatusText.Text = "Checking install state...";
             ArgosProgressBar.Visibility = Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = false;
+            SetLoadingTextShimmer(ArgosStatusText, true, 0.7, 0.45);
         }
     }
 
@@ -300,6 +308,7 @@ public partial class SettingsWindow
                 OpenSourceLocalInstallBtn.IsEnabled = false;
                 OpenSourceLocalStatusText.Text = openSourceJob.Status;
                 OpenSourceLocalInstallBtn.Content = _openSourceLocalInstalled ? "Uninstall" : "Install";
+                SetLoadingTextShimmer(OpenSourceLocalStatusText, true, 0.7, 0.45);
             }
             else
             {
@@ -312,6 +321,7 @@ public partial class SettingsWindow
                 OpenSourceLocalInstallBtn.Content = _openSourceLocalInstalled ? "Uninstall" : "Install";
                 OpenSourceLocalInstallBtn.IsEnabled = true;
                 OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
+                SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
             }
 
             if (BackgroundRuntimeJobService.TryGetSnapshot(ArgosTranslationJobKey, out var argosJob) && argosJob.IsRunning)
@@ -320,6 +330,7 @@ public partial class SettingsWindow
                 ArgosInstallBtn.IsEnabled = false;
                 ArgosStatusText.Text = argosJob.Status;
                 ArgosInstallBtn.Content = _argosInstalled ? "Uninstall" : "Install";
+                SetLoadingTextShimmer(ArgosStatusText, true, 0.7, 0.45);
             }
             else
             {
@@ -332,6 +343,7 @@ public partial class SettingsWindow
                 ArgosInstallBtn.Content = _argosInstalled ? "Uninstall" : "Install";
                 ArgosInstallBtn.IsEnabled = true;
                 ArgosProgressBar.Visibility = Visibility.Collapsed;
+                SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
             }
 
             UpdateTranslationModelUi();
@@ -345,6 +357,8 @@ public partial class SettingsWindow
             ArgosInstallBtn.IsEnabled = true;
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             ArgosProgressBar.Visibility = Visibility.Collapsed;
+            SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
+            SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
             UpdateTranslationModelUi();
         }
     }
