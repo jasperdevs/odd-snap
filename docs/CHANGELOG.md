@@ -1,3 +1,12 @@
+# Yoink v0.8.4.6
+
+## Highlights
+- Hardened installer steps so optional shortcut and registration work cannot fail the full install.
+
+## Fixed
+- Install now treats desktop shortcut creation, Start Menu shortcut creation, app registration, and startup registration as best-effort instead of fatal.
+- Target-directory normalization now falls back to the default install location if Windows or UI state provides an unusable path.
+
 # Yoink v0.8.4.5
 
 ## Highlights

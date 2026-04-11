@@ -152,36 +152,64 @@ public static class InstallService
         // Start menu shortcut
         if (startMenuShortcut)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            onProgress?.Invoke("Creating Start Menu shortcut...");
-            CreateShortcut(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "Microsoft", "Windows", "Start Menu", "Programs", "Yoink.lnk"),
-                targetExe);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                onProgress?.Invoke("Creating Start Menu shortcut...");
+                CreateShortcut(
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "Microsoft", "Windows", "Start Menu", "Programs", "Yoink.lnk"),
+                    targetExe);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning("install.start-menu-shortcut", ex.Message, ex);
+            }
         }
 
         // Desktop shortcut
         if (desktopShortcut)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            onProgress?.Invoke("Creating desktop shortcut...");
-            CreateShortcut(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Yoink.lnk"),
-                targetExe);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                onProgress?.Invoke("Creating desktop shortcut...");
+                CreateShortcut(
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Yoink.lnk"),
+                    targetExe);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning("install.desktop-shortcut", ex.Message, ex);
+            }
         }
 
         // Register in Add/Remove Programs
-        cancellationToken.ThrowIfCancellationRequested();
-        onProgress?.Invoke("Registering application...");
-        RegisterApp(targetDirNorm, targetExe);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            onProgress?.Invoke("Registering application...");
+            RegisterApp(targetDirNorm, targetExe);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("install.register-app", ex.Message, ex);
+        }
 
         // Startup registry
         if (startWithWindows)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            const string rk = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-            using var key = Registry.CurrentUser.OpenSubKey(rk, true);
-            key?.SetValue("Yoink", $"\"{targetExe}\"");
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                const string rk = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+                using var key = Registry.CurrentUser.OpenSubKey(rk, true);
+                key?.SetValue("Yoink", $"\"{targetExe}\"");
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning("install.start-with-windows", ex.Message, ex);
+            }
         }
 
         onProgress?.Invoke("Installation complete!");
@@ -287,7 +315,14 @@ public static class InstallService
     private static string NormalizeTargetDirectory(string? targetDir)
     {
         var candidate = string.IsNullOrWhiteSpace(targetDir) ? DefaultInstallPath : targetDir.Trim();
-        return Path.GetFullPath(candidate);
+        try
+        {
+            return Path.GetFullPath(candidate);
+        }
+        catch
+        {
+            return Path.GetFullPath(DefaultInstallPath);
+        }
     }
 
     private static void CopyDirectory(string source, string target)
