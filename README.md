@@ -3,11 +3,8 @@
 
 <p align="center">
   <a href="https://github.com/jasperdevs/yoink/releases/latest">
-    <img src="https://img.shields.io/badge/windows-download-1962F4?style=for-the-badge&logo=windows&logoColor=white" alt="Download yoink for Windows" />
+    <img src="https://img.shields.io/badge/Windows%20download-4c71f2?logo=windows&logoColor=white" alt="Download yoink for Windows" />
   </a>
-</p>
-
-<p align="center">
   <a href="https://github.com/jasperdevs/yoink/releases">
     <img src="https://img.shields.io/badge/GitHub%20downloads-555?logo=github" alt="GitHub downloads" />
   </a>
@@ -48,7 +45,7 @@ Region, fullscreen, active-window, and scrolling capture in one ShareX-style wor
 <tr>
 <td width="40%" valign="middle">
 <h3>AI Redirects</h3>
-Open ChatGPT, Claude, Gemini, or Google Lens right after capture with the image ready to drag, paste, or inspect.
+Open ChatGPT, Claude, Gemini, or Google Lens right after capture, then keep the image pinned and ready to drag or paste into the chat box.
 </td>
 <td width="60%">
 <img src="assets/airedirects.png" alt="Yoink AI Redirects" width="100%" />
@@ -66,10 +63,19 @@ Remove backgrounds and turn screenshots into polished stickers with optional str
 <tr>
 <td width="40%" valign="middle">
 <h3>OCR + translation</h3>
-Extract text from any screen region, edit the result, and translate it with local or cloud-backed providers.
+Extract text from any screen region into a dedicated result window where you can edit, copy, and translate with local or cloud-backed providers.
 </td>
 <td width="60%">
 <img src="assets/screenshot-ocr.png" alt="Yoink OCR and translation" width="100%" />
+</td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Global hotkeys + tray</h3>
+Launch capture, OCR, color picking, recording, history, and more from system-wide hotkeys or the tray menu without breaking your flow.
+</td>
+<td width="60%">
+<img src="assets/screenshot-main.png" alt="Yoink hotkeys and tray workflow" width="100%" />
 </td>
 </tr>
 <tr>
@@ -120,7 +126,7 @@ Color picker, QR and barcode scanning, ruler tools, and step numbering live alon
 <tr>
 <td width="40%" valign="middle">
 <h3>Flexible uploads</h3>
-Upload screenshots, stickers, and recordings to Imgur, S3, Dropbox, and self-hosted targets from the same post-capture flow.
+Upload screenshots, stickers, and recordings to Imgur, S3, Dropbox, OneDrive, Immich, and self-hosted targets from the same post-capture flow.
 </td>
 <td width="60%">
 <img src="assets/screenshot-main.png" alt="Yoink uploads" width="100%" />
