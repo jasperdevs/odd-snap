@@ -1,4 +1,4 @@
-# Yoink v0.8.13
+# Yoink v0.8.14
 
 ## Highlights
 - Added the new Upscale capture flow with local model/runtime management and preview controls.
@@ -16,7 +16,6 @@
 - Fixed the before/after compare behavior so drag direction and fitted-image alignment behave correctly.
 - Fixed the AI Redirect toast button so it appears when placed, follows the toast layout editor, and no longer spawns an extra toast for non-Lens providers.
 - Fixed shimmer/loading behavior so status text animates more cleanly and duplicate progress copy is suppressed.
-- Fixed OCR translation setup messaging so blocked automatic installs now use a manual-setup flow instead of a failing install action.
 - Fixed sticker and upscale runtime setup so GPU package failures fall back to CPU instead of blocking the feature.
 - Fixed OCR translation install/setup so Argos and the open-source local runtime can install automatically again.
 - Fixed release packaging so setup installers sort to the top of the release page and the updater payload sorts below them.
