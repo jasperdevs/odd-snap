@@ -80,12 +80,10 @@ public partial class InstallWizard : Window
 
     private async void Install_Click(object sender, RoutedEventArgs e)
     {
-        var targetDir = InstallPathBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(targetDir))
-        {
-            MessageBox.Show("Please choose an install location.", "Install", MessageBoxButton.OK);
-            return;
-        }
+        var targetDir = string.IsNullOrWhiteSpace(InstallPathBox.Text)
+            ? InstallService.GetInstalledLocation() ?? InstallService.DefaultInstallPath
+            : InstallPathBox.Text.Trim();
+        InstallPathBox.Text = targetDir;
 
         var desktopShortcut = DesktopShortcutCheck.IsChecked == true;
         var startMenuShortcut = StartMenuCheck.IsChecked == true;

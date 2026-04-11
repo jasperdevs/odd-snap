@@ -126,14 +126,32 @@ public sealed class InstallServiceUpdateTests
     [InlineData("C:\\Installed\\Yoink", "C:\\Portable\\Yoink", true, "C:\\Installed\\Yoink")]
     [InlineData("C:\\Installed\\Yoink", "C:\\Portable\\Yoink", false, "C:\\Portable\\Yoink")]
     [InlineData(null, "C:\\Portable\\Yoink", false, "C:\\Portable\\Yoink")]
-    public void ResolveUpdateTargetDirectory_PrefersInstalledPathOnlyWhenRunningInstalledCopy(string? installedLocation, string runningDir, bool runningInstalledCopy, string expected)
+    [InlineData(null, "", false, null)]
+    public void ResolveUpdateTargetDirectory_PrefersInstalledPathOnlyWhenRunningInstalledCopy(string? installedLocation, string runningDir, bool runningInstalledCopy, string? expected)
     {
         var method = typeof(InstallService).GetMethod("ResolveUpdateTargetDirectory", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(method);
 
         var actual = Assert.IsType<string>(method!.Invoke(null, new object?[] { installedLocation, runningDir, runningInstalledCopy }));
 
-        Assert.Equal(expected, actual);
+        if (expected is null)
+            Assert.Equal(InstallService.DefaultInstallPath, actual);
+        else
+            Assert.Equal(expected, actual);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void NormalizeTargetDirectory_FallsBackToDefaultWhenBlank(string? input)
+    {
+        var method = typeof(InstallService).GetMethod("NormalizeTargetDirectory", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var actual = Assert.IsType<string>(method!.Invoke(null, new object?[] { input }));
+
+        Assert.Equal(Path.GetFullPath(InstallService.DefaultInstallPath), actual);
     }
 
     private static bool InvokeShouldCopyFullPayloadTree(string sourceDir)

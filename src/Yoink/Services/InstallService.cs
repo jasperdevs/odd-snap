@@ -122,6 +122,8 @@ public static class InstallService
         Action<string>? onProgress = null,
         CancellationToken cancellationToken = default)
     {
+        targetDir = NormalizeTargetDirectory(targetDir);
+
         cancellationToken.ThrowIfCancellationRequested();
         onProgress?.Invoke("Closing any running Yoink instances...");
         KillRunningInstances();
@@ -188,6 +190,7 @@ public static class InstallService
     /// <summary>Launch the installed copy and exit this process.</summary>
     public static void LaunchInstalled(string targetDir, bool showOnboarding)
     {
+        targetDir = NormalizeTargetDirectory(targetDir);
         var targetExe = Path.Combine(targetDir, "Yoink.exe");
         var args = showOnboarding ? "--post-install" : "";
         TryLaunch(targetExe, targetDir, args);
@@ -197,8 +200,7 @@ public static class InstallService
     {
         if (string.IsNullOrWhiteSpace(packagePath))
             throw new ArgumentException("Package path is required.", nameof(packagePath));
-        if (string.IsNullOrWhiteSpace(targetDir))
-            throw new ArgumentException("Target directory is required.", nameof(targetDir));
+        targetDir = NormalizeTargetDirectory(targetDir);
         if (!File.Exists(packagePath))
             throw new FileNotFoundException("Update package not found.", packagePath);
 
@@ -277,9 +279,15 @@ public static class InstallService
     private static string ResolveUpdateTargetDirectory(string? installedLocation, string runningAppDirectory, bool runningInstalledCopy)
     {
         if (runningInstalledCopy && !string.IsNullOrWhiteSpace(installedLocation))
-            return installedLocation;
+            return NormalizeTargetDirectory(installedLocation);
 
-        return runningAppDirectory;
+        return NormalizeTargetDirectory(runningAppDirectory);
+    }
+
+    private static string NormalizeTargetDirectory(string? targetDir)
+    {
+        var candidate = string.IsNullOrWhiteSpace(targetDir) ? DefaultInstallPath : targetDir.Trim();
+        return Path.GetFullPath(candidate);
     }
 
     private static void CopyDirectory(string source, string target)
