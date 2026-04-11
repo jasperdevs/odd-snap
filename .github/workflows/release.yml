@@ -117,7 +117,7 @@ jobs:
             dist/**/*.exe
             dist/**/*.zip
             dist/winget-manifests/**/*.yaml
-          body_path: RELEASE_NOTES.md
+          body_path: docs/CHANGELOG.md
 
       - name: Submit release to WinGet
         shell: pwsh

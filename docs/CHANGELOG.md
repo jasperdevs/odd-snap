@@ -1,3 +1,13 @@
+# Yoink v0.8.4.4
+
+## Highlights
+- Fixed in-app install/update path handling so blank or missing target paths fall back safely instead of failing with a null-path error.
+
+## Fixed
+- Install and update flows now normalize target directories before touching `Path` or `File` APIs.
+- The install wizard now falls back to the installed/default Yoink path when its path textbox is blank.
+- Launch/install/update path resolution is consistent across fresh installs, installed copies, and update helper flows.
+
 # Yoink v0.8.4.3
 
 ## Highlights
