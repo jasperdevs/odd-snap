@@ -1,3 +1,11 @@
+# Yoink v0.8.4.5
+
+## Highlights
+- Fixed another installer crash path so first-run installs no longer fail when shortcut-folder resolution returns an empty directory path.
+
+## Fixed
+- Desktop/Start Menu shortcut creation now safely no-ops when Windows does not provide a usable shortcut directory instead of crashing with `Value cannot be null. (Parameter 'path')`.
+
 # Yoink v0.8.4.4
 
 ## Highlights

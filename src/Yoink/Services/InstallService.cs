@@ -468,7 +468,14 @@ public static class InstallService
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(shortcutPath)!);
+            if (string.IsNullOrWhiteSpace(shortcutPath) || string.IsNullOrWhiteSpace(targetExe))
+                return;
+
+            var shortcutDirectory = Path.GetDirectoryName(shortcutPath);
+            if (string.IsNullOrWhiteSpace(shortcutDirectory))
+                return;
+
+            Directory.CreateDirectory(shortcutDirectory);
             var shellType = Type.GetTypeFromProgID("WScript.Shell");
             if (shellType is null) return;
             dynamic shell = Activator.CreateInstance(shellType)!;
