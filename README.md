@@ -3,7 +3,7 @@
 
 <p align="center">
   <a href="https://github.com/jasperdevs/yoink/releases/latest">
-    <img src="https://img.shields.io/badge/Windows%20download-4c71f2?logo=windows&logoColor=white" alt="Download yoink for Windows" />
+    <img src="https://img.shields.io/badge/Windows-download-4c71f2?style=flat&logo=windows&logoColor=white" alt="Download yoink for Windows" />
   </a>
   <img src="https://img.shields.io/badge/macOS%20planned-555?logo=apple" alt="macOS planned" />
   <img src="https://img.shields.io/badge/Linux%20planned-555?logo=linux" alt="Linux planned" />
