@@ -24,15 +24,15 @@ public static class RembgRuntimeService
     public static string ModelCacheDirectory => ModelCacheDir;
 
     public static string GetSetupButtonText(StickerExecutionProvider provider) => provider == StickerExecutionProvider.Gpu
-        ? "Install rembg + CUDA"
+        ? "Install rembg (GPU optional)"
         : "Install rembg";
 
     public static string GetRuntimeSummary(StickerExecutionProvider provider) => provider == StickerExecutionProvider.Gpu
-        ? "GPU uses rembg's CUDA backend when installed. If CUDA is not available, use CPU."
+        ? "GPU uses rembg's CUDA backend when available and falls back to CPU otherwise."
         : "CPU uses the local rembg package and downloads models automatically.";
 
     public static string GetSetupTargetName(StickerExecutionProvider provider) => provider == StickerExecutionProvider.Gpu
-        ? "rembg + CUDA"
+        ? "rembg runtime"
         : "rembg";
 
     public static bool IsModelCached(LocalStickerEngine engine) => File.Exists(GetModelPath(engine));
@@ -77,13 +77,12 @@ public static class RembgRuntimeService
         if (await IsRuntimeReadyAsync(provider, cancellationToken).ConfigureAwait(false))
             return;
 
-        var package = provider == StickerExecutionProvider.Gpu ? "rembg[gpu]" : "rembg[cpu]";
-        progress?.Report($"Installing {package}...");
-        AppDiagnostics.LogInfo("stickers.runtime.install", $"Installing {package} for {provider}.");
+        progress?.Report("Installing rembg runtime...");
+        AppDiagnostics.LogInfo("stickers.runtime.install", $"Installing rembg runtime for {provider}.");
 
         var install = await RunPythonAsync(new[]
         {
-            PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", package
+            PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", "rembg", "onnxruntime", "numpy", "pillow"
         }, cancellationToken).ConfigureAwait(false);
 
         if (install.ExitCode != 0)
@@ -92,13 +91,32 @@ public static class RembgRuntimeService
                 ? install.StdErr.Trim()
                 : install.StdOut.Trim();
 
-            AppDiagnostics.LogWarning("stickers.runtime.install", string.IsNullOrWhiteSpace(message) ? $"Couldn't install {package}." : message);
+            AppDiagnostics.LogWarning("stickers.runtime.install", string.IsNullOrWhiteSpace(message) ? "Couldn't install the rembg runtime." : message);
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(message)
-                ? $"Couldn't install {package}."
+                ? "Couldn't install the rembg runtime."
                 : message);
         }
 
-        UpdateProbeCache(provider, true, "Installed");
+        if (provider == StickerExecutionProvider.Gpu)
+        {
+            progress?.Report("Trying to enable CUDA acceleration...");
+            var gpuInstall = await RunPythonAsync(new[]
+            {
+                PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", "onnxruntime-gpu"
+            }, cancellationToken).ConfigureAwait(false);
+
+            if (gpuInstall.ExitCode != 0)
+            {
+                var gpuMessage = !string.IsNullOrWhiteSpace(gpuInstall.StdErr)
+                    ? gpuInstall.StdErr.Trim()
+                    : gpuInstall.StdOut.Trim();
+                AppDiagnostics.LogWarning("stickers.runtime.install.gpu-optional", string.IsNullOrWhiteSpace(gpuMessage)
+                    ? "CUDA acceleration package was unavailable; using CPU fallback."
+                    : gpuMessage);
+            }
+        }
+
+        await IsRuntimeReadyAsync(provider, cancellationToken).ConfigureAwait(false);
     }
 
     public static async Task<bool> IsRuntimeReadyAsync(StickerExecutionProvider provider, CancellationToken cancellationToken = default)
@@ -129,9 +147,9 @@ public static class RembgRuntimeService
 
         if (provider == StickerExecutionProvider.Gpu)
         {
-            var ready = result.StdOut.Contains("True", StringComparison.OrdinalIgnoreCase);
-            UpdateProbeCache(provider, ready, ready ? "Installed" : "CUDA not available");
-            return ready;
+            var cudaAvailable = result.StdOut.Contains("True", StringComparison.OrdinalIgnoreCase);
+            UpdateProbeCache(provider, true, cudaAvailable ? "Installed (CUDA available)" : "Installed (CPU fallback)");
+            return true;
         }
 
         UpdateProbeCache(provider, true, "Installed");

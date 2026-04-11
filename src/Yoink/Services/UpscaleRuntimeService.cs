@@ -30,15 +30,15 @@ public static class UpscaleRuntimeService
     public static string ModelCacheDirectory => ModelCacheDir;
 
     public static string GetSetupButtonText(UpscaleExecutionProvider provider) => provider == UpscaleExecutionProvider.Gpu
-        ? "Install onnxruntime-gpu"
+        ? "Install onnxruntime (GPU optional)"
         : "Install onnxruntime";
 
     public static string GetRuntimeSummary(UpscaleExecutionProvider provider) => provider == UpscaleExecutionProvider.Gpu
-        ? "GPU uses Python ONNX Runtime with CUDA. If CUDA is unavailable, use CPU."
+        ? "GPU uses Python ONNX Runtime with CUDA when available and falls back to CPU otherwise."
         : "CPU uses Python ONNX Runtime and downloaded ONNX models.";
 
     public static string GetSetupTargetName(UpscaleExecutionProvider provider) => provider == UpscaleExecutionProvider.Gpu
-        ? "onnxruntime-gpu"
+        ? "onnxruntime runtime"
         : "onnxruntime";
 
     public static bool IsModelCached(LocalUpscaleEngine engine) => File.Exists(GetModelPath(engine));
@@ -84,16 +84,32 @@ public static class UpscaleRuntimeService
             return;
 
         progress?.Report("Installing Python runtime packages...");
-        var runtimePackage = provider == UpscaleExecutionProvider.Gpu ? "onnxruntime-gpu" : "onnxruntime";
         var install = await RunPythonAsync(new[]
         {
-            PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", runtimePackage, "numpy", "pillow"
+            PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", "onnxruntime", "numpy", "pillow"
         }, cancellationToken).ConfigureAwait(false);
 
         if (install.ExitCode != 0)
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(install.StdErr) ? install.StdOut.Trim() : install.StdErr.Trim());
 
-        UpdateProbeCache(provider, true, "Installed");
+        if (provider == UpscaleExecutionProvider.Gpu)
+        {
+            progress?.Report("Trying to enable CUDA acceleration...");
+            var gpuInstall = await RunPythonAsync(new[]
+            {
+                PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", "onnxruntime-gpu"
+            }, cancellationToken).ConfigureAwait(false);
+
+            if (gpuInstall.ExitCode != 0)
+            {
+                var gpuMessage = string.IsNullOrWhiteSpace(gpuInstall.StdErr) ? gpuInstall.StdOut.Trim() : gpuInstall.StdErr.Trim();
+                AppDiagnostics.LogWarning("upscale.runtime.install.gpu-optional", string.IsNullOrWhiteSpace(gpuMessage)
+                    ? "CUDA acceleration package was unavailable; using CPU fallback."
+                    : gpuMessage);
+            }
+        }
+
+        await IsRuntimeReadyAsync(provider, cancellationToken).ConfigureAwait(false);
     }
 
     public static async Task<bool> IsRuntimeReadyAsync(UpscaleExecutionProvider provider, CancellationToken cancellationToken = default)
@@ -120,9 +136,9 @@ public static class UpscaleRuntimeService
 
         if (provider == UpscaleExecutionProvider.Gpu)
         {
-            var ready = result.StdOut.Contains("True", StringComparison.OrdinalIgnoreCase);
-            UpdateProbeCache(provider, ready, ready ? "Installed" : "CUDA not available");
-            return ready;
+            var cudaAvailable = result.StdOut.Contains("True", StringComparison.OrdinalIgnoreCase);
+            UpdateProbeCache(provider, true, cudaAvailable ? "Installed (CUDA available)" : "Installed (CPU fallback)");
+            return true;
         }
 
         UpdateProbeCache(provider, true, "Installed");
