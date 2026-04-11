@@ -72,7 +72,6 @@ jobs:
             --mainExe Yoink.exe `
             --packTitle Yoink `
             --packAuthors jasperdevs `
-            --packDescription "Screenshot, annotation, OCR, sticker, and recording tool for Windows" `
             --channel "${{ matrix.rid }}" `
             --runtime "${{ matrix.rid }}" `
             --releaseNotes "docs/CHANGELOG.md" `

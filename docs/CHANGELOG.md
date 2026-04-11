@@ -1,4 +1,4 @@
-# Yoink v0.8.5.0
+# Yoink v0.8.5
 
 ## Highlights
 - Switched release packaging and app updates over to Velopack.
