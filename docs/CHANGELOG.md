@@ -1,3 +1,12 @@
+# Yoink v0.8.4.8
+
+## Highlights
+- Installer failures now produce an actionable message and a saved log path instead of a bare null-path crash.
+
+## Fixed
+- Install-time path resolution now throws clearer installer-specific errors when parent folders cannot be determined.
+- Failed installs now write a log under `%TEMP%\\Yoink\\InstallLogs\\` and tell users to try the default path or disable shortcut creation.
+
 # Yoink v0.8.4.7
 
 ## Highlights

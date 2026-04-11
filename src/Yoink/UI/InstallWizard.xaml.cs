@@ -157,14 +157,16 @@ public partial class InstallWizard : Window
         }
         catch (Exception ex)
         {
+            var logPath = WriteInstallFailureLog(ex, targetDir);
             StatusText.Text = "Installation failed";
-            StatusDetail.Text = ex.Message;
+            StatusDetail.Text = $"Try the default install path or uncheck shortcuts. Log: {logPath}";
             ProgressBar.IsIndeterminate = false;
             ProgressBar.Foreground = new System.Windows.Media.SolidColorBrush(
                 System.Windows.Media.Color.FromRgb(239, 68, 68));
             CancelBtn.IsEnabled = true;
             CancelBtn.Content = "Close";
             InstallBtn.Visibility = Visibility.Collapsed;
+            ToastWindow.ShowError("Installation failed", ex.Message);
         }
         finally
         {
@@ -209,6 +211,30 @@ public partial class InstallWizard : Window
             singleLine = singleLine.Replace("  ", " ");
 
         return singleLine.Length <= 110 ? singleLine : singleLine[..107] + "...";
+    }
+
+    private static string WriteInstallFailureLog(Exception ex, string? targetDir)
+    {
+        try
+        {
+            var logDir = Path.Combine(Path.GetTempPath(), "Yoink", "InstallLogs");
+            Directory.CreateDirectory(logDir);
+            var logPath = Path.Combine(logDir, $"install-failure-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+            var lines = new[]
+            {
+                $"Time: {DateTime.Now:O}",
+                $"TargetDir: {targetDir ?? "<null>"}",
+                $"Version: {UpdateService.GetCurrentVersionLabel()}",
+                "",
+                ex.ToString()
+            };
+            File.WriteAllLines(logPath, lines);
+            return logPath;
+        }
+        catch
+        {
+            return "Unable to write install log";
+        }
     }
 
     private async Task PlayCompletionAnimation()

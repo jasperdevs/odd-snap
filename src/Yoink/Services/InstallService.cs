@@ -355,7 +355,7 @@ public static class InstallService
             var relativePath = Path.GetRelativePath(source, file);
 
             var destination = Path.Combine(target, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            Directory.CreateDirectory(GetRequiredParentDirectory(destination, "copy destination"));
             CopyFileWithRetry(file, destination, cancellationToken);
         }
     }
@@ -378,7 +378,7 @@ public static class InstallService
 
             if (File.Exists(sourcePath))
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                Directory.CreateDirectory(GetRequiredParentDirectory(destinationPath, "optional payload destination"));
                 CopyFileWithRetry(sourcePath, destinationPath, cancellationToken);
             }
             else if (Directory.Exists(sourcePath))
@@ -497,6 +497,18 @@ public static class InstallService
                 Directory.Delete(path, true);
         }
         catch { }
+    }
+
+    private static string GetRequiredParentDirectory(string path, string context)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException($"Yoink couldn't resolve the {context}. Try installing to the default path.");
+
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new InvalidOperationException($"Yoink couldn't resolve the parent folder for '{path}'. Try installing to the default path.");
+
+        return directory;
     }
 
     private static void CreateShortcut(string shortcutPath, string targetExe)
