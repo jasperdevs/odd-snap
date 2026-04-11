@@ -1,4 +1,4 @@
-# Yoink v0.8.11
+# Yoink v0.8.12
 
 ## Highlights
 - Added the new Upscale capture flow with local model/runtime management and preview controls.
@@ -17,3 +17,4 @@
 - Fixed the AI Redirect toast button so it appears when placed, follows the toast layout editor, and no longer spawns an extra toast for non-Lens providers.
 - Fixed shimmer/loading behavior so status text animates more cleanly and duplicate progress copy is suppressed.
 - Fixed OCR translation setup messaging so blocked automatic installs now use a manual-setup flow instead of a failing install action.
+- Fixed release packaging so user-facing setup/portable asset names are clean and the installer uses the app icon.
