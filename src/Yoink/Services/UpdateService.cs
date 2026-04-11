@@ -139,8 +139,11 @@ public static class UpdateService
             response.EnsureSuccessStatusCode();
 
             await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            await using var destination = new FileStream(packagePath, FileMode.Create, FileAccess.Write, FileShare.None);
-            await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+            await using (var destination = new FileStream(packagePath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+                await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
 
             VerifyDownloadedAsset(packagePath, update.AssetSha256);
             return packagePath;
