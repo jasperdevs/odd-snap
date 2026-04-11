@@ -1443,6 +1443,8 @@
                                     <ComboBoxItem Content="Litterbox (temp)" Tag="4"/>
                                     <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
                                     <ComboBoxItem Content="file.io (temp)" Tag="6"/>
+                                    <ComboBoxItem Content="tmpfiles.org (temp)" Tag="22"/>
+                                    <ComboBoxItem Content="transfer.sh (temp)" Tag="8"/>
                                     <ComboBoxItem Content="Catbox" Tag="3"/>
                                     <ComboBoxItem Content="Imgur" Tag="1"/>
                                     <ComboBoxItem Content="ImgBB" Tag="2"/>
@@ -1522,6 +1524,8 @@
                                     <ComboBoxItem Content="Litterbox (temp)" Tag="4"/>
                                     <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
                                     <ComboBoxItem Content="file.io (temp)" Tag="6"/>
+                                    <ComboBoxItem Content="tmpfiles.org (temp)" Tag="22"/>
+                                    <ComboBoxItem Content="transfer.sh (temp)" Tag="8"/>
                                     <ComboBoxItem Content="Catbox" Tag="3"/>
                                     <ComboBoxItem Content="Imgur" Tag="1"/>
                                     <ComboBoxItem Content="ImgBB" Tag="2"/>

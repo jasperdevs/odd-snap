@@ -14,7 +14,7 @@ public sealed partial class RegionOverlayForm
         if (_textBox != null && _textBox.Visible)
             _textBuffer = _textBox.Text;
         if (_isTyping && _textBuffer.Length > 0)
-            AddAnnotation(new TextAnnotation(_textPos, _textBuffer, _textFontSize, _toolColor, _textBold, _textItalic, _textStroke, _textShadow, _textFontFamily));
+            AddAnnotation(new TextAnnotation(_textPos, _textBuffer, _textFontSize, _toolColor, _textBold, _textItalic, _textStroke, _textShadow, _textBackground, _textFontFamily));
         _isTyping = false;
         SetSnapGuides(false, false);
         _textBuffer = "";
@@ -25,7 +25,7 @@ public sealed partial class RegionOverlayForm
         Invalidate();
     }
 
-    private RectangleF MeasureTextRect(Point pos, string text, float fontSize, string fontFamily, bool bold, bool italic)
+    private RectangleF MeasureTextRect(Point pos, string text, float fontSize, string fontFamily, bool bold, bool italic, bool background = false)
     {
         var style = FontStyle.Regular;
         if (bold) style |= FontStyle.Bold;
@@ -34,7 +34,9 @@ public sealed partial class RegionOverlayForm
         string display = text.Length > 0 ? text : "Type here...";
         var size = TextRenderer.MeasureText(display, font, Size.Empty,
             TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
-        return new RectangleF(pos.X - 6, pos.Y - 4, Math.Max(size.Width + 12, 100), size.Height + 8);
+        int padX = background ? 16 : 12;
+        int padY = background ? 12 : 8;
+        return new RectangleF(pos.X - (padX / 2f), pos.Y - (padY / 2f), Math.Max(size.Width + padX, background ? 110 : 100), size.Height + padY);
     }
 
     private RectangleF GetActiveTextRect()
@@ -49,7 +51,7 @@ public sealed partial class RegionOverlayForm
             string display = _textBuffer.Length > 0 ? _textBuffer : "Type here...";
             var measured = TextRenderer.MeasureText(display, font, Size.Empty,
                 TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
-            _activeTextRectCache = MeasureTextRect(_textPos, _textBuffer, _textFontSize, _textFontFamily, _textBold, _textItalic);
+            _activeTextRectCache = MeasureTextRect(_textPos, _textBuffer, _textFontSize, _textFontFamily, _textBold, _textItalic, _textBackground);
             _activeTextMeasureWidth = measured.Width;
             const int hs = 12;
             _activeTextHandleCache[0] = new RectangleF(_activeTextRectCache.X - hs / 2f, _activeTextRectCache.Y - hs / 2f, hs, hs);
@@ -83,7 +85,7 @@ public sealed partial class RegionOverlayForm
         for (int i = texts.Count - 1; i >= 0; i--)
         {
             var ta = texts[i];
-            var rect = MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic);
+            var rect = MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic, ta.Background);
             if (rect.Contains(p)) return i;
         }
         return -1;

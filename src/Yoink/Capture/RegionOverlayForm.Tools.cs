@@ -81,7 +81,7 @@ public sealed partial class RegionOverlayForm
                     PaintStepNumber(g, sn.Pos, sn.Number, sn.Color);
                     break;
                 case TextAnnotation ta:
-                    PaintExcalidrawText(g, ta.Pos, ta.Text, ta.FontSize, ta.Color, ta.Bold, ta.Italic, ta.Stroke, ta.Shadow, ta.FontFamily);
+                    PaintExcalidrawText(g, ta.Pos, ta.Text, ta.FontSize, ta.Color, ta.Bold, ta.Italic, ta.Stroke, ta.Shadow, ta.Background, ta.FontFamily);
                     break;
                 case MagnifierAnnotation ma:
                     PaintPlacedMagnifier(g, ma.Pos, ma.SrcRect);

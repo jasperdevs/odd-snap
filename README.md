@@ -129,10 +129,10 @@ Color picker, QR and barcode scanning, ruler tools, and step numbering live alon
 <tr>
 <td width="40%" valign="middle">
 <h3>Flexible uploads</h3>
-Upload screenshots, stickers, and recordings to Imgur, S3, Dropbox, OneDrive, Immich, and self-hosted targets from the same post-capture flow.
+Upload screenshots, stickers, and recordings to Imgur, ImgBB, Catbox, Litterbox, Gyazo, file.io, Uguu, tmpfiles.org, transfer.sh, Dropbox, Google Drive, OneDrive, Azure Blob, GitHub, Immich, FTP, SFTP, WebDAV, S3 / R2 / B2, and Custom HTTP from the same post-capture flow.
 </td>
 <td width="60%">
-<img src="assets/screenshot-main-readme-v2.png" alt="Yoink uploads" width="100%" />
+<img src="assets/uploads-readme-v2.png" alt="Yoink uploads" width="100%" />
 </td>
 </tr>
 </table>

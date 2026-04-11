@@ -109,6 +109,14 @@ public sealed partial class RegionOverlayForm
                 Invalidate();
                 return;
             }
+            if (_textBackgroundBtnRect.Contains(e.Location))
+            {
+                _textBackground = !_textBackground;
+                InvalidateActiveTextLayout();
+                UpdateTextBoxStyle(); SyncTextBoxSize();
+                Invalidate();
+                return;
+            }
             if (_textFontBtnRect.Contains(e.Location))
             {
                 _fontPickerOpen = !_fontPickerOpen;
@@ -135,14 +143,8 @@ public sealed partial class RegionOverlayForm
             var textBox = GetActiveTextRect();
             if (textBox.Contains(e.Location))
             {
-                _textSelecting = true;
-                _textSelectionAnchor = GetTextCharIndexAt(e.Location);
-                if (_textBox != null)
-                {
-                    _textBox.Focus();
-                    _textBox.SelectionStart = _textSelectionAnchor;
-                    _textBox.SelectionLength = 0;
-                }
+                _textDragging = true;
+                _textDragOffset = new Point(e.Location.X - _textPos.X, e.Location.Y - _textPos.Y);
                 ClearCrosshairGuides();
                 Invalidate();
                 return;
@@ -159,7 +161,7 @@ public sealed partial class RegionOverlayForm
             if (hitIdx >= 0)
             {
                 var ta = GetTextAnnotations()[hitIdx];
-                var oldTextRect = InflateForRepaint(Rectangle.Round(MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic)));
+                var oldTextRect = InflateForRepaint(Rectangle.Round(MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic, ta.Background)));
                 RemoveAnnotation(ta);
                 _isTyping = true;
                 _textPos = ta.Pos;
@@ -170,9 +172,12 @@ public sealed partial class RegionOverlayForm
                 _textItalic = ta.Italic;
                 _textStroke = ta.Stroke;
                 _textShadow = ta.Shadow;
+                _textBackground = ta.Background;
                 _textFontFamily = ta.FontFamily;
                 InvalidateActiveTextLayout();
                 ShowTextBox();
+                _textDragging = true;
+                _textDragOffset = new Point(e.Location.X - _textPos.X, e.Location.Y - _textPos.Y);
                 RefreshOverlayUiChrome();
                 Invalidate();
                 return;
@@ -258,7 +263,7 @@ public sealed partial class RegionOverlayForm
                 InvalidateActiveTextLayout();
                 ShowTextBox();
                 RefreshOverlayUiChrome();
-                Invalidate(InflateForRepaint(Rectangle.Round(MeasureTextRect(_textPos, "", _textFontSize, _textFontFamily, _textBold, _textItalic))));
+                Invalidate(InflateForRepaint(Rectangle.Round(MeasureTextRect(_textPos, "", _textFontSize, _textFontFamily, _textBold, _textItalic, _textBackground))));
                 break;
             case CaptureMode.Highlight:
                 HideToolbarForCaptureTool();

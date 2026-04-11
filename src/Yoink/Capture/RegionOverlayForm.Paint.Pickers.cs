@@ -275,7 +275,7 @@ public sealed partial class RegionOverlayForm
 
         float btnW = 28;
         float fontW = fontLabelSize.Width + 20;
-        float totalW = btnW * 4 + btnPad * 3 + sepW + fontW + pad * 2;
+        float totalW = btnW * 5 + btnPad * 4 + sepW + fontW + pad * 2;
         float totalH = btnH + pad * 2;
         _textToolbarRect = GetTextToolbarBounds(textRect, totalW, totalH);
         float tx = _textToolbarRect.X;
@@ -325,7 +325,7 @@ public sealed partial class RegionOverlayForm
             btnIdx++;
         }
 
-        // B, I, S(troke), Sh(adow)
+        // B, I, S(troke), Sh(adow), Bg
         DrawToggleBtn(ref _textBoldBtnRect, cx, "B", uiFontBold, _textBold);
         cx += btnW + btnPad;
         DrawToggleBtn(ref _textItalicBtnRect, cx, "I", uiFontItalic, _textItalic);
@@ -333,6 +333,8 @@ public sealed partial class RegionOverlayForm
         DrawToggleBtn(ref _textStrokeBtnRect, cx, "S", uiFontSmall, _textStroke);
         cx += btnW + btnPad;
         DrawToggleBtn(ref _textShadowBtnRect, cx, "Sh", uiFontSmall, _textShadow);
+        cx += btnW + btnPad;
+        DrawToggleBtn(ref _textBackgroundBtnRect, cx, "Bg", uiFontSmall, _textBackground);
         cx += btnW;
 
         // Separator between toggle buttons and font selector
@@ -346,7 +348,7 @@ public sealed partial class RegionOverlayForm
         // Font selector
         _textFontBtnRect = new RectangleF(cx, cy, fontW, btnH);
         {
-            bool fontHovered = _hoveredTextBtn == 4;
+            bool fontHovered = _hoveredTextBtn == 5;
             using var btnPath = RRect(_textFontBtnRect, 5);
             int bgAlpha = _fontPickerOpen ? 40 : fontHovered ? 30 : 12;
             var bgColor = UiChrome.SurfaceTextPrimary;
@@ -358,7 +360,7 @@ public sealed partial class RegionOverlayForm
                 g.DrawPath(btnBorder, btnPath);
             }
         }
-        int fontTextAlpha = _hoveredTextBtn == 4 || _fontPickerOpen ? 255 : 190;
+        int fontTextAlpha = _hoveredTextBtn == 5 || _fontPickerOpen ? 255 : 190;
         using var fontBrush = new SolidBrush(Color.FromArgb(fontTextAlpha, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
         g.DrawString(fontLabel, uiFont, fontBrush, _textFontBtnRect, _iconFmt);
 
@@ -368,7 +370,7 @@ public sealed partial class RegionOverlayForm
             var hovRect = _hoveredTextBtn switch
             {
                 0 => _textBoldBtnRect, 1 => _textItalicBtnRect,
-                2 => _textStrokeBtnRect, 3 => _textShadowBtnRect,
+                2 => _textStrokeBtnRect, 3 => _textShadowBtnRect, 4 => _textBackgroundBtnRect,
                 _ => _textFontBtnRect
             };
             var tipFont = UiChrome.ChromeFont(8.5f);
@@ -407,7 +409,7 @@ public sealed partial class RegionOverlayForm
 
         float btnW = 28;
         float fontW = fontLabelSize.Width + 20;
-        float totalW = btnW * 4 + btnPad * 3 + sepW + fontW + pad * 2;
+        float totalW = btnW * 5 + btnPad * 4 + sepW + fontW + pad * 2;
         float totalH = btnH + pad * 2;
         return GetTextToolbarBounds(textRect, totalW, totalH);
     }

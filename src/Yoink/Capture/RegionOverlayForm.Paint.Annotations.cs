@@ -127,11 +127,20 @@ public sealed partial class RegionOverlayForm
             if (_textBuffer.Length > 0)
             {
                 PaintExcalidrawText(g, _textPos, _textBuffer, _textFontSize, _toolColor,
-                    _textBold, _textItalic, _textStroke, _textShadow, _textFontFamily);
+                    _textBold, _textItalic, _textStroke, _textShadow, _textBackground, _textFontFamily);
             }
             else
             {
                 using var placeholderBrush = new SolidBrush(UiChrome.SurfaceTextMuted);
+                if (_textBackground)
+                {
+                    var bgRect = GetActiveTextRect();
+                    using var bgPath = SketchRenderer.RoundedRect(bgRect, 8f);
+                    using var bgBrush = new SolidBrush(_toolColor);
+                    g.FillPath(bgBrush, bgPath);
+                    using var bgStroke = new Pen(Color.FromArgb(60, 0, 0, 0), 1f);
+                    g.DrawPath(bgStroke, bgPath);
+                }
                 g.DrawString(display, font, placeholderBrush, _textPos.X, _textPos.Y);
             }
 
@@ -209,7 +218,7 @@ public sealed partial class RegionOverlayForm
 
     /// <summary>Text annotation: uses DrawString for correct kerning. Shadow and stroke via offset draws.</summary>
     private static void PaintExcalidrawText(Graphics g, Point pos, string text, float fontSize, Color color,
-        bool bold = true, bool italic = false, bool stroke = true, bool shadow = true, string fontFamily = UiChrome.DefaultFontFamily)
+        bool bold = true, bool italic = false, bool stroke = true, bool shadow = true, bool background = false, string fontFamily = UiChrome.DefaultFontFamily)
     {
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
@@ -218,6 +227,28 @@ public sealed partial class RegionOverlayForm
         if (italic) style |= FontStyle.Italic;
         var font = GetAnnotationFont(fontFamily, fontSize, style);
         {
+            if (background)
+            {
+                var size = TextRenderer.MeasureText(text, font, Size.Empty,
+                    TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
+                var bgRect = new RectangleF(pos.X - 8, pos.Y - 6, Math.Max(size.Width + 16, 110), size.Height + 12);
+                using var bgPath = SketchRenderer.RoundedRect(bgRect, 8f);
+                if (shadow)
+                {
+                    using var shadowBrush = new SolidBrush(Color.FromArgb(55, 0, 0, 0));
+                    using var shadowPath = SketchRenderer.RoundedRect(new RectangleF(bgRect.X + 2, bgRect.Y + 2, bgRect.Width, bgRect.Height), 8f);
+                    g.FillPath(shadowBrush, shadowPath);
+                }
+                using var bgBrush = new SolidBrush(color);
+                g.FillPath(bgBrush, bgPath);
+                if (stroke)
+                {
+                    using var bgStroke = new Pen(Color.FromArgb(60, 0, 0, 0), 1.25f);
+                    g.DrawPath(bgStroke, bgPath);
+                }
+                color = Color.White;
+            }
+
             // Shadow: draw text offset in dark color at multiple offsets for soft effect
             if (shadow)
             {

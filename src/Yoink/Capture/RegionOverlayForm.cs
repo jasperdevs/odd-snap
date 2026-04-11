@@ -165,6 +165,7 @@ public sealed partial class RegionOverlayForm : Form
     private bool _textItalic;
     private bool _textStroke = true; // outline stroke enabled by default
     private bool _textShadow = true; // shadow enabled by default
+    private bool _textBackground;
     private string _textFontFamily = UiChrome.FallbackFamilyName;
     private TextBox? _textBox; // real textbox for native text editing
 
@@ -174,6 +175,7 @@ public sealed partial class RegionOverlayForm : Form
     private RectangleF _textItalicBtnRect;
     private RectangleF _textStrokeBtnRect;
     private RectangleF _textShadowBtnRect;
+    private RectangleF _textBackgroundBtnRect;
     private RectangleF _textFontBtnRect;
     private int _hoveredTextBtn = -1; // 0=B, 1=I, 2=S, 3=Sh, 4=Font, -1=none
     private string _textBtnTooltip = "";
@@ -181,6 +183,7 @@ public sealed partial class RegionOverlayForm : Form
     private bool _textResizing;
     private Point _textResizeStart;
     private bool _textDragging;
+    private Point _textDragOffset;
     private bool _textSelecting;
     private int _textSelectionAnchor;
     private RectangleF _activeTextRectCache;

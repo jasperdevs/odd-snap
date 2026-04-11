@@ -14,7 +14,7 @@ public sealed partial class RegionOverlayForm
         if (hitIdx >= 0)
         {
             var ta = GetTextAnnotations()[hitIdx];
-            var oldTextRect = InflateForRepaint(Rectangle.Round(MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic)));
+            var oldTextRect = InflateForRepaint(Rectangle.Round(MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic, ta.Background)));
             RemoveAnnotation(ta);
             _mode = CaptureMode.Text;
             _isTyping = true;
@@ -26,6 +26,7 @@ public sealed partial class RegionOverlayForm
             _textItalic = ta.Italic;
             _textStroke = ta.Stroke;
             _textShadow = ta.Shadow;
+            _textBackground = ta.Background;
             _textFontFamily = ta.FontFamily;
             InvalidateActiveTextLayout();
             ShowTextBox();
@@ -74,6 +75,25 @@ public sealed partial class RegionOverlayForm
             _textBox.SelectionStart = start;
             _textBox.SelectionLength = end - start;
             Invalidate(InflateForRepaint(Rectangle.Round(GetActiveTextRect()), 16));
+            return;
+        }
+
+        if (_textDragging && _isTyping)
+        {
+            ClearCrosshairGuides();
+            SetSnapGuides(false, false);
+            var oldRect = Rectangle.Round(GetActiveTextRect());
+            var oldToolbarRect = Rectangle.Round(GetTextToolbarBounds());
+            var desiredTextPos = new Point(e.Location.X - _textDragOffset.X, e.Location.Y - _textDragOffset.Y);
+            var snappedTextPos = SnapTextPositionToGlobalCenter(desiredTextPos);
+            _textPos = snappedTextPos;
+            InvalidateActiveTextLayout();
+            var newRect = Rectangle.Round(GetActiveTextRect());
+            var newToolbarRect = Rectangle.Round(GetTextToolbarBounds());
+            RefreshOverlayUiChrome();
+            Invalidate(Rectangle.Union(
+                Rectangle.Union(InflateForRepaint(oldRect, 16), InflateForRepaint(newRect, 16)),
+                Rectangle.Union(InflateForRepaint(oldToolbarRect, 16), InflateForRepaint(newToolbarRect, 16))));
             return;
         }
 
@@ -139,13 +159,14 @@ public sealed partial class RegionOverlayForm
             else if (_textItalicBtnRect.Contains(e.Location)) _hoveredTextBtn = 1;
             else if (_textStrokeBtnRect.Contains(e.Location)) _hoveredTextBtn = 2;
             else if (_textShadowBtnRect.Contains(e.Location)) _hoveredTextBtn = 3;
-            else if (_textFontBtnRect.Contains(e.Location)) _hoveredTextBtn = 4;
+            else if (_textBackgroundBtnRect.Contains(e.Location)) _hoveredTextBtn = 4;
+            else if (_textFontBtnRect.Contains(e.Location)) _hoveredTextBtn = 5;
         }
         if (_hoveredTextBtn != prevTextBtn)
         {
             _textBtnTooltip = _hoveredTextBtn switch
             {
-                0 => "Bold", 1 => "Italic", 2 => "Stroke", 3 => "Shadow", 4 => _textFontFamily, _ => ""
+                0 => "Bold", 1 => "Italic", 2 => "Stroke", 3 => "Shadow", 4 => "Background", 5 => _textFontFamily, _ => ""
             };
             needsRepaint = true;
         }
@@ -237,7 +258,7 @@ public sealed partial class RegionOverlayForm
         {
             int h = GetTextHandle(e.Location);
             if (h >= 0) target = h is 0 or 3 ? Cursors.SizeNWSE : Cursors.SizeNESW;
-            else if (GetActiveTextRect().Contains(e.Location)) target = Cursors.IBeam;
+            else if (GetActiveTextRect().Contains(e.Location)) target = Cursors.SizeAll;
             else target = Cursors.Default;
         }
         else if (_mode == CaptureMode.Select)

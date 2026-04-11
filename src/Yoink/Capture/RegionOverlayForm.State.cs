@@ -298,7 +298,9 @@ public sealed partial class RegionOverlayForm
         using var font = new Font(ta.FontFamily, ta.FontSize,
             (ta.Bold ? FontStyle.Bold : 0) | (ta.Italic ? FontStyle.Italic : 0));
         var sz = System.Windows.Forms.TextRenderer.MeasureText(ta.Text, font);
-        return new Rectangle(ta.Pos.X, ta.Pos.Y, sz.Width + 10, sz.Height + 6);
+        int padX = ta.Background ? 16 : 10;
+        int padY = ta.Background ? 12 : 6;
+        return new Rectangle(ta.Pos.X - (padX / 2), ta.Pos.Y - (padY / 2), sz.Width + padX, sz.Height + padY);
     }
 
     /// <summary>Hit-tests all annotations in reverse order (top-most first). Returns index or -1.</summary>

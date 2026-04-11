@@ -250,7 +250,7 @@ public sealed partial class RegionOverlayForm
 
     private Point SnapTextPositionToGlobalCenter(Point desiredTextPos)
     {
-        var snappedBounds = Rectangle.Round(MeasureTextRect(desiredTextPos, _textBuffer, _textFontSize, _textFontFamily, _textBold, _textItalic));
+        var snappedBounds = Rectangle.Round(MeasureTextRect(desiredTextPos, _textBuffer, _textFontSize, _textFontFamily, _textBold, _textItalic, _textBackground));
         return SnapPointToGlobalCenter(snappedBounds, desiredTextPos);
     }
 
