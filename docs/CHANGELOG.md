@@ -1,4 +1,4 @@
-# Yoink v0.8.7.1
+# Yoink v0.8.8
 
 ## Highlights
 - Blocked insecure automatic installs for Argos Translate and the open-source local translation runtime.
