@@ -3,7 +3,7 @@
 
 <p align="center">
   <a href="https://github.com/jasperdevs/yoink/releases/latest">
-    <img src="assets/windows-download-badge-v2.svg" alt="Download yoink for Windows" />
+    <img src="https://img.shields.io/badge/Windows-download-4c71f2?style=flat&logo=windows&logoColor=white" alt="Download yoink for Windows" />
   </a>
   <img src="https://img.shields.io/badge/macOS%20planned-555?logo=apple" alt="macOS planned" />
   <img src="https://img.shields.io/badge/Linux%20planned-555?logo=linux" alt="Linux planned" />
@@ -51,7 +51,7 @@ Region, fullscreen, active-window, and scrolling capture in one ShareX-style wor
 Open ChatGPT, Claude, Gemini, or Google Lens right after capture, then keep the image pinned and ready to drag or paste into the chat box.
 </td>
 <td width="60%">
-<img src="assets/ai-uploads-readme-v3.png" alt="Yoink AI Redirects" width="100%" />
+<img src="assets/ai-uploads-readme-v4.png" alt="Yoink AI Redirects" width="100%" />
 </td>
 </tr>
 <tr>
@@ -83,8 +83,8 @@ Launch capture, OCR, color picking, recording, history, and more from system-wid
 </tr>
 <tr>
 <td width="40%" valign="middle">
-<h3>Recording</h3>
-Record GIFs and videos in multiple formats with optional microphone and desktop audio capture.
+<h3>Recording / scrolling captures</h3>
+Record GIFs and videos in multiple formats with optional microphone and desktop audio capture, and capture long scrolling regions without stitching them manually.
 </td>
 <td width="60%">
 <img src="assets/recording-readme-v2.png" alt="Yoink recording" width="100%" />
@@ -123,7 +123,7 @@ Download language packs on demand for multilingual OCR and translation workflows
 Color picker, QR and barcode scanning, ruler tools, and step numbering live alongside capture instead of being split across separate apps.
 </td>
 <td width="60%">
-<img src="assets/screenshot-main-readme-v2.png" alt="Yoink utility tools" width="100%" />
+<img src="assets/utility-tools-readme-v2.png" alt="Yoink utility tools" width="100%" />
 </td>
 </tr>
 <tr>
