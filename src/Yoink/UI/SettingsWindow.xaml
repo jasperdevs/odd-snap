@@ -2015,6 +2015,8 @@
                                             Click="StickerOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
                                     <Button x:Name="StickerRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="StickerRemoveAllModelsBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
+                                    <Button x:Name="StickerCopyErrorBtn" Content="Copy error" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                            Click="StickerCopyErrorBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
                                 </StackPanel>
                         </StackPanel>
                     </controls:ProviderSection>
@@ -2143,6 +2145,8 @@
                                             Click="UpscaleOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
                                     <Button x:Name="UpscaleRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="UpscaleRemoveAllModelsBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
+                                    <Button x:Name="UpscaleCopyErrorBtn" Content="Copy error" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                            Click="UpscaleCopyErrorBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
                                 </StackPanel>
                         </StackPanel>
                     </controls:ProviderSection>

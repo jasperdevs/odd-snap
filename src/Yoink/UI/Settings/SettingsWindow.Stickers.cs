@@ -93,6 +93,7 @@ public partial class SettingsWindow
 
     private void StickerDownloadRembgBtn_Click(object sender, RoutedEventArgs e)
     {
+        var executionProvider = (StickerExecutionProvider)StickerLocalExecutionCombo.SelectedIndex;
         var engine = GetSelectedLocalStickerEngine();
 
         if (LocalStickerEngineService.IsModelDownloaded(engine))
@@ -118,7 +119,7 @@ public partial class SettingsWindow
             async (progress, cancellationToken) =>
             {
                 var modelProgress = new Progress<LocalStickerEngineDownloadProgress>(p => progress.Report(p.StatusMessage));
-                var result = await LocalStickerEngineService.DownloadModelAsync(engine, modelProgress, cancellationToken);
+                var result = await LocalStickerEngineService.DownloadModelAsync(engine, executionProvider, modelProgress, cancellationToken);
                 if (!result.Success || string.IsNullOrWhiteSpace(result.ModelPath))
                     throw new InvalidOperationException(result.Message);
             });
@@ -162,5 +163,16 @@ public partial class SettingsWindow
         {
             ToastWindow.ShowError("Sticker engine error", "Couldn't remove the downloaded models.");
         }
+    }
+
+    private void StickerCopyErrorBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var executionProvider = (StickerExecutionProvider)StickerLocalExecutionCombo.SelectedIndex;
+        var engine = GetSelectedLocalStickerEngine();
+        if (!TryGetStickerJobError(executionProvider, engine, out var error))
+            return;
+
+        ClipboardService.CopyTextToClipboard(error);
+        ToastWindow.Show("Copied", "Sticker error copied to clipboard.");
     }
 }

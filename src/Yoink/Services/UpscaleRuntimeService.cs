@@ -9,6 +9,7 @@ namespace Yoink.Services;
 public static class UpscaleRuntimeService
 {
     private const string PythonLauncherArg = "-3";
+    private const int RuntimeLayoutVersion = 1;
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
     private static readonly HttpClient Http = new()
     {
@@ -16,13 +17,14 @@ public static class UpscaleRuntimeService
         DefaultRequestHeaders = { { "User-Agent", "Yoink/1.0" } }
     };
 
-    private sealed record PythonRunResult(int ExitCode, string StdOut, string StdErr);
+    private sealed record ProcessRunResult(int ExitCode, string StdOut, string StdErr);
     private sealed record ProbeState(bool? Ready, string Status, DateTime CheckedUtc);
 
     private static readonly string RootDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "upscale");
 
     private static readonly string ModelCacheDir = Path.Combine(RootDir, "models");
+    private static readonly string RuntimeDir = Path.Combine(RootDir, "runtime");
     private static readonly object ProbeGate = new();
     private static readonly Dictionary<UpscaleExecutionProvider, ProbeState> ProbeCache = new();
 
@@ -83,33 +85,17 @@ public static class UpscaleRuntimeService
         if (await IsRuntimeReadyAsync(provider, cancellationToken).ConfigureAwait(false))
             return;
 
-        progress?.Report("Installing Python runtime packages...");
-        var install = await RunPythonAsync(new[]
+        if (!await IsPythonLauncherAvailableAsync(cancellationToken).ConfigureAwait(false))
         {
-            PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", "onnxruntime", "numpy", "pillow"
-        }, cancellationToken).ConfigureAwait(false);
-
-        if (install.ExitCode != 0)
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(install.StdErr) ? install.StdOut.Trim() : install.StdErr.Trim());
-
-        if (provider == UpscaleExecutionProvider.Gpu)
-        {
-            progress?.Report("Trying to enable CUDA acceleration...");
-            var gpuInstall = await RunPythonAsync(new[]
-            {
-                PythonLauncherArg, "-m", "pip", "install", "--user", "--upgrade", "onnxruntime-gpu"
-            }, cancellationToken).ConfigureAwait(false);
-
-            if (gpuInstall.ExitCode != 0)
-            {
-                var gpuMessage = string.IsNullOrWhiteSpace(gpuInstall.StdErr) ? gpuInstall.StdOut.Trim() : gpuInstall.StdErr.Trim();
-                AppDiagnostics.LogWarning("upscale.runtime.install.gpu-optional", string.IsNullOrWhiteSpace(gpuMessage)
-                    ? "CUDA acceleration package was unavailable; using CPU fallback."
-                    : gpuMessage);
-            }
+            UpdateProbeCache(provider, false, "Python not found");
+            throw new InvalidOperationException("Python 3 was not found. Install Python and try again.");
         }
 
-        await IsRuntimeReadyAsync(provider, cancellationToken).ConfigureAwait(false);
+        progress?.Report("Creating isolated upscale runtime...");
+        await EnsureEnvironmentAsync(provider, progress, cancellationToken).ConfigureAwait(false);
+
+        if (!await IsRuntimeReadyAsync(provider, cancellationToken).ConfigureAwait(false))
+            throw new InvalidOperationException("The upscale runtime did not become ready after installation.");
     }
 
     public static async Task<bool> IsRuntimeReadyAsync(UpscaleExecutionProvider provider, CancellationToken cancellationToken = default)
@@ -117,9 +103,10 @@ public static class UpscaleRuntimeService
         if (TryGetCachedStatus(provider, out var cachedReady, out _))
             return cachedReady;
 
-        if (!await IsPythonLauncherAvailableAsync(cancellationToken).ConfigureAwait(false))
+        var pythonPath = GetRuntimePythonPath(provider);
+        if (!File.Exists(pythonPath) || !IsRuntimeMarkerCurrent(provider))
         {
-            UpdateProbeCache(provider, false, "Python not found");
+            UpdateProbeCache(provider, false, "Not installed");
             return false;
         }
 
@@ -127,7 +114,7 @@ public static class UpscaleRuntimeService
             ? "import onnxruntime as ort; print('CUDAExecutionProvider' in ort.get_available_providers())"
             : "import onnxruntime, numpy, PIL; print('ok')";
 
-        var result = await RunPythonAsync(new[] { PythonLauncherArg, "-c", checkCommand }, cancellationToken).ConfigureAwait(false);
+        var result = await RunRuntimePythonAsync(provider, new[] { "-c", checkCommand }, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
             UpdateProbeCache(provider, false, "Not installed");
@@ -218,9 +205,8 @@ public static class UpscaleRuntimeService
 
         try
         {
-            var result = await RunPythonAsync(new[]
+            var result = await RunRuntimePythonAsync(provider, new[]
             {
-                PythonLauncherArg,
                 "-c",
                 BuildUpscaleScript(),
                 tempInput,
@@ -231,7 +217,7 @@ public static class UpscaleRuntimeService
             }, cancellationToken).ConfigureAwait(false);
 
             if (result.ExitCode != 0)
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut.Trim() : result.StdErr.Trim());
+                throw new InvalidOperationException(GetProcessErrorMessage(result, "Upscale processing failed."));
 
             if (!File.Exists(tempOutput))
                 throw new InvalidOperationException("Upscale did not produce an output image.");
@@ -248,6 +234,15 @@ public static class UpscaleRuntimeService
 
     public static string GetModelPath(LocalUpscaleEngine engine) => Path.Combine(ModelCacheDir, GetModelFileName(engine));
 
+    internal static string GetRuntimeEnvironmentDirectory(UpscaleExecutionProvider provider)
+        => Path.Combine(RuntimeDir, provider == UpscaleExecutionProvider.Gpu ? "gpu" : "cpu");
+
+    internal static string GetRuntimePythonPath(UpscaleExecutionProvider provider)
+        => Path.Combine(GetRuntimeEnvironmentDirectory(provider), "Scripts", "python.exe");
+
+    internal static string GetRuntimeMarkerPath(UpscaleExecutionProvider provider)
+        => Path.Combine(GetRuntimeEnvironmentDirectory(provider), ".yoink-runtime-version");
+
     private static string GetModelDownloadUrl(LocalUpscaleEngine engine) => engine switch
     {
         LocalUpscaleEngine.SwinIrRealWorld => "https://huggingface.co/rocca/swin-ir-onnx/resolve/main/003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.onnx?download=1",
@@ -262,17 +257,101 @@ public static class UpscaleRuntimeService
         _ => "upscale.onnx"
     };
 
+    private static async Task EnsureEnvironmentAsync(UpscaleExecutionProvider provider, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(RuntimeDir);
+
+        var envDir = GetRuntimeEnvironmentDirectory(provider);
+        var pythonPath = GetRuntimePythonPath(provider);
+        var recreate = !File.Exists(pythonPath) || !IsRuntimeMarkerCurrent(provider);
+
+        if (recreate)
+        {
+            TryDeleteDirectory(envDir);
+            progress?.Report("Creating isolated Python environment...");
+            var create = await RunLauncherAsync(new[] { PythonLauncherArg, "-m", "venv", envDir }, cancellationToken).ConfigureAwait(false);
+            if (create.ExitCode != 0)
+                throw new InvalidOperationException(GetProcessErrorMessage(create, "Couldn't create the isolated Python environment."));
+        }
+
+        progress?.Report("Installing upscale runtime packages...");
+        var toolsInstall = await RunRuntimePythonAsync(provider, new[]
+        {
+            "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip", "setuptools", "wheel"
+        }, cancellationToken).ConfigureAwait(false);
+        if (toolsInstall.ExitCode != 0)
+            throw new InvalidOperationException(GetProcessErrorMessage(toolsInstall, "Couldn't prepare pip inside the isolated runtime."));
+
+        var runtimeInstall = await InstallRuntimePackagesAsync(provider, progress, cancellationToken).ConfigureAwait(false);
+        if (runtimeInstall.ExitCode != 0)
+            throw new InvalidOperationException(GetProcessErrorMessage(runtimeInstall, "Couldn't install the upscale runtime."));
+
+        File.WriteAllText(GetRuntimeMarkerPath(provider), RuntimeLayoutVersion.ToString());
+        ClearProbeCache(provider);
+    }
+
+    private static async Task<ProcessRunResult> InstallRuntimePackagesAsync(UpscaleExecutionProvider provider, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        if (provider == UpscaleExecutionProvider.Gpu)
+        {
+            progress?.Report("Installing runtime packages with CUDA support...");
+            var gpuInstall = await RunRuntimePythonAsync(provider, BuildInstallArguments(useGpuPackage: true), cancellationToken).ConfigureAwait(false);
+            if (gpuInstall.ExitCode == 0)
+                return gpuInstall;
+
+            var gpuMessage = GetProcessErrorMessage(gpuInstall, "CUDA runtime package was unavailable.");
+            AppDiagnostics.LogWarning("upscale.runtime.install.gpu-optional", gpuMessage);
+            progress?.Report("CUDA package unavailable. Falling back to CPU runtime...");
+        }
+
+        return await RunRuntimePythonAsync(provider, BuildInstallArguments(useGpuPackage: false), cancellationToken).ConfigureAwait(false);
+    }
+
+    private static IEnumerable<string> BuildInstallArguments(bool useGpuPackage)
+    {
+        yield return "-m";
+        yield return "pip";
+        yield return "install";
+        yield return "--disable-pip-version-check";
+        yield return "--upgrade";
+        yield return "--prefer-binary";
+        yield return useGpuPackage ? "onnxruntime-gpu" : "onnxruntime";
+        yield return "numpy";
+        yield return "pillow";
+    }
+
+    private static bool IsRuntimeMarkerCurrent(UpscaleExecutionProvider provider)
+    {
+        try
+        {
+            var markerPath = GetRuntimeMarkerPath(provider);
+            return File.Exists(markerPath) &&
+                   int.TryParse(File.ReadAllText(markerPath).Trim(), out var version) &&
+                   version == RuntimeLayoutVersion;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static async Task<bool> IsPythonLauncherAvailableAsync(CancellationToken cancellationToken)
     {
-        var result = await RunPythonAsync(new[] { PythonLauncherArg, "--version" }, cancellationToken).ConfigureAwait(false);
+        var result = await RunLauncherAsync(new[] { PythonLauncherArg, "--version" }, cancellationToken).ConfigureAwait(false);
         return result.ExitCode == 0;
     }
 
-    private static async Task<PythonRunResult> RunPythonAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
+    private static Task<ProcessRunResult> RunLauncherAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
+        => RunProcessAsync("py", arguments, cancellationToken);
+
+    private static Task<ProcessRunResult> RunRuntimePythonAsync(UpscaleExecutionProvider provider, IEnumerable<string> arguments, CancellationToken cancellationToken)
+        => RunProcessAsync(GetRuntimePythonPath(provider), arguments, cancellationToken);
+
+    private static async Task<ProcessRunResult> RunProcessAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken)
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "py",
+            FileName = fileName,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -286,14 +365,23 @@ public static class UpscaleRuntimeService
         using var errorMode = WindowsErrorModeScope.SuppressSystemDialogs();
         using var process = new Process { StartInfo = psi };
         if (!process.Start())
-            return new PythonRunResult(-1, "", "Could not start Python launcher.");
+            return new ProcessRunResult(-1, "", $"Could not start process '{fileName}'.");
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         var stdout = await stdoutTask.ConfigureAwait(false);
         var stderr = await stderrTask.ConfigureAwait(false);
-        return new PythonRunResult(process.ExitCode, stdout, stderr);
+        return new ProcessRunResult(process.ExitCode, stdout, stderr);
+    }
+
+    private static string GetProcessErrorMessage(ProcessRunResult result, string fallbackMessage)
+    {
+        if (!string.IsNullOrWhiteSpace(result.StdErr))
+            return result.StdErr.Trim();
+        if (!string.IsNullOrWhiteSpace(result.StdOut))
+            return result.StdOut.Trim();
+        return fallbackMessage;
     }
 
     private static string SaveTempPng(Bitmap input)
@@ -325,6 +413,19 @@ if device == 'gpu':
 session = ort.InferenceSession(model_path, providers=providers)
 input_name = session.get_inputs()[0].name
 output_name = session.get_outputs()[0].name
+input_meta = session.get_inputs()[0]
+output_meta = session.get_outputs()[0]
+
+native_scale = scale
+input_shape = input_meta.shape
+output_shape = output_meta.shape
+if (
+    len(input_shape) >= 4 and len(output_shape) >= 4 and
+    isinstance(input_shape[2], int) and isinstance(input_shape[3], int) and
+    isinstance(output_shape[2], int) and isinstance(output_shape[3], int) and
+    input_shape[2] > 0 and input_shape[3] > 0
+):
+    native_scale = max(output_shape[2] // input_shape[2], output_shape[3] // input_shape[3], 1)
 
 img = Image.open(input_path).convert('RGB')
 arr = np.asarray(img).astype(np.float32) / 255.0
@@ -339,24 +440,38 @@ if pad_h or pad_w:
     arr = np.pad(arr, ((0, 0), (0, 0), (0, pad_h), (0, pad_w)), mode='reflect')
 
 tile = 256
-tile_overlap = 24
 _, _, padded_h, padded_w = arr.shape
-output = np.zeros((1, 3, padded_h * scale, padded_w * scale), dtype=np.float32)
+output = np.zeros((1, 3, padded_h * native_scale, padded_w * native_scale), dtype=np.float32)
 weight = np.zeros_like(output)
+
+expected_h = input_shape[2] if len(input_shape) >= 4 and isinstance(input_shape[2], int) and input_shape[2] > 0 else None
+expected_w = input_shape[3] if len(input_shape) >= 4 and isinstance(input_shape[3], int) and input_shape[3] > 0 else None
 
 for y in range(0, padded_h, tile):
     for x in range(0, padded_w, tile):
         input_tile = arr[:, :, y:min(y + tile, padded_h), x:min(x + tile, padded_w)]
+        tile_h = input_tile.shape[2]
+        tile_w = input_tile.shape[3]
+
+        if expected_h is not None and expected_w is not None and (tile_h != expected_h or tile_w != expected_w):
+            pad_h = max(0, expected_h - tile_h)
+            pad_w = max(0, expected_w - tile_w)
+            if pad_h or pad_w:
+                input_tile = np.pad(input_tile, ((0, 0), (0, 0), (0, pad_h), (0, pad_w)), mode='reflect')
+
         output_tile = session.run([output_name], {input_name: input_tile})[0]
-        out_y = y * scale
-        out_x = x * scale
+        crop_h = tile_h * native_scale
+        crop_w = tile_w * native_scale
+        output_tile = output_tile[:, :, :crop_h, :crop_w]
+        out_y = y * native_scale
+        out_x = x * native_scale
         out_h = output_tile.shape[2]
         out_w = output_tile.shape[3]
         output[:, :, out_y:out_y + out_h, out_x:out_x + out_w] += output_tile
         weight[:, :, out_y:out_y + out_h, out_x:out_x + out_w] += 1.0
 
 output = output / np.maximum(weight, 1e-8)
-output = output[:, :, :h * scale, :w * scale]
+output = output[:, :, :h * native_scale, :w * native_scale]
 output = np.clip(output[0], 0.0, 1.0)
 output = np.transpose(output, (1, 2, 0))
 output = (output * 255.0).round().astype(np.uint8)
@@ -367,5 +482,23 @@ Image.fromarray(output).save(output_path)
     {
         lock (ProbeGate)
             ProbeCache[provider] = new ProbeState(ready, status, DateTime.UtcNow);
+    }
+
+    private static void ClearProbeCache(UpscaleExecutionProvider provider)
+    {
+        lock (ProbeGate)
+            ProbeCache.Remove(provider);
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+        }
     }
 }

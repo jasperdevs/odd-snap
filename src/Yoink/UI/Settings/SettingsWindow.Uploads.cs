@@ -142,12 +142,18 @@ public partial class SettingsWindow
         bool downloaded = LocalStickerEngineService.IsModelDownloaded(engine);
         var hasRuntimeFailure = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerRuntimeJobKey(executionProvider), out runtimeJob) &&
                                 runtimeJob is { LastSucceeded: false };
+        BackgroundRuntimeJobSnapshot? modelFailureJob = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerModelJobKey(engine), out var stickerModelJob)
+            ? stickerModelJob
+            : null;
+        var stickerFailure = RuntimeJobFailureResolver.GetFailureMessage(modelFailureJob, runtimeJob);
         var hasRuntimeStatus = RembgRuntimeService.TryGetCachedStatus(executionProvider, out var runtimeReady, out var runtimeStatus);
 
-        if (hasRuntimeFailure)
+        if (!string.IsNullOrWhiteSpace(stickerFailure))
         {
-            StickerLocalEngineStatusText.Text = $"Failed: {runtimeJob.LastError}";
-            StickerInstallDriversBtn.Content = RembgRuntimeService.GetSetupButtonText(executionProvider);
+            StickerLocalEngineStatusText.Text = $"Failed: {stickerFailure}";
+            StickerInstallDriversBtn.Content = hasRuntimeFailure
+                ? RembgRuntimeService.GetSetupButtonText(executionProvider)
+                : (runtimeReady ? "Installed" : RembgRuntimeService.GetSetupButtonText(executionProvider));
         }
         else if (hasRuntimeStatus && !runtimeReady)
         {
@@ -166,6 +172,7 @@ public partial class SettingsWindow
         StickerOpenLocalEngineRepoBtn.Content = "Open rembg";
         StickerDownloadRembgBtn.Content = downloaded ? "Remove model" : "Download model";
         StickerRemoveAllModelsBtn.Visibility = RembgRuntimeService.HasAnyCachedModels() ? Visibility.Visible : Visibility.Collapsed;
+        StickerCopyErrorBtn.Visibility = string.IsNullOrWhiteSpace(stickerFailure) ? Visibility.Collapsed : Visibility.Visible;
         StickerInstallDriversBtn.IsEnabled = true;
         SetStickerDownloadUi(false, null, null);
         SetLoadingTextShimmer(StickerLocalEngineStatusText, false, 1.0, 0.35);
@@ -224,6 +231,7 @@ public partial class SettingsWindow
         StickerDownloadRembgBtn.IsEnabled = !isBusy;
         StickerOpenLocalEngineRepoBtn.IsEnabled = !isBusy;
         StickerRemoveAllModelsBtn.IsEnabled = !isBusy;
+        StickerCopyErrorBtn.IsEnabled = !isBusy;
 
         StickerLocalEngineProgress.Visibility = isBusy || percent.HasValue ? Visibility.Visible : Visibility.Collapsed;
         StickerLocalEngineProgress.IsIndeterminate = isBusy && !percent.HasValue;
@@ -286,12 +294,18 @@ public partial class SettingsWindow
         bool downloaded = LocalUpscaleEngineService.IsModelDownloaded(engine);
         var hasRuntimeFailure = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleRuntimeJobKey(executionProvider), out runtimeJob) &&
                                 runtimeJob is { LastSucceeded: false };
+        BackgroundRuntimeJobSnapshot? modelFailureJob = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleModelJobKey(engine), out var upscaleModelJob)
+            ? upscaleModelJob
+            : null;
+        var upscaleFailure = RuntimeJobFailureResolver.GetFailureMessage(modelFailureJob, runtimeJob);
         var hasRuntimeStatus = UpscaleRuntimeService.TryGetCachedStatus(executionProvider, out var runtimeReady, out var runtimeStatus);
 
-        if (hasRuntimeFailure)
+        if (!string.IsNullOrWhiteSpace(upscaleFailure))
         {
-            UpscaleLocalEngineStatusText.Text = $"Failed: {runtimeJob.LastError}";
-            UpscaleInstallDriversBtn.Content = UpscaleRuntimeService.GetSetupButtonText(executionProvider);
+            UpscaleLocalEngineStatusText.Text = $"Failed: {upscaleFailure}";
+            UpscaleInstallDriversBtn.Content = hasRuntimeFailure
+                ? UpscaleRuntimeService.GetSetupButtonText(executionProvider)
+                : (runtimeReady ? "Installed" : UpscaleRuntimeService.GetSetupButtonText(executionProvider));
         }
         else if (hasRuntimeStatus && !runtimeReady)
         {
@@ -310,6 +324,7 @@ public partial class SettingsWindow
         UpscaleOpenLocalEngineRepoBtn.Content = "Open project";
         UpscaleDownloadModelBtn.Content = downloaded ? "Remove model" : "Download model";
         UpscaleRemoveAllModelsBtn.Visibility = UpscaleRuntimeService.HasAnyCachedModels() ? Visibility.Visible : Visibility.Collapsed;
+        UpscaleCopyErrorBtn.Visibility = string.IsNullOrWhiteSpace(upscaleFailure) ? Visibility.Collapsed : Visibility.Visible;
         UpscaleInstallDriversBtn.IsEnabled = true;
         SetUpscaleDownloadUi(false, null, null);
         SetLoadingTextShimmer(UpscaleLocalEngineStatusText, false, 1.0, 0.35);
@@ -370,6 +385,7 @@ public partial class SettingsWindow
         UpscaleDownloadModelBtn.IsEnabled = !isBusy;
         UpscaleOpenLocalEngineRepoBtn.IsEnabled = !isBusy;
         UpscaleRemoveAllModelsBtn.IsEnabled = !isBusy;
+        UpscaleCopyErrorBtn.IsEnabled = !isBusy;
 
         UpscaleLocalEngineProgress.Visibility = isBusy || percent.HasValue ? Visibility.Visible : Visibility.Collapsed;
         UpscaleLocalEngineProgress.IsIndeterminate = isBusy && !percent.HasValue;
@@ -387,6 +403,30 @@ public partial class SettingsWindow
             UpscaleLocalEngineProgressText.Text = message;
         else if (!isBusy)
             UpscaleLocalEngineProgressText.Text = string.Empty;
+    }
+
+    private bool TryGetStickerJobError(StickerExecutionProvider executionProvider, LocalStickerEngine engine, out string error)
+    {
+        var runtimeJob = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerRuntimeJobKey(executionProvider), out var runtimeSnapshot)
+            ? runtimeSnapshot
+            : null;
+        var modelJob = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerModelJobKey(engine), out var modelSnapshot)
+            ? modelSnapshot
+            : null;
+        error = RuntimeJobFailureResolver.GetFailureMessage(modelJob, runtimeJob) ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(error);
+    }
+
+    private bool TryGetUpscaleJobError(UpscaleExecutionProvider executionProvider, LocalUpscaleEngine engine, out string error)
+    {
+        var runtimeJob = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleRuntimeJobKey(executionProvider), out var runtimeSnapshot)
+            ? runtimeSnapshot
+            : null;
+        var modelJob = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleModelJobKey(engine), out var modelSnapshot)
+            ? modelSnapshot
+            : null;
+        error = RuntimeJobFailureResolver.GetFailureMessage(modelJob, runtimeJob) ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(error);
     }
 
     private void UpdateUpscaleDefaultScaleUi(LocalUpscaleEngine engine)

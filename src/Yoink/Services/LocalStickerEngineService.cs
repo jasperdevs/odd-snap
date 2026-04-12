@@ -78,13 +78,14 @@ public static class LocalStickerEngineService
 
     public static bool RemoveDownloadedModel(LocalStickerEngine engine) => RembgRuntimeService.RemoveCachedModel(engine);
 
-    public static async Task<LocalStickerModelInstallResult> DownloadModelAsync(LocalStickerEngine engine, IProgress<LocalStickerEngineDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
+    public static async Task<LocalStickerModelInstallResult> DownloadModelAsync(LocalStickerEngine engine, StickerExecutionProvider provider, IProgress<LocalStickerEngineDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         try
         {
-            progress?.Report(new LocalStickerEngineDownloadProgress(0, null, $"Preparing {GetEngineLabel(engine)} with rembg..."));
-            await RembgRuntimeService.EnsureInstalledAsync(StickerExecutionProvider.Cpu, null, cancellationToken).ConfigureAwait(false);
-            await RembgRuntimeService.WarmupModelAsync(engine, StickerExecutionProvider.Cpu, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new LocalStickerEngineDownloadProgress(0, null, $"Preparing {GetEngineLabel(engine)}..."));
+            var runtimeProgress = new Progress<string>(message =>
+                progress?.Report(new LocalStickerEngineDownloadProgress(0, null, message)));
+            await RembgRuntimeService.EnsureModelReadyAsync(engine, provider, runtimeProgress, cancellationToken).ConfigureAwait(false);
             var modelPath = GetModelPath(engine);
             progress?.Report(new LocalStickerEngineDownloadProgress(100, 100, "Model is ready."));
             return new LocalStickerModelInstallResult(true, $"Prepared {GetEngineLabel(engine)}.", modelPath, GetProjectUrl(engine));

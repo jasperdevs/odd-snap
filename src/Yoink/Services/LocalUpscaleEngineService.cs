@@ -48,13 +48,13 @@ public static class LocalUpscaleEngineService
     public static string GetModelPath(LocalUpscaleEngine engine) => UpscaleRuntimeService.GetModelPath(engine);
     public static bool RemoveDownloadedModel(LocalUpscaleEngine engine) => UpscaleRuntimeService.RemoveCachedModel(engine);
 
-    public static async Task<LocalUpscaleModelInstallResult> DownloadModelAsync(LocalUpscaleEngine engine, IProgress<LocalUpscaleEngineDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
+    public static async Task<LocalUpscaleModelInstallResult> DownloadModelAsync(LocalUpscaleEngine engine, UpscaleExecutionProvider provider, IProgress<LocalUpscaleEngineDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         try
         {
             var def = Models[engine];
             progress?.Report(new LocalUpscaleEngineDownloadProgress(0, null, $"Preparing {def.Label}..."));
-            await UpscaleRuntimeService.EnsureInstalledAsync(UpscaleExecutionProvider.Cpu, null, cancellationToken).ConfigureAwait(false);
+            await UpscaleRuntimeService.EnsureInstalledAsync(provider, null, cancellationToken).ConfigureAwait(false);
             await UpscaleRuntimeService.EnsureModelDownloadedAsync(engine, progress, cancellationToken).ConfigureAwait(false);
             progress?.Report(new LocalUpscaleEngineDownloadProgress(100, 100, "Model is ready."));
             return new LocalUpscaleModelInstallResult(true, $"Prepared {def.Label}.", GetModelPath(engine), def.ProjectUrl);

@@ -83,6 +83,7 @@ public partial class SettingsWindow
 
     private void UpscaleDownloadModelBtn_Click(object sender, RoutedEventArgs e)
     {
+        var executionProvider = (UpscaleExecutionProvider)UpscaleLocalExecutionCombo.SelectedIndex;
         var engine = GetSelectedLocalUpscaleEngine();
 
         if (LocalUpscaleEngineService.IsModelDownloaded(engine))
@@ -108,7 +109,7 @@ public partial class SettingsWindow
             async (progress, cancellationToken) =>
             {
                 var modelProgress = new Progress<LocalUpscaleEngineDownloadProgress>(p => progress.Report(p.StatusMessage));
-                var result = await LocalUpscaleEngineService.DownloadModelAsync(engine, modelProgress, cancellationToken);
+                var result = await LocalUpscaleEngineService.DownloadModelAsync(engine, executionProvider, modelProgress, cancellationToken);
                 if (!result.Success || string.IsNullOrWhiteSpace(result.ModelPath))
                     throw new InvalidOperationException(result.Message);
             });
@@ -152,5 +153,16 @@ public partial class SettingsWindow
         {
             ToastWindow.ShowError("Upscale engine error", "Couldn't remove the downloaded models.");
         }
+    }
+
+    private void UpscaleCopyErrorBtn_Click(object sender, RoutedEventArgs e)
+    {
+        var executionProvider = (UpscaleExecutionProvider)UpscaleLocalExecutionCombo.SelectedIndex;
+        var engine = GetSelectedLocalUpscaleEngine();
+        if (!TryGetUpscaleJobError(executionProvider, engine, out var error))
+            return;
+
+        ClipboardService.CopyTextToClipboard(error);
+        ToastWindow.Show("Copied", "Upscale error copied to clipboard.");
     }
 }
