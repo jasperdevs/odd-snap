@@ -214,9 +214,9 @@ public partial class App
 
                     _historyService.PruneByRetention(_settingsService.Settings.HistoryRetention);
 
-                    if (_settingsService.Settings.AutoIndexImages)
+                    if (_settingsService.Settings.AutoIndexImages && _imageSearchIndexService is not null)
                     {
-                        EnsureImageSearchIndexService().RequestSync(
+                        _imageSearchIndexService.RequestSync(
                             _historyService.ImageEntries,
                             _settingsService.Settings.OcrLanguageTag);
                     }
@@ -265,9 +265,10 @@ public partial class App
             return;
         }
 
-        SettingsWindow.TrimThumbCache(160);
+        SettingsWindow.TrimThumbCache(64);
 
         try { LocalStickerEngineService.ReleaseSessions(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.release-sticker-sessions", ex); }
+        try { _imageSearchIndexService?.TrimMemory(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.image-search", ex); }
 
         GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);

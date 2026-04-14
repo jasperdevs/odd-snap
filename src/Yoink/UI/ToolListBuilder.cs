@@ -188,6 +188,7 @@ public static class ToolListBuilder
             var (m, k) = svc.Settings.GetToolHotkey(toolId);
             box.Text = HotkeyFormatter.Format(m, k);
         };
+        box.Unloaded += (_, _) => RecordingFlags.Remove(box);
         void AcceptKey(Key rawKey)
         {
             if (!RecordingFlags.GetValueOrDefault(box)) return;

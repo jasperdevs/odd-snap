@@ -1,11 +1,13 @@
 using System.IO;
 using System.Media;
+using System.Collections.Concurrent;
 using Yoink.Models;
 
 namespace Yoink.Services;
 
 public static class SoundService
 {
+    private const int MaxQueuedSounds = 8;
     private static byte[]? _captureWav;
     private static byte[]? _colorWav;
     private static byte[]? _textWav;
@@ -15,6 +17,9 @@ public static class SoundService
     private static byte[]? _uploadStartWav;
     private static byte[]? _uploadDoneWav;
     private static byte[]? _errorWav;
+    private static readonly object PlaybackGate = new();
+    private static BlockingCollection<byte[]>? _playbackQueue;
+    private static Thread? _playbackThread;
 
     public static bool Muted { get; set; }
 
@@ -49,18 +54,40 @@ public static class SoundService
 
     private static void PlayAsync(byte[] wav)
     {
-        var thread = new Thread(() =>
+        EnsurePlaybackWorker();
+        _playbackQueue?.TryAdd(wav);
+    }
+
+    private static void EnsurePlaybackWorker()
+    {
+        lock (PlaybackGate)
         {
-            try
+            if (_playbackQueue is not null && _playbackThread?.IsAlive == true)
+                return;
+
+            _playbackQueue?.Dispose();
+            _playbackQueue = new BlockingCollection<byte[]>(MaxQueuedSounds);
+            _playbackThread = new Thread(() =>
             {
-                using var ms = new MemoryStream(wav);
-                using var player = new SoundPlayer(ms);
-                player.PlaySync();
-            }
-            catch { }
-        });
-        thread.IsBackground = true;
-        thread.Start();
+                foreach (var queuedWav in _playbackQueue.GetConsumingEnumerable())
+                {
+                    try
+                    {
+                        using var ms = new MemoryStream(queuedWav);
+                        using var player = new SoundPlayer(ms);
+                        player.PlaySync();
+                    }
+                    catch
+                    {
+                    }
+                }
+            })
+            {
+                IsBackground = true,
+                Name = "YoinkSoundPlayback"
+            };
+            _playbackThread.Start();
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

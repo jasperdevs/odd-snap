@@ -15,7 +15,7 @@ public sealed class LocalClipRuntimeService : IDisposable
     private static readonly float[] Std = [0.26862954f, 0.26130258f, 0.27577711f];
 
     public static string CacheDirectory => LocalClipRuntimeAssets.CacheDirectory;
-    public static string SetupHelpText => "Semantic search is prepared automatically during install and app startup.";
+    public static string SetupHelpText => "Semantic search is prepared automatically the first time image search needs it.";
     public static string IdleStatusText => LocalClipRuntimeAssets.IdleStatusText;
 
     private readonly object _gate = new();
@@ -138,16 +138,16 @@ public sealed class LocalClipRuntimeService : IDisposable
             return;
 
         _disposed = true;
-        lock (_gate)
-        {
-            _textSession?.Dispose();
-            _textSession = null;
-            _visionSession?.Dispose();
-            _visionSession = null;
-            _tokenizer = null;
-            _isAvailable = false;
-        }
+        ReleaseSessions(keepAvailability: false);
         _startGate.Dispose();
+    }
+
+    public void ReleaseSessions()
+    {
+        if (_disposed)
+            return;
+
+        ReleaseSessions(keepAvailability: true);
     }
 
     private async Task<bool> EnsureSessionsAsync(CancellationToken cancellationToken)
@@ -239,6 +239,20 @@ public sealed class LocalClipRuntimeService : IDisposable
         AppDiagnostics.LogWarning("semantic.runtime", _statusText);
         LocalClipRuntimeAssets.MarkUnavailable(_statusText);
         NotifyStatusChanged(StatusText);
+    }
+
+    private void ReleaseSessions(bool keepAvailability)
+    {
+        lock (_gate)
+        {
+            _textSession?.Dispose();
+            _textSession = null;
+            _visionSession?.Dispose();
+            _visionSession = null;
+            _tokenizer = null;
+            if (!keepAvailability)
+                _isAvailable = false;
+        }
     }
 
     private void SetStatus(string status)

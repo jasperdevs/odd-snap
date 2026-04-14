@@ -163,10 +163,38 @@ public static class OpenSourceTranslationRuntimeService
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            TryTerminateProcess(process);
+            throw;
+        }
         var stdout = await stdoutTask.ConfigureAwait(false);
         var stderr = await stderrTask.ConfigureAwait(false);
         return new PythonRunResult(process.ExitCode, stdout, stderr);
+    }
+
+    private static void TryTerminateProcess(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            process.WaitForExit(5000);
+        }
+        catch
+        {
+        }
     }
 
     private static string GetPythonFailureMessage(PythonRunResult result, string fallback)

@@ -135,8 +135,8 @@ public sealed partial class ImageSearchIndexService
                     record = MergeRetryState(record, existingRecord);
                     lock (_gate)
                     {
-                        _records[entry.FilePath] = record;
                         UpsertDatabaseRecord_NoLock(record);
+                        _records[entry.FilePath] = CreateResidentRecord(record);
                         InvalidateSearchCaches_NoLock();
                         _version++;
                     }
@@ -162,8 +162,8 @@ public sealed partial class ImageSearchIndexService
                     }, existingRecord);
                     lock (_gate)
                     {
-                        _records[entry.FilePath] = failedRecord;
                         UpsertDatabaseRecord_NoLock(failedRecord);
+                        _records[entry.FilePath] = CreateResidentRecord(failedRecord);
                         InvalidateSearchCaches_NoLock();
                         _version++;
                     }
@@ -654,7 +654,7 @@ public sealed partial class ImageSearchIndexService
             ? """
                 SELECT filePath, ocrText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks,
                        fileLengthBytes, lastWriteTimeUtcTicks, ocrLanguageTag, ocrEngineId,
-                       ocrCompleted, semanticModelKey, semanticCompleted, semanticEmbedding, lastError
+                       ocrCompleted, semanticModelKey, semanticCompleted, lastError
                 FROM image_search_records;
                 """
             : """
@@ -684,8 +684,7 @@ public sealed partial class ImageSearchIndexService
                 record.OcrCompleted = !reader.IsDBNull(10) && reader.GetInt64(10) != 0;
                 record.SemanticModelKey = reader.IsDBNull(11) ? "" : reader.GetString(11);
                 record.SemanticCompleted = !reader.IsDBNull(12) && reader.GetInt64(12) != 0;
-                record.SemanticEmbedding = DeserializeEmbedding(reader.IsDBNull(13) ? "" : reader.GetString(13));
-                record.LastError = reader.IsDBNull(14) ? "" : reader.GetString(14);
+                record.LastError = reader.IsDBNull(13) ? "" : reader.GetString(13);
             }
             else
             {
@@ -695,7 +694,7 @@ public sealed partial class ImageSearchIndexService
             if (!File.Exists(record.FilePath))
                 continue;
 
-            _records[record.FilePath] = record;
+            _records[record.FilePath] = CreateResidentRecord(record);
         }
 
         return _records.Count > 0;
@@ -724,7 +723,7 @@ public sealed partial class ImageSearchIndexService
                 ? """
                     SELECT filePath, ocrText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks,
                            fileLengthBytes, lastWriteTimeUtcTicks, ocrLanguageTag, ocrEngineId,
-                           ocrCompleted, semanticModelKey, semanticCompleted, semanticEmbedding, lastError
+                           ocrCompleted, semanticModelKey, semanticCompleted, lastError
                     FROM image_search_records;
                     """
                 : """
@@ -754,8 +753,7 @@ public sealed partial class ImageSearchIndexService
                     record.OcrCompleted = !reader.IsDBNull(10) && reader.GetInt64(10) != 0;
                     record.SemanticModelKey = reader.IsDBNull(11) ? "" : reader.GetString(11);
                     record.SemanticCompleted = !reader.IsDBNull(12) && reader.GetInt64(12) != 0;
-                    record.SemanticEmbedding = DeserializeEmbedding(reader.IsDBNull(13) ? "" : reader.GetString(13));
-                    record.LastError = reader.IsDBNull(14) ? "" : reader.GetString(14);
+                    record.LastError = reader.IsDBNull(13) ? "" : reader.GetString(13);
                 }
                 else
                 {
@@ -765,7 +763,7 @@ public sealed partial class ImageSearchIndexService
                 if (!File.Exists(record.FilePath))
                     continue;
 
-                _records[record.FilePath] = record;
+                _records[record.FilePath] = CreateResidentRecord(record);
             }
 
             return _records.Count > 0;
@@ -812,6 +810,12 @@ public sealed partial class ImageSearchIndexService
         {
             return Array.Empty<float>();
         }
+    }
+
+    private static ImageSearchIndexRecord CreateResidentRecord(ImageSearchIndexRecord source)
+    {
+        source.SemanticEmbedding = Array.Empty<float>();
+        return source;
     }
 
     private static void CleanupLegacySearchArtifacts_NoLock()

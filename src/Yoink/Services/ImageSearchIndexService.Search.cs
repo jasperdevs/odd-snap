@@ -77,7 +77,41 @@ public sealed partial class ImageSearchIndexService
         return result.Embedding;
     }
 
-    private int ScoreEntry(HistoryEntry entry, string normalizedQuery, ImageSearchSourceOptions sources, bool exactMatch, int textScore, float[]? queryEmbedding, IReadOnlyDictionary<string, ImageSearchIndexRecord> recordsSnapshot)
+    private static async Task<Dictionary<string, float[]>> LoadSemanticEmbeddingsAsync(IEnumerable<string> allowedPaths, CancellationToken cancellationToken)
+    {
+        var allowed = allowedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (allowed.Count == 0)
+            return new Dictionary<string, float[]>(StringComparer.OrdinalIgnoreCase);
+
+        return await Task.Run(() =>
+        {
+            var results = new Dictionary<string, float[]>(StringComparer.OrdinalIgnoreCase);
+            using var connection = OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT filePath, semanticEmbedding
+                FROM image_search_records
+                WHERE semanticCompleted = 1 AND semanticEmbedding <> '';
+                """;
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var filePath = reader.GetString(0);
+                if (!allowed.Contains(filePath) || reader.IsDBNull(1))
+                    continue;
+
+                var embedding = DeserializeEmbedding(reader.GetString(1));
+                if (embedding.Length > 0)
+                    results[filePath] = embedding;
+            }
+
+            return results;
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    private int ScoreEntry(HistoryEntry entry, string normalizedQuery, ImageSearchSourceOptions sources, bool exactMatch, int textScore, float[]? queryEmbedding, IReadOnlyDictionary<string, float[]> semanticEmbeddings, IReadOnlyDictionary<string, ImageSearchIndexRecord> recordsSnapshot)
     {
         recordsSnapshot.TryGetValue(entry.FilePath, out var record);
 
@@ -88,9 +122,10 @@ public sealed partial class ImageSearchIndexService
             queryEmbedding is { Length: > 0 } &&
             record is not null &&
             record.SemanticCompleted &&
-            record.SemanticEmbedding is { Length: > 0 })
+            semanticEmbeddings.TryGetValue(entry.FilePath, out var imageEmbedding) &&
+            imageEmbedding.Length > 0)
         {
-            score += ImageSearchQueryMatcher.SemanticScore(queryEmbedding, record.SemanticEmbedding);
+            score += ImageSearchQueryMatcher.SemanticScore(queryEmbedding, imageEmbedding);
         }
 
         return score;

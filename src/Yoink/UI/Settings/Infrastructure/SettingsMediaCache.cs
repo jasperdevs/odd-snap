@@ -7,7 +7,7 @@ namespace Yoink.UI;
 
 internal static class SettingsMediaCache
 {
-    private const int MaxThumbCacheEntries = 384;
+    private const int MaxThumbCacheEntries = 160;
     private static readonly Dictionary<string, BitmapSource> ThumbCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly LinkedList<string> ThumbCacheOrder = new();
     private static readonly Dictionary<string, LinkedListNode<string>> ThumbCacheNodes = new(StringComparer.OrdinalIgnoreCase);
@@ -102,7 +102,7 @@ internal static class SettingsMediaCache
         }
     }
 
-    public static void WarmRecentHistoryThumbs(IEnumerable<HistoryEntry> entries, Action<string, string, HistoryKind> primeThumbLoad, int maxCount = 24)
+    public static void WarmRecentHistoryThumbs(IEnumerable<HistoryEntry> entries, Action<string, string, HistoryKind> primeThumbLoad, int maxCount = 12)
     {
         foreach (var entry in entries
                      .OrderByDescending(item => item.CapturedAt)
@@ -113,7 +113,7 @@ internal static class SettingsMediaCache
         }
     }
 
-    public static void WarmHistoryThumbsInBackground(IEnumerable<HistoryEntry> entries, Action<string, string, HistoryKind> primeThumbLoad, int maxCount = 192, int immediateCount = 48, int batchSize = 24)
+    public static void WarmHistoryThumbsInBackground(IEnumerable<HistoryEntry> entries, Action<string, string, HistoryKind> primeThumbLoad, int maxCount = 96, int immediateCount = 24, int batchSize = 12)
     {
         var targets = entries
             .OrderByDescending(entry => entry.CapturedAt)

@@ -492,11 +492,14 @@ public sealed partial class ImageSearchIndexService : IDisposable
         float[]? queryEmbedding = null;
         if (!exactMatch &&
             sources.HasFlag(ImageSearchSourceOptions.Semantic) &&
-            textScores.Count == 0 &&
-            _clipRuntime.IsAvailable)
+            textScores.Count == 0)
         {
             queryEmbedding = await GetQueryEmbeddingAsync(query, cancellationToken).ConfigureAwait(false);
         }
+
+        var semanticEmbeddings = queryEmbedding is { Length: > 0 }
+            ? await LoadSemanticEmbeddingsAsync(entryMap.Keys, cancellationToken).ConfigureAwait(false)
+            : new Dictionary<string, float[]>(StringComparer.OrdinalIgnoreCase);
 
         Dictionary<string, ImageSearchIndexRecord> recordsSnapshot;
         lock (_gate)
@@ -510,7 +513,7 @@ public sealed partial class ImageSearchIndexService : IDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 textScores.TryGetValue(entry.FilePath, out var textScore);
-                var score = ScoreEntry(entry, normalizedQuery, sources, exactMatch, textScore, queryEmbedding, recordsSnapshot);
+                var score = ScoreEntry(entry, normalizedQuery, sources, exactMatch, textScore, queryEmbedding, semanticEmbeddings, recordsSnapshot);
                 if (score > 0)
                     rankedInner.Add((entry, score));
             }
@@ -536,5 +539,17 @@ public sealed partial class ImageSearchIndexService : IDisposable
         _clipRuntime.Dispose();
         _syncGate.Dispose();
         _lifetimeCts.Dispose();
+    }
+
+    public void TrimMemory()
+    {
+        lock (_gate)
+        {
+            InvalidateSearchCaches_NoLock();
+            foreach (var record in _records.Values)
+                record.SemanticEmbedding = Array.Empty<float>();
+        }
+
+        _clipRuntime.ReleaseSessions();
     }
 }

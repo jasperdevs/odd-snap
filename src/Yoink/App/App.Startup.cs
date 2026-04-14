@@ -116,24 +116,11 @@ public partial class App
             try
             {
                 var historyService = EnsureHistoryService();
-                SettingsWindow.WarmHistoryThumbsInBackground(historyService.ImageEntries, maxCount: 192, immediateCount: 48, batchSize: 24);
-                EnsureImageSearchIndexService();
+                SettingsWindow.WarmHistoryThumbsInBackground(historyService.ImageEntries, maxCount: 96, immediateCount: 24, batchSize: 12);
             }
             catch (Exception ex)
             {
                 AppDiagnostics.LogError("startup.preload-history-search", ex);
-            }
-        });
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await LocalClipRuntimeService.EnsureInstalledAsync().ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                AppDiagnostics.LogError("startup.preload-semantic-runtime", ex);
             }
         });
     }

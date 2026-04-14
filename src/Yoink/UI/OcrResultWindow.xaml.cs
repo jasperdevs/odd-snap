@@ -203,6 +203,8 @@ public partial class OcrResultWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _translateCts?.Cancel();
+        _translateCts?.Dispose();
+        _translateCts = null;
         StopTranslateTimer();
         base.OnClosed(e);
     }
@@ -396,6 +398,7 @@ public partial class OcrResultWindow : Window
         var toCode = toItem.Tag as string ?? "en";
 
         _translateCts?.Cancel();
+        _translateCts?.Dispose();
         _translateCts = new CancellationTokenSource();
         var token = _translateCts.Token;
         var model = GetSelectedModel();

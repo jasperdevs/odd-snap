@@ -41,6 +41,7 @@ public partial class PreviewWindow
         {
             _mouseIsDown = false;
             string tmpFile;
+            bool deleteTempFileAfterDrag = false;
             if (_savedFilePath is not null && File.Exists(_savedFilePath))
             {
                 tmpFile = _savedFilePath;
@@ -49,6 +50,7 @@ public partial class PreviewWindow
             {
                 tmpFile = Path.Combine(Path.GetTempPath(), $"yoink_{DateTime.Now:yyyyMMdd_HHmmss}.png");
                 _screenshot.Save(tmpFile, ImageFormat.Png);
+                deleteTempFileAfterDrag = true;
             }
             else
             {
@@ -79,8 +81,18 @@ public partial class PreviewWindow
                 data.SetData("PNG", ms.ToArray());
             }
 
-            DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Move);
-            AnimateDismiss();
+            try
+            {
+                DragDrop.DoDragDrop(this, data, DragDropEffects.Copy | DragDropEffects.Move);
+                AnimateDismiss();
+            }
+            finally
+            {
+                if (deleteTempFileAfterDrag)
+                {
+                    try { File.Delete(tmpFile); } catch { }
+                }
+            }
         }
         base.OnMouseMove(e);
     }
