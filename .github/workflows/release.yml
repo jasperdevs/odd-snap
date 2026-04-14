@@ -98,24 +98,6 @@ jobs:
           $packArgs += @('--outputDir', $outDir)
           & vpk @packArgs
 
-          $rid = "${{ matrix.rid }}"
-          $version = "${{ steps.version.outputs.version }}"
-          $setupName = if ($rid -eq 'win-x64') { 'Yoink App Setup.exe' } elseif ($rid -eq 'win-x86') { 'Yoink App Setup x86.exe' } else { 'Yoink App Setup arm64.exe' }
-          $portableName = if ($rid -eq 'win-x64') { 'Yoink Portable.zip' } elseif ($rid -eq 'win-x86') { 'Yoink Portable x86.zip' } else { 'Yoink Portable arm64.zip' }
-          $fullName = "Yoink Update $version $rid full.nupkg"
-          $releasesName = "Yoink Update RELEASES $rid"
-          $setup = Get-ChildItem $outDir -Filter '*-Setup.exe' | Select-Object -First 1
-          if ($null -ne $setup) { Rename-Item -LiteralPath $setup.FullName -NewName $setupName }
-
-          $portable = Get-ChildItem $outDir -Filter '*-Portable.zip' | Select-Object -First 1
-          if ($null -ne $portable) { Rename-Item -LiteralPath $portable.FullName -NewName $portableName }
-
-          $full = Get-ChildItem $outDir -Filter '*-full.nupkg' | Select-Object -First 1
-          if ($null -ne $full) { Rename-Item -LiteralPath $full.FullName -NewName $fullName }
-
-          $releases = Get-ChildItem $outDir -Filter 'RELEASES-*' | Select-Object -First 1
-          if ($null -ne $releases) { Rename-Item -LiteralPath $releases.FullName -NewName $releasesName }
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
