@@ -104,9 +104,6 @@ jobs:
           $portableName = if ($rid -eq 'win-x64') { 'Yoink Portable.zip' } elseif ($rid -eq 'win-x86') { 'Yoink Portable x86.zip' } else { 'Yoink Portable arm64.zip' }
           $fullName = "Yoink Update $version $rid full.nupkg"
           $releasesName = "Yoink Update RELEASES $rid"
-          $releaseJsonName = "Yoink Update releases $rid.json"
-          $assetsJsonName = "Yoink Update assets $rid.json"
-
           $setup = Get-ChildItem $outDir -Filter '*-Setup.exe' | Select-Object -First 1
           if ($null -ne $setup) { Rename-Item -LiteralPath $setup.FullName -NewName $setupName }
 
@@ -118,12 +115,6 @@ jobs:
 
           $releases = Get-ChildItem $outDir -Filter 'RELEASES-*' | Select-Object -First 1
           if ($null -ne $releases) { Rename-Item -LiteralPath $releases.FullName -NewName $releasesName }
-
-          $releaseJson = Get-ChildItem $outDir -Filter 'releases.*.json' | Select-Object -First 1
-          if ($null -ne $releaseJson) { Rename-Item -LiteralPath $releaseJson.FullName -NewName $releaseJsonName }
-
-          $assetsJson = Get-ChildItem $outDir -Filter 'assets.*.json' | Select-Object -First 1
-          if ($null -ne $assetsJson) { Rename-Item -LiteralPath $assetsJson.FullName -NewName $assetsJsonName }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
