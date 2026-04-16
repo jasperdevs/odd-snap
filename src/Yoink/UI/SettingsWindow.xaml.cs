@@ -45,6 +45,7 @@ public partial class SettingsWindow : Window
     private bool _pendingImageSearchTextRefresh;
     private bool _pendingHistoryDiskRefresh;
     private bool _pendingHistoryUiRefresh;
+    private bool _pendingHistoryDataRefresh;
     private bool _historyRefreshInProgress;
     private CancellationTokenSource? _historyLoadCts;
     private int _historyLoadVersion;
@@ -115,6 +116,8 @@ public partial class SettingsWindow : Window
             _historyRefreshTimer.Stop();
             _imageSearchDebounceTimer.Stop();
             _semanticSearchTimer.Stop();
+            _ocrSearchDebounceTimer.Stop();
+            _colorSearchDebounceTimer.Stop();
             _historyMonitorTimer.Stop();
         };
     }
@@ -165,6 +168,9 @@ public partial class SettingsWindow : Window
         }
 
         _pendingTrayHistoryOpen = true;
+        HistoryTab.IsChecked = true;
+        if (IsLoaded)
+            ApplyMainTabSelection();
         TryProcessPendingTrayHistoryOpen();
     }
 
@@ -183,6 +189,7 @@ public partial class SettingsWindow : Window
             _pendingTrayHistoryOpen = false;
             HistoryTab.IsChecked = true;
             ApplyMainTabSelection();
+            Activate();
         }, System.Windows.Threading.DispatcherPriority.ContextIdle);
     }
 
@@ -190,9 +197,10 @@ public partial class SettingsWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
-            _historyImageCacheReady = false;
+            InvalidateHistoryCategoryCaches();
+            _pendingHistoryDataRefresh = true;
             QueueHistoryRefresh(reloadFromDisk: false);
-        });
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void ImageSearchIndexService_Changed()
@@ -420,19 +428,31 @@ public partial class SettingsWindow : Window
         try
         {
             var reloadFromDisk = _pendingHistoryDiskRefresh;
+            var refreshLoadedData = _pendingHistoryDataRefresh;
             _pendingHistoryDiskRefresh = false;
+            _pendingHistoryDataRefresh = false;
             _pendingHistoryUiRefresh = false;
 
             if (reloadFromDisk)
                 await Task.Run(RefreshHistoryFromDisk);
 
-            ScheduleHistoryTabLoad(preserveTransientState: true);
-            PrimeHistoryFingerprint();
+            if (!reloadFromDisk &&
+                refreshLoadedData &&
+                HistoryCategoryCombo.SelectedIndex == 0 &&
+                TryRefreshLoadedImageHistoryIncrementally())
+            {
+                PrimeHistoryFingerprint();
+            }
+            else
+            {
+                ScheduleHistoryTabLoad(preserveTransientState: true);
+                PrimeHistoryFingerprint();
+            }
         }
         finally
         {
             _historyRefreshInProgress = false;
-            if (_pendingHistoryDiskRefresh || _pendingHistoryUiRefresh)
+            if (_pendingHistoryDiskRefresh || _pendingHistoryDataRefresh || _pendingHistoryUiRefresh)
                 _historyRefreshTimer.Start();
         }
     }

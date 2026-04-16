@@ -74,6 +74,9 @@ public static class ScreenCapture
     public static Bitmap CaptureRegionForRecording(Rectangle region, bool includeCursor = false)
         => CaptureRegionLegacy(region, includeCursor);
 
+    internal static RecordingFrameCapturer CreateRecordingFrameCapturer(Rectangle region, bool includeCursor = false)
+        => new(region, includeCursor);
+
     private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensLegacy(bool includeCursor)
     {
         // Use GetSystemMetrics for physical pixel bounds (DPI-unaware coordinates)
@@ -241,6 +244,127 @@ public static class ScreenCapture
                 Gdi32.DeleteObject(iconInfo.hbmMask);
             if (iconInfo.hbmColor != IntPtr.Zero)
                 Gdi32.DeleteObject(iconInfo.hbmColor);
+        }
+    }
+
+    private static void DrawCursor(IntPtr hdc, Rectangle captureBounds)
+    {
+        var cursorInfo = new User32.CURSORINFO
+        {
+            cbSize = Marshal.SizeOf<User32.CURSORINFO>()
+        };
+
+        if (!User32.GetCursorInfo(ref cursorInfo))
+            return;
+
+        if ((cursorInfo.flags & User32.CURSOR_SHOWING) == 0 || cursorInfo.hCursor == IntPtr.Zero)
+            return;
+
+        if (cursorInfo.ptScreenPos.X < captureBounds.Left || cursorInfo.ptScreenPos.X >= captureBounds.Right ||
+            cursorInfo.ptScreenPos.Y < captureBounds.Top || cursorInfo.ptScreenPos.Y >= captureBounds.Bottom)
+            return;
+
+        if (!User32.GetIconInfo(cursorInfo.hCursor, out var iconInfo))
+            return;
+
+        try
+        {
+            int x = cursorInfo.ptScreenPos.X - captureBounds.X - (int)iconInfo.xHotspot;
+            int y = cursorInfo.ptScreenPos.Y - captureBounds.Y - (int)iconInfo.yHotspot;
+            User32.DrawIconEx(hdc, x, y, cursorInfo.hCursor, 0, 0, 0, IntPtr.Zero, User32.DI_NORMAL);
+        }
+        finally
+        {
+            if (iconInfo.hbmMask != IntPtr.Zero)
+                Gdi32.DeleteObject(iconInfo.hbmMask);
+            if (iconInfo.hbmColor != IntPtr.Zero)
+                Gdi32.DeleteObject(iconInfo.hbmColor);
+        }
+    }
+
+    internal sealed class RecordingFrameCapturer : IDisposable
+    {
+        private readonly Rectangle _region;
+        private readonly bool _includeCursor;
+        private readonly Bitmap _bitmap;
+        private readonly Graphics _graphics;
+        private readonly IntPtr _hdcScreen;
+        private bool _disposed;
+
+        public RecordingFrameCapturer(Rectangle region, bool includeCursor)
+        {
+            _region = region;
+            _includeCursor = includeCursor;
+            _bitmap = new Bitmap(region.Width, region.Height, PixelFormat.Format32bppArgb);
+            _graphics = Graphics.FromImage(_bitmap);
+            _hdcScreen = User32.GetDC(IntPtr.Zero);
+            if (_hdcScreen == IntPtr.Zero)
+                throw new InvalidOperationException("Screen capture failed (GetDC returned null).");
+        }
+
+        public int BufferByteCount => _region.Width * _region.Height * 4;
+
+        public byte[] CaptureToBuffer(byte[]? buffer)
+        {
+            ThrowIfDisposed();
+            if (buffer is null || buffer.Length != BufferByteCount)
+                buffer = new byte[BufferByteCount];
+
+            IntPtr hdcDest = IntPtr.Zero;
+            try
+            {
+                hdcDest = _graphics.GetHdc();
+                bool ok = Gdi32.BitBlt(hdcDest, 0, 0, _region.Width, _region.Height, _hdcScreen, _region.X, _region.Y, User32.SRCCOPY);
+                if (!ok)
+                    throw new InvalidOperationException("Screen capture failed (BitBlt returned false).");
+
+                if (_includeCursor)
+                    DrawCursor(hdcDest, _region);
+            }
+            finally
+            {
+                if (hdcDest != IntPtr.Zero)
+                    _graphics.ReleaseHdc(hdcDest);
+            }
+
+            var rect = new Rectangle(0, 0, _bitmap.Width, _bitmap.Height);
+            var data = _bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                int byteCount = data.Stride * data.Height;
+                if (buffer.Length != byteCount)
+                    buffer = new byte[byteCount];
+                Marshal.Copy(data.Scan0, buffer, 0, byteCount);
+                return buffer;
+            }
+            finally
+            {
+                _bitmap.UnlockBits(data);
+            }
+        }
+
+        public Bitmap CloneCurrentFrame()
+        {
+            ThrowIfDisposed();
+            return new Bitmap(_bitmap);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            if (_hdcScreen != IntPtr.Zero)
+                User32.ReleaseDC(IntPtr.Zero, _hdcScreen);
+            _graphics.Dispose();
+            _bitmap.Dispose();
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(RecordingFrameCapturer));
         }
     }
 }

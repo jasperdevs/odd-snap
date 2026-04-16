@@ -259,9 +259,13 @@ public partial class App
         if (!_settingsService!.Settings.AskForFileNameOnSave)
             return defaultPath;
 
+        var initialDirectory = Path.GetDirectoryName(defaultPath);
+        if (!string.IsNullOrWhiteSpace(initialDirectory))
+            Directory.CreateDirectory(initialDirectory);
+
         var dlg = new SaveFileDialog
         {
-            InitialDirectory = Path.GetDirectoryName(defaultPath),
+            InitialDirectory = initialDirectory,
             FileName = Path.GetFileName(defaultPath),
             Filter = format switch
             {

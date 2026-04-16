@@ -40,7 +40,7 @@ public static class OpenSourceTranslationRuntimeService
 
         progress?.Report("Preparing local translation model...");
         await PrepareRuntimeAsync(progress, cancellationToken).ConfigureAwait(false);
-        await IsRuntimeReadyAsync(cancellationToken).ConfigureAwait(false);
+        UpdateProbeCache(true, "Installed");
     }
 
     public static Task UninstallAsync(IProgress<string>? progress = null, CancellationToken cancellationToken = default)
@@ -86,6 +86,14 @@ public static class OpenSourceTranslationRuntimeService
 
     public static bool TryGetCachedStatus(out bool isReady, out string status)
     {
+        if (HasRuntimeFiles())
+        {
+            UpdateProbeCache(true, "Installed");
+            isReady = true;
+            status = "Installed";
+            return true;
+        }
+
         lock (ProbeGate)
         {
             if (_cachedReady.HasValue && DateTime.UtcNow - _cachedCheckedUtc <= ProbeCacheTtl)
@@ -94,14 +102,6 @@ public static class OpenSourceTranslationRuntimeService
                 status = _cachedStatus;
                 return true;
             }
-        }
-
-        if (HasRuntimeFiles())
-        {
-            UpdateProbeCache(true, "Installed");
-            isReady = true;
-            status = "Installed";
-            return true;
         }
 
         isReady = false;

@@ -144,7 +144,8 @@ public sealed class SettingsService : IDisposable
             return;
 
         Directory.CreateDirectory(_settingsDir);
-        var json = JsonSerializer.Serialize(Settings, JsonOptions);
+        var storedSettings = SensitiveSettingsProtection.ProtectForStorage(Settings, JsonOptions);
+        var json = JsonSerializer.Serialize(storedSettings, JsonOptions);
         var tmpPath = _settingsPath + ".tmp";
         bool wrote = false;
         try
@@ -216,12 +217,19 @@ public sealed class SettingsService : IDisposable
                ?? new AppSettings();
     }
 
+    public static string ExportRedactedJson(AppSettings settings)
+    {
+        var redacted = SensitiveSettingsProtection.RedactForExport(settings, JsonOptions);
+        return JsonSerializer.Serialize(redacted, JsonOptions);
+    }
+
     private static AppSettings DeserializeSettings(string json)
     {
         var settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
         settings.ImageUploadSettings ??= new UploadSettings();
         settings.StickerUploadSettings ??= new StickerSettings();
         settings.UpscaleUploadSettings ??= new UpscaleSettings();
+        SensitiveSettingsProtection.Unprotect(settings);
 
         if (settings.CompressHistory && settings.CaptureImageFormat == CaptureImageFormat.Png)
             settings.CaptureImageFormat = CaptureImageFormat.Jpeg;

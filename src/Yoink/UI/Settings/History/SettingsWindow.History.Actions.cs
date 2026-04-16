@@ -22,25 +22,35 @@ public partial class SettingsWindow
 
         ReindexAllProgressBar.Visibility = isIndexing ? Visibility.Visible : Visibility.Collapsed;
 
-        var entries = _historyService.ImageEntries;
+        var entries = _allImageHistoryEntries.Count > 0
+            ? _allImageHistoryEntries
+            : _historyService.ImageEntries;
         var ocrTag = _settingsService.Settings.OcrLanguageTag;
         int total = entries.Count;
-        int indexed = _imageSearchIndexService.CountReadyEntries(entries, ocrTag);
 
         if (isIndexing)
         {
             ReindexAllBtn.Content = status;
             ReindexAllBtn.IsEnabled = false;
         }
-        else if (indexed < total)
+        else if (total >= HistoryVirtualizationThreshold)
         {
-            ReindexAllBtn.Content = $"Index {total - indexed} remaining";
-            ReindexAllBtn.IsEnabled = true;
+            ReindexAllBtn.Content = "Refresh index";
+            ReindexAllBtn.IsEnabled = total > 0;
         }
         else
         {
-            ReindexAllBtn.Content = $"{indexed}/{total} indexed";
-            ReindexAllBtn.IsEnabled = false;
+            int indexed = _imageSearchIndexService.CountReadyEntries(entries, ocrTag);
+            if (indexed < total)
+            {
+                ReindexAllBtn.Content = $"Index {total - indexed} remaining";
+                ReindexAllBtn.IsEnabled = true;
+            }
+            else
+            {
+                ReindexAllBtn.Content = $"{indexed}/{total} indexed";
+                ReindexAllBtn.IsEnabled = false;
+            }
         }
     }
 
@@ -246,12 +256,31 @@ public partial class SettingsWindow
             return;
         }
 
-        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 300) return;
-        if (_historyRenderCount >= _filteredHistoryItems.Count) return;
+        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 360)
+            return;
+
+        if (HistoryCategoryCombo.SelectedIndex == 0 && string.IsNullOrWhiteSpace(_imageSearchQuery))
+        {
+            AppendNextImageHistoryPage();
+            return;
+        }
+
+        if (_historyRenderCount >= _filteredHistoryItems.Count)
+            return;
+
+        var previousOffset = ImagesPanel.VerticalOffset;
         var previousCount = _historyRenderCount;
-        _historyRenderCount = Math.Min(_historyRenderCount + HistoryPageSize, _filteredHistoryItems.Count);
+        _historyRenderCount = Math.Min(_historyRenderCount + HistoryAppendPageSize, _filteredHistoryItems.Count);
         var appended = _filteredHistoryItems.Skip(previousCount).Take(_historyRenderCount - previousCount).ToList();
+        if (appended.Count == 0)
+            return;
+
         _historyItems.AddRange(appended);
         AppendGroupedHistoryItems(HistoryStack, appended, CreateHistoryCard);
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
+                ImagesPanel.ScrollToVerticalOffset(previousOffset);
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 }

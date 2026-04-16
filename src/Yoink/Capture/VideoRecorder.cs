@@ -33,6 +33,7 @@ public sealed class VideoRecorder : IDisposable
     private readonly bool _recordDesktop;
     private readonly string? _desktopDeviceId;
     private readonly CancellationTokenSource _cts = new();
+    private readonly object _previewFrameLock = new();
 
     private Thread? _captureThread;
     private Process? _ffmpeg;
@@ -58,6 +59,7 @@ public sealed class VideoRecorder : IDisposable
     private WaveFileWriter? _desktopWriter;
     private string? _micWavPath;
     private string? _desktopWavPath;
+    private Bitmap? _firstFramePreview;
 
     public int FrameCount => _frameCount;
     public int CapturedFrameCount => _capturedFrameCount;
@@ -66,6 +68,12 @@ public sealed class VideoRecorder : IDisposable
     public TimeSpan Elapsed => DateTime.UtcNow - _startTime;
     public bool IsRecording => _captureThread?.IsAlive == true;
     public bool IsPaused => _isPaused;
+
+    public Bitmap? GetFirstFrame()
+    {
+        lock (_previewFrameLock)
+            return _firstFramePreview is null ? null : new Bitmap(_firstFramePreview);
+    }
 
     public VideoRecorder(Rectangle region, Format format = Format.MP4, int fps = 30,
                          int maxDurationSeconds = 300, int maxHeight = 0,
@@ -151,9 +159,9 @@ public sealed class VideoRecorder : IDisposable
 
         string codecArgs = _format switch
         {
-            Format.WebM => $"-c:v libvpx-vp9 -crf 30 -b:v 0 -pix_fmt yuv420p -vf scale={outW}:{outH}",
+            Format.WebM => $"-c:v libvpx-vp9 -deadline good -cpu-used 2 -row-mt 1 -crf 30 -b:v 0 -pix_fmt yuv420p -vf scale={outW}:{outH}",
             Format.MKV => $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -vf scale={outW}:{outH}",
-            _ => $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -vf scale={outW}:{outH}",
+            _ => $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -vf scale={outW}:{outH} -movflags +faststart",
         };
 
         var args = $"-y -f rawvideo -pix_fmt bgra -s {_region.Width}x{_region.Height} -r {_fps} -i pipe:0 {codecArgs} \"{outputPath}\"";
@@ -291,6 +299,7 @@ public sealed class VideoRecorder : IDisposable
     private void CaptureLoop()
     {
         var ct = _cts.Token;
+        using var frameCapturer = ScreenCapture.CreateRecordingFrameCapturer(_region, _showCursor);
         byte[]? captureBuffer = null;
         byte[]? lastFrameBuffer = null;
         int lastFrameByteCount = 0;
@@ -324,25 +333,17 @@ public sealed class VideoRecorder : IDisposable
             bool capturedFrame = false;
             try
             {
-                using var bmp = ScreenCapture.CaptureRegionForRecording(_region, _showCursor);
-                var data = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
-                    ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-                try
-                {
-                    int byteCount = data.Stride * data.Height;
-                    if (captureBuffer == null || captureBuffer.Length != byteCount)
-                        captureBuffer = new byte[byteCount];
-                    if (lastFrameBuffer == null || lastFrameBuffer.Length != byteCount)
-                        lastFrameBuffer = new byte[byteCount];
+                captureBuffer = frameCapturer.CaptureToBuffer(captureBuffer);
+                int byteCount = captureBuffer.Length;
+                if (lastFrameBuffer == null || lastFrameBuffer.Length != byteCount)
+                    lastFrameBuffer = new byte[byteCount];
 
-                    System.Runtime.InteropServices.Marshal.Copy(data.Scan0, captureBuffer, 0, byteCount);
-                    WriteFrame(captureBuffer, byteCount);
-                    Buffer.BlockCopy(captureBuffer, 0, lastFrameBuffer, 0, byteCount);
-                    lastFrameByteCount = byteCount;
-                    capturedFrame = true;
-                }
-                finally { bmp.UnlockBits(data); }
+                WriteFrame(captureBuffer, byteCount);
+                Buffer.BlockCopy(captureBuffer, 0, lastFrameBuffer, 0, byteCount);
+                lastFrameByteCount = byteCount;
+                capturedFrame = true;
 
+                CapturePreviewFrame(frameCapturer);
                 Interlocked.Increment(ref _capturedFrameCount);
             }
             catch (OperationCanceledException) { break; }
@@ -438,6 +439,18 @@ public sealed class VideoRecorder : IDisposable
         try { _desktopWriter?.Dispose(); _desktopWriter = null; } catch { }
         try { _micCapture?.Dispose(); _micCapture = null; } catch { }
         try { _desktopCapture?.Dispose(); _desktopCapture = null; } catch { }
+    }
+
+    private void CapturePreviewFrame(ScreenCapture.RecordingFrameCapturer frameCapturer)
+    {
+        if (_firstFramePreview is not null)
+            return;
+
+        lock (_previewFrameLock)
+        {
+            if (_firstFramePreview is null)
+                _firstFramePreview = frameCapturer.CloneCurrentFrame();
+        }
     }
 
     private bool MuxAudio(string videoPath)
@@ -551,17 +564,20 @@ public sealed class VideoRecorder : IDisposable
         double targetDurationSeconds)
     {
         string duration = targetDurationSeconds.ToString("0.###", CultureInfo.InvariantCulture);
+        string muxerArgs = Path.GetExtension(tempOut).Equals(".mp4", StringComparison.OrdinalIgnoreCase)
+            ? " -movflags +faststart"
+            : "";
 
         if (audioFiles.Count == 1)
         {
             return $"-y -i \"{videoPath}\" -i \"{audioFiles[0]}\" " +
                    $"-filter_complex \"[1:a]apad,atrim=0:{duration}[a]\" " +
-                   $"-c:v copy -c:a {audioCodec} -map 0:v -map \"[a]\" \"{tempOut}\"";
+                   $"-c:v copy -c:a {audioCodec} -map 0:v -map \"[a]\"{muxerArgs} \"{tempOut}\"";
         }
 
         return $"-y -i \"{videoPath}\" -i \"{audioFiles[0]}\" -i \"{audioFiles[1]}\" " +
                $"-filter_complex \"[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,apad,atrim=0:{duration}[a]\" " +
-               $"-c:v copy -c:a {audioCodec} -map 0:v -map \"[a]\" \"{tempOut}\"";
+               $"-c:v copy -c:a {audioCodec} -map 0:v -map \"[a]\"{muxerArgs} \"{tempOut}\"";
     }
 
     internal static int GetExpectedFrameCount(TimeSpan elapsed, int fps)
@@ -640,6 +656,11 @@ public sealed class VideoRecorder : IDisposable
         try { _ffmpegBufferedStdin?.Dispose(); } catch { }
         try { _ffmpegStdin?.Dispose(); } catch { }
         try { _ffmpeg?.Dispose(); } catch { }
+        lock (_previewFrameLock)
+        {
+            _firstFramePreview?.Dispose();
+            _firstFramePreview = null;
+        }
         _cts.Dispose();
     }
 
@@ -771,7 +792,7 @@ public sealed class VideoRecorder : IDisposable
 
     private static string GetRepairVideoCodecArguments(Format format) => format switch
     {
-        Format.WebM => "-c:v libvpx-vp9 -crf 30 -b:v 0 -pix_fmt yuv420p",
+        Format.WebM => "-c:v libvpx-vp9 -deadline good -cpu-used 2 -row-mt 1 -crf 30 -b:v 0 -pix_fmt yuv420p",
         Format.MKV => "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p",
         _ => "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -movflags +faststart",
     };

@@ -91,6 +91,7 @@ public sealed partial class RecordingForm
                 _desktopAudioSoundSuppression?.Dispose();
                 _desktopAudioSoundSuppression = null;
                 SoundService.PlayRecordStopSound();
+                firstFrame ??= vidRec?.GetFirstFrame();
                 firstFrame ??= TryCreateToastPreviewFrame(_savePath);
                 RecordingCompleted?.Invoke(_savePath, firstFrame);
             }
@@ -130,7 +131,7 @@ public sealed partial class RecordingForm
 
     private void CalcToolbarLayout()
     {
-        int tw = 300, th = 48;
+        int tw = 340, th = 64;
         // Try to place above the recording region
         int tx = _recordRegion.X + _recordRegion.Width / 2 - tw / 2;
         int ty = _recordRegion.Y - th - 14;
@@ -143,10 +144,10 @@ public sealed partial class RecordingForm
 
         _toolbarRect = new Rectangle(tx, ty, tw, th);
 
-        int btnY = _toolbarRect.Y + 10;
-        int btnH = 28;
-        _stopBtn = new Rectangle(_toolbarRect.X + 100, btnY, 80, btnH);
-        _discardBtn = new Rectangle(_stopBtn.Right + 8, btnY, 80, btnH);
+        int btnY = _toolbarRect.Y + 12;
+        int btnH = 40;
+        _stopBtn = new Rectangle(_toolbarRect.X + 120, btnY, 92, btnH);
+        _discardBtn = new Rectangle(_stopBtn.Right + 10, btnY, 92, btnH);
     }
 
     private void TransitionToRecordingSurface()

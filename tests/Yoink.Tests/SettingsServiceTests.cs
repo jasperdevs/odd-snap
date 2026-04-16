@@ -118,6 +118,94 @@ public sealed class SettingsServiceTests
         }
     }
 
+    [Fact]
+    public void Save_ProtectsSecretsAndLoadRestoresPlainValues()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            var settingsPath = Path.Combine(root, "settings.json");
+            using (var service = new SettingsService(settingsPath, TimeSpan.Zero))
+            {
+                service.Settings.GoogleTranslateApiKey = "google-secret";
+                service.Settings.ImageUploadSettings.ImgBBApiKey = "imgbb-secret";
+                service.Settings.ImageUploadSettings.CustomHeaders = "Authorization: Bearer upload-secret";
+                service.Settings.StickerUploadSettings.RemoveBgApiKey = "removebg-secret";
+                service.Settings.UpscaleUploadSettings.DeepAiApiKey = "deepai-secret";
+
+                service.Save();
+                service.FlushPendingWrites();
+            }
+
+            var json = File.ReadAllText(settingsPath);
+            Assert.DoesNotContain("google-secret", json);
+            Assert.DoesNotContain("imgbb-secret", json);
+            Assert.DoesNotContain("upload-secret", json);
+            Assert.DoesNotContain("removebg-secret", json);
+            Assert.DoesNotContain("deepai-secret", json);
+            Assert.Contains("dpapi:v1:", json);
+
+            using var reloaded = new SettingsService(settingsPath, TimeSpan.Zero);
+            reloaded.Load();
+
+            Assert.Equal("google-secret", reloaded.Settings.GoogleTranslateApiKey);
+            Assert.Equal("imgbb-secret", reloaded.Settings.ImageUploadSettings.ImgBBApiKey);
+            Assert.Equal("Authorization: Bearer upload-secret", reloaded.Settings.ImageUploadSettings.CustomHeaders);
+            Assert.Equal("removebg-secret", reloaded.Settings.StickerUploadSettings.RemoveBgApiKey);
+            Assert.Equal("deepai-secret", reloaded.Settings.UpscaleUploadSettings.DeepAiApiKey);
+        }
+        finally
+        {
+            TryDeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public void ExportRedactedJson_RemovesSecrets()
+    {
+        var settings = new AppSettings
+        {
+            GoogleTranslateApiKey = "google-secret",
+            ImageUploadSettings =
+            {
+                ImgBBApiKey = "imgbb-secret",
+                CustomHeaders = "Authorization: Bearer upload-secret"
+            },
+            StickerUploadSettings =
+            {
+                RemoveBgApiKey = "removebg-secret"
+            },
+            UpscaleUploadSettings =
+            {
+                DeepAiApiKey = "deepai-secret"
+            }
+        };
+
+        var json = SettingsService.ExportRedactedJson(settings);
+
+        Assert.DoesNotContain("google-secret", json);
+        Assert.DoesNotContain("imgbb-secret", json);
+        Assert.DoesNotContain("upload-secret", json);
+        Assert.DoesNotContain("removebg-secret", json);
+        Assert.DoesNotContain("deepai-secret", json);
+        Assert.Contains("\"GoogleTranslateApiKey\": \"\"", json);
+        Assert.Contains("\"ImgBBApiKey\": \"\"", json);
+    }
+
+    [Fact]
+    public void DiagnosticsRedaction_HidesCommonSecretFormats()
+    {
+        var redacted = AppDiagnostics.RedactSensitiveText(
+            "api_key=abc123 access_token=verysecret X-Api-Key: headersecret Bearer jwt.payload \"GitHubToken\": \"ghp_secret\"");
+
+        Assert.DoesNotContain("abc123", redacted);
+        Assert.DoesNotContain("verysecret", redacted);
+        Assert.DoesNotContain("headersecret", redacted);
+        Assert.DoesNotContain("jwt.payload", redacted);
+        Assert.DoesNotContain("ghp_secret", redacted);
+        Assert.Contains("[redacted]", redacted);
+    }
+
     private static string CreateTempRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "yoink-tests", Guid.NewGuid().ToString("N"));

@@ -221,6 +221,25 @@ public sealed partial class HistoryService
         hash.Add(Directory.GetLastWriteTimeUtc(path).Ticks);
     }
 
+    private static void AddDirectoryTreeSignature(HashCode hash, string path)
+    {
+        AddDirectorySignature(hash, path);
+        if (!Directory.Exists(path))
+            return;
+
+        try
+        {
+            foreach (var dir in Directory.EnumerateDirectories(path, "*", SearchOption.TopDirectoryOnly)
+                         .OrderBy(dir => dir, StringComparer.OrdinalIgnoreCase))
+            {
+                AddDirectorySignature(hash, dir);
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private static void AddFileSignature(HashCode hash, string path)
     {
         hash.Add(File.Exists(path));

@@ -20,23 +20,58 @@ public partial class SettingsWindow
 
     private void LoadMediaHistory()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var cacheKey = BuildMediaHistoryCacheKey();
+        if (!_mediaHistoryCacheReady || !string.Equals(_mediaHistoryCacheKey, cacheKey, StringComparison.Ordinal))
+        {
+            _allGifItems = BuildCombinedMediaEntries();
+            _mediaHistoryCacheReady = true;
+            _mediaHistoryCacheKey = cacheKey;
+            QueueOrphanVideoThumbnailCleanup(_allGifItems);
+        }
+
         GifStack.Children.Clear();
 
-        var entries = BuildCombinedMediaEntries();
-        CleanupOrphanVideoThumbnails(entries);
         long totalBytes = 0;
-        foreach (var e in entries)
+        foreach (var e in _allGifItems)
             totalBytes += e.Entry.FileSizeBytes > 0 ? e.Entry.FileSizeBytes : TryGetFileLength(e.Entry.FilePath);
 
         var sizeStr = FormatStorageSize(totalBytes);
-        HistoryCountText.Text = $"{entries.Count} video/GIF{(entries.Count == 1 ? "" : "s")} · {sizeStr}";
-        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        HistoryCountText.Text = $"{_allGifItems.Count} video/GIF{(_allGifItems.Count == 1 ? "" : "s")} · {sizeStr}";
+        HistoryEmptyText.Visibility = _allGifItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HistoryEmptyLabel.Text = "No videos or GIFs yet";
 
-        _allGifItems = entries;
-        _gifRenderCount = Math.Min(HistoryPageSize, _allGifItems.Count);
+        _gifRenderCount = Math.Min(HistoryInitialPageSize, _allGifItems.Count);
         RenderMediaItems();
         DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+        sw.Stop();
+        AppDiagnostics.LogInfo(
+            "history.load-media",
+            $"items={_allGifItems.Count} rendered={_gifRenderCount} cacheHit={string.Equals(_mediaHistoryCacheKey, cacheKey, StringComparison.Ordinal)} elapsedMs={sw.ElapsedMilliseconds}");
+    }
+
+    private string BuildMediaHistoryCacheKey()
+    {
+        var hash = new HashCode();
+        foreach (var entry in _historyService.GifEntries)
+        {
+            hash.Add(entry.FilePath, StringComparer.OrdinalIgnoreCase);
+            hash.Add(entry.FileSizeBytes);
+        }
+
+        var baseDir = _settingsService.Settings.SaveDirectory;
+        foreach (var dir in new[] { Path.Combine(baseDir, "Videos"), baseDir }.Where(Directory.Exists))
+        {
+            try
+            {
+                var info = new DirectoryInfo(dir);
+                hash.Add(info.FullName, StringComparer.OrdinalIgnoreCase);
+                hash.Add(info.LastWriteTimeUtc.Ticks);
+            }
+            catch { }
+        }
+
+        return hash.ToHashCode().ToString("X8");
     }
 
     private List<HistoryItemVM> BuildCombinedMediaEntries()
@@ -68,6 +103,10 @@ public partial class SettingsWindow
             try
             {
                 var info = new FileInfo(file);
+                var isGif = Path.GetExtension(file).Equals(".gif", StringComparison.OrdinalIgnoreCase);
+                if (!isGif && info.Length <= 1024)
+                    continue;
+
                 items.Add(new HistoryItemVM
                 {
                     Entry = new HistoryEntry
@@ -78,11 +117,11 @@ public partial class SettingsWindow
                         Width = 0,
                         Height = 0,
                         FileSizeBytes = info.Length,
-                        Kind = Path.GetExtension(file).Equals(".gif", StringComparison.OrdinalIgnoreCase)
+                        Kind = isGif
                             ? HistoryKind.Gif
                             : HistoryKind.Image
                     },
-                    ThumbPath = Path.GetExtension(file).Equals(".gif", StringComparison.OrdinalIgnoreCase)
+                    ThumbPath = isGif
                         ? file
                         : GetVideoThumbnailPath(file),
                     Dimensions = "",
@@ -95,6 +134,12 @@ public partial class SettingsWindow
         return items
             .OrderByDescending(i => i.Entry.CapturedAt)
             .ToList();
+    }
+
+    private void QueueOrphanVideoThumbnailCleanup(IEnumerable<HistoryItemVM> items)
+    {
+        var snapshot = items.ToList();
+        _ = Task.Run(() => CleanupOrphanVideoThumbnails(snapshot));
     }
 
     private void CleanupOrphanVideoThumbnails(IEnumerable<HistoryItemVM> items)
@@ -119,22 +164,49 @@ public partial class SettingsWindow
 
     private void RenderMediaItems()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         GifStack.Children.Clear();
         _gifItems = _allGifItems.Take(_gifRenderCount).ToList();
         AppendGroupedHistoryItems(GifStack, _gifItems, CreateMediaCard);
-        PrimeHistoryThumbnailLoads(_allGifItems.Take(Math.Min(_gifRenderCount + 12, _allGifItems.Count)));
+        PrimeHistoryThumbnailLoads(_gifItems.Concat(_allGifItems.Skip(_gifRenderCount).Take(HistoryLookaheadCount)));
+        sw.Stop();
+        AppDiagnostics.LogInfo(
+            "history.render-media",
+            $"rendered={_gifItems.Count} total={_allGifItems.Count} elapsedMs={sw.ElapsedMilliseconds}");
     }
 
     private void GifPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 300) return;
-        if (_gifRenderCount >= _allGifItems.Count) return;
+        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 420) return;
+        AppendNextMediaHistoryPage();
+    }
+
+    private void AppendNextMediaHistoryPage()
+    {
+        if (_gifRenderCount >= _allGifItems.Count)
+            return;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var previousOffset = GifsPanel.VerticalOffset;
         var previousCount = _gifRenderCount;
-        _gifRenderCount = Math.Min(_gifRenderCount + HistoryPageSize, _allGifItems.Count);
+        _gifRenderCount = Math.Min(_gifRenderCount + HistoryAppendPageSize, _allGifItems.Count);
         var appended = _allGifItems.Skip(previousCount).Take(_gifRenderCount - previousCount).ToList();
+        if (appended.Count == 0)
+            return;
+
         _gifItems.AddRange(appended);
         AppendGroupedHistoryItems(GifStack, appended, CreateMediaCard);
-        PrimeHistoryThumbnailLoads(_allGifItems.Take(Math.Min(_gifRenderCount + 12, _allGifItems.Count)));
+        PrimeHistoryThumbnailLoads(appended.Concat(_allGifItems.Skip(_gifRenderCount).Take(HistoryLookaheadCount)));
+
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 2)
+                GifsPanel.ScrollToVerticalOffset(previousOffset);
+        }, System.Windows.Threading.DispatcherPriority.Background);
+        sw.Stop();
+        AppDiagnostics.LogInfo(
+            "history.append-media",
+            $"appended={appended.Count} loaded={_gifRenderCount}/{_allGifItems.Count} elapsedMs={sw.ElapsedMilliseconds}");
     }
 
     private Border CreateMediaCard(HistoryItemVM item)
@@ -214,6 +286,11 @@ public partial class SettingsWindow
             catch { }
         });
 
+        if (!vm.ThumbnailLoaded || vm.ThumbnailSource is null || IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))
+            _ = EnsureVideoThumbThenRefreshAsync(vm);
+
+        shell.Image.Stretch = Stretch.UniformToFill;
+
         var playIcon = new Border
         {
             Width = 36, Height = 36,
@@ -272,6 +349,25 @@ public partial class SettingsWindow
         });
     }
 
+    private static async Task EnsureVideoThumbThenRefreshAsync(HistoryItemVM vm)
+    {
+        if (string.IsNullOrWhiteSpace(vm.Entry.FilePath) || string.IsNullOrWhiteSpace(vm.ThumbPath))
+            return;
+
+        var thumb = await EnsureVideoThumbnailAsync(vm.Entry.FilePath, vm.ThumbPath);
+        if (!File.Exists(thumb) || string.Equals(thumb, vm.Entry.FilePath, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var source = LoadThumbSource(thumb);
+        if (source is null)
+            return;
+
+        vm.ThumbnailSource = source;
+        vm.ThumbnailLoaded = true;
+        StoreThumbInCache(vm.Entry.FilePath, source);
+        ApplyThumbnailToBoundImage(vm, source, animate: true);
+    }
+
     private static IEnumerable<string> EnumerateVideoFiles(string dir)
     {
         foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly))
@@ -323,6 +419,7 @@ public partial class SettingsWindow
         if (File.Exists(thumbPath))
             return thumbPath;
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var ffmpeg = Capture.VideoRecorder.FindFfmpeg();
         if (ffmpeg == null)
             return videoPath;
@@ -343,10 +440,19 @@ public partial class SettingsWindow
                 return videoPath;
 
             await proc.WaitForExitAsync();
-            return File.Exists(thumbPath) ? thumbPath : videoPath;
+            var result = File.Exists(thumbPath) ? thumbPath : videoPath;
+            sw.Stop();
+            AppDiagnostics.LogInfo(
+                "history.video-thumb",
+                $"file={Path.GetFileName(videoPath)} created={File.Exists(thumbPath)} elapsedMs={sw.ElapsedMilliseconds}");
+            return result;
         }
         catch
         {
+            sw.Stop();
+            AppDiagnostics.LogWarning(
+                "history.video-thumb",
+                $"Failed to generate thumbnail for {Path.GetFileName(videoPath)} after {sw.ElapsedMilliseconds}ms.");
             return videoPath;
         }
     }

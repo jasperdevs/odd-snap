@@ -156,6 +156,14 @@ internal static class LocalClipRuntimeAssets
 
     private static bool TryGetCachedRuntimeProbe(out bool isReady, out string status)
     {
+        if (HasRuntimeFiles())
+        {
+            UpdateRuntimeProbeCache(true, "Installed");
+            isReady = true;
+            status = "Installed";
+            return true;
+        }
+
         lock (SetupStateGate)
         {
             if (_cachedRuntimeReady.HasValue && DateTime.UtcNow - _cachedRuntimeCheckedUtc <= RuntimeProbeCacheTtl)
@@ -164,14 +172,6 @@ internal static class LocalClipRuntimeAssets
                 status = _cachedRuntimeStatus;
                 return true;
             }
-        }
-
-        if (HasRuntimeFiles())
-        {
-            UpdateRuntimeProbeCache(true, "Installed");
-            isReady = true;
-            status = "Installed";
-            return true;
         }
 
         isReady = false;

@@ -9,6 +9,9 @@ namespace Yoink;
 
 public partial class App
 {
+    private const long IdleTrimPrivateBytesThreshold = 384L * 1024 * 1024;
+    private static readonly TimeSpan MinimumIdleTrimInterval = TimeSpan.FromMinutes(2);
+
     private static void SyncStartupRegistry(bool enabled)
     {
         const string rk = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
@@ -22,13 +25,18 @@ public partial class App
         else key.DeleteValue("Yoink", false);
     }
 
-    private void ShowSettings()
+    private void ShowSettings(bool openHistory = false)
     {
         if (_settingsWindow is { IsVisible: true })
         {
+            if (openHistory)
+                _settingsWindow.OpenHistoryFromTray();
             _settingsWindow.Activate();
             return;
         }
+
+        if (openHistory)
+            Interlocked.Exchange(ref _openHistoryWhenSettingsReady, 1);
 
         if (Interlocked.CompareExchange(ref _settingsWindowOpening, 1, 0) != 0)
             return;
@@ -49,7 +57,8 @@ public partial class App
                             return;
                         }
 
-                        ShowSettingsWindow(historyService, imageSearchIndexService);
+                        var shouldOpenHistory = Interlocked.Exchange(ref _openHistoryWhenSettingsReady, 0) != 0;
+                        ShowSettingsWindow(historyService, imageSearchIndexService, shouldOpenHistory);
                     }
                     catch (Exception ex)
                     {
@@ -76,7 +85,7 @@ public partial class App
         });
     }
 
-    private void ShowSettingsWindow(HistoryService historyService, ImageSearchIndexService imageSearchIndexService)
+    private void ShowSettingsWindow(HistoryService historyService, ImageSearchIndexService imageSearchIndexService, bool openHistory = false)
     {
         var win = new SettingsWindow(_settingsService!, historyService, imageSearchIndexService);
         Action hotkeyHandler = RegisterHotkeys;
@@ -91,16 +100,14 @@ public partial class App
             ScheduleIdleMemoryTrim();
         };
         _settingsWindow = win;
+        if (openHistory)
+            win.OpenHistoryFromTray();
         win.Show();
     }
 
     private void ShowHistory()
     {
-        ShowSettings();
-        Dispatcher.BeginInvoke(() =>
-        {
-            _settingsWindow?.OpenHistoryFromTray();
-        }, DispatcherPriority.ApplicationIdle);
+        ShowSettings(openHistory: true);
     }
 
     private void BeginUninstall()
@@ -236,14 +243,49 @@ public partial class App
 
     private void HistoryService_Changed()
     {
-        lock (_historyGate)
-        {
-            if (_historyService is null || _settingsService is null)
-                return;
+        QueueImageSearchIndexRefresh();
+    }
 
-            if (_settingsService.Settings.AutoIndexImages)
-                _imageSearchIndexService?.RequestSync(_historyService.ImageEntries, _settingsService.Settings.OcrLanguageTag);
-        }
+    private void QueueImageSearchIndexRefresh()
+    {
+        if (Interlocked.Exchange(ref _historyIndexRefreshScheduled, 1) != 0)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(1500).ConfigureAwait(false);
+
+                HistoryService? historyService;
+                ImageSearchIndexService? imageSearchIndexService;
+                SettingsService? settingsService;
+                lock (_historyGate)
+                {
+                    historyService = _historyService;
+                    imageSearchIndexService = _imageSearchIndexService;
+                    settingsService = _settingsService;
+                }
+
+                if (historyService is null ||
+                    imageSearchIndexService is null ||
+                    settingsService is null ||
+                    !settingsService.Settings.AutoIndexImages)
+                {
+                    return;
+                }
+
+                imageSearchIndexService.RequestSync(historyService.ImageEntries, settingsService.Settings.OcrLanguageTag);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError("lifecycle.history-index-refresh", ex);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _historyIndexRefreshScheduled, 0);
+            }
+        });
     }
 
     private void ScheduleIdleMemoryTrim()
@@ -265,14 +307,45 @@ public partial class App
             return;
         }
 
-        SettingsWindow.TrimThumbCache(64);
+        if (Interlocked.CompareExchange(ref _idleTrimInProgress, 1, 0) != 0)
+        {
+            ScheduleIdleMemoryTrim();
+            return;
+        }
 
-        try { _imageSearchIndexService?.TrimMemory(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.image-search", ex); }
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                if (now - _lastIdleTrimUtc < MinimumIdleTrimInterval)
+                    return;
 
-        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-        GC.WaitForPendingFinalizers();
-        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-        ProcessMemory.TrimCurrentProcessWorkingSet();
+                using var process = System.Diagnostics.Process.GetCurrentProcess();
+                var privateBytes = process.PrivateMemorySize64;
+                SettingsWindow.TrimThumbCache(privateBytes >= IdleTrimPrivateBytesThreshold ? 64 : 96);
+
+                if (privateBytes < IdleTrimPrivateBytesThreshold)
+                {
+                    _lastIdleTrimUtc = now;
+                    return;
+                }
+
+                try { _imageSearchIndexService?.TrimMemory(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.image-search", ex); }
+
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false, compacting: true);
+                ProcessMemory.TrimCurrentProcessWorkingSet();
+                _lastIdleTrimUtc = now;
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError("lifecycle.trim-idle-memory", ex);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _idleTrimInProgress, 0);
+            }
+        });
     }
 }

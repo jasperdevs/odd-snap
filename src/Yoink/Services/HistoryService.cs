@@ -124,8 +124,8 @@ public sealed partial class HistoryService : IDisposable
 
             AddDirectorySignature(hash, HistoryDir);
             AddDirectorySignature(hash, StickerDir);
-            AddDirectorySignature(hash, saveDirectory);
-            AddDirectorySignature(hash, Path.Combine(saveDirectory, "Videos"));
+            AddDirectoryTreeSignature(hash, saveDirectory);
+            AddDirectoryTreeSignature(hash, Path.Combine(saveDirectory, "Videos"));
 
             AddFileSignature(hash, DatabasePath);
 
@@ -208,11 +208,12 @@ public sealed partial class HistoryService : IDisposable
 
     public HistoryEntry SaveStickerEntry(Bitmap sticker, string? providerName = null)
     {
-        Directory.CreateDirectory(StickerDir);
         var now = DateTime.Now;
         var fileName = $"yoink_sticker_{now:yyyyMMdd_HHmmss_fff}.png";
-        var filePath = Path.Combine(StickerDir, fileName);
+        var stickerDir = Helpers.CaptureSavePath.GetMonthDirectory(StickerDir, now);
+        var filePath = Path.Combine(stickerDir, fileName);
 
+        Directory.CreateDirectory(stickerDir);
         sticker.Save(filePath, ImageFormat.Png);
         var fileSizeBytes = new FileInfo(filePath).Length;
 
@@ -273,12 +274,13 @@ public sealed partial class HistoryService : IDisposable
 
     public HistoryEntry SaveCapture(Bitmap screenshot)
     {
-        Directory.CreateDirectory(HistoryDir);
         var now = DateTime.Now;
         string ext = CaptureOutputService.GetExtension(CaptureImageFormat);
         var fileName = $"yoink_{now:yyyyMMdd_HHmmss_fff}.{ext}";
-        var filePath = Path.Combine(HistoryDir, fileName);
+        var captureDir = Helpers.CaptureSavePath.GetMonthDirectory(HistoryDir, now);
+        var filePath = Path.Combine(captureDir, fileName);
 
+        Directory.CreateDirectory(captureDir);
         CaptureOutputService.SaveBitmap(screenshot, filePath, CaptureImageFormat, JpegQuality);
         var fileSizeBytes = new FileInfo(filePath).Length;
 

@@ -32,5 +32,9 @@ public partial class App : Application
     private bool _historyRecovered;
     private bool _historyChangedHooked;
     private bool _historyMaintenanceScheduled;
+    private int _historyIndexRefreshScheduled;
     private int _settingsWindowOpening;
+    private int _idleTrimInProgress;
+    private DateTime _lastIdleTrimUtc = DateTime.MinValue;
+    private int _openHistoryWhenSettingsReady;
 }

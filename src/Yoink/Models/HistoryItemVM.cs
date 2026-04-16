@@ -21,6 +21,7 @@ internal sealed class HistoryItemVM : INotifyPropertyChanged
     public string ImageSearchStatusText { get; set; } = "";
     public string ImageSearchDiagnosticsText { get; set; } = "";
     public string ImageSearchMatchText { get; set; } = "";
+    public bool SearchMetadataHydrated { get; set; }
     public BitmapSource? ThumbnailSource { get; set; }
     public bool ThumbnailLoaded { get; set; }
     internal Border? Card { get; set; }

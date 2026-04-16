@@ -1,3 +1,22 @@
+# Yoink v0.8.18
+
+## Added
+- Add month folders for new automatic screenshot, sticker, upscale, GIF, and video saves.
+- Add History timing diagnostics for image, media, text, color, thumbnail, and tab-load paths.
+
+## Changed
+- Page History items in smaller automatic batches across images, videos/GIFs, stickers, text, and colors.
+- Cache media History entries and move video thumbnail cleanup off the tab-load path.
+- Protect saved API keys and tokens with user-scoped DPAPI and redact secrets from exports and logs.
+- Use cached recording frames for video preview to avoid a second FFmpeg thumbnail pass.
+- Speed up GIF and WebM encoding with FFmpeg palette rectangle diffing and VP9 row multithreading.
+
+## Fixed
+- Open History directly from the tray menu without flashing or sticking on the General tab.
+- Keep runtime/model install buttons in sync after successful setup for translation, semantic search, rembg, and upscale runtimes.
+- Avoid blocking UI-thread garbage collections during idle memory trimming.
+- Preserve existing root-level screenshots while keeping new captures organized by month.
+
 # Yoink v0.8.17
 
 ## Added

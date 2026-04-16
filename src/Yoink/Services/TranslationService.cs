@@ -111,7 +111,7 @@ public static class TranslationService
         }
 
         TryWriteArgosMarker();
-        await IsArgosReadyAsync(cancellationToken).ConfigureAwait(false);
+        UpdateArgosProbeCache(true, "Installed");
     }
 
     public static async Task UninstallAsync(IProgress<string>? progress = null, CancellationToken cancellationToken = default)
@@ -154,6 +154,14 @@ public static class TranslationService
 
     public static bool TryGetArgosCachedStatus(out bool isReady, out string status)
     {
+        if (File.Exists(ArgosMarkerPath))
+        {
+            UpdateArgosProbeCache(true, "Installed");
+            isReady = true;
+            status = "Installed";
+            return true;
+        }
+
         lock (ArgosProbeGate)
         {
             if (_cachedArgosReady.HasValue && DateTime.UtcNow - _cachedArgosCheckedUtc <= ArgosProbeCacheTtl)
@@ -162,14 +170,6 @@ public static class TranslationService
                 status = _cachedArgosStatus;
                 return true;
             }
-        }
-
-        if (File.Exists(ArgosMarkerPath))
-        {
-            UpdateArgosProbeCache(true, "Installed");
-            isReady = true;
-            status = "Installed";
-            return true;
         }
 
         isReady = false;

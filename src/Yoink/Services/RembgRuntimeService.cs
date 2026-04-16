@@ -137,6 +137,27 @@ public static class RembgRuntimeService
 
     public static bool TryGetCachedStatus(StickerExecutionProvider provider, out bool isReady, out string status)
     {
+        var pythonPath = GetRuntimePythonPath(provider);
+        if (File.Exists(pythonPath) && IsRuntimeMarkerCurrent(provider))
+        {
+            lock (ProbeGate)
+            {
+                if (ProbeCache.TryGetValue(provider, out var installedState) &&
+                    installedState.Ready == true &&
+                    DateTime.UtcNow - installedState.CheckedUtc <= ProbeCacheTtl)
+                {
+                    isReady = true;
+                    status = installedState.Status;
+                    return true;
+                }
+            }
+
+            UpdateProbeCache(provider, true, "Installed");
+            isReady = true;
+            status = "Installed";
+            return true;
+        }
+
         lock (ProbeGate)
         {
             if (ProbeCache.TryGetValue(provider, out var state) &&

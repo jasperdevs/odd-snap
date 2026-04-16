@@ -19,7 +19,9 @@ public partial class App
         string? requestedPath = null;
         if (settings.SaveToFile)
         {
-            var defaultPath = Path.Combine(settings.SaveDirectory, $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}.{ext}");
+            var defaultPath = Helpers.CaptureSavePath.BuildMonthlyPath(
+                settings.SaveDirectory,
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}.{ext}");
             if (settings.AskForFileNameOnSave)
             {
                 // SaveFileDialog must run on the WPF dispatcher thread
@@ -102,7 +104,9 @@ public partial class App
         string? requestedPath = null;
         if (settings.SaveToFile)
         {
-            var defaultStickerPath = Path.Combine(settings.SaveDirectory, $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_sticker.png");
+            var defaultStickerPath = Helpers.CaptureSavePath.BuildMonthlyPath(
+                settings.SaveDirectory,
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_sticker.png");
             requestedPath = settings.AskForFileNameOnSave
                 ? ResolveSavePath(defaultStickerPath, CaptureImageFormat.Png)
                 : defaultStickerPath;
@@ -163,7 +167,9 @@ public partial class App
         string? requestedPath = null;
         if (settings.SaveToFile)
         {
-            var defaultUpscalePath = Path.Combine(settings.SaveDirectory, $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_upscale.png");
+            var defaultUpscalePath = Helpers.CaptureSavePath.BuildMonthlyPath(
+                settings.SaveDirectory,
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_upscale.png");
             requestedPath = settings.AskForFileNameOnSave
                 ? ResolveSavePath(defaultUpscalePath, CaptureImageFormat.Png)
                 : defaultUpscalePath;

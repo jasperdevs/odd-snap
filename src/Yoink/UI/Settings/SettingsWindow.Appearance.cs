@@ -224,7 +224,7 @@ public partial class SettingsWindow
             CancelImageSearchWork();
 
         if (HistoryTab.IsChecked == true)
-            ScheduleHistoryTabLoad();
+            ScheduleHistoryTabLoad(preserveTransientState: true);
         if (UploadsTab.IsChecked == true)
             UpdateUploadTabVisibility();
         if (OcrTab.IsChecked == true)
@@ -236,7 +236,7 @@ public partial class SettingsWindow
     {
         if (!IsLoaded) return;
         UpdateImageSearchUi();
-        ScheduleHistoryTabLoad();
+        ScheduleHistoryTabLoad(preserveTransientState: true);
     }
 
     private void HistoryCategoryCombo_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -258,6 +258,8 @@ public partial class SettingsWindow
 
     private void LoadCurrentHistoryTab(bool preserveTransientState = false)
     {
+        var loadSw = System.Diagnostics.Stopwatch.StartNew();
+        var selectedCategory = HistoryCategoryCombo.SelectedIndex;
         if (!preserveTransientState)
         {
             _selectMode = false;
@@ -297,5 +299,9 @@ public partial class SettingsWindow
         }
 
         UpdateHistoryMonitorState();
+        loadSw.Stop();
+        AppDiagnostics.LogInfo(
+            "history.tab-load",
+            $"category={selectedCategory} preserve={preserveTransientState} elapsedMs={loadSw.ElapsedMilliseconds}");
     }
 }

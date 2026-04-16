@@ -20,18 +20,7 @@ public partial class SettingsWindow
     {
         foreach (var item in items)
         {
-            var searchText = _imageSearchIndexService.BuildSearchText(item.Entry.FilePath, item.Entry.FileName);
-            item.SearchText = searchText;
-            item.NormalizedSearchText = ImageSearchQueryMatcher.Normalize(searchText);
-            var diagnostics = _imageSearchIndexService.GetDiagnostics(
-                item.Entry.FilePath,
-                item.Entry.FileName,
-                _imageSearchQuery,
-                _settingsService.Settings.ImageSearchSources,
-                _settingsService.Settings.ImageSearchExactMatch);
-            item.ImageSearchStatusText = diagnostics.StatusText;
-            item.ImageSearchDiagnosticsText = diagnostics.DetailsText;
-            item.ImageSearchMatchText = diagnostics.MatchText;
+            HydrateHistoryItemSearchMetadata(item);
         }
 
         UpdateImageSearchPlaceholderText();
@@ -56,6 +45,7 @@ public partial class SettingsWindow
         CancelImageSearchWork();
         if (string.IsNullOrWhiteSpace(query) || sources == ImageSearchSourceOptions.None)
         {
+            EnsureMaterializedImageHistoryItems(_historyRenderCount <= 0 ? ImageHistoryPageSize : _historyRenderCount);
             ApplyImmediateImageFilter(query, sources, exactMatch);
             SetImageSearchLoading(false, forceSemantic: true);
             return;
@@ -76,7 +66,10 @@ public partial class SettingsWindow
         var renderModeChanged = _useVirtualizedImageHistory != shouldVirtualize;
         var resultSetChanged = !HasSameHistorySequence(_filteredHistoryItems, filteredItems);
         _filteredHistoryItems = filteredItems;
-        _historyRenderCount = Math.Min(HistoryPageSize, _filteredHistoryItems.Count);
+        var desiredRenderCount = string.IsNullOrWhiteSpace(query)
+            ? Math.Max(_historyRenderCount, ImageHistoryPageSize)
+            : HistoryAppendPageSize;
+        _historyRenderCount = Math.Min(desiredRenderCount, _filteredHistoryItems.Count);
 
         long visibleBytes = 0;
         foreach (var item in _filteredHistoryItems)
@@ -85,16 +78,18 @@ public partial class SettingsWindow
         var searchEnabled = sources != ImageSearchSourceOptions.None;
         var usingSearch = searchEnabled && !string.IsNullOrWhiteSpace(query);
         var sizeStr = FormatStorageSize(visibleBytes);
-        var totalCount = _allHistoryItems.Count;
+        var totalCount = _allImageHistoryEntries.Count;
         if (usingSearch)
         {
             HistoryCountText.Text = $"{_filteredHistoryItems.Count} of {totalCount} capture{(totalCount == 1 ? "" : "s")} · {sizeStr}";
         }
         else
         {
-            var indexedCount = _imageSearchIndexService.CountReadyEntries(_historyService.ImageEntries, _settingsService.Settings.OcrLanguageTag);
-            var indexSuffix = totalCount > 0 ? $" · {indexedCount}/{totalCount} indexed" : "";
-            HistoryCountText.Text = $"{_filteredHistoryItems.Count} capture{(_filteredHistoryItems.Count == 1 ? "" : "s")} · {sizeStr}{indexSuffix}";
+            var loadedCount = _filteredHistoryItems.Count;
+            var loadedPrefix = totalCount > loadedCount
+                ? $"{loadedCount} of {totalCount} captures loaded"
+                : $"{loadedCount} capture{(loadedCount == 1 ? "" : "s")}";
+            HistoryCountText.Text = $"{loadedPrefix} · {sizeStr}";
         }
 
         HistoryEmptyText.Visibility = _filteredHistoryItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -117,7 +112,8 @@ public partial class SettingsWindow
         var normalizedQuery = ImageSearchQueryMatcher.Normalize(query);
         if (string.IsNullOrWhiteSpace(normalizedQuery))
         {
-            var fullList = _allHistoryItems.OrderByDescending(item => item.Entry.CapturedAt).ToList();
+            EnsureMaterializedImageHistoryItems(_historyRenderCount <= 0 ? ImageHistoryPageSize : _historyRenderCount);
+            var fullList = _allHistoryItems.ToList();
             RememberImmediateSearch(normalizedQuery, sources, exactMatch, fullList);
             return fullList;
         }
@@ -126,14 +122,19 @@ public partial class SettingsWindow
         var allowOcr = sources.HasFlag(ImageSearchSourceOptions.Ocr);
         if (!allowFileName && !allowOcr)
         {
-            var fullList = _allHistoryItems.OrderByDescending(item => item.Entry.CapturedAt).ToList();
+            EnsureMaterializedImageHistoryItems(_historyRenderCount <= 0 ? ImageHistoryPageSize : _historyRenderCount);
+            var fullList = _allHistoryItems.ToList();
             RememberImmediateSearch(normalizedQuery, sources, exactMatch, fullList);
             return fullList;
         }
 
+        EnsureAllImageHistoryItemsMaterialized();
         IEnumerable<HistoryItemVM> candidateItems = _allHistoryItems;
         if (CanReuseImmediateSearchScope(normalizedQuery, sources, exactMatch))
             candidateItems = _lastImmediateSearchResults;
+
+        if (allowOcr)
+            HydrateHistoryItemsForSearch(candidateItems);
 
         var rankedItems = candidateItems
             .Select(item => new
@@ -181,6 +182,7 @@ public partial class SettingsWindow
             if (!IsLoaded || version != _searchFilterVersion || cancellationToken.IsCancellationRequested)
                 return;
 
+            EnsureAllImageHistoryItemsMaterialized();
             var filtered = new List<HistoryItemVM>(rankedEntries.Count);
             long visibleBytes = 0;
             foreach (var entry in rankedEntries)
@@ -201,7 +203,7 @@ public partial class SettingsWindow
             var renderModeChanged = _useVirtualizedImageHistory != shouldVirtualize;
             var resultSetChanged = !HasSameHistorySequence(_filteredHistoryItems, filteredItems);
             _filteredHistoryItems = filteredItems;
-            _historyRenderCount = Math.Min(HistoryPageSize, _filteredHistoryItems.Count);
+            _historyRenderCount = Math.Min(HistoryAppendPageSize, _filteredHistoryItems.Count);
 
             var sizeStr = FormatStorageSize(visibleBytes);
             var totalCount = _allHistoryItems.Count;

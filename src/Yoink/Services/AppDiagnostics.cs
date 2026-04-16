@@ -1,10 +1,27 @@
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Yoink.Services;
 
 public static class AppDiagnostics
 {
+    private static readonly Regex SensitiveAssignmentPattern = new(
+        @"(?i)\b(api[-_ ]?key|access[-_ ]?token|token|password|secret|authorization|x-api-key|key)=([^&\s;,]+)",
+        RegexOptions.Compiled);
+
+    private static readonly Regex SensitiveJsonPattern = new(
+        """(?i)("(?:[^"]*(?:apiKey|api_key|accessToken|access_token|token|password|secret|authorization|x-api-key|key)[^"]*)"\s*:\s*")([^"]*)(")""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex SensitiveHeaderPattern = new(
+        @"(?i)\b(api[-_ ]?key|access[-_ ]?token|token|password|secret|authorization|x-api-key)\s*:\s*([^\r\n;,]+)",
+        RegexOptions.Compiled);
+
+    private static readonly Regex BearerPattern = new(
+        @"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+",
+        RegexOptions.Compiled);
+
     private static readonly object Gate = new();
     private static readonly string LogDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -25,6 +42,18 @@ public static class AppDiagnostics
     public static void LogError(string context, Exception exception, string? message = null)
         => Write("ERROR", context, message ?? exception.Message, exception);
 
+    internal static string RedactSensitiveText(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+
+        var redacted = SensitiveAssignmentPattern.Replace(text, "$1=[redacted]");
+        redacted = SensitiveJsonPattern.Replace(redacted, "$1[redacted]$3");
+        redacted = SensitiveHeaderPattern.Replace(redacted, "$1: [redacted]");
+        redacted = BearerPattern.Replace(redacted, "$1 [redacted]");
+        return redacted;
+    }
+
     private static void Write(string level, string context, string message, Exception? exception)
     {
         try
@@ -40,11 +69,11 @@ public static class AppDiagnostics
                     .Append("] ")
                     .Append(context)
                     .Append(": ")
-                    .AppendLine(message);
+                    .AppendLine(RedactSensitiveText(message));
 
                 if (exception is not null)
                 {
-                    builder.AppendLine(exception.ToString());
+                    builder.AppendLine(RedactSensitiveText(exception.ToString()));
                 }
 
                 var logPath = CurrentLogPath;

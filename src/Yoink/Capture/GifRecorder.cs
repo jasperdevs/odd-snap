@@ -198,7 +198,7 @@ public sealed class GifRecorder : IDisposable
 
         // Pass 2: encode using palette
         RunFfmpegChecked(ffmpegPath,
-            $"-y -framerate {_fps} -i \"{inputPattern}\" -i \"{paletteFile}\" -lavfi \"paletteuse=dither=sierra2_4a\" \"{outputPath}\"",
+            $"-y -framerate {_fps} -i \"{inputPattern}\" -i \"{paletteFile}\" -lavfi \"paletteuse=dither=sierra2_4a:diff_mode=rectangle\" \"{outputPath}\"",
             timeoutMs: 120_000);
 
         if (!IsValidOutputFile(outputPath))

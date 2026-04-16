@@ -133,7 +133,7 @@ public partial class App
         _trayIcon.OnColorPicker += OnPickerHotkeyPressed;
         _trayIcon.OnGifRecord += OnGifHotkeyPressed;
         _trayIcon.OnScrollCapture += OnScrollCaptureHotkeyPressed;
-        _trayIcon.OnSettings += ShowSettings;
+        _trayIcon.OnSettings += () => ShowSettings();
         _trayIcon.OnHistory += ShowHistory;
         _trayIcon.OnQuit += () => Shutdown();
     }

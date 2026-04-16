@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Yoink.Models;
@@ -23,7 +22,7 @@ public partial class SettingsWindow
             };
             if (dlg.ShowDialog(this) != true) return;
 
-            var json = JsonSerializer.Serialize(_settingsService.Settings, new JsonSerializerOptions { WriteIndented = true });
+            var json = SettingsService.ExportRedactedJson(_settingsService.Settings);
             File.WriteAllText(dlg.FileName, json);
             ToastWindow.Show("Settings exported", dlg.FileName);
         }

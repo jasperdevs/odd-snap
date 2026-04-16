@@ -252,7 +252,7 @@ public sealed partial class RecordingForm : Form
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.DrawRectangle(_selPen, _selection);
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            string label = $"GIF  {_selection.Width} x {_selection.Height}";
+            string label = $"{GetRecordingFormatLabel()}  {_selection.Width} x {_selection.Height}  {_fps} FPS";
             var sz = g.MeasureString(label, _labelFont);
             float lx = _selection.X + _selection.Width / 2f - sz.Width / 2f;
             float ly = _selection.Bottom + 6;
@@ -336,7 +336,7 @@ public sealed partial class RecordingForm : Form
         g.DrawEllipse(_ringPen, dotX, dotY, 10, 10);
 
         string time = $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}";
-        g.DrawString(time, _timeFont, _timeBrush, dotX + 18, _toolbarRect.Y + 13);
+        g.DrawString(time, _timeFont, _timeBrush, dotX + 18, _toolbarRect.Y + 21);
 
         DrawBtn(g, _stopBtn, "\u25A0  Stop", _hoveredBtn == 0,
             Color.FromArgb(255, 239, 68, 68), Color.FromArgb(50, 239, 68, 68));
@@ -354,7 +354,7 @@ public sealed partial class RecordingForm : Form
             g.FillEllipse(_spinBrush, spinX, spinY, 8, 8);
 
             string encLabel = _format == Models.RecordingFormat.GIF ? "Encoding GIF..." : "Saving...";
-            g.DrawString(encLabel, _encFont, _encTextBrush, spinX + 16, _toolbarRect.Y + 12);
+            g.DrawString(encLabel, _encFont, _encTextBrush, spinX + 16, _toolbarRect.Y + 22);
         }
     }
 
@@ -393,6 +393,14 @@ public sealed partial class RecordingForm : Form
         int x = Math.Min(a.X, b.X), y = Math.Min(a.Y, b.Y);
         return new Rectangle(x, y, Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
     }
+
+    private string GetRecordingFormatLabel() => _format switch
+    {
+        Models.RecordingFormat.MP4 => "MP4",
+        Models.RecordingFormat.WebM => "WebM",
+        Models.RecordingFormat.MKV => "MKV",
+        _ => "GIF"
+    };
 
     protected override void Dispose(bool disposing)
     {

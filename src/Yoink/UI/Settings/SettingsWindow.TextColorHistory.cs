@@ -20,9 +20,18 @@ public partial class SettingsWindow
     private List<ColorHistoryEntry> _filteredColorEntries = new();
     private int _colorRenderCount;
     private DateTime? _colorLastRenderedDate;
+    private readonly System.Windows.Threading.DispatcherTimer _ocrSearchDebounceTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(180)
+    };
+    private readonly System.Windows.Threading.DispatcherTimer _colorSearchDebounceTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(180)
+    };
 
     private void LoadOcrHistory()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         EnsureOcrSearchSurface();
         ClearHistoryListPreservingSearch(OcrStack, _ocrSearchSurface);
 
@@ -45,13 +54,18 @@ public partial class SettingsWindow
 
         DeleteSelectedBtn.Visibility = _selectMode && HistoryCategoryCombo.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
         _filteredOcrEntries = entries.ToList();
-        _ocrRenderCount = Math.Min(HistoryPageSize, _filteredOcrEntries.Count);
+        _ocrRenderCount = Math.Min(HistoryInitialPageSize, _filteredOcrEntries.Count);
         _ocrLastRenderedDate = null;
         AppendOcrHistoryEntries(_filteredOcrEntries.Take(_ocrRenderCount));
+        sw.Stop();
+        AppDiagnostics.LogInfo(
+            "history.load-text",
+            $"items={_filteredOcrEntries.Count} rendered={_ocrRenderCount} query={!string.IsNullOrWhiteSpace(query)} elapsedMs={sw.ElapsedMilliseconds}");
     }
 
     private void LoadColorHistory()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         EnsureColorSearchSurface();
         ClearHistoryListPreservingSearch(ColorStack, _colorSearchSurface);
 
@@ -69,27 +83,57 @@ public partial class SettingsWindow
             : $"{entries.Count} of {allEntries.Count} color{(allEntries.Count == 1 ? "" : "s")}";
         DeleteSelectedBtn.Visibility = _selectMode && HistoryCategoryCombo.SelectedIndex == 3 ? Visibility.Visible : Visibility.Collapsed;
         _filteredColorEntries = entries.ToList();
-        _colorRenderCount = Math.Min(HistoryPageSize, _filteredColorEntries.Count);
+        _colorRenderCount = Math.Min(HistoryInitialPageSize, _filteredColorEntries.Count);
         _colorLastRenderedDate = null;
         AppendColorHistoryEntries(_filteredColorEntries.Take(_colorRenderCount));
+        sw.Stop();
+        AppDiagnostics.LogInfo(
+            "history.load-colors",
+            $"items={_filteredColorEntries.Count} rendered={_colorRenderCount} query={!string.IsNullOrWhiteSpace(query)} elapsedMs={sw.ElapsedMilliseconds}");
     }
 
     private void OcrPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 260) return;
-        if (_ocrRenderCount >= _filteredOcrEntries.Count) return;
-        var previousCount = _ocrRenderCount;
-        _ocrRenderCount = Math.Min(_ocrRenderCount + HistoryPageSize, _filteredOcrEntries.Count);
-        AppendOcrHistoryEntries(_filteredOcrEntries.Skip(previousCount).Take(_ocrRenderCount - previousCount));
+        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 360) return;
+        AppendNextOcrHistoryPage();
     }
 
     private void ColorsPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 260) return;
-        if (_colorRenderCount >= _filteredColorEntries.Count) return;
+        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 360) return;
+        AppendNextColorHistoryPage();
+    }
+
+    private void AppendNextOcrHistoryPage()
+    {
+        if (_ocrRenderCount >= _filteredOcrEntries.Count)
+            return;
+
+        var previousOffset = TextPanel.VerticalOffset;
+        var previousCount = _ocrRenderCount;
+        _ocrRenderCount = Math.Min(_ocrRenderCount + HistoryAppendPageSize, _filteredOcrEntries.Count);
+        AppendOcrHistoryEntries(_filteredOcrEntries.Skip(previousCount).Take(_ocrRenderCount - previousCount));
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 1)
+                TextPanel.ScrollToVerticalOffset(previousOffset);
+        }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void AppendNextColorHistoryPage()
+    {
+        if (_colorRenderCount >= _filteredColorEntries.Count)
+            return;
+
+        var previousOffset = ColorsPanel.VerticalOffset;
         var previousCount = _colorRenderCount;
-        _colorRenderCount = Math.Min(_colorRenderCount + HistoryPageSize, _filteredColorEntries.Count);
+        _colorRenderCount = Math.Min(_colorRenderCount + HistoryAppendPageSize, _filteredColorEntries.Count);
         AppendColorHistoryEntries(_filteredColorEntries.Skip(previousCount).Take(_colorRenderCount - previousCount));
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 3)
+                ColorsPanel.ScrollToVerticalOffset(previousOffset);
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void EnsureOcrSearchSurface()
@@ -104,7 +148,10 @@ public partial class SettingsWindow
             text =>
             {
                 _ocrSearchQuery = text;
-                LoadOcrHistory();
+                _ocrSearchDebounceTimer.Stop();
+                _ocrSearchDebounceTimer.Tick -= FlushOcrSearchDebounce;
+                _ocrSearchDebounceTimer.Tick += FlushOcrSearchDebounce;
+                _ocrSearchDebounceTimer.Start();
             });
         OcrStack.Children.Add(_ocrSearchSurface);
     }
@@ -121,9 +168,26 @@ public partial class SettingsWindow
             text =>
             {
                 _colorSearchQuery = text;
-                LoadColorHistory();
+                _colorSearchDebounceTimer.Stop();
+                _colorSearchDebounceTimer.Tick -= FlushColorSearchDebounce;
+                _colorSearchDebounceTimer.Tick += FlushColorSearchDebounce;
+                _colorSearchDebounceTimer.Start();
             });
         ColorStack.Children.Add(_colorSearchSurface);
+    }
+
+    private void FlushOcrSearchDebounce(object? sender, EventArgs e)
+    {
+        _ocrSearchDebounceTimer.Stop();
+        if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 1)
+            LoadOcrHistory();
+    }
+
+    private void FlushColorSearchDebounce(object? sender, EventArgs e)
+    {
+        _colorSearchDebounceTimer.Stop();
+        if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 3)
+            LoadColorHistory();
     }
 
     private UIElement CreateHistorySearchSurface(string placeholderText, string initialText, Action<string> onTextChanged)
@@ -227,8 +291,8 @@ public partial class SettingsWindow
         var card = new Border
         {
             CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(12, 10, 12, 10),
-            Margin = new Thickness(0, 0, 0, 4),
+            Padding = new Thickness(12),
+            Margin = new Thickness(0, 0, 0, 6),
             Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
         };
 
@@ -236,25 +300,25 @@ public partial class SettingsWindow
         card.MouseLeave += (_, _) => card.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255));
 
         var capturedText = entry.Text;
-        bool isLong = capturedText.Length > 120;
+        bool isLong = capturedText.Length > 220 || capturedText.Count(ch => ch == '\n') > 3;
         bool expanded = false;
 
-        var textBlock = new System.Windows.Controls.TextBox
+        var textBlock = new TextBlock
         {
-            Text = isLong ? capturedText[..120] + "..." : capturedText,
+            Text = capturedText,
             FontSize = 12,
+            LineHeight = 18,
             TextWrapping = TextWrapping.Wrap,
-            MaxHeight = 60,
-            IsReadOnly = true,
-            BorderThickness = new Thickness(0),
-            Background = System.Windows.Media.Brushes.Transparent,
-            Padding = new Thickness(0),
-            Cursor = System.Windows.Input.Cursors.IBeam,
+            MaxHeight = isLong ? 74 : double.PositiveInfinity,
+            ClipToBounds = true,
             Foreground = Theme.Brush(Theme.TextPrimary),
+            Opacity = 0.92
         };
 
-        var bottomRow = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
-        bottomRow.Children.Add(new TextBlock
+        var footer = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        footer.Children.Add(new TextBlock
         {
             Text = FormatTimeAgo(entry.CapturedAt),
             FontSize = 10,
@@ -267,7 +331,7 @@ public partial class SettingsWindow
             Orientation = System.Windows.Controls.Orientation.Horizontal,
             HorizontalAlignment = System.Windows.HorizontalAlignment.Right
         };
-        DockPanel.SetDock(btnPanel, Dock.Right);
+        Grid.SetColumn(btnPanel, 1);
 
         if (isLong)
         {
@@ -285,14 +349,12 @@ public partial class SettingsWindow
                 expanded = !expanded;
                 if (expanded)
                 {
-                    textBlock.Text = capturedText;
                     textBlock.MaxHeight = double.PositiveInfinity;
                     showMoreBtn.Content = "Show less";
                 }
                 else
                 {
-                    textBlock.Text = capturedText[..120] + "...";
-                    textBlock.MaxHeight = 60;
+                    textBlock.MaxHeight = 74;
                     showMoreBtn.Content = "Show more";
                 }
             };
@@ -313,11 +375,11 @@ public partial class SettingsWindow
             ToastWindow.Show("Copied", "Text copied");
         };
         btnPanel.Children.Add(copyBtn);
-        bottomRow.Children.Insert(0, btnPanel);
+        footer.Children.Add(btnPanel);
 
         var textStack = new StackPanel();
         textStack.Children.Add(textBlock);
-        textStack.Children.Add(bottomRow);
+        textStack.Children.Add(footer);
 
         var badge = CreateSelectionBadge(false);
         var root = new Grid();
