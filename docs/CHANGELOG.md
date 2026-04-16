@@ -1,4 +1,4 @@
-# Yoink v0.8.20
+# Yoink v0.8.21
 
 ## Changed
 - Remove CLIP semantic image search and keep screenshot search limited to filenames and OCR text.

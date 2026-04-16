@@ -810,15 +810,6 @@
                                       Checked="AutoIndexImagesCheck_Changed" Unchecked="AutoIndexImagesCheck_Changed"/>
                             <CheckBox x:Name="ShowImageSearchDiagnosticsCheck" Content="Show search diagnostics" FontSize="13" Margin="0,6,0,0"
                                       Checked="ShowImageSearchDiagnosticsCheck_Changed" Unchecked="ShowImageSearchDiagnosticsCheck_Changed"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Semantic runtime (CLIP)" FontSize="13"/>
-                                                     IsIndeterminate="True" Visibility="Collapsed"/>
-                                    </StackPanel>
-                                </Grid>
-                                <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
-                            </StackPanel>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
