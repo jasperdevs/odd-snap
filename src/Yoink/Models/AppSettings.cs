@@ -207,7 +207,7 @@ public sealed class AppSettings
     public SoundPack SoundPack { get; set; } = SoundPack.Default;
 
     // Video recording
-    public RecordingFormat RecordingFormat { get; set; } = RecordingFormat.GIF;
+    public RecordingFormat RecordingFormat { get; set; } = RecordingFormat.MP4;
     public RecordingQuality RecordingQuality { get; set; } = RecordingQuality.Original;
     public int RecordingFps { get; set; } = 30;
     public bool RecordMicrophone { get; set; }
