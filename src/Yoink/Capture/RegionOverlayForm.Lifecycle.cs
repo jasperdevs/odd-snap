@@ -158,12 +158,8 @@ public sealed partial class RegionOverlayForm
                 if (e.KeyCode == Keys.Escape)
                 {
                     e.SuppressKeyPress = true;
-                    _textBuffer = "";
-                    _isTyping = false;
-                    SetSnapGuides(false, false);
-                    HideTextBox();
-                    InvalidateActiveTextLayout();
-                    Invalidate();
+                    e.Handled = true;
+                    Cancel();
                 }
             };
             _textBox.TextChanged += (_, _) =>
@@ -252,10 +248,8 @@ public sealed partial class RegionOverlayForm
                 if (e.KeyCode == Keys.Escape)
                 {
                     e.SuppressKeyPress = true;
-                    _emojiPickerOpen = false;
-                    HideEmojiSearchBox();
-                    Invalidate(InflateForRepaint(GetEmojiPickerBounds(), 12));
-                    RefreshToolbar();
+                    e.Handled = true;
+                    Cancel();
                 }
             };
             Controls.Add(_emojiSearchBox);
@@ -316,11 +310,8 @@ public sealed partial class RegionOverlayForm
                 if (e.KeyCode == Keys.Escape)
                 {
                     e.SuppressKeyPress = true;
-                    _fontPickerOpen = false;
-                    _fontSearch = ""; _filteredFonts = null;
-                    HideFontSearchBox();
-                    Invalidate(InflateForRepaint(GetFontPickerBounds(), 12));
-                    RefreshToolbar();
+                    e.Handled = true;
+                    Cancel();
                 }
             };
             Controls.Add(_fontSearchBox);
@@ -454,9 +445,21 @@ public sealed partial class RegionOverlayForm
 
     private void Cancel()
     {
+        if (_cancelRequested)
+            return;
+
+        _cancelRequested = true;
         _allowDeactivation = true;
+        try { HideTextBox(); } catch { }
+        try { HideEmojiSearchBox(); } catch { }
+        try { HideFontSearchBox(); } catch { }
+        try { CloseMagWindow(); } catch { }
+        try { CloseCaptureMagnifier(); } catch { }
+        try { ClearCrosshairGuides(); } catch { }
         SelectionCancelled?.Invoke();
     }
+
+    internal void CancelFromShortcut() => Cancel();
 
     protected override void Dispose(bool disposing)
     {

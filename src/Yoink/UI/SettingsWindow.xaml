@@ -204,9 +204,40 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type controls:ProviderSection}">
                         <Border Style="{StaticResource Card}">
-                            <ContentPresenter Content="{TemplateBinding Content}"/>
+                            <StackPanel>
+                                <DockPanel x:Name="ProviderHeaderRow" Margin="0,0,0,10" LastChildFill="True">
+                                    <ContentControl x:Name="HeaderExtrasHost"
+                                                    DockPanel.Dock="Right"
+                                                    Content="{TemplateBinding HeaderExtras}"
+                                                    VerticalAlignment="Center"/>
+                                    <Image x:Name="ProviderHeaderIcon"
+                                           Source="{TemplateBinding IconSource}"
+                                           Width="18"
+                                           Height="18"
+                                           Stretch="Uniform"
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center"/>
+                                    <TextBlock Text="{TemplateBinding Header}"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               FontFamily="Segoe UI Variable Text"
+                                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                               Opacity="0.55"
+                                               VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <ContentPresenter Content="{TemplateBinding Content}"/>
+                            </StackPanel>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="Header" Value="{x:Null}">
+                                <Setter TargetName="ProviderHeaderRow" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IconSource" Value="{x:Null}">
+                                <Setter TargetName="ProviderHeaderIcon" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="HeaderExtras" Value="{x:Null}">
+                                <Setter TargetName="HeaderExtrasHost" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -357,6 +388,7 @@
             <!-- Capture + Saving -->
             <ScrollViewer x:Name="CapturePanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
+                    <TextBlock Text="Capture Tool" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -523,6 +555,7 @@
                         </StackPanel>
                     </Border>
 
+                    <TextBlock Text="History" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="SaveHistoryCheck" Content="Save capture history" FontSize="13"
@@ -551,6 +584,7 @@
             <!-- Recording -->
             <ScrollViewer x:Name="RecordingPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
+                    <TextBlock Text="Recording" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <Grid>
@@ -583,7 +617,8 @@
                         </StackPanel>
                     </Border>
 
-                    <Border x:Name="VideoOnlySettings" Style="{StaticResource Card}" Margin="0,3,0,0">
+                    <TextBlock Text="Audio" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border x:Name="VideoOnlySettings" Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="RecordMicCheck" Content="Record microphone" FontSize="13"
                                       Checked="RecordMicCheck_Changed" Unchecked="RecordMicCheck_Changed"/>
@@ -605,6 +640,7 @@
             <!-- OCR & Translation -->
             <ScrollViewer x:Name="OcrPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
+                    <TextBlock Text="Recognition" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -670,6 +706,7 @@
                         </StackPanel>
                     </Border>
 
+                    <TextBlock Text="Engines" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <Grid>
@@ -740,6 +777,7 @@
             <!-- We need to close and reopen for the General section -->
             <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
+                    <TextBlock Text="Sound &amp; Motion" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="MuteSoundsCheck" Content="Mute capture sounds" FontSize="13"
@@ -809,6 +847,7 @@
                           PreviewMouseMove="ToastPanel_PreviewMouseMove"
                           PreviewMouseLeftButtonUp="ToastPanel_PreviewMouseLeftButtonUp">
                 <StackPanel>
+                    <TextBlock Text="Placement" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <Grid>
@@ -1169,6 +1208,7 @@
             <!-- About -->
             <ScrollViewer x:Name="AboutPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
                 <StackPanel>
+                    <TextBlock Text="Updates" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <CheckBox x:Name="AutoUpdateCheck" Content="Automatically check for updates" FontSize="13"
@@ -1413,6 +1453,7 @@
                     </Border>
 
                     <StackPanel x:Name="ImageUploadsPanel">
+                    <TextBlock Text="Destination" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
                             <Grid>
@@ -1831,7 +1872,9 @@
                     </Border>
 
                     <!-- Test upload -->
-                    <Border Style="{StaticResource Card}" Margin="0,14,0,0" x:Name="TestUploadCard" Visibility="Collapsed">
+                    <TextBlock Text="Test" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"
+                               Visibility="{Binding Visibility, ElementName=TestUploadCard}"/>
+                    <Border Style="{StaticResource Card}" x:Name="TestUploadCard" Visibility="Collapsed">
                         <Button x:Name="TestUploadBtn" Content="Test Upload" FontSize="12" Padding="12,6"
                                 ToolTip="Sends a tiny 1x1 pixel image to test your configuration"
                                 HorizontalAlignment="Left" Click="TestUpload_Click" Cursor="Hand"/>

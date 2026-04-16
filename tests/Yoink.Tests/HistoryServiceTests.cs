@@ -49,4 +49,25 @@ public sealed class HistoryServiceTests
 
         Assert.Null(ex);
     }
+
+    [Theory]
+    [InlineData("clip.mp4")]
+    [InlineData("clip.webm")]
+    [InlineData("clip.mkv")]
+    public void GetKindForPath_RecognizesVideoFiles(string fileName)
+    {
+        Assert.Equal(HistoryKind.Video, HistoryEntryUtilities.GetKindForPath(fileName));
+        Assert.True(HistoryEntryUtilities.IsSupportedHistoryFile(fileName));
+    }
+
+    [Fact]
+    public void GetKindForPath_StillRecognizesGifAndStickerFiles()
+    {
+        Assert.Equal(HistoryKind.Gif, HistoryEntryUtilities.GetKindForPath("clip.gif"));
+        Assert.Equal(
+            HistoryKind.Sticker,
+            HistoryEntryUtilities.GetKindForPath(
+                Path.Combine(HistoryService.StickerDir, "sticker.png"),
+                stickerDirs: [HistoryService.StickerDir]));
+    }
 }

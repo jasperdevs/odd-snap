@@ -68,7 +68,7 @@ public sealed class ToolbarForm : Form
         g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
         g.TranslateTransform(dx, dy);
-        _owner.PaintToolbarTo(g, ClientRectangle, Point.Empty);
+        _owner.PaintToolbarTo(g);
         g.ResetTransform();
         g.Flush(System.Drawing.Drawing2D.FlushIntention.Sync);
 
@@ -106,6 +106,17 @@ public sealed class ToolbarForm : Form
                 Native.User32.DeleteDC(hdcMem);
             Native.User32.ReleaseDC(IntPtr.Zero, hdcScreen);
         }
+    }
+
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if ((keyData & Keys.KeyCode) == Keys.Escape)
+        {
+            _owner.CancelFromShortcut();
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
     }
 
     protected override void Dispose(bool disposing)

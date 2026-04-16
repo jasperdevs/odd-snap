@@ -114,13 +114,12 @@ public partial class App
     {
         Dispatcher.BeginInvoke(() =>
         {
-            var result = MessageBox.Show(
-                "Uninstall Yoink? This will remove the app data and try to remove the app folder.",
-                "Confirm uninstall",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (result != MessageBoxResult.Yes)
+            if (!ThemedConfirmDialog.Confirm(
+                    _settingsWindow,
+                    "Confirm uninstall",
+                    "Uninstall Yoink? This will remove the app data and try to remove the app folder.",
+                    "Uninstall",
+                    "Cancel"))
                 return;
 
             try { UninstallService.RemoveStartupEntry(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.uninstall.remove-startup-entry", ex); }

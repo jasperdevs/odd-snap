@@ -66,6 +66,7 @@ public sealed partial class RegionOverlayForm : Form
     private const float FlyoutAnimDurationMs = 80f;
     private ToolbarForm? _toolbarForm;
     private bool _allowDeactivation;
+    private bool _cancelRequested;
     private Point _pendingAutoDetectPoint = Point.Empty;
 
     private const int TopBarHeight = 110;

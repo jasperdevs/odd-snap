@@ -189,12 +189,13 @@ public partial class SettingsWindow
         if (conflict != null)
         {
             var combo = HotkeyFormatter.Format(modifiers, vk);
-            var result = MessageBox.Show(
-                $"{combo} is already used by \"{conflict}\".\n\nReplace it?",
-                "Hotkey conflict",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (result != MessageBoxResult.Yes)
+            if (!ThemedConfirmDialog.Confirm(
+                    this,
+                    "Hotkey conflict",
+                    $"{combo} is already used by \"{conflict}\".\n\nReplace it?",
+                    "Replace",
+                    "Cancel",
+                    danger: false))
             {
                 AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
                 Keyboard.ClearFocus();
@@ -211,6 +212,10 @@ public partial class SettingsWindow
         Keyboard.ClearFocus();
         HotkeyChanged?.Invoke();
     }
+
+    private static bool IsModifierOnly(Key key) =>
+        key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
+            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape;
 
     private string? FindAiRedirectConflict(uint modifiers, uint key)
     {

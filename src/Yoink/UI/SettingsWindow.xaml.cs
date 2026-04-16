@@ -78,7 +78,6 @@ public partial class SettingsWindow : Window
         Theme.Refresh();
         Theme.ApplyTo(Application.Current.Resources);
         ApplyThemeColors();
-        WireHotkeyBoxes();
         LoadSettings();
         Loaded += (_, _) => ApplyMicaBackdrop();
         Loaded += async (_, _) => await RefreshUpdateStatusAsync(false);

@@ -294,6 +294,7 @@ public partial class SettingsWindow
             Padding = new Thickness(12),
             Margin = new Thickness(0, 0, 0, 6),
             Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
+            DataContext = entry
         };
 
         card.MouseEnter += (_, _) => card.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(24, 255, 255, 255));
@@ -387,21 +388,20 @@ public partial class SettingsWindow
         root.Children.Add(badge);
         card.Child = root;
 
-        bool selected = false;
-        if (_selectMode)
+        card.Cursor = System.Windows.Input.Cursors.Hand;
+        card.MouseLeftButtonDown += (_, e) =>
         {
-            card.Cursor = System.Windows.Input.Cursors.Hand;
-            card.BorderThickness = new Thickness(0);
-            card.MouseLeftButtonDown += (_, e) =>
-            {
-                e.Handled = true;
-                selected = !selected;
-                card.Tag = selected;
-                UpdateSelectableCardSelection(card, badge, selected);
-            };
-        }
+            if (!_selectMode)
+                return;
 
-        UpdateSelectableCardSelection(card, badge, selected);
+            e.Handled = true;
+            var selected = card.Tag is true;
+            selected = !selected;
+            card.Tag = selected;
+            UpdateSelectableCardSelection(card, badge, selected);
+        };
+
+        UpdateSelectableCardSelection(card, badge, selected: false);
         return card;
     }
 
@@ -432,7 +432,8 @@ public partial class SettingsWindow
             Padding = new Thickness(10, 8, 12, 8),
             Margin = new Thickness(0, 0, 0, 3),
             Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255)),
-            Cursor = System.Windows.Input.Cursors.Hand
+            Cursor = System.Windows.Input.Cursors.Hand,
+            DataContext = entry
         };
 
         card.MouseEnter += (_, _) => card.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(24, 255, 255, 255));
@@ -499,29 +500,23 @@ public partial class SettingsWindow
         root.Children.Add(badge);
         card.Child = root;
 
-        var selected = false;
-        if (_selectMode)
+        card.MouseLeftButtonDown += (_, e) =>
         {
-            card.BorderThickness = new Thickness(0);
-            card.MouseLeftButtonDown += (_, e) =>
+            e.Handled = true;
+            if (_selectMode)
             {
-                e.Handled = true;
+                var selected = card.Tag is ColorHistoryEntry;
                 selected = !selected;
                 card.Tag = selected ? entry : null;
                 UpdateSelectableCardSelection(card, badge, selected);
-            };
-        }
-        else
-        {
-            card.MouseLeftButtonDown += (_, e) =>
-            {
-                e.Handled = true;
-                ClipboardService.CopyTextToClipboard(capturedHex);
-                ToastWindow.Show("Copied", capturedHex);
-            };
-        }
+                return;
+            }
 
-        UpdateSelectableCardSelection(card, badge, selected);
+            ClipboardService.CopyTextToClipboard(capturedHex);
+            ToastWindow.Show("Copied", capturedHex);
+        };
+
+        UpdateSelectableCardSelection(card, badge, selected: false);
         return card;
     }
 
@@ -679,10 +674,13 @@ public partial class SettingsWindow
         }
     }
 
-    private static void UpdateSelectableCardSelection(Border card, Border badge, bool selected)
+    private void UpdateSelectableCardSelection(Border card, Border badge, bool selected)
     {
         card.BorderThickness = new Thickness(selected ? Theme.StrokeThickness : 0);
         card.BorderBrush = selected ? Theme.StrokeBrush() : System.Windows.Media.Brushes.Transparent;
-        badge.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
+        badge.Visibility = _selectMode || selected ? Visibility.Visible : Visibility.Collapsed;
+        badge.Opacity = selected ? 1 : 0.45;
+        if (badge.Tag is UIElement check)
+            check.Visibility = selected ? Visibility.Visible : Visibility.Hidden;
     }
 }

@@ -53,22 +53,14 @@ public partial class SettingsWindow
     private string BuildMediaHistoryCacheKey()
     {
         var hash = new HashCode();
-        foreach (var entry in _historyService.GifEntries)
+        foreach (var entry in _historyService.MediaEntries)
         {
             hash.Add(entry.FilePath, StringComparer.OrdinalIgnoreCase);
             hash.Add(entry.FileSizeBytes);
-        }
-
-        var baseDir = _settingsService.Settings.SaveDirectory;
-        foreach (var dir in new[] { Path.Combine(baseDir, "Videos"), baseDir }.Where(Directory.Exists))
-        {
-            try
-            {
-                var info = new DirectoryInfo(dir);
-                hash.Add(info.FullName, StringComparer.OrdinalIgnoreCase);
-                hash.Add(info.LastWriteTimeUtc.Ticks);
-            }
-            catch { }
+            hash.Add(entry.CapturedAt);
+            hash.Add(entry.Kind);
+            hash.Add(entry.UploadUrl, StringComparer.OrdinalIgnoreCase);
+            hash.Add(entry.UploadProvider, StringComparer.OrdinalIgnoreCase);
         }
 
         return hash.ToHashCode().ToString("X8");
@@ -79,7 +71,7 @@ public partial class SettingsWindow
         var items = new List<HistoryItemVM>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var entry in _historyService.GifEntries.OrderByDescending(e => e.CapturedAt))
+        foreach (var entry in _historyService.MediaEntries.OrderByDescending(e => e.CapturedAt))
         {
             if (!seen.Add(entry.FilePath))
                 continue;
@@ -87,48 +79,12 @@ public partial class SettingsWindow
             items.Add(new HistoryItemVM
             {
                 Entry = entry,
-                ThumbPath = entry.FilePath,
+                ThumbPath = entry.Kind == HistoryKind.Gif
+                    ? entry.FilePath
+                    : GetVideoThumbnailPath(entry.FilePath),
                 Dimensions = "",
                 TimeAgo = FormatTimeAgo(entry.CapturedAt)
             });
-        }
-
-        var baseDir = _settingsService.Settings.SaveDirectory;
-        var videoDirs = new[] { Path.Combine(baseDir, "Videos"), baseDir }.Where(Directory.Exists);
-        foreach (var file in videoDirs.SelectMany(EnumerateVideoFiles).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!seen.Add(file))
-                continue;
-
-            try
-            {
-                var info = new FileInfo(file);
-                var isGif = Path.GetExtension(file).Equals(".gif", StringComparison.OrdinalIgnoreCase);
-                if (!isGif && info.Length <= 1024)
-                    continue;
-
-                items.Add(new HistoryItemVM
-                {
-                    Entry = new HistoryEntry
-                    {
-                        FileName = info.Name,
-                        FilePath = file,
-                        CapturedAt = info.CreationTime,
-                        Width = 0,
-                        Height = 0,
-                        FileSizeBytes = info.Length,
-                        Kind = isGif
-                            ? HistoryKind.Gif
-                            : HistoryKind.Image
-                    },
-                    ThumbPath = isGif
-                        ? file
-                        : GetVideoThumbnailPath(file),
-                    Dimensions = "",
-                    TimeAgo = FormatTimeAgo(info.CreationTime)
-                });
-            }
-            catch { }
         }
 
         return items
@@ -145,7 +101,7 @@ public partial class SettingsWindow
     private void CleanupOrphanVideoThumbnails(IEnumerable<HistoryItemVM> items)
     {
         var expectedThumbs = new HashSet<string>(
-            items.Where(i => i.Entry.Kind != HistoryKind.Gif)
+            items.Where(i => i.Entry.Kind == HistoryKind.Video)
                  .Select(i => GetVideoThumbnailPath(i.Entry.FilePath)),
             StringComparer.OrdinalIgnoreCase);
 
@@ -368,49 +324,16 @@ public partial class SettingsWindow
         ApplyThumbnailToBoundImage(vm, source, animate: true);
     }
 
-    private static IEnumerable<string> EnumerateVideoFiles(string dir)
-    {
-        foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly))
-        {
-            var ext = Path.GetExtension(file);
-            if (ext.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".gif", StringComparison.OrdinalIgnoreCase))
-            {
-                yield return file;
-            }
-        }
-    }
-
     private void DeleteMediaItems(IEnumerable<HistoryItemVM> items)
     {
-        var gifEntries = new List<HistoryEntry>();
-        int failed = 0;
-        foreach (var item in items)
-        {
-            if (item.Entry.Kind == HistoryKind.Gif)
-            {
-                gifEntries.Add(item.Entry);
-                continue;
-            }
-
-            try { File.Delete(item.Entry.FilePath); }
-            catch { failed++; }
-            try { File.Delete(GetVideoThumbnailPath(item.Entry.FilePath)); } catch { }
-        }
-
-        _historyService.DeleteEntries(gifEntries);
-
-        if (failed > 0)
-            ToastWindow.ShowError("Delete failed", $"{failed} file(s) couldn't be deleted (may be in use).");
+        _historyService.DeleteEntries(items.Select(item => item.Entry));
 
         LoadCurrentHistoryTab();
     }
 
     private static string GetVideoThumbnailPath(string videoPath)
     {
-        var fileKey = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(videoPath))).ToLowerInvariant();
+        var fileKey = HistoryEntryUtilities.GetStablePathKey(videoPath);
         return Path.Combine(HistoryService.ThumbnailDir, fileKey + ".jpg");
     }
 
@@ -478,12 +401,23 @@ public partial class SettingsWindow
         var cacheKey = sourcePath ?? path;
         RegisterThumbWaiter(cacheKey, img);
 
-        if (TryGetThumbFromCache(cacheKey, out var cached))
+        if (TryGetThumbFromCache(cacheKey, out var cached) && cached is not null)
         {
             vm.ThumbnailSource = cached;
             vm.ThumbnailLoaded = true;
             img.Source = cached;
             img.Opacity = 1;
+            ApplyThumbnailToWaiters(cacheKey, cached, animate: false);
+            return;
+        }
+
+        if (TryLoadCachedThumbnailSource(cacheKey, path, sourcePath, vm.Entry.Kind, out var cachedDisk) && cachedDisk is not null)
+        {
+            vm.ThumbnailSource = cachedDisk;
+            vm.ThumbnailLoaded = true;
+            img.Source = cachedDisk;
+            img.Opacity = 1;
+            ApplyThumbnailToWaiters(cacheKey, cachedDisk, animate: false);
             return;
         }
 
@@ -498,8 +432,10 @@ public partial class SettingsWindow
                 try
                 {
                     var loadPath = path;
-                    if (!File.Exists(loadPath) && sourcePath != null)
+                    if (vm.Entry.Kind == HistoryKind.Video && sourcePath != null && !File.Exists(loadPath))
                         loadPath = await EnsureVideoThumbnailAsync(sourcePath, path);
+                    else if (vm.Entry.Kind is HistoryKind.Image or HistoryKind.Gif or HistoryKind.Sticker && sourcePath != null)
+                        loadPath = sourcePath;
 
                     if (!File.Exists(loadPath))
                     {
@@ -514,7 +450,7 @@ public partial class SettingsWindow
                         return;
                     }
 
-                    var bmp = LoadThumbSource(loadPath);
+                    var bmp = LoadOrCreateThumbnailSource(loadPath, sourcePath ?? loadPath, vm.Entry.Kind);
                     if (bmp is null)
                     {
                         if (sourcePath == null || !ShouldCachePlaceholder(vm.Entry.Kind))
@@ -547,6 +483,16 @@ public partial class SettingsWindow
         {
             if (onReady is not null)
                 onReady(cached!);
+            ApplyThumbnailToWaiters(cacheKey, cached!, animate: false);
+            onLoaded?.Invoke();
+            return;
+        }
+
+        if (TryLoadCachedThumbnailSource(cacheKey, thumbPath, cacheKey, kind, out var cachedDisk))
+        {
+            if (onReady is not null)
+                onReady(cachedDisk!);
+            ApplyThumbnailToWaiters(cacheKey, cachedDisk!, animate: false);
             onLoaded?.Invoke();
             return;
         }
@@ -562,18 +508,15 @@ public partial class SettingsWindow
                 try
                 {
                     var loadPath = thumbPath;
-                    if (!File.Exists(loadPath))
-                    {
-                        if (kind == HistoryKind.Gif || kind == HistoryKind.Image || kind == HistoryKind.Sticker)
-                            loadPath = cacheKey;
-                        else
-                            loadPath = await EnsureVideoThumbnailAsync(cacheKey, thumbPath);
-                    }
+                    if (kind == HistoryKind.Video && !File.Exists(loadPath))
+                        loadPath = await EnsureVideoThumbnailAsync(cacheKey, thumbPath);
+                    else if (kind is HistoryKind.Gif or HistoryKind.Image or HistoryKind.Sticker)
+                        loadPath = cacheKey;
 
                     if (!File.Exists(loadPath))
                         return;
 
-                    var bmp = LoadThumbSource(loadPath);
+                    var bmp = LoadOrCreateThumbnailSource(loadPath, cacheKey, kind);
                     if (bmp is null)
                         return;
 
@@ -637,7 +580,7 @@ public partial class SettingsWindow
     }
 
     private static bool ShouldCachePlaceholder(HistoryKind kind) =>
-        kind != HistoryKind.Image && kind != HistoryKind.Gif && kind != HistoryKind.Sticker;
+        kind != HistoryKind.Image && kind != HistoryKind.Gif && kind != HistoryKind.Sticker && kind != HistoryKind.Video;
 
     private static void RegisterThumbWaiter(string cacheKey, System.Windows.Controls.Image image) => SettingsMediaCache.RegisterWaiter(cacheKey, image);
 

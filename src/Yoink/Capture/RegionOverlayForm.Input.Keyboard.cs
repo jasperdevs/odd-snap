@@ -9,42 +9,8 @@ public sealed partial class RegionOverlayForm
     // ProcessCmdKey always receives ESC (OnKeyDown sometimes doesn't)
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (keyData == Keys.Escape)
+        if ((keyData & Keys.KeyCode) == Keys.Escape)
         {
-            // Close all popups and transient state in one pass
-            bool anyClosed = false;
-            if (_mode == CaptureMode.ColorPicker) { CloseMagWindow(); anyClosed = true; }
-            if (_emojiPickerOpen) { _emojiPickerOpen = false; HideEmojiSearchBox(); anyClosed = true; }
-            if (_fontPickerOpen) { _fontPickerOpen = false; _fontSearch = ""; _filteredFonts = null; HideFontSearchBox(); anyClosed = true; }
-            if (_colorPickerOpen) { _colorPickerOpen = false; anyClosed = true; }
-            if (_isPlacingEmoji) { _isPlacingEmoji = false; _selectedEmoji = null; anyClosed = true; }
-            if (_isRulerDragging) { _isRulerDragging = false; anyClosed = true; }
-            if (_isSelecting) { _isSelecting = false; _hasSelection = false; anyClosed = true; }
-            if (_isArrowDragging) { _isArrowDragging = false; anyClosed = true; }
-            if (_isLineDragging) { _isLineDragging = false; anyClosed = true; }
-            if (_isCurvedArrowDragging) { _isCurvedArrowDragging = false; anyClosed = true; }
-            if (_isBlurring) { _isBlurring = false; anyClosed = true; }
-            if (_isEraserDragging) { _isEraserDragging = false; anyClosed = true; }
-            if (_isHighlighting) { _isHighlighting = false; anyClosed = true; }
-            if (_isRectShapeDragging) { _isRectShapeDragging = false; anyClosed = true; }
-            if (_isCircleShapeDragging) { _isCircleShapeDragging = false; anyClosed = true; }
-            if (_isSelectDragging) { _isSelectDragging = false; anyClosed = true; }
-            if (_isSelectResizing) { _isSelectResizing = false; _selectResizeHandle = -1; anyClosed = true; }
-            if (_selectedAnnotationIndex >= 0) { _selectedAnnotationIndex = -1; anyClosed = true; }
-            if (_isTyping)
-            {
-                _isTyping = false;
-                SetSnapGuides(false, false);
-                _textBuffer = "";
-                HideTextBox();
-                anyClosed = true;
-            }
-            if (anyClosed)
-            {
-                Invalidate();
-                RefreshToolbar();
-                return true;
-            }
             Cancel();
             return true;
         }
@@ -53,6 +19,14 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.KeyCode == Keys.Escape)
+        {
+            e.SuppressKeyPress = true;
+            e.Handled = true;
+            Cancel();
+            return;
+        }
+
         // Undo must work in all states (emoji placing, typing, etc.)
         if (e.KeyCode == Keys.Z && e.Control && _undoStack.Count > 0)
         {

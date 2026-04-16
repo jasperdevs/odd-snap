@@ -215,7 +215,7 @@ internal static class DxgiScreenCapture
         }
     }
 
-    private static Rectangle ToRectangle(Rectangle rect) => rect;
+    private static Rectangle ToRectangle(Vortice.RawRect rect) => rect;
 
     private sealed record DeviceBundle(ID3D11Device Device, ID3D11DeviceContext Context, IDXGIAdapter Adapter) : IDisposable
     {

@@ -41,7 +41,7 @@ public sealed partial class HistoryService
         {
             foreach (var file in Directory.EnumerateFiles(LegacyHistoryDir, "*.*", SearchOption.AllDirectories))
             {
-                if (!IsSupportedHistoryFile(file))
+                if (!HistoryEntryUtilities.IsSupportedHistoryFile(file))
                     continue;
 
                 var fileName = Path.GetFileName(file);
@@ -141,14 +141,8 @@ public sealed partial class HistoryService
         }
     }
 
-    private static bool IsSupportedHistoryFile(string path)
-    {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-        return ext is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp";
-    }
-
     /// <summary>
-    /// Scans one or more directories for image files not tracked in the index
+    /// Scans one or more directories for media files not tracked in the index
     /// and adds them so the history is complete. Call after Load().
     /// </summary>
     public void RecoverFromDirectories(params string[] dirs)
@@ -175,13 +169,13 @@ public sealed partial class HistoryService
                         continue;
                     if (file.StartsWith(ThumbnailDir, StringComparison.OrdinalIgnoreCase))
                         continue;
-                    var ext = Path.GetExtension(file).ToLowerInvariant();
-                    if (ext is not (".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp")) continue;
+                    if (!HistoryEntryUtilities.IsSupportedHistoryFile(file)) continue;
                     if (tracked.Contains(file)) continue;
 
                     try
                     {
                         var fi = new FileInfo(file);
+                        var kind = HistoryEntryUtilities.GetKindForPath(file, stickerDirs: [StickerDir]);
                         _entries.Add(new HistoryEntry
                         {
                             FileName = fi.Name,
@@ -190,7 +184,7 @@ public sealed partial class HistoryService
                             Width = 0,
                             Height = 0,
                             FileSizeBytes = fi.Length,
-                            Kind = ext == ".gif" ? HistoryKind.Gif : HistoryKind.Image
+                            Kind = kind
                         });
                         tracked.Add(file);
                         changed = true;
@@ -330,6 +324,8 @@ public sealed partial class HistoryService
 
         Directory.CreateDirectory(HistoryDir);
         Directory.CreateDirectory(StickerDir);
+        Directory.CreateDirectory(ThumbnailDir);
+        Directory.CreateDirectory(ImageThumbnailDir);
         var result = HistoryStore.Flush(DatabasePath, new HistoryFlushRequest(
             _entries,
             _ocrEntries,
@@ -397,7 +393,7 @@ public sealed partial class HistoryService
 
     private static string GetManagedThumbnailPath(string filePath)
     {
-        var fileKey = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(filePath))).ToLowerInvariant();
+        var fileKey = HistoryEntryUtilities.GetStablePathKey(filePath);
         return Path.Combine(ThumbnailDir, fileKey + ".jpg");
     }
 
@@ -407,6 +403,19 @@ public sealed partial class HistoryService
         {
             var thumbPath = GetManagedThumbnailPath(filePath);
             if (File.Exists(thumbPath))
+                File.Delete(thumbPath);
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (!Directory.Exists(ImageThumbnailDir))
+                return;
+
+            var fileKey = HistoryEntryUtilities.GetStablePathKey(filePath);
+            foreach (var thumbPath in Directory.EnumerateFiles(ImageThumbnailDir, fileKey + "-*.png", SearchOption.TopDirectoryOnly))
                 File.Delete(thumbPath);
         }
         catch

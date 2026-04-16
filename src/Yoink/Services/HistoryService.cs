@@ -11,7 +11,8 @@ public enum HistoryKind
 {
     Image,
     Gif,
-    Sticker
+    Sticker,
+    Video
 }
 
 public sealed class HistoryEntry
@@ -46,6 +47,7 @@ public sealed partial class HistoryService : IDisposable
 
     public static readonly string StickerDir = Path.Combine(HistoryDir, "stickers");
     public static readonly string ThumbnailDir = Path.Combine(HistoryDir, "cache", "video-thumbs");
+    public static readonly string ImageThumbnailDir = Path.Combine(HistoryDir, "cache", "thumbs");
     public static readonly string DatabasePath = Path.Combine(HistoryDir, "history.db");
 
     private static readonly string LegacyHistoryDir = Path.Combine(
@@ -69,6 +71,8 @@ public sealed partial class HistoryService : IDisposable
     private IReadOnlyList<HistoryEntry>? _imageEntries;
     private IReadOnlyList<HistoryEntry>? _gifEntries;
     private IReadOnlyList<HistoryEntry>? _stickerEntries;
+    private IReadOnlyList<HistoryEntry>? _videoEntries;
+    private IReadOnlyList<HistoryEntry>? _mediaEntries;
     private readonly object _gate = new();
     private readonly System.Threading.Timer _flushTimer;
     private bool _disposed;
@@ -92,10 +96,19 @@ public sealed partial class HistoryService : IDisposable
     public IReadOnlyList<HistoryEntry> ImageEntries { get { lock (_gate) return _imageEntries ??= _entries.Where(e => e.Kind == HistoryKind.Image).ToList(); } }
     public IReadOnlyList<HistoryEntry> GifEntries { get { lock (_gate) return _gifEntries ??= _entries.Where(e => e.Kind == HistoryKind.Gif).ToList(); } }
     public IReadOnlyList<HistoryEntry> StickerEntries { get { lock (_gate) return _stickerEntries ??= _entries.Where(e => e.Kind == HistoryKind.Sticker).ToList(); } }
+    public IReadOnlyList<HistoryEntry> VideoEntries { get { lock (_gate) return _videoEntries ??= _entries.Where(e => e.Kind == HistoryKind.Video).ToList(); } }
+    public IReadOnlyList<HistoryEntry> MediaEntries { get { lock (_gate) return _mediaEntries ??= _entries.Where(e => e.Kind is HistoryKind.Gif or HistoryKind.Video).ToList(); } }
     public IReadOnlyList<OcrHistoryEntry> OcrEntries { get { lock (_gate) return _ocrEntries.ToList(); } }
     public IReadOnlyList<ColorHistoryEntry> ColorEntries { get { lock (_gate) return _colorEntries.ToList(); } }
 
-    private void InvalidateFilteredCache() { _imageEntries = null; _gifEntries = null; _stickerEntries = null; }
+    private void InvalidateFilteredCache()
+    {
+        _imageEntries = null;
+        _gifEntries = null;
+        _stickerEntries = null;
+        _videoEntries = null;
+        _mediaEntries = null;
+    }
 
     private void NotifyChanged()
     {
@@ -144,6 +157,7 @@ public sealed partial class HistoryService : IDisposable
             Directory.CreateDirectory(HistoryDir);
             Directory.CreateDirectory(StickerDir);
             Directory.CreateDirectory(ThumbnailDir);
+            Directory.CreateDirectory(ImageThumbnailDir);
             EnsureDatabase_NoLock();
             LoadFromDatabase_NoLock();
             ImportLegacyJsonIndexes_NoLock();
@@ -182,21 +196,36 @@ public sealed partial class HistoryService : IDisposable
     public HistoryRetentionPeriod RetentionPeriod { get; set; } = HistoryRetentionPeriod.Never;
 
     public HistoryEntry SaveGifEntry(string gifPath)
+        => SaveMediaEntry(gifPath);
+
+    public HistoryEntry SaveVideoEntry(string videoPath)
+        => SaveMediaEntry(videoPath);
+
+    public HistoryEntry SaveMediaEntry(string mediaPath)
     {
-        var fi = new FileInfo(gifPath);
+        var fi = new FileInfo(mediaPath);
+        if (!fi.Exists)
+            throw new FileNotFoundException("Media file was not found.", mediaPath);
+
+        var kind = HistoryEntryUtilities.GetKindForPath(mediaPath);
+        if (kind is not (HistoryKind.Gif or HistoryKind.Video))
+            kind = HistoryKind.Video;
+
         HistoryEntry entry;
         lock (_gate)
         {
-            entry = new HistoryEntry
-            {
-                FileName = fi.Name,
-                FilePath = gifPath,
-                CapturedAt = DateTime.Now,
-                Width = 0,
-                Height = 0,
-                FileSizeBytes = fi.Length,
-                Kind = HistoryKind.Gif
-            };
+            entry = _entries.FirstOrDefault(existing => existing.FilePath.Equals(mediaPath, StringComparison.OrdinalIgnoreCase))
+                ?? new HistoryEntry();
+
+            entry.FileName = fi.Name;
+            entry.FilePath = mediaPath;
+            entry.CapturedAt = fi.CreationTime;
+            entry.Width = 0;
+            entry.Height = 0;
+            entry.FileSizeBytes = fi.Length;
+            entry.Kind = kind;
+
+            _entries.RemoveAll(existing => existing.FilePath.Equals(mediaPath, StringComparison.OrdinalIgnoreCase));
             _entries.Insert(0, entry);
             InvalidateFilteredCache();
             QueueEntryUpsert_NoLock(entry);
@@ -319,7 +348,7 @@ public sealed partial class HistoryService : IDisposable
     {
         lock (_gate)
         {
-            _entries.Remove(entry);
+            _entries.RemoveAll(existing => existing.FilePath.Equals(entry.FilePath, StringComparison.OrdinalIgnoreCase));
             InvalidateFilteredCache();
             try { File.Delete(entry.FilePath); } catch { }
             TryDeleteManagedThumbnail_NoLock(entry.FilePath);
@@ -337,14 +366,15 @@ public sealed partial class HistoryService : IDisposable
 
         lock (_gate)
         {
+            var paths = list.Select(entry => entry.FilePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in list)
             {
-                _entries.Remove(entry);
                 try { File.Delete(entry.FilePath); } catch { }
                 TryDeleteManagedThumbnail_NoLock(entry.FilePath);
             }
+            _entries.RemoveAll(entry => paths.Contains(entry.FilePath));
             InvalidateFilteredCache();
-            QueueEntryDeletes_NoLock(list.Select(entry => entry.FilePath));
+            QueueEntryDeletes_NoLock(paths);
             ScheduleFlush_NoLock();
         }
         NotifyChanged();

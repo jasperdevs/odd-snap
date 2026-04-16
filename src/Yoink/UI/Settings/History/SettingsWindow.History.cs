@@ -45,7 +45,13 @@ public partial class SettingsWindow
     private const int HistoryAppendPageSize = 18;
     private const int HistoryLookaheadCount = 6;
     private const int HistoryVirtualizationThreshold = 240;
-    private const double HistoryCardFullWidth = 174d;
+    private const double HistoryCardMargin = 3d;
+    private const double HistoryCardPreferredWidth = 168d;
+    private const double HistoryCardMinWidth = 148d;
+    private const double HistoryCardMaxWidth = 220d;
+    private const double HistoryCardHorizontalGap = HistoryCardMargin * 2d;
+    private const double HistoryCardFullWidth = HistoryCardPreferredWidth + HistoryCardHorizontalGap;
+    private const double HistoryCardImageAspectRatio = 100d / HistoryCardPreferredWidth;
     private const double HistoryVirtualRowHeight = 156d;
     private const int HistoryVirtualRowBuffer = 3;
     private const int HistoryPrefetchRowBuffer = 2;
@@ -588,22 +594,109 @@ public partial class SettingsWindow
                status.Equals("OCR failed", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void UpdateCardSelection(HistoryItemVM vm)
+    private void UpdateCardSelection(HistoryItemVM vm)
     {
         if (vm.Card is null)
             return;
 
         if (vm.SelectionBadge != null)
-            vm.SelectionBadge.Visibility = vm.IsSelected ? Visibility.Visible : Visibility.Collapsed;
+        {
+            vm.SelectionBadge.Visibility = _selectMode || vm.IsSelected ? Visibility.Visible : Visibility.Collapsed;
+            vm.SelectionBadge.Opacity = vm.IsSelected ? 1 : 0.45;
+            if (vm.SelectionBadge is FrameworkElement { Tag: UIElement check })
+                check.Visibility = vm.IsSelected ? Visibility.Visible : Visibility.Hidden;
+        }
     }
 
     private void ToggleSelectMode(object sender, RoutedEventArgs e)
     {
         _selectMode = !_selectMode;
+        if (!_selectMode)
+            ClearCurrentHistorySelections();
+
+        UpdateSelectModeControls();
+        RefreshVisibleCardSelections();
+        UpdateImageSearchActionButtons();
+    }
+
+    private void UpdateSelectModeControls()
+    {
         SelectBtn.Content = _selectMode ? "Done" : "Select";
         DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
-        LoadCurrentHistoryTab();
-        UpdateImageSearchActionButtons();
+    }
+
+    private void ClearCurrentHistorySelections()
+    {
+        foreach (var item in GetCurrentHistorySelectionItems())
+            item.IsSelected = false;
+
+        foreach (var card in GetCurrentSelectableCards())
+            ClearSelectableCardSelection(card);
+    }
+
+    private void RefreshVisibleCardSelections()
+    {
+        foreach (var item in GetCurrentHistorySelectionItems())
+            UpdateCardSelection(item);
+
+        foreach (var card in GetCurrentSelectableCards())
+            RefreshSelectableCardSelection(card);
+    }
+
+    private IEnumerable<HistoryItemVM> GetCurrentHistorySelectionItems()
+    {
+        return HistoryCategoryCombo.SelectedIndex switch
+        {
+            0 => _historyItems,
+            2 => _gifItems,
+            4 => _stickerItems,
+            _ => Enumerable.Empty<HistoryItemVM>()
+        };
+    }
+
+    private IEnumerable<Border> GetCurrentSelectableCards()
+    {
+        return HistoryCategoryCombo.SelectedIndex switch
+        {
+            1 => OcrStack.Children.OfType<Border>().Where(IsSelectableHistoryCard),
+            3 => ColorStack.Children.OfType<Border>().Where(IsSelectableHistoryCard),
+            _ => Enumerable.Empty<Border>()
+        };
+    }
+
+    private static bool IsSelectableHistoryCard(Border card)
+    {
+        return card.Child is Grid root &&
+               root.Children.OfType<Border>().Any(badge => badge.Tag is UIElement);
+    }
+
+    private void ClearSelectableCardSelection(Border card)
+    {
+        if (HistoryCategoryCombo.SelectedIndex == 1)
+            card.Tag = false;
+        else if (HistoryCategoryCombo.SelectedIndex == 3)
+            card.Tag = null;
+
+        RefreshSelectableCardSelection(card);
+    }
+
+    private void RefreshSelectableCardSelection(Border card)
+    {
+        if (card.Child is not Grid root)
+            return;
+
+        var badge = root.Children.OfType<Border>().FirstOrDefault(candidate => candidate.Tag is UIElement);
+        if (badge is null)
+            return;
+
+        var selected = HistoryCategoryCombo.SelectedIndex switch
+        {
+            1 => card.Tag is true,
+            3 => card.Tag is ColorHistoryEntry,
+            _ => false
+        };
+
+        UpdateSelectableCardSelection(card, badge, selected);
     }
 
     private void DeleteAllClick(object sender, RoutedEventArgs e)
@@ -615,9 +708,9 @@ public partial class SettingsWindow
                 : HistoryCategoryCombo.SelectedIndex == 2 ? "videos/GIFs"
                 : HistoryCategoryCombo.SelectedIndex == 1 ? "text history"
                 : HistoryCategoryCombo.SelectedIndex == 3 ? "colors" : "stickers";
-            if (MessageBox.Show($"Delete all {tab}?", "Confirm 1/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-            if (MessageBox.Show($"Really delete all {tab}?", "Confirm 2/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-            if (MessageBox.Show($"This cannot be undone. Delete all {tab}?", "Confirm 3/3", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+            if (!ThemedConfirmDialog.Confirm(this, "Confirm 1/3", $"Delete all {tab}?", "Delete", "Cancel")) return;
+            if (!ThemedConfirmDialog.Confirm(this, "Confirm 2/3", $"Really delete all {tab}?", "Delete", "Cancel")) return;
+            if (!ThemedConfirmDialog.Confirm(this, "Confirm 3/3", $"This cannot be undone. Delete all {tab}?", "Delete", "Cancel")) return;
 
             if (HistoryCategoryCombo.SelectedIndex == 0) _historyService.ClearImages();
             else if (HistoryCategoryCombo.SelectedIndex == 2) DeleteMediaItems(_allGifItems);
@@ -658,25 +751,11 @@ public partial class SettingsWindow
             }
             else if (HistoryCategoryCombo.SelectedIndex == 1)
             {
-                var toDelete = OcrStack.Children.OfType<Border>()
+                var entriesToDelete = OcrStack.Children.OfType<Border>()
                     .Where(b => b.Tag is true)
+                    .Select(card => card.DataContext)
+                    .OfType<OcrHistoryEntry>()
                     .ToList();
-                // Map selected cards to their OcrHistoryEntry by matching text content
-                var allEntries = _historyService.OcrEntries;
-                var entriesToDelete = new List<OcrHistoryEntry>();
-                foreach (var card in toDelete)
-                {
-                    if (card.Child is Grid root && root.Children.OfType<StackPanel>().FirstOrDefault() is { } stack)
-                    {
-                        var textBox = stack.Children.OfType<System.Windows.Controls.TextBox>().FirstOrDefault();
-                        if (textBox != null)
-                        {
-                            var match = allEntries.FirstOrDefault(e =>
-                                e.Text == textBox.Text || e.Text.StartsWith(textBox.Text.TrimEnd('.', ' ')));
-                            if (match != null) entriesToDelete.Add(match);
-                        }
-                    }
-                }
                 _historyService.DeleteOcrEntries(entriesToDelete);
             }
             else if (HistoryCategoryCombo.SelectedIndex == 3)
@@ -792,13 +871,64 @@ public partial class SettingsWindow
                     Margin = new Thickness(6, 12, 0, 6)
                 });
 
-                currentWrap = new WrapPanel { Tag = itemDate };
+                currentWrap = CreateHistoryWrapPanel(itemDate);
                 target.Children.Add(currentWrap);
                 currentDate = itemDate;
             }
 
             currentWrap.Children.Add(cardFactory(item));
+            UpdateHistoryWrapPanelCardWidths(currentWrap);
         }
+    }
+
+    private WrapPanel CreateHistoryWrapPanel(DateTime itemDate)
+    {
+        var wrap = new WrapPanel
+        {
+            Tag = itemDate,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch
+        };
+        wrap.Loaded += (_, _) => UpdateHistoryWrapPanelCardWidths(wrap);
+        wrap.SizeChanged += (_, _) => UpdateHistoryWrapPanelCardWidths(wrap);
+        return wrap;
+    }
+
+    private static void UpdateHistoryWrapPanelCardWidths(WrapPanel wrap)
+    {
+        var availableWidth = wrap.ActualWidth;
+        if (double.IsNaN(availableWidth) || double.IsInfinity(availableWidth) || availableWidth <= 0)
+            return;
+
+        var minimumOuterWidth = HistoryCardMinWidth + HistoryCardHorizontalGap;
+        var maxColumns = Math.Max(1, (int)Math.Floor(availableWidth / minimumOuterWidth));
+        var columns = Math.Max(1, (int)Math.Round(availableWidth / HistoryCardFullWidth));
+        columns = Math.Min(columns, maxColumns);
+
+        var targetWidth = Math.Floor(availableWidth / columns) - HistoryCardHorizontalGap;
+        if (availableWidth >= minimumOuterWidth)
+            targetWidth = Math.Clamp(targetWidth, HistoryCardMinWidth, HistoryCardMaxWidth);
+        else
+            targetWidth = Math.Max(0, availableWidth - HistoryCardHorizontalGap);
+
+        foreach (var card in wrap.Children.OfType<Border>())
+        {
+            if (card.Tag is not HistoryItemVM)
+                continue;
+
+            if (Math.Abs(card.Width - targetWidth) > 0.5)
+                card.Width = targetWidth;
+        }
+    }
+
+    private static double GetHistoryCardImageHeight(double cardWidth)
+    {
+        if (double.IsNaN(cardWidth) || double.IsInfinity(cardWidth) || cardWidth <= 0)
+            return Math.Round(HistoryCardPreferredWidth * HistoryCardImageAspectRatio);
+
+        return Math.Clamp(
+            Math.Round(cardWidth * HistoryCardImageAspectRatio),
+            88d,
+            132d);
     }
 
     private static string FormatHistoryGroupLabel(DateTime date) =>

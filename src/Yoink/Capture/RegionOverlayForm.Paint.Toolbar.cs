@@ -288,7 +288,7 @@ public sealed partial class RegionOverlayForm
     /// Called by the separate ToolbarForm to paint toolbar, tooltips, and popups.
     /// Graphics is already translated so overlay coordinates map correctly.
     /// </summary>
-    public void PaintToolbarTo(Graphics g, Rectangle clip, Point unused)
+    public void PaintToolbarTo(Graphics g)
     {
         ApplyUiGraphics(g);
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;

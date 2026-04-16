@@ -29,9 +29,29 @@ public partial class SettingsWindow
 
     internal static void TrimThumbCache(int keepCount) => SettingsMediaCache.Trim(keepCount);
 
-    internal static void WarmRecentHistoryThumbs(IEnumerable<HistoryEntry> entries, int maxCount = 24) => SettingsMediaCache.WarmRecentHistoryThumbs(entries, (cacheKey, thumbPath, kind) => PrimeThumbLoad(cacheKey, thumbPath, kind), maxCount);
+    internal static void WarmRecentHistoryThumbs(IEnumerable<HistoryEntry> entries, int maxCount = 24)
+    {
+        foreach (var entry in entries
+                     .OrderByDescending(item => item.CapturedAt)
+                     .Where(item => !string.IsNullOrWhiteSpace(item.FilePath))
+                     .Take(maxCount))
+        {
+            PrimeThumbLoad(entry.FilePath, GetHistoryThumbPath(entry), entry.Kind);
+        }
+    }
 
-    internal static void WarmHistoryThumbsInBackground(IEnumerable<HistoryEntry> entries, int maxCount = 192, int immediateCount = 48, int batchSize = 24) => SettingsMediaCache.WarmHistoryThumbsInBackground(entries, (cacheKey, thumbPath, kind) => PrimeThumbLoad(cacheKey, thumbPath, kind), maxCount, immediateCount, batchSize);
+    internal static void WarmHistoryThumbsInBackground(IEnumerable<HistoryEntry> entries, int maxCount = 192, int immediateCount = 48, int batchSize = 24) =>
+        SettingsMediaCache.WarmHistoryThumbsInBackground(
+            entries,
+            (cacheKey, thumbPath, kind) => PrimeThumbLoad(cacheKey, GetHistoryThumbPath(cacheKey, kind), kind),
+            maxCount,
+            immediateCount,
+            batchSize);
+
+    private static string GetHistoryThumbPath(HistoryEntry entry) => GetHistoryThumbPath(entry.FilePath, entry.Kind);
+
+    private static string GetHistoryThumbPath(string filePath, HistoryKind kind) =>
+        kind == HistoryKind.Video ? GetVideoThumbnailPath(filePath) : filePath;
 
     private static BitmapImage? LoadPackImage(string relativePath) => SettingsMediaCache.LoadPackImage(relativePath);
 
@@ -61,6 +81,90 @@ public partial class SettingsWindow
             {
                 return null;
             }
+        }
+    }
+
+    private static bool TryLoadCachedThumbnailSource(string cacheKey, string thumbPath, string? sourcePath, HistoryKind kind, out BitmapSource? image)
+    {
+        image = null;
+        var diskPath = GetExistingCachedThumbnailPath(thumbPath, sourcePath ?? cacheKey, kind);
+        if (string.IsNullOrWhiteSpace(diskPath))
+            return false;
+
+        image = LoadThumbSource(diskPath);
+        if (image is null)
+        {
+            try { File.Delete(diskPath); } catch { }
+            return false;
+        }
+
+        StoreThumbInCache(cacheKey, image);
+        return true;
+    }
+
+    private static BitmapSource? LoadOrCreateThumbnailSource(string loadPath, string sourcePath, HistoryKind kind)
+    {
+        var persistentPath = GetPersistentThumbnailPath(sourcePath, kind);
+        if (!string.IsNullOrWhiteSpace(persistentPath) && File.Exists(persistentPath))
+        {
+            var cached = LoadThumbSource(persistentPath);
+            if (cached is not null)
+                return cached;
+
+            try { File.Delete(persistentPath); } catch { }
+        }
+
+        var bitmap = LoadThumbSource(loadPath);
+        if (bitmap is not null)
+            SavePersistentThumbnail(bitmap, sourcePath, kind);
+
+        return bitmap;
+    }
+
+    private static string? GetExistingCachedThumbnailPath(string thumbPath, string sourcePath, HistoryKind kind)
+    {
+        if (kind == HistoryKind.Video)
+            return File.Exists(thumbPath) ? thumbPath : null;
+
+        var persistentPath = GetPersistentThumbnailPath(sourcePath, kind);
+        return !string.IsNullOrWhiteSpace(persistentPath) && File.Exists(persistentPath)
+            ? persistentPath
+            : null;
+    }
+
+    private static string? GetPersistentThumbnailPath(string sourcePath, HistoryKind kind)
+    {
+        if (kind is not (HistoryKind.Image or HistoryKind.Gif or HistoryKind.Sticker) || !File.Exists(sourcePath))
+            return null;
+
+        try
+        {
+            var info = new FileInfo(sourcePath);
+            var pathKey = HistoryEntryUtilities.GetStablePathKey(sourcePath);
+            return Path.Combine(HistoryService.ImageThumbnailDir, $"{pathKey}-{info.Length:X16}-{info.LastWriteTimeUtc.Ticks:X16}.png");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void SavePersistentThumbnail(BitmapSource bitmap, string sourcePath, HistoryKind kind)
+    {
+        var thumbPath = GetPersistentThumbnailPath(sourcePath, kind);
+        if (string.IsNullOrWhiteSpace(thumbPath) || File.Exists(thumbPath))
+            return;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(thumbPath)!);
+            using var stream = new FileStream(thumbPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            encoder.Save(stream);
+        }
+        catch
+        {
         }
     }
 
@@ -125,7 +229,7 @@ public partial class SettingsWindow
 
     private static bool IsStaleHistoryPlaceholder(BitmapSource? source, HistoryKind kind) =>
         source is not null &&
-        (kind == HistoryKind.Image || kind == HistoryKind.Gif || kind == HistoryKind.Sticker) &&
+        (kind == HistoryKind.Image || kind == HistoryKind.Gif || kind == HistoryKind.Sticker || kind == HistoryKind.Video) &&
         ReferenceEquals(source, GetHistoryPlaceholder(kind));
 
     private static FrameworkElement? CreateProviderBadge(string? providerOrPath, bool isPath = false)

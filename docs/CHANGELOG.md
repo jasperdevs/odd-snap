@@ -1,21 +1,17 @@
-# Yoink v0.8.18
+# Yoink v0.8.19
 
 ## Added
-- Add month folders for new automatic screenshot, sticker, upscale, GIF, and video saves.
-- Add History timing diagnostics for image, media, text, color, thumbnail, and tab-load paths.
+- Add persisted video History entries for MP4, WebM, and MKV recordings.
+- Add themed confirmation dialogs for destructive Settings and History actions.
 
 ## Changed
-- Page History items in smaller automatic batches across images, videos/GIFs, stickers, text, and colors.
-- Cache media History entries and move video thumbnail cleanup off the tab-load path.
-- Protect saved API keys and tokens with user-scoped DPAPI and redact secrets from exports and logs.
-- Use cached recording frames for video preview instead of launching FFmpeg again after encode.
-- Speed up GIF encoding with FFmpeg palette rectangle diffing.
-- Speed up WebM encoding with VP9 row multithreading while keeping constant-quality output.
-- Add MP4 faststart metadata for faster playback after sharing or uploading recordings.
+- Cache History thumbnails on disk so images, GIFs, stickers, and videos reload faster after restart.
+- Resize History cards with the settings window across images, videos/GIFs, and stickers.
+- Render section headers for Settings cards and upload provider panels.
 
 ## Fixed
-- Open History directly from the tray menu without flashing or sticking on the General tab.
-- Keep runtime/model install buttons in sync after successful setup for translation, semantic search, rembg, and upscale runtimes.
-- Avoid blocking UI-thread garbage collections during idle memory trimming.
-- Preserve existing root-level screenshots while keeping new captures organized by month.
-- Reduce History lag while capturing by debouncing search indexing and refreshing loaded entries incrementally.
+- Keep Select mode active across image, video/GIF, sticker, text, and color History lists.
+- Make Escape close the screenshot overlay from text input, pickers, flyouts, and toolbar focus.
+- Remove the idle screenshot overlay dash border that intersected the toolbar dock.
+- Persist and recover recorded videos in History instead of only discovering top-level files.
+- Use the correct DXGI raw-rectangle conversion during capture.

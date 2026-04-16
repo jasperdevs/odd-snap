@@ -60,12 +60,11 @@ public partial class App
                     {
                         _trayIcon?.UpdateRecordingState(false);
 
-                        // Only index GIF recordings in the GIF history list (and only when history is enabled).
                         Services.HistoryEntry? historyEntry = null;
                         try
                         {
-                            if (s.SaveHistory && string.Equals(Path.GetExtension(path), ".gif", StringComparison.OrdinalIgnoreCase))
-                                historyEntry = EnsureHistoryService().SaveGifEntry(path);
+                            if (s.SaveHistory)
+                                historyEntry = EnsureHistoryService().SaveMediaEntry(path);
                         }
                         catch { }
 

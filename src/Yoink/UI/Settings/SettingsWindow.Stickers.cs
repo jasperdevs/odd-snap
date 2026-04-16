@@ -146,11 +146,12 @@ public partial class SettingsWindow
 
     private void StickerRemoveAllModelsBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show(
-                "Remove all downloaded local sticker models?\n\nThey will be downloaded again the next time you use them.",
+        if (!ThemedConfirmDialog.Confirm(
+                this,
                 "Remove Models",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                "Remove all downloaded local sticker models?\n\nThey will be downloaded again the next time you use them.",
+                "Remove",
+                "Cancel"))
             return;
 
         bool removed = RembgRuntimeService.RemoveAllCachedModels();

@@ -63,14 +63,26 @@ public partial class SettingsWindow
 
     private void ResetSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("Reset all settings to defaults?\n\nThis cannot be undone.",
-                "Reset Settings", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (!ThemedConfirmDialog.Confirm(
+                this,
+                "Reset Settings",
+                "Reset all settings to defaults?\n\nThis cannot be undone.",
+                "Reset",
+                "Cancel"))
             return;
-        if (MessageBox.Show("Are you sure? All hotkeys, upload configs, and preferences will be lost.",
-                "Confirm Reset", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (!ThemedConfirmDialog.Confirm(
+                this,
+                "Confirm Reset",
+                "Are you sure? All hotkeys, upload configs, and preferences will be lost.",
+                "Reset",
+                "Cancel"))
             return;
-        if (MessageBox.Show("Last chance — reset everything?",
-                "Final Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (!ThemedConfirmDialog.Confirm(
+                this,
+                "Final Confirmation",
+                "Last chance - reset everything?",
+                "Reset",
+                "Cancel"))
             return;
 
         _settingsService.Settings = new AppSettings();
@@ -313,8 +325,12 @@ public partial class SettingsWindow
 
     private void ResetImageIndexesBtn_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("Reset the image OCR/search index?\n\nThis rebuilds screenshot search data in the background.",
-                "Reset Image Indexes", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (!ThemedConfirmDialog.Confirm(
+                this,
+                "Reset Image Indexes",
+                "Reset the image OCR/search index?\n\nThis rebuilds screenshot search data in the background.",
+                "Reset",
+                "Cancel"))
             return;
 
         _imageSearchIndexService.ReindexAll(_historyService.ImageEntries, _settingsService.Settings.OcrLanguageTag);

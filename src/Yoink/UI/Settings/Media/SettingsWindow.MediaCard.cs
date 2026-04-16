@@ -100,7 +100,8 @@ public partial class SettingsWindow
         var selectionBadge = CreateSelectionBadge(vm.IsSelected);
 
         var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(100) });
+        var imageRow = new RowDefinition { Height = new GridLength(GetHistoryCardImageHeight(HistoryCardPreferredWidth)) };
+        root.RowDefinitions.Add(imageRow);
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var imgContainer = new Grid();
@@ -118,8 +119,10 @@ public partial class SettingsWindow
 
         var card = new Border
         {
-            Width = 168,
-            Margin = new Thickness(3),
+            Width = HistoryCardPreferredWidth,
+            MinWidth = HistoryCardMinWidth,
+            MaxWidth = HistoryCardMaxWidth,
+            Margin = new Thickness(HistoryCardMargin),
             CornerRadius = new CornerRadius(8),
             Background = Theme.Brush(Theme.BgCard),
             BorderBrush = Brushes.Transparent,
@@ -134,6 +137,7 @@ public partial class SettingsWindow
         card.SizeChanged += (s, _) =>
         {
             var b = (Border)s!;
+            imageRow.Height = new GridLength(GetHistoryCardImageHeight(b.ActualWidth));
             b.Clip = new System.Windows.Media.RectangleGeometry(
                 new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight), 10, 10);
         };
@@ -226,6 +230,18 @@ public partial class SettingsWindow
 
     private static Border CreateSelectionBadge(bool isSelected)
     {
+        var checkPath = new System.Windows.Shapes.Path
+        {
+            Data = System.Windows.Media.Geometry.Parse("M6,14 L11,19 L22,8"),
+            Stroke = Brushes.White,
+            StrokeThickness = 2.6,
+            StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
+            StrokeEndLineCap = System.Windows.Media.PenLineCap.Round,
+            Stretch = Stretch.Uniform,
+            Margin = new Thickness(8),
+            Visibility = isSelected ? Visibility.Visible : Visibility.Hidden
+        };
+
         var badge = new Border
         {
             Width = 36,
@@ -238,16 +254,9 @@ public partial class SettingsWindow
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,
             Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed,
-            Child = new System.Windows.Shapes.Path
-            {
-                Data = System.Windows.Media.Geometry.Parse("M6,14 L11,19 L22,8"),
-                Stroke = Brushes.White,
-                StrokeThickness = 2.6,
-                StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
-                StrokeEndLineCap = System.Windows.Media.PenLineCap.Round,
-                Stretch = Stretch.Uniform,
-                Margin = new Thickness(8)
-            }
+            Opacity = isSelected ? 1 : 0.45,
+            Child = checkPath,
+            Tag = checkPath
         };
         Grid.SetRowSpan(badge, 2);
         System.Windows.Controls.Panel.SetZIndex(badge, 20);

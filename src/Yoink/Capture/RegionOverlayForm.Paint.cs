@@ -91,8 +91,6 @@ public sealed partial class RegionOverlayForm
         }
         else if (isSelectionMode && !_hasSelection && !_isSelecting)
         {
-            // Full-screen fallback border: use dashed pattern to match auto-detect style
-            g.DrawRectangle(DashedPen(120), 2, 2, ClientSize.Width - 5, ClientSize.Height - 5);
             _lastAutoDetectRect = Rectangle.Empty;
         }
 
