@@ -35,6 +35,34 @@ public sealed class CaptureOutputServiceTests
         }
     }
 
+    [Fact]
+    public void SaveBitmapToTempPng_CreatesReadablePng()
+    {
+        string? tempPath = null;
+        try
+        {
+            using var bitmap = new Bitmap(10, 6);
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.Clear(Color.CadetBlue);
+            }
+
+            tempPath = CaptureOutputService.SaveBitmapToTempPng(bitmap, "yoink-test");
+
+            Assert.NotNull(tempPath);
+            Assert.EndsWith(".png", tempPath, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(tempPath));
+            Assert.NotEmpty(File.ReadAllBytes(tempPath));
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(tempPath))
+            {
+                try { File.Delete(tempPath); } catch { }
+            }
+        }
+    }
+
     private static string CreateTempRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "yoink-tests", Guid.NewGuid().ToString("N"));

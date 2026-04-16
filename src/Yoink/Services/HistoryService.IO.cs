@@ -1,6 +1,5 @@
 using System.IO;
 using System.Text.Json;
-using Microsoft.Data.Sqlite;
 using Yoink.Models;
 
 namespace Yoink.Services;
@@ -49,7 +48,7 @@ public sealed partial class HistoryService
                 if (trackedFileNames.Contains(fileName))
                     continue;
 
-                var kind = GetKindForPath(file);
+                var kind = HistoryEntryUtilities.GetKindForPath(file, stickerDirs: [StickerDir, LegacyStickerDir]);
                 if (TryMigrateLegacyFile(file, kind, out var migrated))
                 {
                     _entries.Add(migrated);
@@ -128,7 +127,11 @@ public sealed partial class HistoryService
                 Width = 0,
                 Height = 0,
                 FileSizeBytes = fi.Length,
-                Kind = GetKindForPath(targetPath, legacyKind)
+                Kind = HistoryEntryUtilities.GetKindForPath(
+                    targetPath,
+                    legacyKind,
+                    StickerDir,
+                    LegacyStickerDir)
             };
             return true;
         }
@@ -142,18 +145,6 @@ public sealed partial class HistoryService
     {
         var ext = Path.GetExtension(path).ToLowerInvariant();
         return ext is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp";
-    }
-
-    private static HistoryKind GetKindForPath(string path, HistoryKind? fallback = null)
-    {
-        if (path.StartsWith(StickerDir, StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith(LegacyStickerDir, StringComparison.OrdinalIgnoreCase))
-            return HistoryKind.Sticker;
-
-        if (Path.GetExtension(path).Equals(".gif", StringComparison.OrdinalIgnoreCase))
-            return HistoryKind.Gif;
-
-        return fallback ?? HistoryKind.Image;
     }
 
     /// <summary>
@@ -367,7 +358,7 @@ public sealed partial class HistoryService
             return;
 
         _pendingEntryDeletes.Remove(entry.FilePath);
-        _pendingEntryUpserts[entry.FilePath] = CloneEntry(entry);
+        _pendingEntryUpserts[entry.FilePath] = HistoryEntryUtilities.CloneEntry(entry);
     }
 
     private void QueueEntryDeletes_NoLock(IEnumerable<string> filePaths)
@@ -383,22 +374,6 @@ public sealed partial class HistoryService
 
         _pendingEntryUpserts.Remove(filePath);
         _pendingEntryDeletes.Add(filePath);
-    }
-
-    private static HistoryEntry CloneEntry(HistoryEntry entry)
-    {
-        return new HistoryEntry
-        {
-            FileName = entry.FileName,
-            FilePath = entry.FilePath,
-            CapturedAt = entry.CapturedAt,
-            Width = entry.Width,
-            Height = entry.Height,
-            FileSizeBytes = entry.FileSizeBytes,
-            Kind = entry.Kind,
-            UploadUrl = entry.UploadUrl,
-            UploadProvider = entry.UploadProvider
-        };
     }
 
     private static string GetManagedThumbnailPath(string filePath)

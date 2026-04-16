@@ -107,11 +107,14 @@ internal static class HistoryStore
                     continue;
                 }
 
-                var desiredKind = GetKindForPath(entry.FilePath, entry.Kind);
+                var desiredKind = HistoryEntryUtilities.GetKindForPath(
+                    entry.FilePath,
+                    entry.Kind,
+                    HistoryService.StickerDir);
                 if (entry.Kind != desiredKind)
                 {
                     entry.Kind = desiredKind;
-                    pendingUpserts.Add(CloneEntry(entry));
+                    pendingUpserts.Add(HistoryEntryUtilities.CloneEntry(entry));
                 }
 
                 entries.Add(entry);
@@ -277,30 +280,4 @@ internal static class HistoryStore
         command.ExecuteNonQuery();
     }
 
-    private static HistoryEntry CloneEntry(HistoryEntry entry)
-    {
-        return new HistoryEntry
-        {
-            FileName = entry.FileName,
-            FilePath = entry.FilePath,
-            CapturedAt = entry.CapturedAt,
-            Width = entry.Width,
-            Height = entry.Height,
-            FileSizeBytes = entry.FileSizeBytes,
-            Kind = entry.Kind,
-            UploadUrl = entry.UploadUrl,
-            UploadProvider = entry.UploadProvider
-        };
-    }
-
-    private static HistoryKind GetKindForPath(string path, HistoryKind? fallback = null)
-    {
-        if (path.StartsWith(HistoryService.StickerDir, StringComparison.OrdinalIgnoreCase))
-            return HistoryKind.Sticker;
-
-        if (Path.GetExtension(path).Equals(".gif", StringComparison.OrdinalIgnoreCase))
-            return HistoryKind.Gif;
-
-        return fallback ?? HistoryKind.Image;
-    }
 }

@@ -20,8 +20,10 @@ public static class SoundService
     private static readonly object PlaybackGate = new();
     private static BlockingCollection<byte[]>? _playbackQueue;
     private static Thread? _playbackThread;
+    private static int _suppressionDepth;
 
     public static bool Muted { get; set; }
+    internal static bool IsPlaybackSuppressed => Muted || Volatile.Read(ref _suppressionDepth) > 0;
 
     private static SoundPack _currentPack = SoundPack.Default;
     public static void SetPack(SoundPack pack) { _currentPack = pack; ClearCache(); }
@@ -42,15 +44,21 @@ public static class SoundService
         _recordStartWav = _recordStopWav = _uploadStartWav = _uploadDoneWav = _errorWav = null;
     }
 
-    public static void PlayCaptureSound() { if (!Muted) PlayAsync(_captureWav ??= GenerateCaptureWav()); }
-    public static void PlayColorSound() { if (!Muted) PlayAsync(_colorWav ??= GenerateColorWav()); }
-    public static void PlayTextSound() { if (!Muted) PlayAsync(_textWav ??= GenerateTextWav()); }
-    public static void PlayScanSound() { if (!Muted) PlayAsync(_scanWav ??= GenerateScanWav()); }
-    public static void PlayRecordStartSound() { if (!Muted) PlayAsync(_recordStartWav ??= GenerateRecordStartWav()); }
-    public static void PlayRecordStopSound() { if (!Muted) PlayAsync(_recordStopWav ??= GenerateRecordStopWav()); }
-    public static void PlayUploadStartSound() { if (!Muted) PlayAsync(_uploadStartWav ??= GenerateUploadStartWav()); }
-    public static void PlayUploadDoneSound() { if (!Muted) PlayAsync(_uploadDoneWav ??= GenerateUploadDoneWav()); }
-    public static void PlayErrorSound() { if (!Muted) PlayAsync(_errorWav ??= GenerateErrorWav()); }
+    public static void PlayCaptureSound() { if (!IsPlaybackSuppressed) PlayAsync(_captureWav ??= GenerateCaptureWav()); }
+    public static void PlayColorSound() { if (!IsPlaybackSuppressed) PlayAsync(_colorWav ??= GenerateColorWav()); }
+    public static void PlayTextSound() { if (!IsPlaybackSuppressed) PlayAsync(_textWav ??= GenerateTextWav()); }
+    public static void PlayScanSound() { if (!IsPlaybackSuppressed) PlayAsync(_scanWav ??= GenerateScanWav()); }
+    public static void PlayRecordStartSound() { if (!IsPlaybackSuppressed) PlayAsync(_recordStartWav ??= GenerateRecordStartWav()); }
+    public static void PlayRecordStopSound() { if (!IsPlaybackSuppressed) PlayAsync(_recordStopWav ??= GenerateRecordStopWav()); }
+    public static void PlayUploadStartSound() { if (!IsPlaybackSuppressed) PlayAsync(_uploadStartWav ??= GenerateUploadStartWav()); }
+    public static void PlayUploadDoneSound() { if (!IsPlaybackSuppressed) PlayAsync(_uploadDoneWav ??= GenerateUploadDoneWav()); }
+    public static void PlayErrorSound() { if (!IsPlaybackSuppressed) PlayAsync(_errorWav ??= GenerateErrorWav()); }
+
+    public static IDisposable SuppressPlayback()
+    {
+        Interlocked.Increment(ref _suppressionDepth);
+        return new PlaybackSuppressionHandle();
+    }
 
     private static void PlayAsync(byte[] wav)
     {
@@ -422,5 +430,18 @@ public static class SoundService
         bw.Write((short)16);
         bw.Write("data"u8);
         bw.Write(dataSize);
+    }
+
+    private sealed class PlaybackSuppressionHandle : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return;
+
+            Interlocked.Decrement(ref _suppressionDepth);
+        }
     }
 }

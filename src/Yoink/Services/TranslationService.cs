@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
@@ -26,8 +25,6 @@ public static class TranslationService
     private static bool? _cachedArgosReady;
     private static string _cachedArgosStatus = "Checking install state...";
     private static DateTime _cachedArgosCheckedUtc;
-
-    private sealed record PythonRunResult(int ExitCode, string StdOut, string StdErr);
 
     public static string GetModelLabel(TranslationModel model) => model switch
     {
@@ -327,66 +324,19 @@ public static class TranslationService
         return result.ExitCode == 0;
     }
 
-    private static async Task<PythonRunResult> RunPythonAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "py",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = System.Text.Encoding.UTF8,
-            StandardErrorEncoding = System.Text.Encoding.UTF8
-        };
-
-        psi.EnvironmentVariables["PYTHONUTF8"] = "1";
-        foreach (var arg in arguments)
-            psi.ArgumentList.Add(arg);
-
-        using var errorMode = WindowsErrorModeScope.SuppressSystemDialogs();
-        using var process = new Process { StartInfo = psi };
-        if (!process.Start())
-        {
-            AppDiagnostics.LogWarning("translation.python.start", "Could not start Python launcher.");
-            return new PythonRunResult(-1, "", "Could not start Python launcher.");
-        }
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        try
-        {
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            TryTerminateProcess(process);
-            throw;
-        }
-        var stdout = await stdoutTask.ConfigureAwait(false);
-        var stderr = await stderrTask.ConfigureAwait(false);
-        return new PythonRunResult(process.ExitCode, stdout, stderr);
-    }
-
-    private static void TryTerminateProcess(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            process.WaitForExit(5000);
-        }
-        catch
-        {
-        }
-    }
+    private static Task<ProcessRunResult> RunPythonAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
+        => ProcessRunner.RunAsync(
+            "py",
+            arguments,
+            cancellationToken,
+            configure: psi =>
+            {
+                psi.EnvironmentVariables["PYTHONUTF8"] = "1";
+                psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+                psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
+            },
+            startFailureMessage: "Could not start Python launcher.",
+            onStartFailure: message => AppDiagnostics.LogWarning("translation.python.start", message));
 
     private static HttpClient CreateGoogleHttpClient()
     {

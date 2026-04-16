@@ -1,17 +1,13 @@
-using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 
 namespace Yoink.Services;
 
 public static class RembgRuntimeService
 {
-    private const string PythonLauncherArg = "-3";
     private const int RuntimeLayoutVersion = 2;
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
 
-    private sealed record ProcessRunResult(int ExitCode, string StdOut, string StdErr);
     private sealed record ProbeState(bool? Ready, string Status, DateTime CheckedUtc);
 
     private static readonly string RootDir = Path.Combine(
@@ -87,10 +83,10 @@ public static class RembgRuntimeService
         if (await IsRuntimeReadyAsync(provider, cancellationToken).ConfigureAwait(false))
             return;
 
-        var launcherArg = await ResolveCompatiblePythonLauncherAsync(cancellationToken).ConfigureAwait(false);
+        var launcherArg = await PythonRuntimeEnvironment.ResolveCompatibleOnnxRuntimeLauncherAsync(cancellationToken).ConfigureAwait(false);
         if (launcherArg is null)
         {
-            var message = await BuildPythonCompatibilityMessageAsync(cancellationToken).ConfigureAwait(false);
+            var message = await PythonRuntimeEnvironment.BuildMissingOnnxRuntimeMessageAsync(cancellationToken).ConfigureAwait(false);
             UpdateProbeCache(provider, false, message);
             throw new InvalidOperationException(message);
         }
@@ -175,7 +171,7 @@ public static class RembgRuntimeService
         }, cancellationToken).ConfigureAwait(false);
 
         if (result.ExitCode != 0)
-            throw new InvalidOperationException(GetProcessErrorMessage(result, "Couldn't prepare the sticker model."));
+            throw new InvalidOperationException(ProcessRunner.GetFailureMessage(result, "Couldn't prepare the sticker model."));
 
         if (!File.Exists(modelPath))
             throw new InvalidOperationException("The sticker model did not finish downloading.");
@@ -185,7 +181,7 @@ public static class RembgRuntimeService
     {
         await EnsureInstalledAsync(provider, null, cancellationToken).ConfigureAwait(false);
 
-        var tempInput = SaveTempPng(input);
+        var tempInput = CaptureOutputService.SaveBitmapToTempPng(input, "yoink_rembg");
         var tempOutput = tempInput + ".out.png";
 
         try
@@ -201,7 +197,7 @@ public static class RembgRuntimeService
 
             if (result.ExitCode != 0)
             {
-                var message = GetProcessErrorMessage(result, "rembg failed to process the image.");
+                var message = ProcessRunner.GetFailureMessage(result, "rembg failed to process the image.");
                 AppDiagnostics.LogWarning("stickers.runtime.remove-background", message);
                 throw new InvalidOperationException(message);
             }
@@ -267,11 +263,11 @@ public static class RembgRuntimeService
 
         if (recreate)
         {
-            TryDeleteDirectory(envDir);
+            PythonRuntimeEnvironment.TryDeleteDirectory(envDir);
             progress?.Report("Creating isolated Python environment...");
-            var create = await RunLauncherAsync(new[] { launcherArg, "-m", "venv", envDir }, cancellationToken).ConfigureAwait(false);
+            var create = await PythonRuntimeEnvironment.RunLauncherAsync(new[] { launcherArg, "-m", "venv", envDir }, cancellationToken).ConfigureAwait(false);
             if (create.ExitCode != 0)
-                throw new InvalidOperationException(GetProcessErrorMessage(create, "Couldn't create the isolated Python environment."));
+                throw new InvalidOperationException(ProcessRunner.GetFailureMessage(create, "Couldn't create the isolated Python environment."));
         }
 
         progress?.Report("Installing rembg packages...");
@@ -280,11 +276,11 @@ public static class RembgRuntimeService
             "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip", "setuptools", "wheel"
         }, cancellationToken).ConfigureAwait(false);
         if (toolsInstall.ExitCode != 0)
-            throw new InvalidOperationException(GetProcessErrorMessage(toolsInstall, "Couldn't prepare pip inside the isolated runtime."));
+            throw new InvalidOperationException(ProcessRunner.GetFailureMessage(toolsInstall, "Couldn't prepare pip inside the isolated runtime."));
 
         var runtimeInstall = await InstallRuntimePackagesAsync(provider, progress, cancellationToken).ConfigureAwait(false);
         if (runtimeInstall.ExitCode != 0)
-            throw new InvalidOperationException(GetProcessErrorMessage(runtimeInstall, "Couldn't install the rembg runtime."));
+            throw new InvalidOperationException(ProcessRunner.GetFailureMessage(runtimeInstall, "Couldn't install the rembg runtime."));
 
         File.WriteAllText(GetRuntimeMarkerPath(provider), RuntimeLayoutVersion.ToString());
         ClearProbeCache(provider);
@@ -299,7 +295,7 @@ public static class RembgRuntimeService
             if (gpuInstall.ExitCode == 0)
                 return gpuInstall;
 
-            var gpuMessage = GetProcessErrorMessage(gpuInstall, "CUDA runtime package was unavailable.");
+            var gpuMessage = ProcessRunner.GetFailureMessage(gpuInstall, "CUDA runtime package was unavailable.");
             AppDiagnostics.LogWarning("stickers.runtime.install.gpu-optional", gpuMessage);
             progress?.Report("CUDA package unavailable. Falling back to CPU runtime...");
         }
@@ -323,129 +319,26 @@ public static class RembgRuntimeService
 
     private static bool IsRuntimeMarkerCurrent(StickerExecutionProvider provider)
     {
-        try
-        {
-            var markerPath = GetRuntimeMarkerPath(provider);
-            return File.Exists(markerPath) &&
-                   int.TryParse(File.ReadAllText(markerPath).Trim(), out var version) &&
-                   version == RuntimeLayoutVersion;
-        }
-        catch
-        {
-            return false;
-        }
+        return PythonRuntimeEnvironment.IsRuntimeMarkerCurrent(GetRuntimeMarkerPath(provider), RuntimeLayoutVersion);
     }
-
-    private static Task<ProcessRunResult> RunLauncherAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
-        => RunProcessAsync("py", arguments, cancellationToken);
 
     private static Task<ProcessRunResult> RunRuntimePythonAsync(StickerExecutionProvider provider, IEnumerable<string> arguments, CancellationToken cancellationToken)
         => RunProcessAsync(GetRuntimePythonPath(provider), arguments, cancellationToken);
 
-    private static async Task<ProcessRunResult> RunProcessAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-
-        psi.EnvironmentVariables["U2NET_HOME"] = ModelCacheDir;
-        psi.EnvironmentVariables["PYTHONUTF8"] = "1";
-        foreach (var arg in arguments)
-            psi.ArgumentList.Add(arg);
-
-        using var errorMode = WindowsErrorModeScope.SuppressSystemDialogs();
-        using var process = new Process { StartInfo = psi };
-        if (!process.Start())
-        {
-            var message = $"Could not start process '{fileName}'.";
-            AppDiagnostics.LogWarning("stickers.runtime.process-start", message);
-            return new ProcessRunResult(-1, "", message);
-        }
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        try
-        {
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            TryTerminateProcess(process);
-            throw;
-        }
-        var stdout = await stdoutTask.ConfigureAwait(false);
-        var stderr = await stderrTask.ConfigureAwait(false);
-        return new ProcessRunResult(process.ExitCode, stdout, stderr);
-    }
-
-    private static void TryTerminateProcess(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            process.WaitForExit(5000);
-        }
-        catch
-        {
-        }
-    }
-
-    private static string GetProcessErrorMessage(ProcessRunResult result, string fallbackMessage)
-    {
-        if (!string.IsNullOrWhiteSpace(result.StdErr))
-            return result.StdErr.Trim();
-        if (!string.IsNullOrWhiteSpace(result.StdOut))
-            return result.StdOut.Trim();
-        return fallbackMessage;
-    }
-
-    private static async Task<string?> ResolveCompatiblePythonLauncherAsync(CancellationToken cancellationToken)
-    {
-        var list = await TryListPythonLaunchersAsync(cancellationToken).ConfigureAwait(false);
-        if (list.Count > 0)
-            return PythonLauncherSelector.SelectOnnxRuntimeLauncherArgument(list);
-
-        var versionProbe = await RunLauncherAsync(new[] { PythonLauncherArg, "--version" }, cancellationToken).ConfigureAwait(false);
-        return versionProbe.ExitCode == 0 && PythonLauncherSelector.IsSupportedOnnxRuntimeVersion(versionProbe.StdOut)
-            ? PythonLauncherArg
-            : null;
-    }
-
-    private static async Task<string> BuildPythonCompatibilityMessageAsync(CancellationToken cancellationToken)
-    {
-        var list = await TryListPythonLaunchersAsync(cancellationToken).ConfigureAwait(false);
-        return PythonLauncherSelector.BuildOnnxRuntimeMissingVersionMessage(list);
-    }
-
-    private static async Task<IReadOnlyList<PythonLauncherSelector.LauncherEntry>> TryListPythonLaunchersAsync(CancellationToken cancellationToken)
-    {
-        var result = await RunLauncherAsync(new[] { "--list-paths" }, cancellationToken).ConfigureAwait(false);
-        var entries = PythonLauncherSelector.ParseLauncherListOutput($"{result.StdOut}{Environment.NewLine}{result.StdErr}");
-        if (entries.Count > 0)
-            return entries;
-
-        result = await RunLauncherAsync(new[] { "-0p" }, cancellationToken).ConfigureAwait(false);
-        return PythonLauncherSelector.ParseLauncherListOutput($"{result.StdOut}{Environment.NewLine}{result.StdErr}");
-    }
+    private static Task<ProcessRunResult> RunProcessAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken)
+        => ProcessRunner.RunAsync(
+            fileName,
+            arguments,
+            cancellationToken,
+            configure: psi =>
+            {
+                psi.EnvironmentVariables["U2NET_HOME"] = ModelCacheDir;
+                psi.EnvironmentVariables["PYTHONUTF8"] = "1";
+            },
+            onStartFailure: message => AppDiagnostics.LogWarning("stickers.runtime.process-start", message));
 
     private static async Task<string?> GetRuntimePythonVersionAsync(StickerExecutionProvider provider, CancellationToken cancellationToken)
-    {
-        var result = await RunRuntimePythonAsync(provider, ["--version"], cancellationToken).ConfigureAwait(false);
-        return result.ExitCode == 0 ? result.StdOut.Trim() : null;
-    }
+        => await PythonRuntimeEnvironment.GetPythonVersionAsync(GetRuntimePythonPath(provider), cancellationToken).ConfigureAwait(false);
 
     private static string? ResolveExistingModelPath(LocalStickerEngine engine)
     {
@@ -463,14 +356,6 @@ public static class RembgRuntimeService
         var fileName = GetModelFileName(engine);
         yield return Path.Combine(ModelCacheDir, fileName);
         yield return Path.Combine(LegacyModelCacheDir, fileName);
-    }
-
-    private static string SaveTempPng(Bitmap input)
-    {
-        Directory.CreateDirectory(Path.GetTempPath());
-        var temp = Path.Combine(Path.GetTempPath(), $"yoink_rembg_{Guid.NewGuid():N}.png");
-        input.Save(temp, ImageFormat.Png);
-        return temp;
     }
 
     private static string BuildModelPrepareScript() => """
@@ -510,18 +395,6 @@ with open(output_path, "wb") as f:
     {
         lock (ProbeGate)
             ProbeCache.Remove(provider);
-    }
-
-    private static void TryDeleteDirectory(string path)
-    {
-        try
-        {
-            if (Directory.Exists(path))
-                Directory.Delete(path, recursive: true);
-        }
-        catch
-        {
-        }
     }
 
     private static void TryDeleteDirectoryIfEmpty(string path)

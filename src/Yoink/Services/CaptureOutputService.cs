@@ -64,6 +64,21 @@ public static class CaptureOutputService
         }
     }
 
+    public static string SaveBitmapToTempPng(Bitmap bitmap, string fileNamePrefix)
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"{fileNamePrefix}_{Guid.NewGuid():N}.png");
+        try
+        {
+            bitmap.Save(tempPath, ImageFormat.Png);
+            return tempPath;
+        }
+        catch
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            throw;
+        }
+    }
+
     private static void SaveWithAtomicWrite(Bitmap bitmap, string filePath, Action<Bitmap, string> saveAction)
     {
         var tmpPath = filePath + ".tmp";

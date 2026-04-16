@@ -73,7 +73,6 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Page 1: Hotkeys -->
         <Grid x:Name="Page1" Grid.Row="0" Margin="36,28,36,0">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
                 <StackPanel>
@@ -97,7 +96,6 @@
             </ScrollViewer>
         </Grid>
 
-        <!-- Page 2: Capture & Saving -->
         <Grid x:Name="Page2" Grid.Row="0" Margin="36,28,36,0" Visibility="Collapsed">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
                 <StackPanel>
@@ -157,7 +155,6 @@
             </ScrollViewer>
         </Grid>
 
-        <!-- Page 3: You're all set -->
         <Grid x:Name="Page3" Grid.Row="0" Margin="40,32,40,0" Visibility="Collapsed">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                 <Image Source="pack://application:,,,/yoink.ico" Width="56" Height="56"
@@ -176,7 +173,7 @@
                 <TextBlock FontSize="12" FontFamily="Segoe UI Variable Text" TextAlignment="Center"
                            Foreground="{DynamicResource WizFgMuted}" HorizontalAlignment="Center"
                            Margin="0,24,0,0" Opacity="0.5">
-                    Uploads, recording, OCR, and more in Settings.
+                    More options live in Settings.
                 </TextBlock>
 
                 <Button Content="Open Settings" Style="{StaticResource WizBtnSecondary}"
@@ -185,7 +182,6 @@
             </StackPanel>
         </Grid>
 
-        <!-- Bottom bar -->
         <Border Grid.Row="1" Padding="28,12,28,20">
             <Grid>
                 <Grid.ColumnDefinitions>

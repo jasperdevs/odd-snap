@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 
 namespace Yoink.Services;
@@ -14,7 +13,6 @@ public static class OpenSourceTranslationRuntimeService
     private static readonly string TokenizerDir = Path.Combine(RootDir, "tokenizer");
     private static readonly string RuntimeVersionPath = Path.Combine(RootDir, "runtime.version");
 
-    private sealed record PythonRunResult(int ExitCode, string StdOut, string StdErr);
     private static readonly object ProbeGate = new();
     private static bool? _cachedReady;
     private static string _cachedStatus = "Checking install state...";
@@ -136,76 +134,24 @@ public static class OpenSourceTranslationRuntimeService
         return result.StdOut.TrimEnd();
     }
 
-    private static async Task<PythonRunResult> RunPythonAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
+    private static Task<ProcessRunResult> RunPythonAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
+        => ProcessRunner.RunAsync(
+            "py",
+            arguments,
+            cancellationToken,
+            configure: psi =>
+            {
+                psi.EnvironmentVariables["PYTHONUTF8"] = "1";
+                psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+                psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
+            },
+            startFailureMessage: "Could not start Python launcher.",
+            onStartFailure: message => AppDiagnostics.LogWarning("translation.local.python-start", message));
+
+    private static string GetPythonFailureMessage(ProcessRunResult result, string fallback)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "py",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = System.Text.Encoding.UTF8,
-            StandardErrorEncoding = System.Text.Encoding.UTF8
-        };
-
-        psi.EnvironmentVariables["PYTHONUTF8"] = "1";
-        foreach (var arg in arguments)
-            psi.ArgumentList.Add(arg);
-
-        using var errorMode = WindowsErrorModeScope.SuppressSystemDialogs();
-        using var process = new Process { StartInfo = psi };
-        if (!process.Start())
-        {
-            AppDiagnostics.LogWarning("translation.local.python-start", "Could not start Python launcher.");
-            return new PythonRunResult(-1, "", "Could not start Python launcher.");
-        }
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        try
-        {
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            TryTerminateProcess(process);
-            throw;
-        }
-        var stdout = await stdoutTask.ConfigureAwait(false);
-        var stderr = await stderrTask.ConfigureAwait(false);
-        return new PythonRunResult(process.ExitCode, stdout, stderr);
-    }
-
-    private static void TryTerminateProcess(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            process.WaitForExit(5000);
-        }
-        catch
-        {
-        }
-    }
-
-    private static string GetPythonFailureMessage(PythonRunResult result, string fallback)
-    {
-        var message = !string.IsNullOrWhiteSpace(result.StdErr)
-            ? result.StdErr.Trim()
-            : result.StdOut.Trim();
-        if (string.IsNullOrWhiteSpace(message))
-            return fallback;
-
-        return NormalizePythonError(message);
+        var message = ProcessRunner.GetFailureMessage(result, fallback);
+        return string.IsNullOrWhiteSpace(message) ? fallback : NormalizePythonError(message);
     }
 
     private static string NormalizePythonError(string message)
@@ -262,7 +208,7 @@ public static class OpenSourceTranslationRuntimeService
         }
     }
 
-    private static async Task<PythonRunResult> RunPrepareScriptAsync(CancellationToken cancellationToken)
+    private static async Task<ProcessRunResult> RunPrepareScriptAsync(CancellationToken cancellationToken)
     {
         return await RunPythonAsync(new[]
         {

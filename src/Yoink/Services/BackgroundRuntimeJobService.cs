@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
+using Yoink.AppModel.Jobs;
 using Yoink.UI;
 
 namespace Yoink.Services;
@@ -131,6 +132,38 @@ public static class BackgroundRuntimeJobService
             }
 
             snapshot = ToSnapshot(state);
+            return true;
+        }
+    }
+
+    public static IReadOnlyList<AppJobSnapshot> GetSnapshots(AppJobArea? area = null)
+    {
+        lock (Gate)
+        {
+            EnsureInitialized_NoLock();
+            var snapshots = Jobs.Values
+                .Select(ToAppJobSnapshot)
+                .OrderBy(snapshot => snapshot.Key, StringComparer.Ordinal)
+                .ToList();
+
+            return area is null
+                ? snapshots
+                : snapshots.Where(snapshot => snapshot.Area == area.Value).ToList();
+        }
+    }
+
+    public static bool TryGetAppJobSnapshot(string key, out AppJobSnapshot snapshot)
+    {
+        lock (Gate)
+        {
+            EnsureInitialized_NoLock();
+            if (!Jobs.TryGetValue(key, out var state))
+            {
+                snapshot = default!;
+                return false;
+            }
+
+            snapshot = ToAppJobSnapshot(state);
             return true;
         }
     }
@@ -303,6 +336,9 @@ public static class BackgroundRuntimeJobService
 
     private static BackgroundRuntimeJobSnapshot ToSnapshot(JobState state)
         => new(state.Key, state.Label, state.IsRunning, state.Status, state.LastSucceeded, state.LastError);
+
+    private static AppJobSnapshot ToAppJobSnapshot(JobState state)
+        => new(state.Key, state.Label, AppJobArea.Runtime, state.IsRunning, state.Status, state.LastSucceeded, state.LastError);
 
     private static void NotifyChanged(string key)
     {

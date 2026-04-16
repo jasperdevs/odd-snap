@@ -40,7 +40,6 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Image preview area (hidden for text-only toasts) -->
                 <Grid x:Name="ImageArea" Grid.Row="0" Visibility="Collapsed" MaxHeight="176" HorizontalAlignment="Center">
                     <Border x:Name="ImageFrame" CornerRadius="10,10,0,0" ClipToBounds="True">
                         <Image x:Name="PreviewImage" Stretch="Uniform"
@@ -49,7 +48,6 @@
                                RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Border>
 
-                    <!-- Overlay buttons (shown on hover) -->
                     <Border x:Name="CloseBtn" Width="32" Height="32" CornerRadius="8"
                             Background="#E0202024" BorderBrush="#30FFFFFF" BorderThickness="0.8"
                             ToolTipService.IsEnabled="False"
@@ -102,7 +100,6 @@
                     </Border>
                 </Grid>
 
-                <!-- Text content -->
                 <StackPanel x:Name="TextContentPanel" Grid.Row="1" Orientation="Horizontal" Margin="14,11,14,11">
                     <Border x:Name="ColorSwatch" Width="28" Height="28" CornerRadius="8"
                             Margin="0,0,12,0" Visibility="Collapsed" VerticalAlignment="Center"/>

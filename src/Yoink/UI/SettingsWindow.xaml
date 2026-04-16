@@ -1953,7 +1953,7 @@
                                         </ComboBox>
                                     </Grid>
 
-                                    <TextBlock Text="Pick a runtime lane first, then choose the model." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Choose CPU or GPU first, then pick the model you want ready." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
                                     <Grid x:Name="StickerLocalCpuEnginePanel" Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
@@ -1989,7 +1989,7 @@
                                                 <ComboBoxItem Content="U2Netp (Fastest)" Tag="U2Netp"/>
                                             </ComboBox>
                                         </StackPanel>
-                                        <Button x:Name="StickerInstallDriversBtn" Grid.Column="1" Content="Install rembg" FontSize="12"
+                                        <Button x:Name="StickerInstallDriversBtn" Grid.Column="1" Content="Install runtime" FontSize="12"
                                                 Padding="12,6" Margin="10,22,0,0" VerticalAlignment="Top"
                                                 Click="StickerInstallDriversBtn_Click" Cursor="Hand"/>
                                     </Grid>
@@ -2011,11 +2011,11 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                                     <Button x:Name="StickerDownloadRembgBtn" Content="Download model" FontSize="12" Padding="12,6"
                                             Click="StickerDownloadRembgBtn_Click" Cursor="Hand"/>
-                                    <Button x:Name="StickerOpenLocalEngineRepoBtn" Content="Open rembg" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                    <Button x:Name="StickerOpenLocalEngineRepoBtn" Content="Open engine project" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="StickerOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
                                     <Button x:Name="StickerRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="StickerRemoveAllModelsBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
-                                    <Button x:Name="StickerCopyErrorBtn" Content="Copy error" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                    <Button x:Name="StickerCopyErrorBtn" Content="Copy status" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="StickerCopyErrorBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
                                 </StackPanel>
                         </StackPanel>
@@ -2064,7 +2064,7 @@
                                         </ComboBox>
                                     </Grid>
 
-                                    <TextBlock Text="Pick a runtime lane first, then choose the model." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Choose CPU or GPU first, then pick the model you want ready." FontSize="11" Opacity="0.32" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
                                     <Grid x:Name="UpscaleLocalCpuEnginePanel" Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
@@ -2094,7 +2094,7 @@
                                                 <ComboBoxItem Content="SwinIR x4 (Faithful / UI)" Tag="SwinIrRealWorld"/>
                                             </ComboBox>
                                         </StackPanel>
-                                        <Button x:Name="UpscaleInstallDriversBtn" Grid.Column="1" Content="Install onnxruntime" FontSize="12"
+                                        <Button x:Name="UpscaleInstallDriversBtn" Grid.Column="1" Content="Install runtime" FontSize="12"
                                                 Padding="12,6" Margin="10,22,0,0" VerticalAlignment="Top"
                                                 Click="UpscaleInstallDriversBtn_Click" Cursor="Hand"/>
                                     </Grid>
@@ -2141,11 +2141,11 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                                     <Button x:Name="UpscaleDownloadModelBtn" Content="Download model" FontSize="12" Padding="12,6"
                                             Click="UpscaleDownloadModelBtn_Click" Cursor="Hand"/>
-                                    <Button x:Name="UpscaleOpenLocalEngineRepoBtn" Content="Open project" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                    <Button x:Name="UpscaleOpenLocalEngineRepoBtn" Content="Open engine project" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="UpscaleOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
                                     <Button x:Name="UpscaleRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="UpscaleRemoveAllModelsBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
-                                    <Button x:Name="UpscaleCopyErrorBtn" Content="Copy error" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                    <Button x:Name="UpscaleCopyErrorBtn" Content="Copy status" FontSize="12" Padding="12,6" Margin="8,0,0,0"
                                             Click="UpscaleCopyErrorBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
                                 </StackPanel>
                         </StackPanel>

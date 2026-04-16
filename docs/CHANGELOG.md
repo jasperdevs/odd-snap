@@ -1,3 +1,19 @@
+# Yoink v0.8.17
+
+## Added
+- Add shared app-model settings schemas, job contracts, and a WinUI 3 migration shell to the solution.
+- Add recorder and sound-service regression tests plus a temp PNG capture-output helper.
+
+## Changed
+- Refresh the docs site home, downloads, changelog, donate, hotkeys, and not-found pages.
+- Tighten local sticker, upscale, and translation runtimes around Yoink-managed Python environments and shared process helpers.
+
+## Fixed
+- Keep video recordings on the wall-clock timeline by filling missed frame slots instead of shortening the output when capture falls behind.
+- Validate and repair recording duration after encode when FFmpeg output lands outside the expected timeline tolerance.
+- Suppress Yoink UI sounds during desktop-audio recording so the app does not capture its own cues.
+- Preserve history entry classification during migration and expose runtime job snapshots through the shared job model.
+
 # Yoink v0.8.16
 
 ## Changed

@@ -1,6 +1,4 @@
-using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Net.Http;
 
@@ -8,7 +6,6 @@ namespace Yoink.Services;
 
 public static class UpscaleRuntimeService
 {
-    private const string PythonLauncherArg = "-3";
     private const int RuntimeLayoutVersion = 2;
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
     private static readonly HttpClient Http = new()
@@ -17,7 +14,6 @@ public static class UpscaleRuntimeService
         DefaultRequestHeaders = { { "User-Agent", "Yoink/1.0" } }
     };
 
-    private sealed record ProcessRunResult(int ExitCode, string StdOut, string StdErr);
     private sealed record ProbeState(bool? Ready, string Status, DateTime CheckedUtc);
 
     private static readonly string RootDir = Path.Combine(
@@ -85,10 +81,10 @@ public static class UpscaleRuntimeService
         if (await IsRuntimeReadyAsync(provider, cancellationToken).ConfigureAwait(false))
             return;
 
-        var launcherArg = await ResolveCompatiblePythonLauncherAsync(cancellationToken).ConfigureAwait(false);
+        var launcherArg = await PythonRuntimeEnvironment.ResolveCompatibleOnnxRuntimeLauncherAsync(cancellationToken).ConfigureAwait(false);
         if (launcherArg is null)
         {
-            var message = await BuildPythonCompatibilityMessageAsync(cancellationToken).ConfigureAwait(false);
+            var message = await PythonRuntimeEnvironment.BuildMissingOnnxRuntimeMessageAsync(cancellationToken).ConfigureAwait(false);
             UpdateProbeCache(provider, false, message);
             throw new InvalidOperationException(message);
         }
@@ -202,7 +198,7 @@ public static class UpscaleRuntimeService
         await EnsureInstalledAsync(provider, null, cancellationToken).ConfigureAwait(false);
         await EnsureModelDownloadedAsync(engine, null, cancellationToken).ConfigureAwait(false);
 
-        var tempInput = SaveTempPng(input);
+        var tempInput = CaptureOutputService.SaveBitmapToTempPng(input, "yoink_upscale");
         var tempOutput = tempInput + ".out.png";
 
         try
@@ -219,7 +215,7 @@ public static class UpscaleRuntimeService
             }, cancellationToken).ConfigureAwait(false);
 
             if (result.ExitCode != 0)
-                throw new InvalidOperationException(GetProcessErrorMessage(result, "Upscale processing failed."));
+                throw new InvalidOperationException(ProcessRunner.GetFailureMessage(result, "Upscale processing failed."));
 
             if (!File.Exists(tempOutput))
                 throw new InvalidOperationException("Upscale did not produce an output image.");
@@ -272,11 +268,11 @@ public static class UpscaleRuntimeService
 
         if (recreate)
         {
-            TryDeleteDirectory(envDir);
+            PythonRuntimeEnvironment.TryDeleteDirectory(envDir);
             progress?.Report("Creating isolated Python environment...");
-            var create = await RunLauncherAsync(new[] { launcherArg, "-m", "venv", envDir }, cancellationToken).ConfigureAwait(false);
+            var create = await PythonRuntimeEnvironment.RunLauncherAsync(new[] { launcherArg, "-m", "venv", envDir }, cancellationToken).ConfigureAwait(false);
             if (create.ExitCode != 0)
-                throw new InvalidOperationException(GetProcessErrorMessage(create, "Couldn't create the isolated Python environment."));
+                throw new InvalidOperationException(ProcessRunner.GetFailureMessage(create, "Couldn't create the isolated Python environment."));
         }
 
         progress?.Report("Installing upscale runtime packages...");
@@ -285,11 +281,11 @@ public static class UpscaleRuntimeService
             "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip", "setuptools", "wheel"
         }, cancellationToken).ConfigureAwait(false);
         if (toolsInstall.ExitCode != 0)
-            throw new InvalidOperationException(GetProcessErrorMessage(toolsInstall, "Couldn't prepare pip inside the isolated runtime."));
+            throw new InvalidOperationException(ProcessRunner.GetFailureMessage(toolsInstall, "Couldn't prepare pip inside the isolated runtime."));
 
         var runtimeInstall = await InstallRuntimePackagesAsync(provider, progress, cancellationToken).ConfigureAwait(false);
         if (runtimeInstall.ExitCode != 0)
-            throw new InvalidOperationException(GetProcessErrorMessage(runtimeInstall, "Couldn't install the upscale runtime."));
+            throw new InvalidOperationException(ProcessRunner.GetFailureMessage(runtimeInstall, "Couldn't install the upscale runtime."));
 
         File.WriteAllText(GetRuntimeMarkerPath(provider), RuntimeLayoutVersion.ToString());
         ClearProbeCache(provider);
@@ -304,7 +300,7 @@ public static class UpscaleRuntimeService
             if (gpuInstall.ExitCode == 0)
                 return gpuInstall;
 
-            var gpuMessage = GetProcessErrorMessage(gpuInstall, "CUDA runtime package was unavailable.");
+            var gpuMessage = ProcessRunner.GetFailureMessage(gpuInstall, "CUDA runtime package was unavailable.");
             AppDiagnostics.LogWarning("upscale.runtime.install.gpu-optional", gpuMessage);
             progress?.Report("CUDA package unavailable. Falling back to CPU runtime...");
         }
@@ -326,133 +322,23 @@ public static class UpscaleRuntimeService
     }
 
     private static bool IsRuntimeMarkerCurrent(UpscaleExecutionProvider provider)
-    {
-        try
-        {
-            var markerPath = GetRuntimeMarkerPath(provider);
-            return File.Exists(markerPath) &&
-                   int.TryParse(File.ReadAllText(markerPath).Trim(), out var version) &&
-                   version == RuntimeLayoutVersion;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static Task<ProcessRunResult> RunLauncherAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
-        => RunProcessAsync("py", arguments, cancellationToken);
+        => PythonRuntimeEnvironment.IsRuntimeMarkerCurrent(GetRuntimeMarkerPath(provider), RuntimeLayoutVersion);
 
     private static Task<ProcessRunResult> RunRuntimePythonAsync(UpscaleExecutionProvider provider, IEnumerable<string> arguments, CancellationToken cancellationToken)
         => RunProcessAsync(GetRuntimePythonPath(provider), arguments, cancellationToken);
 
-    private static async Task<ProcessRunResult> RunProcessAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-
-        psi.EnvironmentVariables["PYTHONUTF8"] = "1";
-        foreach (var arg in arguments)
-            psi.ArgumentList.Add(arg);
-
-        using var errorMode = WindowsErrorModeScope.SuppressSystemDialogs();
-        using var process = new Process { StartInfo = psi };
-        if (!process.Start())
-            return new ProcessRunResult(-1, "", $"Could not start process '{fileName}'.");
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        try
-        {
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            TryTerminateProcess(process);
-            throw;
-        }
-        var stdout = await stdoutTask.ConfigureAwait(false);
-        var stderr = await stderrTask.ConfigureAwait(false);
-        return new ProcessRunResult(process.ExitCode, stdout, stderr);
-    }
-
-    private static void TryTerminateProcess(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            process.WaitForExit(5000);
-        }
-        catch
-        {
-        }
-    }
-
-    private static string GetProcessErrorMessage(ProcessRunResult result, string fallbackMessage)
-    {
-        if (!string.IsNullOrWhiteSpace(result.StdErr))
-            return result.StdErr.Trim();
-        if (!string.IsNullOrWhiteSpace(result.StdOut))
-            return result.StdOut.Trim();
-        return fallbackMessage;
-    }
-
-    private static async Task<string?> ResolveCompatiblePythonLauncherAsync(CancellationToken cancellationToken)
-    {
-        var list = await TryListPythonLaunchersAsync(cancellationToken).ConfigureAwait(false);
-        if (list.Count > 0)
-            return PythonLauncherSelector.SelectOnnxRuntimeLauncherArgument(list);
-
-        var versionProbe = await RunLauncherAsync(new[] { PythonLauncherArg, "--version" }, cancellationToken).ConfigureAwait(false);
-        return versionProbe.ExitCode == 0 && PythonLauncherSelector.IsSupportedOnnxRuntimeVersion(versionProbe.StdOut)
-            ? PythonLauncherArg
-            : null;
-    }
-
-    private static async Task<string> BuildPythonCompatibilityMessageAsync(CancellationToken cancellationToken)
-    {
-        var list = await TryListPythonLaunchersAsync(cancellationToken).ConfigureAwait(false);
-        return PythonLauncherSelector.BuildOnnxRuntimeMissingVersionMessage(list);
-    }
-
-    private static async Task<IReadOnlyList<PythonLauncherSelector.LauncherEntry>> TryListPythonLaunchersAsync(CancellationToken cancellationToken)
-    {
-        var result = await RunLauncherAsync(new[] { "--list-paths" }, cancellationToken).ConfigureAwait(false);
-        var entries = PythonLauncherSelector.ParseLauncherListOutput($"{result.StdOut}{Environment.NewLine}{result.StdErr}");
-        if (entries.Count > 0)
-            return entries;
-
-        result = await RunLauncherAsync(new[] { "-0p" }, cancellationToken).ConfigureAwait(false);
-        return PythonLauncherSelector.ParseLauncherListOutput($"{result.StdOut}{Environment.NewLine}{result.StdErr}");
-    }
+    private static Task<ProcessRunResult> RunProcessAsync(string fileName, IEnumerable<string> arguments, CancellationToken cancellationToken)
+        => ProcessRunner.RunAsync(
+            fileName,
+            arguments,
+            cancellationToken,
+            configure: psi =>
+            {
+                psi.EnvironmentVariables["PYTHONUTF8"] = "1";
+            });
 
     private static async Task<string?> GetRuntimePythonVersionAsync(UpscaleExecutionProvider provider, CancellationToken cancellationToken)
-    {
-        var result = await RunRuntimePythonAsync(provider, ["--version"], cancellationToken).ConfigureAwait(false);
-        return result.ExitCode == 0 ? result.StdOut.Trim() : null;
-    }
-
-    private static string SaveTempPng(Bitmap input)
-    {
-        Directory.CreateDirectory(Path.GetTempPath());
-        var temp = Path.Combine(Path.GetTempPath(), $"yoink_upscale_{Guid.NewGuid():N}.png");
-        input.Save(temp, ImageFormat.Png);
-        return temp;
-    }
+        => await PythonRuntimeEnvironment.GetPythonVersionAsync(GetRuntimePythonPath(provider), cancellationToken).ConfigureAwait(false);
 
     private static string BuildUpscaleScript() => """
 import sys
@@ -552,15 +438,4 @@ Image.fromarray(output).save(output_path)
             ProbeCache.Remove(provider);
     }
 
-    private static void TryDeleteDirectory(string path)
-    {
-        try
-        {
-            if (Directory.Exists(path))
-                Directory.Delete(path, recursive: true);
-        }
-        catch
-        {
-        }
-    }
 }

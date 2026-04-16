@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Yoink.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Yoink.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

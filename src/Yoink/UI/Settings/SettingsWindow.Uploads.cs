@@ -169,7 +169,7 @@ public partial class SettingsWindow
         }
 
         StickerDownloadRembgBtn.Visibility = Visibility.Visible;
-        StickerOpenLocalEngineRepoBtn.Content = "Open rembg";
+        StickerOpenLocalEngineRepoBtn.Content = "Open engine project";
         StickerDownloadRembgBtn.Content = downloaded ? "Remove model" : "Download model";
         StickerRemoveAllModelsBtn.Visibility = RembgRuntimeService.HasAnyCachedModels() ? Visibility.Visible : Visibility.Collapsed;
         StickerCopyErrorBtn.Visibility = string.IsNullOrWhiteSpace(stickerFailure) ? Visibility.Collapsed : Visibility.Visible;
@@ -321,7 +321,7 @@ public partial class SettingsWindow
         }
 
         UpscaleDownloadModelBtn.Visibility = Visibility.Visible;
-        UpscaleOpenLocalEngineRepoBtn.Content = "Open project";
+        UpscaleOpenLocalEngineRepoBtn.Content = "Open engine project";
         UpscaleDownloadModelBtn.Content = downloaded ? "Remove model" : "Download model";
         UpscaleRemoveAllModelsBtn.Visibility = UpscaleRuntimeService.HasAnyCachedModels() ? Visibility.Visible : Visibility.Collapsed;
         UpscaleCopyErrorBtn.Visibility = string.IsNullOrWhiteSpace(upscaleFailure) ? Visibility.Collapsed : Visibility.Visible;

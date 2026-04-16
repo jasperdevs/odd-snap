@@ -129,7 +129,7 @@
                                    Opacity="0.62"
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource ThemeTextPrimaryBrush}"
-                                   Text="Click Upscale to generate a comparison."/>
+                                   Text="Pick a scale and model, then run a before-and-after preview."/>
 
                         <StackPanel Grid.Row="4">
                             <Button x:Name="UpscaleBtn"

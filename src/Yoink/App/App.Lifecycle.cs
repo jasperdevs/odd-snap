@@ -267,7 +267,6 @@ public partial class App
 
         SettingsWindow.TrimThumbCache(64);
 
-        try { LocalStickerEngineService.ReleaseSessions(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.release-sticker-sessions", ex); }
         try { _imageSearchIndexService?.TrimMemory(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.image-search", ex); }
 
         GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;

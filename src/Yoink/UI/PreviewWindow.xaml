@@ -13,10 +13,10 @@
         MouseLeave="OnMouseLeave">
 
     <Border x:Name="ImageBorder" MinWidth="120" MinHeight="80"
-            CornerRadius="16" Background="Transparent"
-            BorderBrush="#BFFFFFFF" BorderThickness="4">
+            CornerRadius="18" Background="#12000000"
+            BorderBrush="#D8FFFFFF" BorderThickness="2">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="28" ShadowDepth="4" Opacity="0.5" Color="Black"/>
+            <DropShadowEffect BlurRadius="32" ShadowDepth="6" Opacity="0.4" Color="Black"/>
         </Border.Effect>
         <Border.RenderTransform>
             <TransformGroup>
@@ -33,17 +33,16 @@
 
             <Border x:Name="PreviewFrame" Grid.Row="0"
                     Margin="4,4,4,0"
-                    CornerRadius="12" Background="#303030" ClipToBounds="True">
+                    CornerRadius="14" Background="#1B1B1A" ClipToBounds="True">
                 <Border.Clip>
-                    <RectangleGeometry x:Name="ImageClip" RadiusX="12" RadiusY="12"/>
+                    <RectangleGeometry x:Name="ImageClip" RadiusX="14" RadiusY="14"/>
                 </Border.Clip>
                 <Grid>
                     <Image x:Name="ThumbnailImage" Stretch="Uniform"
                            RenderOptions.BitmapScalingMode="HighQuality"/>
 
-                    <!-- X close -->
-                    <Border x:Name="CloseBtn" Width="28" Height="28" CornerRadius="7"
-                            Background="#80000000" Cursor="Hand"
+                    <Border x:Name="CloseBtn" Width="30" Height="30" CornerRadius="9"
+                            Background="#D6202024" BorderBrush="#30FFFFFF" BorderThickness="1" Cursor="Hand"
                             MouseLeftButtonDown="CloseClick"
                             HorizontalAlignment="Right" VerticalAlignment="Top"
                             Margin="0,6,6,0" Opacity="0"
@@ -54,9 +53,8 @@
                         </Canvas>
                     </Border>
 
-                    <!-- Pin button -->
-                    <Border x:Name="PinBtn" Width="28" Height="28" CornerRadius="7"
-                            Background="#80000000" Cursor="Hand"
+                    <Border x:Name="PinBtn" Width="30" Height="30" CornerRadius="9"
+                            Background="#D6202024" BorderBrush="#30FFFFFF" BorderThickness="1" Cursor="Hand"
                             MouseLeftButtonDown="PinClick"
                             HorizontalAlignment="Left" VerticalAlignment="Bottom"
                             Margin="6,0,0,6" Opacity="0"
@@ -67,9 +65,8 @@
                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
 
-                    <!-- Save button -->
-                    <Border x:Name="SaveBtn" Width="28" Height="28" CornerRadius="7"
-                            Background="#80000000" Cursor="Hand"
+                    <Border x:Name="SaveBtn" Width="30" Height="30" CornerRadius="9"
+                            Background="#D6202024" BorderBrush="#30FFFFFF" BorderThickness="1" Cursor="Hand"
                             MouseLeftButtonDown="SaveClick"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
                             Margin="0,0,6,6" Opacity="0"
@@ -81,10 +78,9 @@
                 </Grid>
             </Border>
 
-            <!-- Progress bar -->
-            <Border x:Name="ProgressBar" Grid.Row="1" Height="3"
+            <Border x:Name="ProgressBar" Grid.Row="1" Height="2"
                     Margin="4,0,4,4"
-                    Background="#80FFFFFF" CornerRadius="0,0,12,12"
+                    Background="#55FFFFFF" CornerRadius="0,0,14,14"
                     HorizontalAlignment="Stretch"
                     RenderTransformOrigin="0,0.5">
                 <Border.RenderTransform>

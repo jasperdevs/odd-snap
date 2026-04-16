@@ -1,39 +1,22 @@
 import { useState, useEffect } from "react";
+import { fetchGitHubRepoJson, logGitHubFetchError } from "../lib/github";
+import type { GitHubRelease, GitHubReleaseAsset } from "../types/github";
 
-export interface ReleaseAsset {
-  name: string;
-  browser_download_url: string;
-  size: number;
-  content_type: string;
-}
-
-export interface Release {
-  id: number;
-  tag_name: string;
-  name: string;
-  published_at: string;
-  body: string;
-  html_url: string;
-  assets: ReleaseAsset[];
-  tarball_url: string;
-  zipball_url: string;
-}
+export type ReleaseAsset = GitHubReleaseAsset;
+export type Release = GitHubRelease;
 
 export function useReleases() {
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(
-      "https://api.github.com/repos/jasperdevs/yoink/releases?per_page=20"
-    )
-      .then((res) => res.json())
+    fetchGitHubRepoJson<Release[]>("/releases?per_page=20")
       .then((data) => {
         if (Array.isArray(data)) {
           setReleases(data);
         }
       })
-      .catch(() => {})
+      .catch((error) => logGitHubFetchError("releases", error))
       .finally(() => setLoading(false));
   }, []);
 

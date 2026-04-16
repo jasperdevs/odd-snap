@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.IO;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using Yoink.Services;
 
 namespace Yoink.Capture;
 
@@ -14,6 +16,7 @@ namespace Yoink.Capture;
 public sealed class VideoRecorder : IDisposable
 {
     private const int DefaultInitialCaptureDelayMs = 0;
+    private const double DurationValidationToleranceSeconds = 0.35d;
     public enum Format { MP4, WebM, MKV }
     private static readonly object FfmpegPathLock = new();
     private static string? _cachedFfmpegPath;
@@ -37,7 +40,11 @@ public sealed class VideoRecorder : IDisposable
     private BufferedStream? _ffmpegBufferedStdin;
     private LimitedTextBuffer? _ffmpegStderr;
     private int _frameCount;
+    private int _capturedFrameCount;
+    private int _duplicatedFrameCount;
+    private int _droppedFrameCount;
     private DateTime _startTime;
+    private TimeSpan _recordedDuration = TimeSpan.Zero;
     private bool _isPaused;
     private bool _disposed;
     private readonly object _pauseLock = new();
@@ -53,6 +60,9 @@ public sealed class VideoRecorder : IDisposable
     private string? _desktopWavPath;
 
     public int FrameCount => _frameCount;
+    public int CapturedFrameCount => _capturedFrameCount;
+    public int DuplicatedFrameCount => _duplicatedFrameCount;
+    public int DroppedFrameCount => _droppedFrameCount;
     public TimeSpan Elapsed => DateTime.UtcNow - _startTime;
     public bool IsRecording => _captureThread?.IsAlive == true;
     public bool IsPaused => _isPaused;
@@ -280,9 +290,11 @@ public sealed class VideoRecorder : IDisposable
 
     private void CaptureLoop()
     {
-        int delayMs = 1000 / _fps;
         var ct = _cts.Token;
-        byte[]? buffer = null;
+        byte[]? captureBuffer = null;
+        byte[]? lastFrameBuffer = null;
+        int lastFrameByteCount = 0;
+        double frameIntervalTicks = (double)Stopwatch.Frequency / _fps;
 
         if (_initialCaptureDelayMs > 0)
         {
@@ -290,9 +302,11 @@ public sealed class VideoRecorder : IDisposable
             catch (ThreadInterruptedException) { return; }
         }
 
+        long activeStartTicks = Stopwatch.GetTimestamp();
         while (!ct.IsCancellationRequested)
         {
-            if ((DateTime.UtcNow - _startTime).TotalMilliseconds >= _maxDurationMs)
+            var activeElapsed = Stopwatch.GetElapsedTime(activeStartTicks);
+            if (activeElapsed.TotalMilliseconds >= _maxDurationMs)
                 break;
 
             // Pause support
@@ -303,7 +317,11 @@ public sealed class VideoRecorder : IDisposable
             }
             if (ct.IsCancellationRequested) break;
 
-            var sw = Stopwatch.StartNew();
+            WaitForNextFrameSlot(activeStartTicks, frameIntervalTicks, ct);
+            if (ct.IsCancellationRequested)
+                break;
+
+            bool capturedFrame = false;
             try
             {
                 using var bmp = ScreenCapture.CaptureRegionForRecording(_region, _showCursor);
@@ -312,24 +330,61 @@ public sealed class VideoRecorder : IDisposable
                 try
                 {
                     int byteCount = data.Stride * data.Height;
-                    if (buffer == null || buffer.Length != byteCount)
-                        buffer = new byte[byteCount];
-                    System.Runtime.InteropServices.Marshal.Copy(data.Scan0, buffer, 0, byteCount);
-                    _ffmpegBufferedStdin?.Write(buffer, 0, byteCount);
+                    if (captureBuffer == null || captureBuffer.Length != byteCount)
+                        captureBuffer = new byte[byteCount];
+                    if (lastFrameBuffer == null || lastFrameBuffer.Length != byteCount)
+                        lastFrameBuffer = new byte[byteCount];
+
+                    System.Runtime.InteropServices.Marshal.Copy(data.Scan0, captureBuffer, 0, byteCount);
+                    WriteFrame(captureBuffer, byteCount);
+                    Buffer.BlockCopy(captureBuffer, 0, lastFrameBuffer, 0, byteCount);
+                    lastFrameByteCount = byteCount;
+                    capturedFrame = true;
                 }
                 finally { bmp.UnlockBits(data); }
 
-                Interlocked.Increment(ref _frameCount);
+                Interlocked.Increment(ref _capturedFrameCount);
             }
             catch (OperationCanceledException) { break; }
-            catch { /* skip frame */ }
-
-            int sleep = delayMs - (int)sw.ElapsedMilliseconds;
-            if (sleep > 0)
+            catch
             {
-                try { Thread.Sleep(sleep); }
-                catch (ThreadInterruptedException) { break; }
+                Interlocked.Increment(ref _droppedFrameCount);
             }
+
+            if (!capturedFrame && lastFrameBuffer == null)
+                continue;
+
+            int targetFrameCount = GetExpectedFrameCount(Stopwatch.GetElapsedTime(activeStartTicks), _fps);
+            DuplicateLastFrameUntil(lastFrameBuffer, lastFrameByteCount, targetFrameCount);
+        }
+
+        _recordedDuration = Stopwatch.GetElapsedTime(activeStartTicks);
+        if (lastFrameBuffer != null && lastFrameByteCount > 0)
+        {
+            int targetFrameCount = GetExpectedFrameCount(_recordedDuration, _fps);
+            DuplicateLastFrameUntil(lastFrameBuffer, lastFrameByteCount, targetFrameCount);
+        }
+    }
+
+    private void WaitForNextFrameSlot(long activeStartTicks, double frameIntervalTicks, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            long nextDueTicks = activeStartTicks + (long)Math.Round(_frameCount * frameIntervalTicks);
+            long nowTicks = Stopwatch.GetTimestamp();
+            long remainingTicks = nextDueTicks - nowTicks;
+            if (remainingTicks <= 0)
+                break;
+
+            int sleepMs = (int)Math.Min(20, remainingTicks * 1000 / Stopwatch.Frequency);
+            if (sleepMs <= 1)
+            {
+                Thread.Yield();
+                continue;
+            }
+
+            try { Thread.Sleep(sleepMs); }
+            catch (ThreadInterruptedException) { break; }
         }
     }
 
@@ -368,23 +423,31 @@ public sealed class VideoRecorder : IDisposable
             throw new InvalidOperationException($"Video encoding failed — no output file produced. {_ffmpegStderr}");
 
         // Mux audio if we captured any
-        MuxAudio(outputPath);
+        bool hasAudioTrack = MuxAudio(outputPath);
+        ValidateAndRepairOutput(outputPath, hasAudioTrack);
+        LogRecordingStats(outputPath);
 
         return outputPath;
     }
 
     private void StopAudioCapture()
     {
-        try { _micCapture?.StopRecording(); } catch { }
-        try { _desktopCapture?.StopRecording(); } catch { }
+        StopCaptureAndWait(_micCapture);
+        StopCaptureAndWait(_desktopCapture);
         try { _micWriter?.Dispose(); _micWriter = null; } catch { }
         try { _desktopWriter?.Dispose(); _desktopWriter = null; } catch { }
         try { _micCapture?.Dispose(); _micCapture = null; } catch { }
         try { _desktopCapture?.Dispose(); _desktopCapture = null; } catch { }
     }
 
-    private void MuxAudio(string videoPath)
+    private bool MuxAudio(string videoPath)
     {
+        var tempAudioFiles = new[] { _desktopWavPath, _micWavPath }
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         // Determine which audio files exist
         var audioFiles = new List<string>();
         if (_desktopWavPath != null && HasMeaningfulAudio(_desktopWavPath))
@@ -392,32 +455,20 @@ public sealed class VideoRecorder : IDisposable
         if (_micWavPath != null && HasMeaningfulAudio(_micWavPath))
             audioFiles.Add(_micWavPath);
 
-        if (audioFiles.Count == 0) return;
+        if (audioFiles.Count == 0) return false;
 
         var ffmpegPath = FindFfmpeg();
-        if (ffmpegPath == null) return;
+        if (ffmpegPath == null) return false;
 
         string dir = Path.GetDirectoryName(videoPath)!;
         string ext = Path.GetExtension(videoPath);
         string tempOut = Path.Combine(dir, Path.GetFileNameWithoutExtension(videoPath) + "_muxed" + ext);
+        string audioCodec = ext.Equals(".webm", StringComparison.OrdinalIgnoreCase) ? "libopus" : "aac";
+        double targetDurationSeconds = GetCapturedVideoDurationSeconds();
 
         try
         {
-            string args;
-            if (audioFiles.Count == 1)
-            {
-                // Single audio source — mux directly
-                string audioCodec = ext.Equals(".webm", StringComparison.OrdinalIgnoreCase) ? "libopus" : "aac";
-                args = $"-y -i \"{videoPath}\" -i \"{audioFiles[0]}\" -c:v copy -c:a {audioCodec} -shortest \"{tempOut}\"";
-            }
-            else
-            {
-                // Two audio sources — merge with amix filter then mux
-                string audioCodec = ext.Equals(".webm", StringComparison.OrdinalIgnoreCase) ? "libopus" : "aac";
-                args = $"-y -i \"{videoPath}\" -i \"{audioFiles[0]}\" -i \"{audioFiles[1]}\" " +
-                       $"-filter_complex \"[1:a][2:a]amix=inputs=2:duration=shortest[a]\" " +
-                       $"-c:v copy -c:a {audioCodec} -map 0:v -map \"[a]\" -shortest \"{tempOut}\"";
-            }
+            string args = BuildMuxArguments(videoPath, audioFiles, tempOut, audioCodec, targetDurationSeconds);
 
             using var proc = new Process
             {
@@ -438,6 +489,7 @@ public sealed class VideoRecorder : IDisposable
             {
                 File.Delete(videoPath);
                 File.Move(tempOut, videoPath);
+                return true;
             }
             else
             {
@@ -453,9 +505,113 @@ public sealed class VideoRecorder : IDisposable
         finally
         {
             // Clean up temp WAV files
-            foreach (var f in audioFiles)
+            foreach (var f in tempAudioFiles)
                 try { File.Delete(f); } catch { }
         }
+
+        return false;
+    }
+
+    private static void StopCaptureAndWait(IWaveIn? capture, int timeoutMs = 5_000)
+    {
+        if (capture == null)
+            return;
+
+        using var stopped = new ManualResetEventSlim(false);
+        EventHandler<StoppedEventArgs>? handler = (_, _) => stopped.Set();
+        capture.RecordingStopped += handler;
+        try
+        {
+            try { capture.StopRecording(); }
+            catch { stopped.Set(); }
+
+            try { stopped.Wait(timeoutMs); } catch { }
+        }
+        finally
+        {
+            try { capture.RecordingStopped -= handler; } catch { }
+        }
+    }
+
+    private double GetCapturedVideoDurationSeconds()
+    {
+        double elapsedDuration = _recordedDuration.TotalSeconds;
+        if (elapsedDuration > 0)
+            return elapsedDuration;
+
+        double frameDuration = _fps > 0 ? FrameCount / (double)_fps : 0d;
+        return Math.Max(0.1d, frameDuration);
+    }
+
+    internal static string BuildMuxArguments(
+        string videoPath,
+        IReadOnlyList<string> audioFiles,
+        string tempOut,
+        string audioCodec,
+        double targetDurationSeconds)
+    {
+        string duration = targetDurationSeconds.ToString("0.###", CultureInfo.InvariantCulture);
+
+        if (audioFiles.Count == 1)
+        {
+            return $"-y -i \"{videoPath}\" -i \"{audioFiles[0]}\" " +
+                   $"-filter_complex \"[1:a]apad,atrim=0:{duration}[a]\" " +
+                   $"-c:v copy -c:a {audioCodec} -map 0:v -map \"[a]\" \"{tempOut}\"";
+        }
+
+        return $"-y -i \"{videoPath}\" -i \"{audioFiles[0]}\" -i \"{audioFiles[1]}\" " +
+               $"-filter_complex \"[1:a][2:a]amix=inputs=2:duration=longest:dropout_transition=0,apad,atrim=0:{duration}[a]\" " +
+               $"-c:v copy -c:a {audioCodec} -map 0:v -map \"[a]\" \"{tempOut}\"";
+    }
+
+    internal static int GetExpectedFrameCount(TimeSpan elapsed, int fps)
+    {
+        int clampedFps = Math.Clamp(fps, 1, 240);
+        if (elapsed <= TimeSpan.Zero)
+            return 1;
+
+        return Math.Max(1, (int)Math.Ceiling(elapsed.TotalSeconds * clampedFps));
+    }
+
+    internal static bool TryParseMediaDuration(string ffmpegOutput, out double durationSeconds)
+    {
+        durationSeconds = 0d;
+        if (string.IsNullOrWhiteSpace(ffmpegOutput))
+            return false;
+
+        const string marker = "Duration:";
+        int markerIndex = ffmpegOutput.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+            return false;
+
+        int valueStart = markerIndex + marker.Length;
+        int valueEnd = ffmpegOutput.IndexOf(',', valueStart);
+        string raw = valueEnd > valueStart
+            ? ffmpegOutput[valueStart..valueEnd]
+            : ffmpegOutput[valueStart..];
+
+        if (!TimeSpan.TryParse(raw.Trim(), CultureInfo.InvariantCulture, out var duration))
+            return false;
+
+        durationSeconds = duration.TotalSeconds;
+        return durationSeconds > 0;
+    }
+
+    internal string BuildRepairArguments(string videoPath, string tempOut, double actualDurationSeconds, bool hasAudioTrack)
+    {
+        string expectedDuration = GetCapturedVideoDurationSeconds().ToString("0.###", CultureInfo.InvariantCulture);
+        string padDuration = Math.Max(0d, GetCapturedVideoDurationSeconds() - actualDurationSeconds).ToString("0.###", CultureInfo.InvariantCulture);
+        string videoCodec = GetRepairVideoCodecArguments(_format);
+        string audioCodec = GetRepairAudioCodec(_format);
+
+        if (!hasAudioTrack)
+        {
+            return $"-y -i \"{videoPath}\" -vf \"tpad=stop_mode=clone:stop_duration={padDuration},trim=duration={expectedDuration}\" {videoCodec} \"{tempOut}\"";
+        }
+
+        return $"-y -i \"{videoPath}\" " +
+               $"-filter_complex \"[0:v]tpad=stop_mode=clone:stop_duration={padDuration},trim=duration={expectedDuration}[v];[0:a]apad,atrim=0:{expectedDuration}[a]\" " +
+               $"-map \"[v]\" -map \"[a]\" {videoCodec} -c:a {audioCodec} \"{tempOut}\"";
     }
 
     /// <summary>Cancels recording without saving.</summary>
@@ -497,6 +653,137 @@ public sealed class VideoRecorder : IDisposable
     {
         try { return File.Exists(path) && new FileInfo(path).Length > 0; }
         catch { return false; }
+    }
+
+    private void WriteFrame(byte[] frame, int byteCount)
+    {
+        _ffmpegBufferedStdin?.Write(frame, 0, byteCount);
+        Interlocked.Increment(ref _frameCount);
+    }
+
+    private void DuplicateLastFrameUntil(byte[]? lastFrameBuffer, int byteCount, int targetFrameCount)
+    {
+        if (lastFrameBuffer == null || byteCount <= 0)
+            return;
+
+        while (_frameCount < targetFrameCount)
+        {
+            WriteFrame(lastFrameBuffer, byteCount);
+            Interlocked.Increment(ref _duplicatedFrameCount);
+        }
+    }
+
+    private void ValidateAndRepairOutput(string outputPath, bool hasAudioTrack)
+    {
+        var ffmpegPath = FindFfmpeg();
+        if (ffmpegPath == null)
+            return;
+
+        double expectedDuration = GetCapturedVideoDurationSeconds();
+        if (expectedDuration <= 0.1d)
+            return;
+
+        if (!TryGetMediaDurationSeconds(ffmpegPath, outputPath, out double actualDuration))
+            return;
+
+        if (Math.Abs(actualDuration - expectedDuration) <= DurationValidationToleranceSeconds)
+            return;
+
+        AppDiagnostics.LogWarning(
+            "recording.duration-mismatch",
+            $"Expected about {expectedDuration:F3}s but encoded {actualDuration:F3}s for {Path.GetFileName(outputPath)}. Attempting repair.");
+
+        string tempOut = Path.Combine(
+            Path.GetDirectoryName(outputPath)!,
+            Path.GetFileNameWithoutExtension(outputPath) + "_repaired" + Path.GetExtension(outputPath));
+
+        try
+        {
+            string args = BuildRepairArguments(outputPath, tempOut, actualDuration, hasAudioTrack);
+            using var proc = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                }
+            };
+            proc.Start();
+            string stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(60_000);
+
+            if (proc.ExitCode != 0 || !HasNonEmptyFile(tempOut))
+            {
+                AppDiagnostics.LogWarning(
+                    "recording.duration-repair",
+                    $"Repair failed for {Path.GetFileName(outputPath)}. FFmpeg exit={proc.ExitCode}. {stderr}");
+                try { File.Delete(tempOut); } catch { }
+                return;
+            }
+
+            File.Delete(outputPath);
+            File.Move(tempOut, outputPath);
+
+            if (TryGetMediaDurationSeconds(ffmpegPath, outputPath, out double repairedDuration))
+            {
+                AppDiagnostics.LogInfo(
+                    "recording.duration-repair",
+                    $"Repaired {Path.GetFileName(outputPath)} from {actualDuration:F3}s to {repairedDuration:F3}s.");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("recording.duration-repair", ex);
+            try { File.Delete(tempOut); } catch { }
+        }
+    }
+
+    private static bool TryGetMediaDurationSeconds(string ffmpegPath, string mediaPath, out double durationSeconds)
+    {
+        durationSeconds = 0d;
+        try
+        {
+            using var proc = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = $"-hide_banner -i \"{mediaPath}\" -f null -",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                }
+            };
+
+            proc.Start();
+            string stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(30_000);
+            return TryParseMediaDuration(stderr, out durationSeconds);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string GetRepairVideoCodecArguments(Format format) => format switch
+    {
+        Format.WebM => "-c:v libvpx-vp9 -crf 30 -b:v 0 -pix_fmt yuv420p",
+        Format.MKV => "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p",
+        _ => "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -movflags +faststart",
+    };
+
+    private static string GetRepairAudioCodec(Format format)
+        => format == Format.WebM ? "libopus" : "aac";
+
+    private void LogRecordingStats(string outputPath)
+    {
+        AppDiagnostics.LogInfo(
+            "recording.stats",
+            $"{Path.GetFileName(outputPath)} duration={GetCapturedVideoDurationSeconds():F3}s encodedFrames={FrameCount} capturedFrames={CapturedFrameCount} duplicatedFrames={DuplicatedFrameCount} droppedFrames={DroppedFrameCount}");
     }
 
     private sealed class LimitedTextBuffer(int maxChars)

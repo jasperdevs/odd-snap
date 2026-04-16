@@ -13,6 +13,7 @@ namespace Yoink.Capture;
 public sealed partial class RecordingForm
 {
     private const string VideoPreviewSeekOffset = "0.40";
+    private IDisposable? _desktopAudioSoundSuppression;
 
     // ─── Recording lifecycle ──────────────────────────────────────────
 
@@ -49,6 +50,7 @@ public sealed partial class RecordingForm
         TransitionToRecordingSurface();
 
         Current = this;
+        _desktopAudioSoundSuppression = _recordDesktop ? SoundService.SuppressPlayback() : null;
         SoundService.PlayRecordStartSound();
         _recorder?.Start(RecordingWarmupDelayMs);
         _videoRecorder?.Start(_savePath, RecordingWarmupDelayMs);
@@ -75,7 +77,6 @@ public sealed partial class RecordingForm
 
         var gifRec = _recorder; _recorder = null;
         var vidRec = _videoRecorder; _videoRecorder = null;
-        SoundService.PlayRecordStopSound();
         Close();
 
         // Finalize the recording in the background after the UI closes.
@@ -87,6 +88,9 @@ public sealed partial class RecordingForm
                 try { System.Windows.Application.Current?.Dispatcher.Invoke(() => ToastWindow.Show("Recording", "Encoding, please wait...")); } catch { }
                 gifRec?.StopAndEncode(_savePath);
                 vidRec?.StopAndEncode(_savePath);
+                _desktopAudioSoundSuppression?.Dispose();
+                _desktopAudioSoundSuppression = null;
+                SoundService.PlayRecordStopSound();
                 firstFrame ??= TryCreateToastPreviewFrame(_savePath);
                 RecordingCompleted?.Invoke(_savePath, firstFrame);
             }
@@ -105,6 +109,8 @@ public sealed partial class RecordingForm
             }
             finally
             {
+                _desktopAudioSoundSuppression?.Dispose();
+                _desktopAudioSoundSuppression = null;
                 gifRec?.Dispose();
                 vidRec?.Dispose();
             }
@@ -116,6 +122,8 @@ public sealed partial class RecordingForm
         _tickTimer?.Stop();
         if (_recorder != null) { _recorder.Discard(); _recorder.Dispose(); _recorder = null; }
         if (_videoRecorder != null) { _videoRecorder.Discard(); _videoRecorder.Dispose(); _videoRecorder = null; }
+        _desktopAudioSoundSuppression?.Dispose();
+        _desktopAudioSoundSuppression = null;
         RecordingCancelled?.Invoke();
         Close();
     }

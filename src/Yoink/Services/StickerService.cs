@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -86,7 +85,7 @@ public static class StickerService
         if (string.IsNullOrWhiteSpace(settings.RemoveBgApiKey))
             return new StickerResult { Error = "remove.bg API key not configured" };
 
-        var temp = SaveTempPng(input);
+        var temp = CaptureOutputService.SaveBitmapToTempPng(input, "yoink_sticker");
         try
         {
             using var form = new MultipartFormDataContent();
@@ -114,7 +113,7 @@ public static class StickerService
         if (string.IsNullOrWhiteSpace(settings.PhotoroomApiKey))
             return new StickerResult { Error = "Photoroom API key not configured" };
 
-        var temp = SaveTempPng(input);
+        var temp = CaptureOutputService.SaveBitmapToTempPng(input, "yoink_sticker");
         try
         {
             using var form = new MultipartFormDataContent();
@@ -227,18 +226,4 @@ public static class StickerService
         }
     }
 
-    private static string SaveTempPng(Bitmap input)
-    {
-        var temp = Path.Combine(Path.GetTempPath(), $"yoink_sticker_{Guid.NewGuid():N}.png");
-        try
-        {
-            input.Save(temp, ImageFormat.Png);
-        }
-        catch
-        {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { }
-            throw;
-        }
-        return temp;
-    }
 }

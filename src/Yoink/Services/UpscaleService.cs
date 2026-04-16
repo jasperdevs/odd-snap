@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -83,7 +82,7 @@ public static class UpscaleService
         if (string.IsNullOrWhiteSpace(settings.DeepAiApiKey))
             return new UpscaleResult { Error = $"{providerName} API key not configured", ProviderName = providerName };
 
-        var temp = SaveTempPng(input);
+        var temp = CaptureOutputService.SaveBitmapToTempPng(input, "yoink_upscale");
         try
         {
             using var form = new MultipartFormDataContent();
@@ -196,19 +195,4 @@ public static class UpscaleService
         }
     }
 
-    private static string SaveTempPng(Bitmap input)
-    {
-        var temp = Path.Combine(Path.GetTempPath(), $"yoink_upscale_{Guid.NewGuid():N}.png");
-        try
-        {
-            input.Save(temp, ImageFormat.Png);
-        }
-        catch
-        {
-            try { if (File.Exists(temp)) File.Delete(temp); } catch { }
-            throw;
-        }
-
-        return temp;
-    }
 }

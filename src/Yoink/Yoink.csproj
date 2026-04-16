@@ -12,7 +12,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>yoink.ico</ApplicationIcon>
-    <Version>0.8.16</Version>
+    <Version>0.8.17</Version>
     <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
     <Authors>jasperdevs</Authors>
     <Description>Screenshot, annotation, OCR, sticker, and recording tool for Windows</Description>
@@ -69,6 +69,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Yoink.AppModel\Yoink.AppModel.csproj" />
     <PackageReference Include="AnimatedGif" Version="1.0.5" />
     <PackageReference Include="FluentFTP" Version="52.1.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.10" />

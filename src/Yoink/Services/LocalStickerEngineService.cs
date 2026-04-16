@@ -64,14 +64,6 @@ public static class LocalStickerEngineService
         _ => "Unknown"
     };
 
-    public static void Shutdown()
-    {
-    }
-
-    public static void ReleaseSessions()
-    {
-    }
-
     public static bool IsModelDownloaded(LocalStickerEngine engine) => RembgRuntimeService.IsModelCached(engine);
 
     public static string GetModelPath(LocalStickerEngine engine) => RembgRuntimeService.GetModelPath(engine);
