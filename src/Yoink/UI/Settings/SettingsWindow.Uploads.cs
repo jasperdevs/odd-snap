@@ -22,6 +22,7 @@ public partial class SettingsWindow
         ImgurClientIdBox.Text = s.ImgurClientId;
         ImgurTokenBox.Text = s.ImgurAccessToken;
         ImgBBKeyBox.Text = s.ImgBBApiKey;
+        ImgPileTokenBox.Text = s.ImgPileApiToken;
         GyazoTokenBox.Text = s.GyazoAccessToken;
         DropboxTokenBox.Text = s.DropboxAccessToken;
         DropboxPathBox.Text = s.DropboxPathPrefix;

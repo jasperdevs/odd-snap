@@ -129,6 +129,7 @@ public sealed class SettingsServiceTests
             {
                 service.Settings.GoogleTranslateApiKey = "google-secret";
                 service.Settings.ImageUploadSettings.ImgBBApiKey = "imgbb-secret";
+                service.Settings.ImageUploadSettings.ImgPileApiToken = "imgpile-secret";
                 service.Settings.ImageUploadSettings.CustomHeaders = "Authorization: Bearer upload-secret";
                 service.Settings.StickerUploadSettings.RemoveBgApiKey = "removebg-secret";
                 service.Settings.UpscaleUploadSettings.DeepAiApiKey = "deepai-secret";
@@ -140,6 +141,7 @@ public sealed class SettingsServiceTests
             var json = File.ReadAllText(settingsPath);
             Assert.DoesNotContain("google-secret", json);
             Assert.DoesNotContain("imgbb-secret", json);
+            Assert.DoesNotContain("imgpile-secret", json);
             Assert.DoesNotContain("upload-secret", json);
             Assert.DoesNotContain("removebg-secret", json);
             Assert.DoesNotContain("deepai-secret", json);
@@ -150,6 +152,7 @@ public sealed class SettingsServiceTests
 
             Assert.Equal("google-secret", reloaded.Settings.GoogleTranslateApiKey);
             Assert.Equal("imgbb-secret", reloaded.Settings.ImageUploadSettings.ImgBBApiKey);
+            Assert.Equal("imgpile-secret", reloaded.Settings.ImageUploadSettings.ImgPileApiToken);
             Assert.Equal("Authorization: Bearer upload-secret", reloaded.Settings.ImageUploadSettings.CustomHeaders);
             Assert.Equal("removebg-secret", reloaded.Settings.StickerUploadSettings.RemoveBgApiKey);
             Assert.Equal("deepai-secret", reloaded.Settings.UpscaleUploadSettings.DeepAiApiKey);
@@ -169,6 +172,7 @@ public sealed class SettingsServiceTests
             ImageUploadSettings =
             {
                 ImgBBApiKey = "imgbb-secret",
+                ImgPileApiToken = "imgpile-secret",
                 CustomHeaders = "Authorization: Bearer upload-secret"
             },
             StickerUploadSettings =
@@ -185,11 +189,13 @@ public sealed class SettingsServiceTests
 
         Assert.DoesNotContain("google-secret", json);
         Assert.DoesNotContain("imgbb-secret", json);
+        Assert.DoesNotContain("imgpile-secret", json);
         Assert.DoesNotContain("upload-secret", json);
         Assert.DoesNotContain("removebg-secret", json);
         Assert.DoesNotContain("deepai-secret", json);
         Assert.Contains("\"GoogleTranslateApiKey\": \"\"", json);
         Assert.Contains("\"ImgBBApiKey\": \"\"", json);
+        Assert.Contains("\"ImgPileApiToken\": \"\"", json);
     }
 
     [Fact]

@@ -49,6 +49,7 @@ internal static class SensitiveSettingsProtection
         settings.ImgurClientId = transform(settings.ImgurClientId);
         settings.ImgurAccessToken = transform(settings.ImgurAccessToken);
         settings.ImgBBApiKey = transform(settings.ImgBBApiKey);
+        settings.ImgPileApiToken = transform(settings.ImgPileApiToken);
         settings.GyazoAccessToken = transform(settings.GyazoAccessToken);
         settings.DropboxAccessToken = transform(settings.DropboxAccessToken);
         settings.GoogleDriveAccessToken = transform(settings.GoogleDriveAccessToken);

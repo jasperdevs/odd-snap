@@ -166,13 +166,74 @@ public static partial class UploadService
         using var content = new MultipartFormDataContent();
         content.Add(CreateFileStreamContent(filePath), "files[]", Path.GetFileName(filePath));
 
-        var resp = await Http.PostAsync("https://uguu.se/upload.php?output=text", content);
+        var resp = await Http.PostAsync("https://uguu.se/upload?output=text", content);
         var url = (await resp.Content.ReadAsStringAsync()).Trim();
 
         if (url.StartsWith("https://") || url.StartsWith("http://"))
             return new UploadResult { Success = true, Url = url };
 
         return new UploadResult { Error = $"Uguu error: {url}" };
+    }
+
+    // ─── Gofile ─────────────────────────────────────────────────────
+
+    private static async Task<UploadResult> UploadGofile(string filePath)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(CreateFileStreamContent(filePath), "file", Path.GetFileName(filePath));
+
+        var resp = await Http.PostAsync("https://upload.gofile.io/uploadfile", content);
+        var json = await resp.Content.ReadAsStringAsync();
+        var node = TryParseJson(json);
+
+        if (!resp.IsSuccessStatusCode)
+            return new UploadResult { Error = BuildHttpError("Gofile", resp, json, node), IsRateLimit = (int)resp.StatusCode == 429 };
+
+        var status = node?["status"]?.GetValue<string>();
+        var data = node?["data"];
+        var url =
+            data?["downloadPage"]?.GetValue<string>() ??
+            data?["directLink"]?.GetValue<string>() ??
+            data?["link"]?.GetValue<string>();
+
+        if (string.Equals(status, "ok", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(url) &&
+            Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            return new UploadResult
+            {
+                Success = true,
+                Url = url,
+                ProviderName = "Gofile"
+            };
+        }
+
+        return new UploadResult { Error = BuildHttpError("Gofile", resp, json, node) };
+    }
+
+    // ─── imgpile ─────────────────────────────────────────────────────
+
+    private static async Task<UploadResult> UploadImgPile(string filePath, UploadSettings s)
+    {
+        if (string.IsNullOrWhiteSpace(s.ImgPileApiToken))
+            return new UploadResult { Error = "imgpile API token not configured." };
+
+        using var content = new MultipartFormDataContent();
+        content.Add(CreateFileStreamContent(filePath), "file", Path.GetFileName(filePath));
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://cdn.imgpile.com/api/v1/media");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.ImgPileApiToken);
+        request.Content = content;
+
+        var resp = await Http.SendAsync(request);
+        var json = await resp.Content.ReadAsStringAsync();
+        var node = TryParseJson(json);
+
+        var url = node?["media"]?["urls"]?["original"]?.GetValue<string>();
+        if (resp.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(url))
+            return new UploadResult { Success = true, Url = url, ProviderName = "imgpile" };
+
+        return new UploadResult { Error = BuildHttpError("imgpile", resp, json, node), IsRateLimit = (int)resp.StatusCode == 429 };
     }
 
     // ─── transfer.sh ────────────────────────────────────────────────

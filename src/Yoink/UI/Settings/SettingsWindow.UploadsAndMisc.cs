@@ -34,11 +34,13 @@ public partial class SettingsWindow
         var dest = GetSelectedUploadDest();
         ImgurSettings.Visibility = dest == Services.UploadDestination.Imgur ? Visibility.Visible : Visibility.Collapsed;
         ImgBBSettings.Visibility = dest == Services.UploadDestination.ImgBB ? Visibility.Visible : Visibility.Collapsed;
+        ImgPileSettings.Visibility = dest == Services.UploadDestination.ImgPile ? Visibility.Visible : Visibility.Collapsed;
         CatboxSettings.Visibility = dest == Services.UploadDestination.Catbox ? Visibility.Visible : Visibility.Collapsed;
         LitterboxSettings.Visibility = dest == Services.UploadDestination.Litterbox ? Visibility.Visible : Visibility.Collapsed;
         GyazoSettings.Visibility = dest == Services.UploadDestination.Gyazo ? Visibility.Visible : Visibility.Collapsed;
         FileIoSettings.Visibility = dest == Services.UploadDestination.FileIo ? Visibility.Visible : Visibility.Collapsed;
         UguuSettings.Visibility = dest == Services.UploadDestination.Uguu ? Visibility.Visible : Visibility.Collapsed;
+        GofileSettings.Visibility = dest == Services.UploadDestination.Gofile ? Visibility.Visible : Visibility.Collapsed;
         TransferSettings.Visibility = dest == Services.UploadDestination.TransferSh ? Visibility.Visible : Visibility.Collapsed;
         DropboxSettings.Visibility = dest == Services.UploadDestination.Dropbox ? Visibility.Visible : Visibility.Collapsed;
         GoogleDriveSettings.Visibility = dest == Services.UploadDestination.GoogleDrive ? Visibility.Visible : Visibility.Collapsed;
@@ -98,7 +100,7 @@ public partial class SettingsWindow
             item.Tag is string tag && int.TryParse(tag, out var value))
             return Services.UploadService.NormalizeAiChatUploadDestination((Services.UploadDestination)value);
 
-        return Services.UploadDestination.Catbox;
+        return Services.UploadDestination.TempHosts;
     }
 
     private void UpdateAiRedirectPanelVisibility()
@@ -275,6 +277,13 @@ public partial class SettingsWindow
     {
         if (!IsLoaded) return;
         ActiveUploadSettings.ImgBBApiKey = ImgBBKeyBox.Text;
+        _settingsService.Save();
+    }
+
+    private void ImgPileTokenBox_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        ActiveUploadSettings.ImgPileApiToken = ImgPileTokenBox.Text;
         _settingsService.Save();
     }
 
@@ -596,7 +605,7 @@ public partial class SettingsWindow
                 continue;
 
             var destination = (Services.UploadDestination)raw;
-            if (destination is Services.UploadDestination.None or Services.UploadDestination.AiChat)
+            if (destination is Services.UploadDestination.None or Services.UploadDestination.AiChat or Services.UploadDestination.TransferSh)
                 continue;
 
             AiRedirectLensUploadDestPanelCombo.Items.Add(new ComboBoxItem

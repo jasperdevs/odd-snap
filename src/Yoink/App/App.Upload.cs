@@ -17,9 +17,14 @@ public partial class App
 {
     private static readonly UploadDestination[] GoogleLensFallbackHosts =
     {
-        UploadDestination.Catbox,
+        UploadDestination.Litterbox,
+        UploadDestination.TmpFiles,
+        UploadDestination.Uguu,
+        UploadDestination.Gofile,
         UploadDestination.ImgBB,
-        UploadDestination.Litterbox
+        UploadDestination.Imgur,
+        UploadDestination.Catbox,
+        UploadDestination.FileIo
     };
 
     private static string CleanErrorMessage(string? msg)
@@ -302,7 +307,10 @@ public partial class App
     private static async Task<GoogleLensUploadAttempt> TryUploadForGoogleLensAsync(string filePath, UploadSettings settings)
     {
         var primary = UploadService.NormalizeAiChatUploadDestination(settings.AiChatUploadDestination);
-        var candidates = new List<UploadDestination> { primary };
+        var candidates = new List<UploadDestination>();
+        if (primary is not (UploadDestination.FileIo or UploadDestination.TempHosts))
+            candidates.Add(primary);
+
         foreach (var fallback in GoogleLensFallbackHosts)
         {
             if (!candidates.Contains(fallback))

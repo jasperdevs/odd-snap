@@ -37,7 +37,9 @@ public enum UploadDestination
     CustomHttp,
     AiChat,
     TempHosts,
-    TmpFiles
+    TmpFiles,
+    Gofile,
+    ImgPile
 }
 
 public enum AiChatProvider
@@ -75,8 +77,9 @@ public static partial class UploadService
     private static readonly UploadDestination[] TemporaryHostFallbacks =
     {
         UploadDestination.Litterbox,
-        UploadDestination.Uguu,
         UploadDestination.TmpFiles,
+        UploadDestination.Uguu,
+        UploadDestination.Gofile,
         UploadDestination.FileIo
     };
 
@@ -152,8 +155,10 @@ public static partial class UploadService
         UploadDestination.S3Compatible => "S3",
         UploadDestination.CustomHttp => "Custom",
         UploadDestination.AiChat => "AI Redirects",
-        UploadDestination.TempHosts => "Filter between free temporary hosts",
+        UploadDestination.TempHosts => "Filter between free/no-setup hosts",
         UploadDestination.TmpFiles => "tmpfiles.org",
+        UploadDestination.Gofile => "Gofile",
+        UploadDestination.ImgPile => "imgpile",
         _ => ""
     };
 
@@ -188,6 +193,8 @@ public static partial class UploadService
         if (provider.Equals("file.io", StringComparison.OrdinalIgnoreCase)) return FileIoLogoPath;
         if (provider.Equals("uguu", StringComparison.OrdinalIgnoreCase)) return UguuLogoPath;
         if (provider.Equals("transfer.sh", StringComparison.OrdinalIgnoreCase)) return TransferLogoPath;
+        if (provider.Equals("gofile", StringComparison.OrdinalIgnoreCase)) return string.Empty;
+        if (provider.Equals("imgpile", StringComparison.OrdinalIgnoreCase)) return string.Empty;
         if (provider.Equals("dropbox", StringComparison.OrdinalIgnoreCase)) return DropboxLogoPath;
         if (provider.Equals("google drive", StringComparison.OrdinalIgnoreCase)) return GoogleDriveLogoPath;
         if (provider.Equals("onedrive", StringComparison.OrdinalIgnoreCase)) return OneDriveLogoPath;
@@ -209,6 +216,8 @@ public static partial class UploadService
         UploadDestination.FileIo => FileIoLogoPath,
         UploadDestination.Uguu => UguuLogoPath,
         UploadDestination.TransferSh => TransferLogoPath,
+        UploadDestination.Gofile => string.Empty,
+        UploadDestination.ImgPile => string.Empty,
         UploadDestination.Dropbox => DropboxLogoPath,
         UploadDestination.GoogleDrive => GoogleDriveLogoPath,
         UploadDestination.OneDrive => OneDriveLogoPath,
@@ -302,6 +311,8 @@ public static partial class UploadService
             UploadDestination.AiChat => long.MaxValue,
             UploadDestination.TempHosts => 100L * 1024 * 1024,
             UploadDestination.TmpFiles => 100L * 1024 * 1024,
+            UploadDestination.Gofile => long.MaxValue,
+            UploadDestination.ImgPile => 100L * 1024 * 1024,
             _ => long.MaxValue
         };
     }
@@ -312,6 +323,7 @@ public static partial class UploadService
         UploadDestination.None => false,
         UploadDestination.Imgur => !string.IsNullOrWhiteSpace(settings.ImgurClientId),
         UploadDestination.ImgBB => !string.IsNullOrWhiteSpace(settings.ImgBBApiKey),
+        UploadDestination.ImgPile => !string.IsNullOrWhiteSpace(settings.ImgPileApiToken),
         UploadDestination.Gyazo => !string.IsNullOrWhiteSpace(settings.GyazoAccessToken),
         UploadDestination.Dropbox => !string.IsNullOrWhiteSpace(settings.DropboxAccessToken),
         UploadDestination.GoogleDrive => !string.IsNullOrWhiteSpace(settings.GoogleDriveAccessToken),
@@ -327,6 +339,7 @@ public static partial class UploadService
         UploadDestination.AiChat => true,
         UploadDestination.TempHosts => true,
         UploadDestination.TmpFiles => true,
+        UploadDestination.Gofile => true,
         // These don't need credentials
         UploadDestination.Catbox or UploadDestination.Litterbox or UploadDestination.FileIo
             or UploadDestination.Uguu or UploadDestination.TransferSh => true,
@@ -407,6 +420,8 @@ public static partial class UploadService
                 UploadDestination.Uguu => await UploadUguu(filePath),
                 UploadDestination.TransferSh => await UploadTransferSh(filePath),
                 UploadDestination.TmpFiles => await UploadTmpFiles(filePath),
+                UploadDestination.Gofile => await UploadGofile(filePath),
+                UploadDestination.ImgPile => await UploadImgPile(filePath, settings),
                 UploadDestination.Dropbox => await UploadDropbox(filePath, settings),
                 UploadDestination.GoogleDrive => await UploadGoogleDrive(filePath, settings),
                 UploadDestination.OneDrive => await UploadOneDrive(filePath, settings),
@@ -451,6 +466,9 @@ public sealed class UploadSettings
 
     // ImgBB
     public string ImgBBApiKey { get; set; } = "";
+
+    // imgpile
+    public string ImgPileApiToken { get; set; } = "";
 
     // Gyazo
     public string GyazoAccessToken { get; set; } = "";

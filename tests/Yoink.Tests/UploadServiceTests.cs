@@ -14,8 +14,10 @@ public sealed class UploadServiceTests
     [InlineData(UploadDestination.TransferSh, "transfer.sh")]
     [InlineData(UploadDestination.S3Compatible, "S3")]
     [InlineData(UploadDestination.AiChat, "AI Redirects")]
-    [InlineData(UploadDestination.TempHosts, "Filter between free temporary hosts")]
+    [InlineData(UploadDestination.TempHosts, "Filter between free/no-setup hosts")]
     [InlineData(UploadDestination.TmpFiles, "tmpfiles.org")]
+    [InlineData(UploadDestination.Gofile, "Gofile")]
+    [InlineData(UploadDestination.ImgPile, "imgpile")]
     public void GetName_ReturnsExpectedLabels(UploadDestination destination, string expected)
     {
         Assert.Equal(expected, UploadService.GetName(destination));
@@ -49,14 +51,18 @@ public sealed class UploadServiceTests
         Assert.False(UploadService.HasCredentials(UploadDestination.None, settings));
         Assert.True(UploadService.HasCredentials(UploadDestination.Catbox, settings));
         Assert.True(UploadService.HasCredentials(UploadDestination.TmpFiles, settings));
+        Assert.True(UploadService.HasCredentials(UploadDestination.Gofile, settings));
         Assert.True(UploadService.HasCredentials(UploadDestination.AiChat, settings));
         Assert.False(UploadService.HasCredentials(UploadDestination.Imgur, settings));
+        Assert.False(UploadService.HasCredentials(UploadDestination.ImgPile, settings));
         Assert.False(UploadService.HasCredentials(UploadDestination.Sftp, settings));
 
         settings.ImgurClientId = "client-id";
+        settings.ImgPileApiToken = "imgpile-token";
         settings.SftpHost = "sftp.example.com";
         settings.SftpHostKeyFingerprint = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         Assert.True(UploadService.HasCredentials(UploadDestination.Imgur, settings));
+        Assert.True(UploadService.HasCredentials(UploadDestination.ImgPile, settings));
         Assert.True(UploadService.HasCredentials(UploadDestination.AiChat, settings));
         Assert.True(UploadService.HasCredentials(UploadDestination.Sftp, settings));
     }

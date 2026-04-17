@@ -1447,16 +1447,17 @@
                                           PreviewTextInput="UploadDestCombo_PreviewTextInput" PreviewKeyDown="UploadDestCombo_PreviewKeyDown"
                                           SelectionChanged="UploadDestCombo_Changed">
                                     <ComboBoxItem Content="None" Tag="0"/>
-                                    <ComboBoxItem Content="Filter between free temporary hosts" Tag="21"/>
+                                    <ComboBoxItem Content="Recommended: filter between free/no-setup hosts" Tag="21"/>
                                     <ComboBoxItem Content="Litterbox (temp)" Tag="4"/>
-                                    <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
-                                    <ComboBoxItem Content="file.io (temp)" Tag="6"/>
                                     <ComboBoxItem Content="tmpfiles.org (temp)" Tag="22"/>
-                                    <ComboBoxItem Content="transfer.sh (temp)" Tag="8"/>
-                                    <ComboBoxItem Content="Catbox" Tag="3"/>
-                                    <ComboBoxItem Content="Imgur" Tag="1"/>
-                                    <ComboBoxItem Content="ImgBB" Tag="2"/>
-                                    <ComboBoxItem Content="Gyazo" Tag="5"/>
+                                    <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
+                                    <ComboBoxItem Content="Gofile (free)" Tag="23"/>
+                                    <ComboBoxItem Content="Catbox (free)" Tag="3"/>
+                                    <ComboBoxItem Content="file.io (temp)" Tag="6"/>
+                                    <ComboBoxItem Content="Imgur (API/client ID)" Tag="1"/>
+                                    <ComboBoxItem Content="ImgBB (API key)" Tag="2"/>
+                                    <ComboBoxItem Content="imgpile (API token)" Tag="24"/>
+                                    <ComboBoxItem Content="Gyazo (API token)" Tag="5"/>
                                     <ComboBoxItem Content="Dropbox" Tag="9"/>
                                     <ComboBoxItem Content="Google Drive" Tag="10"/>
                                     <ComboBoxItem Content="OneDrive" Tag="11"/>
@@ -1468,6 +1469,7 @@
                                     <ComboBoxItem Content="WebDAV" Tag="17"/>
                                     <ComboBoxItem Content="S3 / R2 / B2" Tag="18"/>
                                     <ComboBoxItem Content="Custom HTTP" Tag="19"/>
+                                    <ComboBoxItem Content="Unavailable: transfer.sh" Tag="8"/>
                                 </ComboBox>
                             </Grid>
                         </StackPanel>
@@ -1524,6 +1526,24 @@
                                      ToolTip="Get a free API key at api.imgbb.com"
                                      Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
                                      TextChanged="ImgBBKeyBox_Changed"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="ImgPileSettings" Header="IMGPILE" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="Image" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="API token" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <TextBlock Text="  100MB max · Direct CDN URL" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="API token" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="ImgPileTokenBox" FontSize="11" Padding="7,4"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="ImgPileTokenBox_Changed"/>
                         </StackPanel>
                     </controls:ProviderSection>
 
@@ -1607,6 +1627,21 @@
                                 <TextBlock Text="  128MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
                             </StackPanel>
                             <TextBlock Text="Temporary host. No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="GofileSettings" Header="GOFILE" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="No setup" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <TextBlock Text="  Free public share page" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="No setup required. Used after direct temporary hosts in the automatic filter." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
                         </StackPanel>
                     </controls:ProviderSection>
 
