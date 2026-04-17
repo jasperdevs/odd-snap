@@ -227,7 +227,7 @@ public static partial class UploadService
 
     public static UploadDestination NormalizeAiChatUploadDestination(UploadDestination destination) =>
         destination is UploadDestination.None or UploadDestination.AiChat
-            ? UploadDestination.Catbox
+            ? UploadDestination.TempHosts
             : destination;
 
     public static bool ShouldUploadScreenshot(AppSettings settings, bool hasFilePath, bool useAiRedirect)
@@ -519,5 +519,5 @@ public sealed class UploadSettings
     // AI Chat
     public AiChatProvider AiChatProvider { get; set; } = AiChatProvider.ChatGpt;
     public bool AiChatUploadDestinationSynced { get; set; }
-    public UploadDestination AiChatUploadDestination { get; set; } = UploadDestination.Catbox;
+    public UploadDestination AiChatUploadDestination { get; set; } = UploadDestination.TempHosts;
 }

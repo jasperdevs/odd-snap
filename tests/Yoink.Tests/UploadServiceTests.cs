@@ -94,8 +94,8 @@ public sealed class UploadServiceTests
     }
 
     [Theory]
-    [InlineData(UploadDestination.None, UploadDestination.Catbox)]
-    [InlineData(UploadDestination.AiChat, UploadDestination.Catbox)]
+    [InlineData(UploadDestination.None, UploadDestination.TempHosts)]
+    [InlineData(UploadDestination.AiChat, UploadDestination.TempHosts)]
     [InlineData(UploadDestination.Imgur, UploadDestination.Imgur)]
     [InlineData(UploadDestination.Catbox, UploadDestination.Catbox)]
     public void NormalizeAiChatUploadDestination_ReturnsExpectedDestination(UploadDestination input, UploadDestination expected)

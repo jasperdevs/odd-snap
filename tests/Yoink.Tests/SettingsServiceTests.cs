@@ -91,7 +91,7 @@ public sealed class SettingsServiceTests
         Assert.Equal(LocalStickerEngine.BiRefNetLite, settings.StickerUploadSettings.LocalEngine);
         Assert.Equal(LocalStickerEngine.U2Netp, settings.StickerUploadSettings.LocalCpuEngine);
         Assert.Equal(UploadDestination.TempHosts, settings.ImageUploadDestination);
-        Assert.Equal(UploadDestination.Catbox, settings.ImageUploadSettings.AiChatUploadDestination);
+        Assert.Equal(UploadDestination.TempHosts, settings.ImageUploadSettings.AiChatUploadDestination);
     }
 
     [Fact]
