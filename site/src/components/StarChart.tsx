@@ -161,7 +161,7 @@ export default function StarChart() {
     ctx.strokeStyle = "rgba(0,0,0,0.08)";
     ctx.lineWidth = 1;
     ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.font = "10px 'IBM Plex Mono', monospace";
+    ctx.font = "11px 'Segoe UI Variable', 'Segoe UI', ui-sans-serif, system-ui, sans-serif";
     ctx.textAlign = "right";
     const yTicks = 5;
     for (let i = 0; i <= yTicks; i++) {
@@ -301,20 +301,20 @@ export default function StarChart() {
 
   return (
     <div>
-      <div className="rounded-lg border border-[#EBEBEB] overflow-hidden bg-white relative">
+      <div className="relative">
         <canvas
           ref={canvasRef}
           className="w-full cursor-crosshair"
-          style={{ height: 260 }}
+          style={{ height: 240 }}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
         />
         {hover && (
           <div
-            className="absolute pointer-events-none bg-white border border-[#EBEBEB] rounded px-2.5 py-1.5 text-xs shadow-sm"
+            className="absolute pointer-events-none bg-[#F6F6F6] border border-[#EBEBEB] rounded-md px-2.5 py-1.5 text-[12px]"
             style={{
               left: Math.min(hover.x, (layoutRef.current?.w ?? 600) - 140),
-              top: Math.max(hover.y - 44, 4),
+              top: Math.max(hover.y - 40, 4),
             }}
           >
             <span className="text-black/60">{tooltipDate}</span>
@@ -322,8 +322,8 @@ export default function StarChart() {
           </div>
         )}
       </div>
-      <p className="text-xs text-black/50 mt-3 text-center">
-        <span className="text-black">{label}</span> GitHub Stars
+      <p className="text-[13px] text-black/60 mt-3">
+        <span className="text-black">{label}</span> github stars
       </p>
     </div>
   );

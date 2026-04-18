@@ -82,10 +82,47 @@ function WindowsIcon() {
   );
 }
 
+const AUTO_MS = 5000;
+const TRANSITION_MS = 600;
+
 function Showcase() {
   const base = import.meta.env.BASE_URL;
-  const [active, setActive] = useState(0);
-  const current = showcase[active];
+  const N = showcase.length;
+  const [idx, setIdx] = useState(0); // 0..N (N = clone of 0 for seamless wrap)
+  const [animate, setAnimate] = useState(true);
+  const visible = idx % N;
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAnimate(true);
+      setIdx((i) => i + 1);
+    }, AUTO_MS);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (idx !== N) return;
+    const t = setTimeout(() => {
+      setAnimate(false);
+      setIdx(0);
+    }, TRANSITION_MS + 20);
+    return () => clearTimeout(t);
+  }, [idx, N]);
+
+  useEffect(() => {
+    if (animate) return;
+    const r = requestAnimationFrame(() =>
+      requestAnimationFrame(() => setAnimate(true))
+    );
+    return () => cancelAnimationFrame(r);
+  }, [animate]);
+
+  const clickTab = (i: number) => {
+    setAnimate(true);
+    setIdx(i);
+  };
+
+  const slotPct = 100 / (N + 1);
 
   return (
     <div>
@@ -93,9 +130,9 @@ function Showcase() {
         {showcase.map((s, i) => (
           <button
             key={s.title}
-            onClick={() => setActive(i)}
+            onClick={() => clickTab(i)}
             className={`px-3 py-1.5 rounded-md text-[13px] transition-colors ${
-              active === i
+              visible === i
                 ? "bg-black text-white"
                 : "text-black/70 hover:text-black hover:bg-[#EBEBEB]"
             }`}
@@ -106,17 +143,35 @@ function Showcase() {
       </div>
 
       <div className="rounded-md overflow-hidden border border-[#EBEBEB] bg-white">
-        <div className="aspect-[16/10] w-full">
-          <img
-            src={base + current.img}
-            alt={current.title}
-            className="w-full h-full object-cover object-top"
-          />
+        <div className="aspect-[16/10] w-full overflow-hidden relative">
+          <div
+            className="absolute inset-0 flex"
+            style={{
+              width: `${(N + 1) * 100}%`,
+              transform: `translateX(-${idx * slotPct}%)`,
+              transition: animate ? `transform ${TRANSITION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : "none",
+            }}
+          >
+            {[...showcase, showcase[0]].map((s, i) => (
+              <div
+                key={`${s.title}-${i}`}
+                className="h-full shrink-0"
+                style={{ width: `${slotPct}%` }}
+              >
+                <img
+                  src={base + s.img}
+                  alt={s.title}
+                  className="w-full h-full object-cover object-top"
+                  loading={i <= 1 ? "eager" : "lazy"}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <p className="mt-4 text-[14px] text-black/70 leading-relaxed max-w-[70ch]">
-        {current.desc}
+        {showcase[visible].desc}
       </p>
     </div>
   );
