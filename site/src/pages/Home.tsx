@@ -7,29 +7,21 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+} from "@/components/ui/table";
 
-const features = [
-  "region capture",
-  "scrolling capture",
-  "active window capture",
-  "delay timer",
-  "annotation tools",
-  "step numbers",
-  "emoji & ruler",
-  "blur & highlight",
-  "magnifier",
-  "100+ ocr languages",
-  "argos offline translate",
-  "qr/barcode scanner",
-  "tray menu",
-  "global hotkeys",
-  "multi-monitor",
-  "png, jpeg, bmp",
-  "15/24/30/60 fps recording",
-  "mic + desktop audio",
-  "start with windows",
-  "auto-updates",
-  "gpl-3.0 licensed",
+const featureGroups: { category: string; items: string }[] = [
+  { category: "capture", items: "region, scrolling, active window, delay timer, multi-monitor" },
+  { category: "annotate", items: "arrows, shapes, text, step numbers, emoji & ruler, blur & highlight, magnifier" },
+  { category: "ocr & translate", items: "100+ ocr languages, argos offline, qr/barcode scanner" },
+  { category: "record", items: "15/24/30/60 fps, mic + desktop audio, gif, mp4, webm, mkv" },
+  { category: "formats", items: "png, jpeg, bmp" },
+  { category: "system", items: "tray menu, global hotkeys, start with windows, auto-updates" },
+  { category: "license", items: "gpl-3.0, open source" },
 ];
 
 const showcase = [
@@ -236,13 +228,16 @@ export default function Home() {
       </Section>
 
       <Section title="also included">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
-          {features.map((f) => (
-            <span key={f} className="text-[14px] text-black/70 leading-snug">
-              {f}
-            </span>
-          ))}
-        </div>
+        <Table>
+          <TableBody>
+            {featureGroups.map((row, i) => (
+              <TableRow key={row.category} index={i}>
+                <TableCell className="text-black w-[140px] align-top">{row.category}</TableCell>
+                <TableCell>{row.items}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </Section>
 
       <Section title="built for privacy">

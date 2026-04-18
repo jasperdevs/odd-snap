@@ -121,6 +121,22 @@ function PrimaryBtn({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
+function ChevronLeft() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M15 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
+function ChevronRight() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
 function OutlineBtn({ href, external, children }: { href: string; external?: boolean; children: React.ReactNode }) {
   return (
     <a
@@ -143,6 +159,7 @@ function ReleaseCard({
   userArch: Arch;
 }) {
   const [extrasOpen, setExtrasOpen] = useState(false);
+  const [changelogExpanded, setChangelogExpanded] = useState(false);
 
   const exeAssets = release.assets.filter(isExe);
   const zipAssets = release.assets.filter(isZip);
@@ -240,18 +257,44 @@ function ReleaseCard({
         </div>
       )}
 
-      {hasBody && (
-        <div className="mt-5">
-          <h3 className="text-[14px] text-black/70 mb-2">changelog</h3>
-          <div className="rounded-md border border-[#EBEBEB] bg-white overflow-hidden">
-            <div
-              className="px-4 py-3 font-mono changelog-body [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-              style={{ fontFamily: "Consolas, 'Cascadia Mono', 'Fira Code', monospace" }}
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
-            />
+      {hasBody && (() => {
+        const isLong = release.body.length > 900;
+        const collapsed = isLong && !changelogExpanded;
+        return (
+          <div className="mt-5">
+            <h3 className="text-[14px] text-black/70 mb-2">changelog</h3>
+            <div className="rounded-md border border-[#EBEBEB] bg-white overflow-hidden">
+              <div className="relative">
+                <div
+                  className="px-4 py-3 font-mono changelog-body [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 overflow-hidden"
+                  style={{
+                    fontFamily: "Consolas, 'Cascadia Mono', 'Fira Code', monospace",
+                    maxHeight: collapsed ? 260 : "none",
+                  }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
+                />
+                {collapsed && (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
+                    style={{
+                      background:
+                        "linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 55%, rgba(255,255,255,1) 100%)",
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+            {isLong && (
+              <button
+                onClick={() => setChangelogExpanded((v) => !v)}
+                className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4 mt-2"
+              >
+                {changelogExpanded ? "show less" : "show more"}
+              </button>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -304,35 +347,35 @@ export default function Downloads() {
           </div>
 
           {pageCount > 1 && (
-            <div className="flex items-center justify-between pt-6 mt-2 border-t border-[#EBEBEB]">
+            <div className="flex items-center justify-center gap-1 pt-6 mt-2 border-t border-[#EBEBEB]">
               <button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={safePage === 0}
-                className="text-[13px] text-black/70 hover:text-black transition-colors disabled:text-black/25 disabled:cursor-not-allowed"
+                aria-label="previous page"
+                className="w-7 h-7 flex items-center justify-center rounded-md text-black/60 hover:text-black hover:bg-[#EBEBEB] transition-colors disabled:text-black/25 disabled:hover:bg-transparent disabled:cursor-not-allowed"
               >
-                ← previous
+                <ChevronLeft />
               </button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: pageCount }, (_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setPage(i)}
-                    className={`w-7 h-7 rounded-md text-[12px] transition-colors ${
-                      i === safePage
-                        ? "bg-black text-white"
-                        : "text-black/60 hover:text-black hover:bg-[#EBEBEB]"
-                    }`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-              </div>
+              {Array.from({ length: pageCount }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setPage(i)}
+                  className={`w-7 h-7 rounded-md text-[12px] transition-colors ${
+                    i === safePage
+                      ? "bg-black text-white"
+                      : "text-black/60 hover:text-black hover:bg-[#EBEBEB]"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
               <button
                 onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
                 disabled={safePage === pageCount - 1}
-                className="text-[13px] text-black/70 hover:text-black transition-colors disabled:text-black/25 disabled:cursor-not-allowed"
+                aria-label="next page"
+                className="w-7 h-7 flex items-center justify-center rounded-md text-black/60 hover:text-black hover:bg-[#EBEBEB] transition-colors disabled:text-black/25 disabled:hover:bg-transparent disabled:cursor-not-allowed"
               >
-                next →
+                <ChevronRight />
               </button>
             </div>
           )}
