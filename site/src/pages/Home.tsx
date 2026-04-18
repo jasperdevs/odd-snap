@@ -10,29 +10,38 @@ import {
 
 const features = [
   "region capture",
+  "scrolling capture",
+  "active window capture",
+  "delay timer",
   "annotation tools",
-  "ocr & translate",
-  "screen recording",
-  "sticker maker",
-  "color picker",
+  "step numbers",
+  "emoji & ruler",
+  "blur & highlight",
+  "magnifier",
+  "100+ ocr languages",
+  "argos offline translate",
   "qr/barcode scanner",
-  "search history",
-  "19 upload destinations",
+  "tray menu",
   "global hotkeys",
-  "png, jpeg, bmp",
   "multi-monitor",
+  "png, jpeg, bmp",
+  "15/24/30/60 fps recording",
+  "mic + desktop audio",
   "start with windows",
   "auto-updates",
   "gpl-3.0 licensed",
 ];
 
 const showcase = [
-  { title: "annotate", desc: "arrows, text, shapes, blur, highlights, freehand, step numbers, emoji, ruler.", img: "annotations.png" },
-  { title: "stickers", desc: "remove backgrounds locally with 5 ai models, save as transparent png.", img: "sticker-showcase.png" },
-  { title: "ocr", desc: "extract text from any region and translate across 35+ languages.", img: "ocr-screenshot.png" },
-  { title: "search", desc: "find screenshots by filename, ocr text, or ai semantic match.", img: "search-screenshot.png" },
-  { title: "color picker", desc: "pick any color on screen with a magnified preview. hex and rgb.", img: "color-picker.png" },
-  { title: "record", desc: "save as gif, mp4, webm, or mkv. microphone and desktop audio.", img: "recording.png" },
+  { title: "annotate", desc: "arrows, text, shapes, blur, highlights, freehand, step numbers, emoji, and ruler with undo/redo.", img: "annotations.png" },
+  { title: "ocr & translate", desc: "extract text from any region with 100+ ocr languages. translate offline with argos or online with google.", img: "ocr-screenshot.png" },
+  { title: "ai redirects", desc: "open chatgpt, claude, gemini, or google lens right after capture. image stays pinned and ready to drop in.", img: "ai-redirects.png" },
+  { title: "upscale", desc: "upscale any capture locally with swinir x4 or real-esrgan x4plus. compare before and after side by side.", img: "upscale.png" },
+  { title: "stickers", desc: "remove backgrounds locally with 5 ai models. add stroke and shadow finishing, save as transparent png.", img: "sticker-showcase.png" },
+  { title: "record", desc: "save as gif, mp4, webm, or mkv. microphone and desktop audio at 15/24/30/60 fps.", img: "recording.png" },
+  { title: "search", desc: "find past screenshots by filename, ocr text, or ai-powered semantic similarity.", img: "search-screenshot.png" },
+  { title: "color picker", desc: "pick any color on screen with a magnified preview. hex and rgb to clipboard.", img: "color-picker.png" },
+  { title: "uploads", desc: "19 destinations: imgur, s3/r2/b2, dropbox, github, onedrive, immich, webdav, and more.", img: "uploads.png" },
 ];
 
 const faq = [
@@ -41,11 +50,11 @@ const faq = [
   { q: "does yoink work offline?", a: "yes. all capture, annotation, ocr, and recording features work fully offline. only uploads and google translate require internet." },
   { q: "what windows versions are supported?", a: "windows 10 (version 1903+) and windows 11. both x64 and arm64 are supported." },
   { q: "how does ocr work?", a: "yoink uses the windows built-in ocr engine. no downloads or setup needed. it supports all languages installed in your windows language settings." },
-  { q: "can i upload screenshots automatically?", a: "yes. yoink supports auto-upload to 19 destinations: imgur, imgbb, catbox, litterbox, gyazo, file.io, uguu, transfer.sh, dropbox, google drive, onedrive, azure blob, github, immich, ftp, sftp, webdav, s3-compatible storage (aws, cloudflare r2, backblaze b2), and custom http endpoints." },
+  { q: "can i upload screenshots automatically?", a: "yes. yoink supports auto-upload to 19 destinations: imgur, imgbb, catbox, litterbox, gyazo, file.io, uguu, tmpfiles, transfer.sh, dropbox, google drive, onedrive, azure blob, github, immich, ftp, sftp, webdav, s3-compatible storage (aws, cloudflare r2, backblaze b2), and custom http endpoints." },
   { q: "where are screenshots saved?", a: "by default in your pictures/yoink folder. you can change this in settings along with the file format and naming pattern." },
   { q: "what recording formats are supported?", a: "gif, mp4, webm, and mkv. you can record with microphone audio, desktop audio, or both. frame rate and quality are configurable." },
   { q: "what translation services are supported?", a: "yoink supports argos translate (fully offline, no api key needed) and google translate (requires internet). both support 35+ languages." },
-  { q: "how is yoink different from sharex?", a: "yoink has a modern, clean interface with built-in sticker creation, semantic image search, and uses windows native ocr instead of tesseract. it focuses on being simple to use while still being powerful." },
+  { q: "how is yoink different from sharex?", a: "yoink has a modern, clean interface with built-in sticker creation, ai redirects, image upscaling, and semantic image search. it focuses on being simple to use while still being powerful." },
   { q: "can i customize hotkeys?", a: "yes. every action has a configurable global hotkey. you can set hotkeys for screenshot, ocr, color picker, recording, stickers, and more in settings." },
   { q: "does yoink have a portable version?", a: "yes. the downloads page includes both a windows installer (recommended) and a portable zip." },
   { q: "how do i update yoink?", a: "installed builds can update through the app. you can also download the latest installer or portable build directly from the downloads page." },
@@ -67,11 +76,8 @@ function pickInstaller(release: { assets: { name: string; browser_download_url: 
 
 function WindowsIcon() {
   return (
-    <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
-      <rect x="0" y="0" width="7" height="7" />
-      <rect x="9" y="0" width="7" height="7" />
-      <rect x="0" y="9" width="7" height="7" />
-      <rect x="9" y="9" width="7" height="7" />
+    <svg viewBox="0 0 88 88" width="14" height="14" fill="currentColor" aria-hidden="true">
+      <path d="m0 12.402 35.687-4.86.016 34.423-35.67.203zm35.67 33.529.028 34.453L.028 75.48.026 45.7zm4.326-39.025L87.314 0v41.527l-47.318.376zm47.329 39.349-.011 41.34-47.318-6.678-.066-34.739z" />
     </svg>
   );
 }
@@ -142,7 +148,7 @@ export default function Home() {
       <section className="pt-24 pb-28 flex flex-col items-center text-center">
         <img src={base + "banner.svg"} alt="yoink" className="w-64 mb-8" />
         <p className="text-black/70 leading-relaxed mb-10 max-w-[55ch] text-[15px]">
-          capture, annotate, ocr, translate, make stickers, record video, and upload. all in one open-source tool for windows.
+          capture, annotate, ocr, translate, upscale, make stickers, record video, and upload. all in one open-source tool for windows.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {downloadUrl ? (
