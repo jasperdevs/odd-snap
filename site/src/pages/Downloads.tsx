@@ -136,6 +136,26 @@ function ChevronRight() {
   );
 }
 
+function ChevronDown({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="transition-transform duration-150"
+      style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
 function OutlineBtn({ href, external, children }: { href: string; external?: boolean; children: React.ReactNode }) {
   return (
     <Button asChild size="md" variant="tertiary">
@@ -182,16 +202,17 @@ function ReleaseCard({
 
   return (
     <div className="border-t border-[#EBEBEB] py-6">
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <h2 className="text-[16px] text-black">{release.tag_name}</h2>
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <h2 className="text-[16px] text-black">
+          {release.tag_name}
+          <span className="text-black/40 mx-2">//</span>
+          <span className="text-black/60 text-[14px]">{formatDate(release.published_at)}</span>
+        </h2>
         {isLatest && (
           <Badge variant="dot" size="sm" color="green">
             latest
           </Badge>
         )}
-        <span className="text-[13px] text-black/60 ml-auto">
-          {formatDate(release.published_at)}
-        </span>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -205,8 +226,9 @@ function ReleaseCard({
                 {getArchLabel(asset.name)}
                 {isRecommended && <span className="ml-2 text-black/60 text-[12px]">(recommended)</span>}
               </span>
-              <span className="text-[12px] text-black/60">{formatSize(asset.size)}</span>
-              <PrimaryBtn href={asset.browser_download_url}>download</PrimaryBtn>
+              <PrimaryBtn href={asset.browser_download_url}>
+                download {formatSize(asset.size)}
+              </PrimaryBtn>
             </div>
           );
         })}
@@ -214,15 +236,16 @@ function ReleaseCard({
 
       {hasExtras && (
         <div className="mt-3">
-          {!extrasOpen ? (
-            <button
-              onClick={() => setExtrasOpen(true)}
-              className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4"
-            >
-              more downloads
-            </button>
-          ) : (
-            <div className="flex flex-col gap-2">
+          <button
+            onClick={() => setExtrasOpen((v) => !v)}
+            aria-label={extrasOpen ? "hide more downloads" : "show more downloads"}
+            aria-expanded={extrasOpen}
+            className="inline-flex items-center justify-center h-7 w-7 text-black/60 hover:text-black transition-colors"
+          >
+            <ChevronDown open={extrasOpen} />
+          </button>
+          {extrasOpen && (
+            <div className="flex flex-col gap-2 mt-2">
               {sortedZipAssets.map((asset) => {
                 const assetArch = getAssetArch(asset.name);
                 const isRecommended = assetArch === userArch;
@@ -232,8 +255,9 @@ function ReleaseCard({
                       {getArchLabel(asset.name)} (.zip)
                       {isRecommended && <span className="ml-2 text-black/60 text-[12px]">(recommended)</span>}
                     </span>
-                    <span className="text-[12px] text-black/60">{formatSize(asset.size)}</span>
-                    <OutlineBtn href={asset.browser_download_url}>download</OutlineBtn>
+                    <OutlineBtn href={asset.browser_download_url}>
+                      download {formatSize(asset.size)}
+                    </OutlineBtn>
                   </div>
                 );
               })}
@@ -243,12 +267,6 @@ function ReleaseCard({
                   view on github
                 </OutlineBtn>
               </div>
-              <button
-                onClick={() => setExtrasOpen(false)}
-                className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4 text-left mt-1"
-              >
-                show less
-              </button>
             </div>
           )}
         </div>
@@ -284,9 +302,11 @@ function ReleaseCard({
             {isLong && (
               <button
                 onClick={() => setChangelogExpanded((v) => !v)}
-                className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4 mt-2"
+                aria-label={changelogExpanded ? "show less changelog" : "show more changelog"}
+                aria-expanded={changelogExpanded}
+                className="inline-flex items-center justify-center h-7 w-7 text-black/60 hover:text-black transition-colors mt-2"
               >
-                {changelogExpanded ? "show less" : "show more"}
+                <ChevronDown open={changelogExpanded} />
               </button>
             )}
           </div>
