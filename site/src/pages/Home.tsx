@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import StarChart from "../components/StarChart";
 import { useReleases } from "../hooks/useReleases";
 import {
@@ -28,9 +28,9 @@ const features = [
 
 const showcase = [
   { title: "annotate", desc: "arrows, text, shapes, blur, highlights, freehand, step numbers, emoji, ruler.", img: "annotations.png" },
-  { title: "make stickers", desc: "remove backgrounds locally with 5 ai models, save as transparent png.", img: "sticker-showcase.png" },
-  { title: "ocr & translate", desc: "extract text from any region and translate across 35+ languages.", img: "ocr-screenshot.png" },
-  { title: "search history", desc: "find screenshots by filename, ocr text, or ai semantic match.", img: "search-screenshot.png" },
+  { title: "stickers", desc: "remove backgrounds locally with 5 ai models, save as transparent png.", img: "sticker-showcase.png" },
+  { title: "ocr", desc: "extract text from any region and translate across 35+ languages.", img: "ocr-screenshot.png" },
+  { title: "search", desc: "find screenshots by filename, ocr text, or ai semantic match.", img: "search-screenshot.png" },
   { title: "color picker", desc: "pick any color on screen with a magnified preview. hex and rgb.", img: "color-picker.png" },
   { title: "record", desc: "save as gif, mp4, webm, or mkv. microphone and desktop audio.", img: "recording.png" },
 ];
@@ -65,99 +65,53 @@ function pickInstaller(release: { assets: { name: string; browser_download_url: 
   return (match ?? installer ?? exes[0])?.browser_download_url ?? null;
 }
 
+function WindowsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+      <rect x="0" y="0" width="7" height="7" />
+      <rect x="9" y="0" width="7" height="7" />
+      <rect x="0" y="9" width="7" height="7" />
+      <rect x="9" y="9" width="7" height="7" />
+    </svg>
+  );
+}
+
 function Showcase() {
   const base = import.meta.env.BASE_URL;
-  const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
-
-  const scrollTo = (i: number) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const card = el.children[i] as HTMLElement | undefined;
-    if (card) el.scrollTo({ left: card.offsetLeft - el.offsetLeft, behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const children = Array.from(el.children) as HTMLElement[];
-      if (children.length === 0) return;
-      const centerX = el.scrollLeft + el.clientWidth / 2;
-      let closest = 0;
-      let closestDist = Infinity;
-      children.forEach((child, i) => {
-        const mid = child.offsetLeft + child.offsetWidth / 2 - el.offsetLeft;
-        const dist = Math.abs(mid - centerX);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closest = i;
-        }
-      });
-      setActive(closest);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  const current = showcase[active];
 
   return (
     <div>
-      <div
-        ref={scrollerRef}
-        className="no-scrollbar flex overflow-x-auto snap-x snap-mandatory gap-4 -mx-6 px-6 sm:-mx-8 sm:px-8 pb-1"
-        style={{ scrollSnapType: "x mandatory" }}
-      >
-        {showcase.map((s) => (
-          <div
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {showcase.map((s, i) => (
+          <button
             key={s.title}
-            className="snap-center shrink-0 w-full"
+            onClick={() => setActive(i)}
+            className={`px-3 py-1.5 rounded-md text-[13px] transition-colors ${
+              active === i
+                ? "bg-black text-white"
+                : "text-black/70 hover:text-black hover:bg-[#EBEBEB]"
+            }`}
           >
-            <div className="rounded-md overflow-hidden border border-[#EBEBEB] bg-white">
-              <img
-                loading="lazy"
-                src={base + s.img}
-                alt={s.title}
-                className="w-full h-auto block"
-              />
-            </div>
-            <div className="mt-3">
-              <h3 className="text-[15px] font-bold text-black">{s.title}</h3>
-              <p className="text-[14px] text-black/70 leading-relaxed mt-1 max-w-[60ch]">{s.desc}</p>
-            </div>
-          </div>
+            {s.title}
+          </button>
         ))}
       </div>
 
-      <div className="mt-5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-1.5">
-          {showcase.map((s, i) => (
-            <button
-              key={s.title}
-              onClick={() => scrollTo(i)}
-              aria-label={`go to ${s.title}`}
-              className={`h-1.5 rounded-full transition-all ${
-                active === i ? "w-6 bg-black" : "w-1.5 bg-black/20 hover:bg-black/40"
-              }`}
-            />
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => scrollTo(Math.max(0, active - 1))}
-            aria-label="previous"
-            className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-[#EBEBEB] text-black/70 hover:text-black hover:bg-[#EBEBEB] transition-colors"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
-          <button
-            onClick={() => scrollTo(Math.min(showcase.length - 1, active + 1))}
-            aria-label="next"
-            className="w-8 h-8 inline-flex items-center justify-center rounded-md border border-[#EBEBEB] text-black/70 hover:text-black hover:bg-[#EBEBEB] transition-colors"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-          </button>
+      <div className="rounded-md overflow-hidden border border-[#EBEBEB] bg-white">
+        <div className="aspect-[16/10] w-full">
+          <img
+            src={base + current.img}
+            alt={current.title}
+            className="w-full h-full object-cover object-top"
+          />
         </div>
       </div>
+
+      <p className="mt-4 text-[14px] text-black/70 leading-relaxed max-w-[70ch]">
+        {current.desc}
+      </p>
     </div>
   );
 }
@@ -165,7 +119,7 @@ function Showcase() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="pt-10 pb-4">
-      <h2 className="text-[18px] font-bold mb-3 text-black">{title}</h2>
+      <h2 className="text-[18px] mb-3 text-black">{title}</h2>
       {children}
     </section>
   );
@@ -184,22 +138,24 @@ export default function Home() {
   }, [releases]);
 
   return (
-    <div className="py-12 space-y-2">
-      <section className="pb-10 flex flex-col items-center text-center">
-        <img src={base + "banner.svg"} alt="yoink" className="w-60 mb-6" />
-        <p className="text-black/70 leading-relaxed mb-8 max-w-[55ch] text-[15px]">
+    <div className="space-y-2">
+      <section className="pt-24 pb-28 flex flex-col items-center text-center">
+        <img src={base + "banner.svg"} alt="yoink" className="w-64 mb-8" />
+        <p className="text-black/70 leading-relaxed mb-10 max-w-[55ch] text-[15px]">
           capture, annotate, ocr, translate, make stickers, record video, and upload. all in one open-source tool for windows.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {downloadUrl ? (
             <a
               href={downloadUrl}
-              className="inline-flex items-center justify-center px-5 py-2.5 rounded-md bg-black text-white text-[14px] font-medium hover:bg-black/85 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-md bg-black text-white text-[14px] hover:bg-black/85 transition-colors"
             >
-              download
+              <WindowsIcon />
+              download for windows
             </a>
           ) : (
-            <span className="inline-flex items-center justify-center px-5 py-2.5 rounded-md bg-black/40 text-white text-[14px] font-medium cursor-wait">
+            <span className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-md bg-black/40 text-white text-[14px] cursor-wait">
+              <WindowsIcon />
               loading...
             </span>
           )}
@@ -207,7 +163,7 @@ export default function Home() {
             href="https://github.com/jasperdevs/yoink"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center justify-center px-5 py-2.5 rounded-md border border-black text-black text-[14px] font-medium hover:bg-[#EBEBEB] transition-colors"
+            className="inline-flex items-center justify-center px-5 py-2.5 rounded-md border border-black text-black text-[14px] hover:bg-[#EBEBEB] transition-colors"
           >
             source code
           </a>

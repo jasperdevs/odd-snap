@@ -61,7 +61,7 @@ function PrimaryBtn({ href, children }: { href: string; children: React.ReactNod
   return (
     <a
       href={href}
-      className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-black text-white text-[13px] font-medium hover:bg-black/85 transition-colors"
+      className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-black text-white text-[13px] hover:bg-black/85 transition-colors"
     >
       {children}
     </a>
@@ -73,7 +73,7 @@ function OutlineBtn({ href, external, children }: { href: string; external?: boo
     <a
       href={href}
       {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-black text-black text-[13px] font-medium hover:bg-[#EBEBEB] transition-colors"
+      className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-black text-black text-[13px] hover:bg-[#EBEBEB] transition-colors"
     >
       {children}
     </a>
@@ -113,9 +113,9 @@ function ReleaseCard({
   return (
     <div className="border-t border-[#EBEBEB] py-6">
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <h2 className="text-[16px] font-bold text-black">{release.tag_name}</h2>
+        <h2 className="text-[16px] text-black">{release.tag_name}</h2>
         {isLatest && (
-          <span className="px-2 py-0.5 rounded-full border border-black text-[11px] font-medium text-black">
+          <span className="px-2 py-0.5 rounded-full border border-black text-[11px] text-black">
             latest
           </span>
         )}
@@ -197,7 +197,7 @@ export default function Downloads() {
   return (
     <div className="py-12">
       <div className="mb-8">
-        <h1 className="text-[28px] font-bold text-black">downloads</h1>
+        <h1 className="text-[28px] text-black">downloads</h1>
       </div>
 
       {loading ? (

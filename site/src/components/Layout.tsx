@@ -13,13 +13,13 @@ export default function Layout() {
   const location = useLocation();
 
   return (
-    <div className="relative min-h-screen bg-[#F6F6F6] text-black">
+    <div className="relative min-h-screen flex flex-col bg-[#F6F6F6] text-black">
       <header
         className="sticky top-0 z-50 bg-[#F6F6F6]"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="mx-auto max-w-[800px] px-6 sm:px-8 h-14 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 font-semibold text-[15px] text-black">
+          <Link to="/" className="flex items-center gap-2 text-[15px] text-black">
             <img src={import.meta.env.BASE_URL + "favicon.ico"} alt="yoink" className="w-5 h-5" />
             yoink
           </Link>
@@ -76,7 +76,7 @@ export default function Layout() {
       />
 
       <main
-        className="mx-auto max-w-[800px] px-6 sm:px-8"
+        className="flex-1 mx-auto w-full max-w-[800px] px-6 sm:px-8"
         style={{
           paddingLeft: "max(1.5rem, env(safe-area-inset-left))",
           paddingRight: "max(1.5rem, env(safe-area-inset-right))",

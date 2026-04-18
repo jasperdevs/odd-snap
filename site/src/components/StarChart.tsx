@@ -318,12 +318,12 @@ export default function StarChart() {
             }}
           >
             <span className="text-black/60">{tooltipDate}</span>
-            <span className="text-black font-semibold ml-2">{hover.stars} stars</span>
+            <span className="text-black ml-2">{hover.stars} stars</span>
           </div>
         )}
       </div>
       <p className="text-xs text-black/50 mt-3 text-center">
-        <span className="text-black font-semibold">{label}</span> GitHub Stars
+        <span className="text-black">{label}</span> GitHub Stars
       </p>
     </div>
   );

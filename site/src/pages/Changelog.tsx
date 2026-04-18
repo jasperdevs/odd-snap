@@ -20,9 +20,9 @@ function escapeHtml(str: string): string {
 function renderMarkdown(body: string): string {
   let html = escapeHtml(body);
 
-  html = html.replace(/^### (.+)$/gm, '<h4 class="text-[14px] font-semibold mt-4 mb-1 text-black">$1</h4>');
-  html = html.replace(/^## (.+)$/gm, '<h3 class="text-[15px] font-semibold mt-5 mb-2 text-black">$1</h3>');
-  html = html.replace(/^# (.+)$/gm, '<h2 class="text-[16px] font-semibold mt-6 mb-2 text-black">$1</h2>');
+  html = html.replace(/^### (.+)$/gm, '<h4 class="text-[14px] mt-4 mb-1 text-black">$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3 class="text-[15px] mt-5 mb-2 text-black">$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h2 class="text-[16px] mt-6 mb-2 text-black">$1</h2>');
 
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 
@@ -67,7 +67,7 @@ export default function Changelog() {
   return (
     <div className="py-12">
       <div className="mb-8">
-        <h1 className="text-[28px] font-bold text-black">changelog</h1>
+        <h1 className="text-[28px] text-black">changelog</h1>
       </div>
 
       {loading ? (
@@ -91,7 +91,7 @@ export default function Changelog() {
           {releases.map((release) => (
             <div key={release.id} className="border-t border-[#EBEBEB] py-6">
               <div className="flex items-center gap-3 mb-3 flex-wrap">
-                <h2 className="text-[16px] font-bold text-black">{release.tag_name}</h2>
+                <h2 className="text-[16px] text-black">{release.tag_name}</h2>
                 <span className="text-[13px] text-black/60 ml-auto">
                   {formatDate(release.published_at)}
                 </span>
