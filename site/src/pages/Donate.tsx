@@ -54,7 +54,7 @@ export default function Donate() {
             href={card.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="panel support-card flex flex-col gap-4 text-left transition-colors hover:border-[rgba(255,245,231,0.22)]"
+            className="panel support-card flex flex-col gap-4 text-left transition-colors hover:border-[var(--line-highlight)] hover:bg-[rgba(255,255,255,0.03)]"
           >
             <div className="support-mark">
               {card.logo}

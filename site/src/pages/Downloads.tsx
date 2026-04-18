@@ -101,7 +101,7 @@ function AssetRow({
         <div className="mt-1 text-sm text-[var(--muted)]">{formatSize(asset.size)}</div>
       </div>
       {isRecommended ? (
-        <span className="tag-pill border-[rgba(140,200,180,0.2)] bg-[rgba(72,168,130,0.12)] text-[rgb(176,223,201)]">
+        <span className="tag-pill border-[var(--line-strong)] bg-[rgba(255,255,255,0.06)] text-[var(--text)]">
           Recommended
         </span>
       ) : null}
@@ -151,7 +151,7 @@ function ReleaseCard({
       <div className="release-card-header">
         <h2 className="text-lg font-semibold">{release.tag_name}</h2>
         {isLatest ? (
-          <span className="tag-pill border-[rgba(140,200,180,0.2)] bg-[rgba(72,168,130,0.12)] text-[rgb(176,223,201)]">
+          <span className="tag-pill border-[var(--line-strong)] bg-[rgba(255,255,255,0.08)] text-[var(--text)]">
             Latest
           </span>
         ) : null}

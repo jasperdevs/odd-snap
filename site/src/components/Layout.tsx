@@ -28,12 +28,12 @@ export default function Layout() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-8">
               <Link to="/" className="flex items-center gap-3">
-                <span className="support-mark h-11 w-11 rounded-2xl">
-                  <img src={import.meta.env.BASE_URL + "favicon.ico"} alt="Yoink" className="h-6 w-6" />
+                <span className="support-mark h-10 w-10 rounded-[10px]">
+                  <img src={import.meta.env.BASE_URL + "favicon.ico"} alt="Yoink" className="h-5 w-5" />
                 </span>
-                <div className="space-y-0.5">
-                  <div className="font-semibold text-[1.05rem] text-[var(--text)]">Yoink</div>
-                  <div className="text-[0.82rem] text-[var(--muted)]">
+                <div className="leading-tight">
+                  <div className="font-semibold text-[1.02rem] tracking-[-0.015em] text-[var(--text)]">Yoink</div>
+                  <div className="text-[0.78rem] text-[var(--muted)]">
                     Capture, annotate, OCR, and ship.
                   </div>
                 </div>
@@ -46,7 +46,7 @@ export default function Layout() {
                     className={`tag-pill ${
                       location.pathname === link.to
                         ? "border-[var(--line-strong)] bg-[rgba(255,255,255,0.06)] text-[var(--text)]"
-                        : "hover:border-[rgba(255,245,231,0.18)] hover:text-[var(--text)]"
+                        : "hover:border-[var(--line-strong)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)]"
                     }`}
                   >
                     {link.label}
@@ -72,7 +72,7 @@ export default function Layout() {
                 className={`tag-pill ${
                   location.pathname === link.to
                     ? "border-[var(--line-strong)] bg-[rgba(255,255,255,0.06)] text-[var(--text)]"
-                    : "hover:border-[rgba(255,245,231,0.18)] hover:text-[var(--text)]"
+                    : "hover:border-[var(--line-strong)] hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--text)]"
                 }`}
               >
                 {link.label}
