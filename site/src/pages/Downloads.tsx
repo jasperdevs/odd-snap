@@ -267,7 +267,7 @@ function ReleaseCard({
   const hasExtras = zipAssets.length > 0 || !!release.zipball_url;
 
   return (
-    <div className="border-t border-[#EBEBEB] py-6">
+    <div className="border-t border-[#EBEBEB] pt-8 pb-10">
       <h2 className="text-[16px] text-black mb-4">
         {release.tag_name}
         <span className="text-black/40 mx-2">//</span>

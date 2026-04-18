@@ -204,7 +204,7 @@ const InputCopy = forwardRef<HTMLDivElement, InputCopyProps>(
       <span
         className={cn(
           "flex-1 min-w-0 text-left text-[13px] text-foreground font-mono py-2 select-none truncate",
-          align === "left" ? "pl-1" : "pl-0"
+          align === "left" ? "pl-1" : "pl-3"
         )}
         style={{ fontVariationSettings: fontWeights.normal }}
       >
@@ -251,7 +251,7 @@ const InputCopy = forwardRef<HTMLDivElement, InputCopyProps>(
       >
         {label && (
           <span
-            className={cn("text-[13px] text-muted-foreground", align === "left" ? "pl-1" : "pl-0")}
+            className={cn("text-[13px] text-muted-foreground pl-3", align === "left" ? "pl-1" : "")}
             style={{ fontVariationSettings: fontWeights.normal }}
           >
             {label}
