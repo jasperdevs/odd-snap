@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useReleases } from "../hooks/useReleases";
 import type { Release, ReleaseAsset } from "../hooks/useReleases";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
@@ -112,12 +114,9 @@ function getArchLabel(name: string): string {
 
 function PrimaryBtn({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a
-      href={href}
-      className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-black text-white text-[13px] hover:bg-black/85 transition-colors"
-    >
-      {children}
-    </a>
+    <Button asChild size="md" variant="primary">
+      <a href={href}>{children}</a>
+    </Button>
   );
 }
 
@@ -139,13 +138,11 @@ function ChevronRight() {
 
 function OutlineBtn({ href, external, children }: { href: string; external?: boolean; children: React.ReactNode }) {
   return (
-    <a
-      href={href}
-      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-black text-black text-[13px] hover:bg-[#EBEBEB] transition-colors"
-    >
-      {children}
-    </a>
+    <Button asChild size="md" variant="tertiary">
+      <a href={href} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+        {children}
+      </a>
+    </Button>
   );
 }
 
@@ -188,9 +185,9 @@ function ReleaseCard({
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <h2 className="text-[16px] text-black">{release.tag_name}</h2>
         {isLatest && (
-          <span className="px-2 py-0.5 rounded-full border border-black text-[11px] text-black">
+          <Badge variant="dot" size="sm" color="green">
             latest
-          </span>
+          </Badge>
         )}
         <span className="text-[13px] text-black/60 ml-auto">
           {formatDate(release.published_at)}
@@ -348,35 +345,35 @@ export default function Downloads() {
 
           {pageCount > 1 && (
             <div className="flex items-center justify-center gap-1 pt-6 mt-2 border-t border-[#EBEBEB]">
-              <button
+              <Button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={safePage === 0}
                 aria-label="previous page"
-                className="w-7 h-7 flex items-center justify-center rounded-md text-black/60 hover:text-black hover:bg-[#EBEBEB] transition-colors disabled:text-black/25 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                size="icon-sm"
+                variant="ghost"
               >
                 <ChevronLeft />
-              </button>
+              </Button>
               {Array.from({ length: pageCount }, (_, i) => (
-                <button
+                <Button
                   key={i}
                   onClick={() => setPage(i)}
-                  className={`w-7 h-7 rounded-md text-[12px] transition-colors ${
-                    i === safePage
-                      ? "bg-black text-white"
-                      : "text-black/60 hover:text-black hover:bg-[#EBEBEB]"
-                  }`}
+                  size="sm"
+                  variant={i === safePage ? "primary" : "ghost"}
+                  className="min-w-8"
                 >
                   {i + 1}
-                </button>
+                </Button>
               ))}
-              <button
+              <Button
                 onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
                 disabled={safePage === pageCount - 1}
                 aria-label="next page"
-                className="w-7 h-7 flex items-center justify-center rounded-md text-black/60 hover:text-black hover:bg-[#EBEBEB] transition-colors disabled:text-black/25 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                size="icon-sm"
+                variant="ghost"
               >
                 <ChevronRight />
-              </button>
+              </Button>
             </div>
           )}
         </>

@@ -8,6 +8,7 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 import { Tabs, TabsList, TabItem, TabPanel } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 
 const features = [
   "region capture",
@@ -205,27 +206,27 @@ export default function Home() {
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {downloadUrl ? (
-            <a
-              href={downloadUrl}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-md bg-black text-white text-[14px] hover:bg-black/85 transition-colors"
-            >
+            <Button asChild size="lg" variant="primary">
+              <a href={downloadUrl}>
+                <WindowsIcon />
+                download for windows
+              </a>
+            </Button>
+          ) : (
+            <Button size="lg" variant="primary" loading>
               <WindowsIcon />
               download for windows
-            </a>
-          ) : (
-            <span className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-md bg-black/40 text-white text-[14px] cursor-wait">
-              <WindowsIcon />
-              loading...
-            </span>
+            </Button>
           )}
-          <a
-            href="https://github.com/jasperdevs/yoink"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center px-5 py-2.5 rounded-md border border-black text-black text-[14px] hover:bg-[#EBEBEB] transition-colors"
-          >
-            source code
-          </a>
+          <Button asChild size="lg" variant="tertiary">
+            <a
+              href="https://github.com/jasperdevs/yoink"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              source code
+            </a>
+          </Button>
         </div>
       </section>
 
