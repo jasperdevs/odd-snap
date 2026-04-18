@@ -142,7 +142,6 @@ function ReleaseCard({
   isLatest: boolean;
   userArch: Arch;
 }) {
-  const [changelogOpen, setChangelogOpen] = useState(false);
   const [extrasOpen, setExtrasOpen] = useState(false);
 
   const exeAssets = release.assets.filter(isExe);
@@ -181,36 +180,6 @@ function ReleaseCard({
         </span>
       </div>
 
-      {hasBody && (
-        <div className="mb-5">
-          <div className="text-[12px] text-black/50 mb-1.5">changelog</div>
-          <div className="rounded-md border border-[#EBEBEB] bg-white overflow-hidden">
-            <div className="relative">
-              <div
-                className="px-4 py-3 overflow-hidden [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-                style={{ maxHeight: changelogOpen ? "none" : 110 }}
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
-              />
-              {!changelogOpen && (
-                <div
-                  className="pointer-events-none absolute inset-x-0 bottom-0 h-14"
-                  style={{
-                    background:
-                      "linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 60%, rgba(255,255,255,1) 100%)",
-                  }}
-                />
-              )}
-            </div>
-          </div>
-          <button
-            onClick={() => setChangelogOpen((v) => !v)}
-            className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4 mt-2"
-          >
-            {changelogOpen ? "show less" : "show more"}
-          </button>
-        </div>
-      )}
-
       <div className="flex flex-col gap-2">
         {sortedExeAssets.map((asset) => {
           const assetArch = getAssetArch(asset.name);
@@ -228,6 +197,19 @@ function ReleaseCard({
           );
         })}
       </div>
+
+      {hasBody && (
+        <div className="mt-5">
+          <h3 className="text-[14px] text-black/70 mb-2">changelog</h3>
+          <div className="rounded-md border border-[#EBEBEB] bg-white overflow-hidden">
+            <div
+              className="px-4 py-3 font-mono changelog-body [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+              style={{ fontFamily: "Consolas, 'Cascadia Mono', 'Fira Code', monospace" }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
+            />
+          </div>
+        </div>
+      )}
 
       {hasExtras && (
         <div className="mt-4">

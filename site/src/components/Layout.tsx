@@ -66,12 +66,11 @@ export default function Layout() {
 
       {/* Top fade, sits directly under the sticky header */}
       <div
-        className="sticky z-40 h-16 pointer-events-none"
+        className="sticky z-40 h-8 pointer-events-none"
         style={{
           top: "calc(3.5rem + env(safe-area-inset-top))",
-          background:
-            "linear-gradient(to bottom, rgba(246,246,246,1) 0%, rgba(246,246,246,0.987) 8.1%, rgba(246,246,246,0.951) 15.5%, rgba(246,246,246,0.896) 22.5%, rgba(246,246,246,0.825) 29%, rgba(246,246,246,0.741) 35.3%, rgba(246,246,246,0.648) 41.2%, rgba(246,246,246,0.55) 47.1%, rgba(246,246,246,0.45) 52.9%, rgba(246,246,246,0.352) 58.8%, rgba(246,246,246,0.259) 64.7%, rgba(246,246,246,0.175) 70.7%, rgba(246,246,246,0.104) 77.5%, rgba(246,246,246,0.049) 84.5%, rgba(246,246,246,0.013) 91.9%, rgba(246,246,246,0) 100%)",
-          marginBottom: "-4rem",
+          background: "linear-gradient(to bottom, #F6F6F6, rgba(246,246,246,0))",
+          marginBottom: "-2rem",
         }}
       />
 
@@ -87,10 +86,9 @@ export default function Layout() {
 
       {/* Bottom fade, fixed above the viewport bottom */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-40 h-24 pointer-events-none"
+        className="fixed bottom-0 left-0 right-0 z-40 h-12 pointer-events-none"
         style={{
-          background:
-            "linear-gradient(to top, rgba(246,246,246,1) 0%, rgba(246,246,246,0.987) 8.1%, rgba(246,246,246,0.951) 15.5%, rgba(246,246,246,0.896) 22.5%, rgba(246,246,246,0.825) 29%, rgba(246,246,246,0.741) 35.3%, rgba(246,246,246,0.648) 41.2%, rgba(246,246,246,0.55) 47.1%, rgba(246,246,246,0.45) 52.9%, rgba(246,246,246,0.352) 58.8%, rgba(246,246,246,0.259) 64.7%, rgba(246,246,246,0.175) 70.7%, rgba(246,246,246,0.104) 77.5%, rgba(246,246,246,0.049) 84.5%, rgba(246,246,246,0.013) 91.9%, rgba(246,246,246,0) 100%)",
+          background: "linear-gradient(to top, #F6F6F6, rgba(246,246,246,0))",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       />

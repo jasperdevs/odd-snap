@@ -142,7 +142,7 @@ function Showcase() {
         ))}
       </div>
 
-      <div className="rounded-md overflow-hidden border border-[#EBEBEB] bg-white">
+      <div className="rounded-xl overflow-hidden border border-[#EBEBEB] bg-white">
         <div className="aspect-[16/10] w-full overflow-hidden relative">
           <div
             className="absolute inset-0 flex"
