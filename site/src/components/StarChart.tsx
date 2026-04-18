@@ -1,6 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { fetchGitHubRepoJson, logGitHubFetchError } from "../lib/github";
-import type { GitHubRepository, GitHubStarEvent } from "../types/github";
 
 interface StarData {
   date: string;
@@ -26,7 +24,7 @@ interface ChartLayout {
 }
 
 const CACHE_KEY = "yoink-star-chart";
-const CACHE_TTL = 24 * 60 * 60 * 1000;
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 function getCachedData(): CachedStarData | null {
   try {
@@ -62,9 +60,10 @@ export default function StarChart() {
       return;
     }
 
-    fetchGitHubRepoJson<GitHubRepository>()
-      .then((payload) => setTotal(payload.stargazers_count))
-      .catch((error) => logGitHubFetchError("star count", error));
+    fetch("https://api.github.com/repos/jasperdevs/yoink")
+      .then((r) => r.json())
+      .then((d) => setTotal(d.stargazers_count))
+      .catch(() => {});
 
     async function fetchStarHistory() {
       const perPage = 100;
@@ -73,17 +72,19 @@ export default function StarChart() {
 
       while (true) {
         try {
-          const batch = await fetchGitHubRepoJson<GitHubStarEvent[]>(
-            `/stargazers?per_page=${perPage}&page=${page}`,
-            { headers: { Accept: "application/vnd.github.v3.star+json" } },
+          const res = await fetch(
+            `https://api.github.com/repos/jasperdevs/yoink/stargazers?per_page=${perPage}&page=${page}`,
+            { headers: { Accept: "application/vnd.github.v3.star+json" } }
           );
+          if (!res.ok) break;
+          const batch = await res.json();
           if (!batch.length) break;
-
-          allStars = allStars.concat(batch.map((item) => ({ date: item.starred_at })));
+          allStars = allStars.concat(
+            batch.map((s: { starred_at: string }) => ({ date: s.starred_at }))
+          );
           if (batch.length < perPage) break;
-          page += 1;
-        } catch (error) {
-          logGitHubFetchError("star history", error);
+          page++;
+        } catch {
           break;
         }
       }
@@ -92,8 +93,9 @@ export default function StarChart() {
 
       const sorted = allStars.sort((a, b) => a.date.localeCompare(b.date));
       const byDate = new Map<string, number>();
-      sorted.forEach((star, index) => {
-        byDate.set(star.date.slice(0, 10), index + 1);
+      sorted.forEach((s, i) => {
+        const day = s.date.slice(0, 10);
+        byDate.set(day, i + 1);
       });
 
       const points: StarData[] = [];
@@ -104,34 +106,31 @@ export default function StarChart() {
         const firstStarDate = new Date(entries[0][0] + "T00:00:00Z");
         const startDate = new Date(firstStarDate);
         startDate.setUTCDate(startDate.getUTCDate() - 1);
-
         const today = new Date();
-        const todayStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
+        const todayStr = today.getUTCFullYear() + "-" + String(today.getUTCMonth() + 1).padStart(2, "0") + "-" + String(today.getUTCDate()).padStart(2, "0");
         const endDate = new Date(todayStr + "T00:00:00Z");
         const dateMap = new Map(entries);
 
         points.push({ date: startDate.toISOString().slice(0, 10), stars: 0 });
 
-        for (let date = new Date(firstStarDate); date <= endDate; date.setUTCDate(date.getUTCDate() + 1)) {
-          const key = date.toISOString().slice(0, 10);
-          if (dateMap.has(key)) {
-            lastCount = dateMap.get(key)!;
-          }
+        for (let d = new Date(firstStarDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+          const key = d.toISOString().slice(0, 10);
+          if (dateMap.has(key)) lastCount = dateMap.get(key)!;
           points.push({ date: key, stars: lastCount });
         }
       }
 
       setData(points);
-      setTotal((previous) => {
-        setCachedData(points, previous);
-        return previous;
+      setTotal((prev) => {
+        setCachedData(points, prev);
+        return prev;
       });
     }
 
     fetchStarHistory();
   }, []);
 
-  const drawChart = useCallback((hoverIndex?: number) => {
+  const drawChart = useCallback((hoverIdx?: number) => {
     const canvas = canvasRef.current;
     if (!canvas || data.length < 2) return;
 
@@ -139,8 +138,7 @@ export default function StarChart() {
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const ctx = canvas.getContext("2d")!;
     ctx.scale(dpr, dpr);
 
     const w = rect.width;
@@ -152,45 +150,51 @@ export default function StarChart() {
     const plotW = w - padL - padR;
     const plotH = h - padT - padB;
 
-    const maxStars = Math.max(...data.map((item) => item.stars));
+    const maxStars = Math.max(...data.map((d) => d.stars));
     const niceMax = Math.ceil(maxStars / 10) * 10 || 10;
+
     layoutRef.current = { padL, padR, padT, padB, plotW, plotH, w, h, niceMax };
 
     ctx.clearRect(0, 0, w, h);
-    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+
+    // Grid lines and Y labels
+    ctx.strokeStyle = "rgba(0,0,0,0.08)";
     ctx.lineWidth = 1;
-    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.font = "10px 'IBM Plex Mono', monospace";
     ctx.textAlign = "right";
-
     const yTicks = 5;
-    for (let index = 0; index <= yTicks; index += 1) {
-      const value = Math.round((niceMax / yTicks) * index);
-      const y = padT + plotH - (index / yTicks) * plotH;
+    for (let i = 0; i <= yTicks; i++) {
+      const val = Math.round((niceMax / yTicks) * i);
+      const y = padT + plotH - (i / yTicks) * plotH;
       ctx.beginPath();
       ctx.moveTo(padL, y);
       ctx.lineTo(w - padR, y);
       ctx.stroke();
-      ctx.fillText(value.toString(), padL - 8, y + 3);
+      ctx.fillText(val.toString(), padL - 8, y + 3);
     }
 
+    // X labels - use UTC to avoid timezone offset issues
     ctx.textAlign = "center";
     const xTicks = Math.min(6, data.length);
-    for (let index = 0; index < xTicks; index += 1) {
-      const pointIndex = Math.round((index / (xTicks - 1)) * (data.length - 1));
-      const x = padL + (pointIndex / (data.length - 1)) * plotW;
-      const parts = data[pointIndex].date.split("-");
-      const monthIndex = parseInt(parts[1], 10) - 1;
+    for (let i = 0; i < xTicks; i++) {
+      const idx = Math.round((i / (xTicks - 1)) * (data.length - 1));
+      const x = padL + (idx / (data.length - 1)) * plotW;
+      const parts = data[idx].date.split("-");
+      const moIdx = parseInt(parts[1], 10) - 1;
       const day = parseInt(parts[2], 10);
-      const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][monthIndex];
-      ctx.fillText(`${month} ${day}`, x, h - padB + 16);
+      const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][moIdx];
+      const label = `${mo} ${day}`;
+      ctx.fillText(label, x, h - padB + 16);
     }
 
-    const points: [number, number][] = data.map((item, index) => [
-      padL + (index / (data.length - 1)) * plotW,
-      padT + plotH - (item.stars / niceMax) * plotH,
+    // Build path points
+    const points: [number, number][] = data.map((d, i) => [
+      padL + (i / (data.length - 1)) * plotW,
+      padT + plotH - (d.stars / niceMax) * plotH,
     ]);
 
+    // Hatching fill
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(points[0][0], padT + plotH);
@@ -199,38 +203,38 @@ export default function StarChart() {
     ctx.closePath();
     ctx.clip();
 
-    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.strokeStyle = "rgba(0,0,0,0.08)";
     ctx.lineWidth = 1;
-    for (let index = -h; index < w + h; index += 6) {
+    const step = 6;
+    for (let i = -h; i < w + h; i += step) {
       ctx.beginPath();
-      ctx.moveTo(index, 0);
-      ctx.lineTo(index + h, h);
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + h, h);
       ctx.stroke();
     }
     ctx.restore();
 
+    // Glow line
     ctx.beginPath();
     ctx.moveTo(points[0][0], points[0][1]);
-    for (let index = 1; index < points.length; index += 1) {
-      ctx.lineTo(points[index][0], points[index][1]);
-    }
-    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+    ctx.strokeStyle = "rgba(0,0,0,0.12)";
     ctx.lineWidth = 4;
     ctx.stroke();
 
+    // Main line
     ctx.beginPath();
     ctx.moveTo(points[0][0], points[0][1]);
-    for (let index = 1; index < points.length; index += 1) {
-      ctx.lineTo(points[index][0], points[index][1]);
-    }
-    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+    ctx.strokeStyle = "rgba(0,0,0,0.75)";
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    if (hoverIndex !== undefined && hoverIndex >= 0 && hoverIndex < points.length) {
-      const [hx, hy] = points[hoverIndex];
+    // Hover crosshair + dot
+    if (hoverIdx !== undefined && hoverIdx >= 0 && hoverIdx < points.length) {
+      const [hx, hy] = points[hoverIdx];
 
-      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      ctx.strokeStyle = "rgba(0,0,0,0.25)";
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
@@ -241,42 +245,34 @@ export default function StarChart() {
 
       ctx.beginPath();
       ctx.arc(hx, hy, 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = "#000";
       ctx.fill();
       ctx.beginPath();
       ctx.arc(hx, hy, 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#0c0c0c";
+      ctx.fillStyle = "#fff";
       ctx.fill();
     }
   }, [data]);
 
-  useEffect(() => {
-    drawChart();
-  }, [drawChart]);
+  useEffect(() => { drawChart(); }, [drawChart]);
 
-  const handleMouseMove = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     const layout = layoutRef.current;
-    if (!canvas || !layout || data.length < 2) {
-      setHover(null);
-      return;
-    }
+    if (!canvas || !layout || data.length < 2) { setHover(null); return; }
 
     const rect = canvas.getBoundingClientRect();
-    const mx = event.clientX - rect.left;
-    const index = Math.round(((mx - layout.padL) / layout.plotW) * (data.length - 1));
-    if (index < 0 || index >= data.length) {
-      setHover(null);
-      drawChart();
-      return;
-    }
+    const mx = e.clientX - rect.left;
 
-    const point = data[index];
-    const x = layout.padL + (index / (data.length - 1)) * layout.plotW;
-    const y = layout.padT + layout.plotH - (point.stars / layout.niceMax) * layout.plotH;
+    const idx = Math.round(((mx - layout.padL) / layout.plotW) * (data.length - 1));
+    if (idx < 0 || idx >= data.length) { setHover(null); drawChart(); return; }
 
-    setHover({ x, y, date: point.date, stars: point.stars });
-    drawChart(index);
+    const pt = data[idx];
+    const px = layout.padL + (idx / (data.length - 1)) * layout.plotW;
+    const py = layout.padT + layout.plotH - (pt.stars / layout.niceMax) * layout.plotH;
+
+    setHover({ x: px, y: py, date: pt.date, stars: pt.stars });
+    drawChart(idx);
   }, [data, drawChart]);
 
   const handleMouseLeave = useCallback(() => {
@@ -284,22 +280,28 @@ export default function StarChart() {
     drawChart();
   }, [drawChart]);
 
-  const label = total !== null ? (total >= 1000 ? `${(total / 1000).toFixed(1)}K` : total.toString()) : "...";
+  const label =
+    total !== null
+      ? total >= 1000
+        ? `${(total / 1000).toFixed(1)}K`
+        : total.toString()
+      : "...";
 
+  // Format tooltip date from the ISO date string directly to avoid timezone issues
   const tooltipDate = hover
     ? (() => {
         const parts = hover.date.split("-");
-        const monthIndex = parseInt(parts[1], 10) - 1;
+        const moIdx = parseInt(parts[1], 10) - 1;
         const day = parseInt(parts[2], 10);
         const year = parts[0];
-        const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][monthIndex];
-        return `${month} ${day}, ${year}`;
+        const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][moIdx];
+        return `${mo} ${day}, ${year}`;
       })()
     : "";
 
   return (
     <div>
-      <div className="site-panel-soft relative overflow-hidden rounded-[1.2rem]">
+      <div className="rounded-lg border border-[#EBEBEB] overflow-hidden bg-white relative">
         <canvas
           ref={canvasRef}
           className="w-full cursor-crosshair"
@@ -307,21 +309,21 @@ export default function StarChart() {
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
         />
-        {hover ? (
+        {hover && (
           <div
-            className="pointer-events-none absolute rounded-[0.9rem] border border-[var(--line-strong)] bg-[rgba(11,14,18,0.96)] px-3 py-2 text-xs"
+            className="absolute pointer-events-none bg-white border border-[#EBEBEB] rounded px-2.5 py-1.5 text-xs shadow-sm"
             style={{
               left: Math.min(hover.x, (layoutRef.current?.w ?? 600) - 140),
               top: Math.max(hover.y - 44, 4),
             }}
           >
-            <span className="text-[var(--soft)]">{tooltipDate}</span>
-            <span className="ml-2 font-semibold text-[var(--text)]">{hover.stars} stars</span>
+            <span className="text-black/60">{tooltipDate}</span>
+            <span className="text-black font-semibold ml-2">{hover.stars} stars</span>
           </div>
-        ) : null}
+        )}
       </div>
-      <p className="mt-3 text-center text-xs text-[var(--soft)]">
-        <span className="font-semibold text-[var(--text)]">{label}</span> GitHub stars
+      <p className="text-xs text-black/50 mt-3 text-center">
+        <span className="text-black font-semibold">{label}</span> GitHub Stars
       </p>
     </div>
   );

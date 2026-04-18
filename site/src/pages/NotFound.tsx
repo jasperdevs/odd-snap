@@ -1,19 +1,14 @@
 import { Link } from "react-router-dom";
-import PageIntro from "../components/PageIntro";
+import { Button } from "@/components/ui/button";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="site-panel-strong max-w-xl p-8 text-center">
-        <PageIntro
-          eyebrow="404"
-          title="That page does not exist."
-          description="The route is missing or the link is stale. Head back to the homepage and keep moving."
-        />
-        <Link to="/" className="button-secondary">
-          Back to home
-        </Link>
-      </div>
+    <div className="flex flex-col items-center justify-center py-32 px-8 text-center">
+      <h1 className="text-6xl font-bold text-black mb-4">404</h1>
+      <p className="text-black/60 text-lg mb-8">Page not found.</p>
+      <Button asChild variant="tertiary" size="lg">
+        <Link to="/">Back to Home</Link>
+      </Button>
     </div>
   );
 }

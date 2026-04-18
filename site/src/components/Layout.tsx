@@ -22,83 +22,68 @@ export default function Layout() {
   const location = useLocation();
 
   return (
-    <div className="site-shell flex flex-col">
-      <header className="site-header">
-        <div className="flex min-h-18 flex-col gap-4 px-6 py-4 sm:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-8">
-              <Link to="/" className="flex items-center gap-3">
-                <span className="support-mark h-11 w-11 rounded-2xl">
-                  <img src={import.meta.env.BASE_URL + "favicon.ico"} alt="Yoink" className="h-6 w-6" />
-                </span>
-                <div className="space-y-0.5">
-                  <div className="font-semibold text-[1.05rem] text-[var(--text)]">Yoink</div>
-                  <div className="text-[0.82rem] text-[var(--muted)]">
-                    Capture, annotate, OCR, and ship.
-                  </div>
-                </div>
-              </Link>
-              <nav className="hidden sm:flex items-center gap-2">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    className={`tag-pill ${
-                      location.pathname === link.to
-                        ? "border-[var(--line-strong)] bg-[rgba(255,255,255,0.06)] text-[var(--text)]"
-                        : "hover:border-[rgba(255,245,231,0.18)] hover:text-[var(--text)]"
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-            <a
-              href="https://github.com/jasperdevs/yoink"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="button-secondary text-sm"
-            >
-              <StarIcon />
-              <span>{stars !== null ? stars.toLocaleString() : "..."}</span>
-            </a>
+    <div className="mx-auto max-w-[900px] min-h-screen flex flex-col bg-white text-black">
+      <header className="sticky top-0 z-50 border-b border-[#EBEBEB] bg-white">
+        <div className="px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <Link to="/" className="flex items-center gap-2.5 font-semibold text-lg text-black">
+              <img src={import.meta.env.BASE_URL + "favicon.ico"} alt="Yoink" className="w-6 h-6" />
+              Yoink
+            </Link>
+            <nav className="hidden sm:flex items-center gap-2">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`px-3 py-1.5 rounded-md text-[15px] transition-colors ${
+                    location.pathname === link.to
+                      ? "text-black bg-[#EBEBEB]"
+                      : "text-black/60 hover:text-black hover:bg-[#EBEBEB]"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
           </div>
-          <nav className="flex flex-wrap items-center gap-2 sm:hidden">
-            {navLinks.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={`tag-pill ${
-                  location.pathname === link.to
-                    ? "border-[var(--line-strong)] bg-[rgba(255,255,255,0.06)] text-[var(--text)]"
-                    : "hover:border-[rgba(255,245,231,0.18)] hover:text-[var(--text)]"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          <a
+            href="https://github.com/jasperdevs/yoink"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-md border border-[#EBEBEB] text-[15px] text-black/70 hover:text-black hover:bg-[#EBEBEB] transition-colors"
+          >
+            <StarIcon />
+            {stars !== null ? stars.toLocaleString() : "..."}
+          </a>
         </div>
+        <nav className="sm:hidden flex items-center gap-1 px-8 pb-3">
+          {navLinks.map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
+              className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                location.pathname === link.to
+                  ? "text-black bg-[#EBEBEB]"
+                  : "text-black/60 hover:text-black"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
       </header>
 
-      <main className="site-main flex-1">
+      <main className="flex-1">
         <Outlet />
       </main>
 
-      <footer className="site-footer">
-        <div className="flex flex-col gap-4 px-6 py-8 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <div>
-            <div className="font-medium text-[var(--text)]">Yoink is open source under GPL-3.0.</div>
-            <div className="text-[var(--subtle)]">
-              A focused Windows toolkit for capture, OCR, recording, and sharing.
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <a href="https://github.com/jasperdevs/yoink" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--text)] transition-colors">GitHub</a>
-            <a href="https://ko-fi.com/jasperdevs" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--text)] transition-colors">Ko-fi</a>
-            <Link to="/downloads" className="hover:text-[var(--text)] transition-colors">Downloads</Link>
-            <Link to="/changelog" className="hover:text-[var(--text)] transition-colors">Changelog</Link>
+      <footer className="border-t border-[#EBEBEB]">
+        <div className="px-8 py-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-[13px] text-black/50">
+          <span>Yoink is open source under the GPL-3.0 license.</span>
+          <div className="flex items-center gap-5">
+            <a href="https://github.com/jasperdevs/yoink" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">GitHub</a>
+            <a href="https://ko-fi.com/jasperdevs" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">Ko-fi</a>
+            <Link to="/changelog" className="hover:text-black transition-colors">Changelog</Link>
           </div>
         </div>
       </footer>
