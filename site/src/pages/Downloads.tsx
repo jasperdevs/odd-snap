@@ -198,21 +198,8 @@ function ReleaseCard({
         })}
       </div>
 
-      {hasBody && (
-        <div className="mt-5">
-          <h3 className="text-[14px] text-black/70 mb-2">changelog</h3>
-          <div className="rounded-md border border-[#EBEBEB] bg-white overflow-hidden">
-            <div
-              className="px-4 py-3 font-mono changelog-body [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-              style={{ fontFamily: "Consolas, 'Cascadia Mono', 'Fira Code', monospace" }}
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
-            />
-          </div>
-        </div>
-      )}
-
       {hasExtras && (
-        <div className="mt-4">
+        <div className="mt-3">
           {!extrasOpen ? (
             <button
               onClick={() => setExtrasOpen(true)}
@@ -252,15 +239,35 @@ function ReleaseCard({
           )}
         </div>
       )}
+
+      {hasBody && (
+        <div className="mt-5">
+          <h3 className="text-[14px] text-black/70 mb-2">changelog</h3>
+          <div className="rounded-md border border-[#EBEBEB] bg-white overflow-hidden">
+            <div
+              className="px-4 py-3 font-mono changelog-body [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+              style={{ fontFamily: "Consolas, 'Cascadia Mono', 'Fira Code', monospace" }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
+const PAGE_SIZE = 5;
+
 export default function Downloads() {
   const { releases, loading } = useReleases();
   const userArch = useMemo(() => detectArch(), []);
+  const [page, setPage] = useState(0);
 
   const windowsReleases = releases.filter((r) => r.assets.some(isWindowsAsset));
+  const pageCount = Math.max(1, Math.ceil(windowsReleases.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const start = safePage * PAGE_SIZE;
+  const pageReleases = windowsReleases.slice(start, start + PAGE_SIZE);
 
   return (
     <div className="py-12">
@@ -284,16 +291,52 @@ export default function Downloads() {
           ))}
         </div>
       ) : (
-        <div>
-          {windowsReleases.map((release, i) => (
-            <ReleaseCard
-              key={release.id}
-              release={release}
-              isLatest={i === 0}
-              userArch={userArch}
-            />
-          ))}
-        </div>
+        <>
+          <div>
+            {pageReleases.map((release, i) => (
+              <ReleaseCard
+                key={release.id}
+                release={release}
+                isLatest={safePage === 0 && i === 0}
+                userArch={userArch}
+              />
+            ))}
+          </div>
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between pt-6 mt-2 border-t border-[#EBEBEB]">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                className="text-[13px] text-black/70 hover:text-black transition-colors disabled:text-black/25 disabled:cursor-not-allowed"
+              >
+                ← previous
+              </button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: pageCount }, (_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setPage(i)}
+                    className={`w-7 h-7 rounded-md text-[12px] transition-colors ${
+                      i === safePage
+                        ? "bg-black text-white"
+                        : "text-black/60 hover:text-black hover:bg-[#EBEBEB]"
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={safePage === pageCount - 1}
+                className="text-[13px] text-black/70 hover:text-black transition-colors disabled:text-black/25 disabled:cursor-not-allowed"
+              >
+                next →
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
