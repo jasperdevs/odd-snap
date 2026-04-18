@@ -142,7 +142,8 @@ function ReleaseCard({
   isLatest: boolean;
   userArch: Arch;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
+  const [extrasOpen, setExtrasOpen] = useState(false);
 
   const exeAssets = release.assets.filter(isExe);
   const zipAssets = release.assets.filter(isZip);
@@ -164,7 +165,7 @@ function ReleaseCard({
   }, [zipAssets, userArch]);
 
   const hasBody = !!release.body?.trim();
-  const hasExtras = zipAssets.length > 0 || !!release.zipball_url || hasBody;
+  const hasExtras = zipAssets.length > 0 || !!release.zipball_url;
 
   return (
     <div className="border-t border-[#EBEBEB] py-6">
@@ -179,6 +180,33 @@ function ReleaseCard({
           {formatDate(release.published_at)}
         </span>
       </div>
+
+      {hasBody && (
+        <div className="mb-5">
+          <div className="relative">
+            <div
+              className="max-w-none overflow-hidden"
+              style={{ maxHeight: changelogOpen ? "none" : 120 }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
+            />
+            {!changelogOpen && (
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
+                style={{
+                  background:
+                    "linear-gradient(to bottom, rgba(246,246,246,0) 0%, rgba(246,246,246,0.6) 50%, rgba(246,246,246,1) 100%)",
+                }}
+              />
+            )}
+          </div>
+          <button
+            onClick={() => setChangelogOpen((v) => !v)}
+            className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4 mt-2"
+          >
+            {changelogOpen ? "show less" : "show more"}
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         {sortedExeAssets.map((asset) => {
@@ -200,50 +228,38 @@ function ReleaseCard({
 
       {hasExtras && (
         <div className="mt-4">
-          {!expanded ? (
+          {!extrasOpen ? (
             <button
-              onClick={() => setExpanded(true)}
+              onClick={() => setExtrasOpen(true)}
               className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4"
             >
-              show changelog
+              more downloads
             </button>
           ) : (
-            <div className="flex flex-col gap-3">
-              {hasBody && (
-                <div
-                  className="max-w-none"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(release.body) }}
-                />
-              )}
-
-              {(sortedZipAssets.length > 0 || release.zipball_url) && (
-                <div className="flex flex-col gap-2 mt-2">
-                  {sortedZipAssets.map((asset) => {
-                    const assetArch = getAssetArch(asset.name);
-                    const isRecommended = assetArch === userArch;
-                    return (
-                      <div key={asset.name} className="flex items-center gap-3 flex-wrap">
-                        <span className="text-[14px] text-black flex-1 min-w-0">
-                          {getArchLabel(asset.name)} (.zip)
-                          {isRecommended && <span className="ml-2 text-black/60 text-[12px]">(recommended)</span>}
-                        </span>
-                        <span className="text-[12px] text-black/60">{formatSize(asset.size)}</span>
-                        <OutlineBtn href={asset.browser_download_url}>download</OutlineBtn>
-                      </div>
-                    );
-                  })}
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-[14px] text-black flex-1 min-w-0">source code</span>
-                    <OutlineBtn href={release.html_url} external>
-                      view on github
-                    </OutlineBtn>
+            <div className="flex flex-col gap-2">
+              {sortedZipAssets.map((asset) => {
+                const assetArch = getAssetArch(asset.name);
+                const isRecommended = assetArch === userArch;
+                return (
+                  <div key={asset.name} className="flex items-center gap-3 flex-wrap">
+                    <span className="text-[14px] text-black flex-1 min-w-0">
+                      {getArchLabel(asset.name)} (.zip)
+                      {isRecommended && <span className="ml-2 text-black/60 text-[12px]">(recommended)</span>}
+                    </span>
+                    <span className="text-[12px] text-black/60">{formatSize(asset.size)}</span>
+                    <OutlineBtn href={asset.browser_download_url}>download</OutlineBtn>
                   </div>
-                </div>
-              )}
-
+                );
+              })}
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-[14px] text-black flex-1 min-w-0">source code</span>
+                <OutlineBtn href={release.html_url} external>
+                  view on github
+                </OutlineBtn>
+              </div>
               <button
-                onClick={() => setExpanded(false)}
-                className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4 text-left"
+                onClick={() => setExtrasOpen(false)}
+                className="text-[13px] text-black/60 hover:text-black transition-colors underline underline-offset-4 text-left mt-1"
               >
                 show less
               </button>
