@@ -18,9 +18,13 @@ export default function Layout() {
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="mx-auto max-w-[800px] px-6 sm:px-8 h-14 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-[15px] text-black">
-            <img src={import.meta.env.BASE_URL + "favicon.ico"} alt="yoink" className="w-5 h-5" />
-            yoink
+          <Link to="/" className="flex items-center text-black" aria-label="OddSnap home">
+            <img
+              src={import.meta.env.BASE_URL + "oddsnap.png"}
+              alt="OddSnap"
+              className="h-5 w-auto max-w-[116px]"
+              style={{ filter: "invert(1)" }}
+            />
           </Link>
           <nav className="hidden sm:flex items-center gap-5 text-[14px]">
             {navLinks.map((link) => (
@@ -38,7 +42,7 @@ export default function Layout() {
             ))}
           </nav>
           <a
-            href="https://github.com/jasperdevs/yoink"
+            href="https://github.com/jasperdevs/odd-snap"
             target="_blank"
             rel="noopener noreferrer"
             className="hidden sm:inline-flex items-center gap-1.5 text-[14px] text-black/60 hover:text-black transition-colors"
@@ -98,9 +102,9 @@ export default function Layout() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="mx-auto max-w-[800px] px-6 sm:px-8 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[13px] text-black/50">
-          <span>yoink is open source under gpl-3.0.</span>
+          <span>oddsnap is open source under gpl-3.0.</span>
           <div className="flex items-center gap-4">
-            <a href="https://github.com/jasperdevs/yoink" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">github</a>
+            <a href="https://github.com/jasperdevs/odd-snap" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">github</a>
             <a href="https://ko-fi.com/jasperdevs" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">ko-fi</a>
             <Link to="/downloads" className="hover:text-black transition-colors">downloads</Link>
           </div>

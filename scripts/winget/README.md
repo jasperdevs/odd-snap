@@ -8,7 +8,7 @@ Release jobs:
 - generate versioned winget manifests from the exact uploaded ZIP hashes
 - attach the manifests to the GitHub release
 
-To submit or update Yoink in the winget community repository, use the generated manifests from the matching release tag.
+To submit or update OddSnap in the winget community repository, use the generated manifests from the matching release tag.
 
 First submission, exact flow:
 

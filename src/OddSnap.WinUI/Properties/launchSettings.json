@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "OddSnap.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "OddSnap.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

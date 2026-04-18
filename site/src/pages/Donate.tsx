@@ -65,8 +65,8 @@ const options = [
   },
   {
     title: "github star",
-    description: "star the repo to help others find yoink.",
-    url: "https://github.com/jasperdevs/yoink",
+    description: "star the repo to help others find oddsnap.",
+    url: "https://github.com/jasperdevs/odd-snap",
     buttonText: "star on github",
     logo: <GitHubLogo />,
   },
@@ -78,7 +78,7 @@ export default function Donate() {
       <div className="mb-8">
         <h1 className="text-[28px] text-black mb-2">donate</h1>
         <p className="text-black/70 leading-relaxed max-w-[60ch]">
-          yoink is free and open source. if you find it useful, consider supporting the project.
+          oddsnap is free and open source. if you find it useful, consider supporting the project.
         </p>
       </div>
 

@@ -1,0 +1,2214 @@
+<Window x:Class="OddSnap.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OddSnap.UI.Controls"
+        Title="OddSnap"
+        Height="660" Width="720"
+        MinHeight="660" MinWidth="720"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen"
+        Background="Transparent"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Icon="pack://application:,,,/oddsnap.ico">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" GlassFrameThickness="0" CornerRadius="12"
+                      ResizeBorderThickness="8" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#FFF0F0F0"/>
+        <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#FF9A9A9A"/>
+        <SolidColorBrush x:Key="ThemeMutedBrush" Color="#FF686868"/>
+        <SolidColorBrush x:Key="ThemeCardBrush" Color="#FF2D2D2D"/>
+        <SolidColorBrush x:Key="ThemeTabActiveBrush" Color="#18FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeTabHoverBrush" Color="#0EFFFFFF"/>
+        <SolidColorBrush x:Key="ThemeInputBackgroundBrush" Color="#FF1E1E1E"/>
+        <SolidColorBrush x:Key="ThemeInputBorderBrush" Color="#15FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#12FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="ThemeSeparatorBrush" Color="#0CFFFFFF"/>
+
+        <Style x:Key="TabPill" TargetType="RadioButton">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Padding="16,7" CornerRadius="7" Cursor="Hand" Background="Transparent">
+                            <TextBlock x:Name="Tb" Text="{TemplateBinding Content}" FontSize="12.5"
+                                       FontFamily="Segoe UI Variable Text"
+                                       Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.55"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabActiveBrush}"/>
+                                <Setter TargetName="Tb" Property="Opacity" Value="1"/>
+                                <Setter TargetName="Tb" Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabHoverBrush}"/>
+                                <Setter TargetName="Tb" Property="Opacity" Value="0.75"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SubTab" TargetType="RadioButton">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Padding="12,5" CornerRadius="6" Cursor="Hand" Background="Transparent">
+                            <TextBlock x:Name="Tb" Text="{TemplateBinding Content}" FontSize="11.5"
+                                       FontFamily="Segoe UI Variable Text"
+                                       Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.5"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabHoverBrush}"/>
+                                <Setter TargetName="Tb" Property="Opacity" Value="0.92"/>
+                                <Setter TargetName="Tb" Property="FontWeight" Value="Medium"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Tb" Property="Opacity" Value="0.75"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
+            <Setter Property="Opacity" Value="0.52"/>
+            <Setter Property="Margin" Value="4,0,0,6"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="TextOptions.TextFormattingMode" Value="Display"/>
+        </Style>
+
+        <Style x:Key="NavItem" TargetType="RadioButton">
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Border x:Name="Bd" Padding="14,9" CornerRadius="7" Cursor="Hand" Background="Transparent"
+                                    Margin="4,1">
+                                <TextBlock x:Name="Tb" Text="{TemplateBinding Content}" FontSize="12.5"
+                                           FontFamily="Segoe UI Variable Text"
+                                           Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.55"/>
+                            </Border>
+                            <Border x:Name="Accent" Width="3" Height="16" CornerRadius="1.5"
+                                    Background="{DynamicResource ThemeAccentBrush}" Opacity="0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="1,0,0,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabActiveBrush}"/>
+                                <Setter TargetName="Tb" Property="Opacity" Value="1"/>
+                                <Setter TargetName="Tb" Property="FontWeight" Value="SemiBold"/>
+                                <Setter TargetName="Accent" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabHoverBrush}"/>
+                                <Setter TargetName="Tb" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="InfoText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
+            <Setter Property="Opacity" Value="0.3"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+
+        <Style TargetType="Button" BasedOn="{StaticResource ChromeButtonBase}">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="MinWidth" Value="40"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+                    <Setter Property="RenderTransform">
+                        <Setter.Value>
+                            <ScaleTransform ScaleX="0.97" ScaleY="0.97"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.45"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+        </Style>
+
+        <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+        </Style>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16,14"/>
+            <Setter Property="Margin" Value="0,0,0,3"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeCardBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeWindowBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <Style x:Key="InlineTagChip" TargetType="Border">
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeTabActiveBrush}"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+        </Style>
+
+        <Style x:Key="InlineTagChipDanger" TargetType="Border" BasedOn="{StaticResource InlineTagChip}">
+            <Setter Property="Background" Value="#30EF4444"/>
+        </Style>
+
+        <Style x:Key="ProviderIconFrame" TargetType="Border">
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeTabActiveBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="ProviderIconImage" TargetType="Image">
+            <Setter Property="Width" Value="16"/>
+            <Setter Property="Height" Value="16"/>
+            <Setter Property="Stretch" Value="Uniform"/>
+        </Style>
+
+        <Style TargetType="{x:Type controls:ProviderSection}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type controls:ProviderSection}">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <DockPanel x:Name="ProviderHeaderRow" Margin="0,0,0,10" LastChildFill="True">
+                                    <ContentControl x:Name="HeaderExtrasHost"
+                                                    DockPanel.Dock="Right"
+                                                    Content="{TemplateBinding HeaderExtras}"
+                                                    VerticalAlignment="Center"/>
+                                    <Image x:Name="ProviderHeaderIcon"
+                                           Source="{TemplateBinding IconSource}"
+                                           Width="18"
+                                           Height="18"
+                                           Stretch="Uniform"
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center"/>
+                                    <TextBlock Text="{TemplateBinding Header}"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               FontFamily="Segoe UI Variable Text"
+                                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                               Opacity="0.55"
+                                               VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <ContentPresenter Content="{TemplateBinding Content}"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Header" Value="{x:Null}">
+                                <Setter TargetName="ProviderHeaderRow" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IconSource" Value="{x:Null}">
+                                <Setter TargetName="ProviderHeaderIcon" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="HeaderExtras" Value="{x:Null}">
+                                <Setter TargetName="HeaderExtrasHost" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Hotkey input textbox -->
+        <Style x:Key="HotkeyBox" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Small clear button -->
+        <Style x:Key="ClearBtn" TargetType="Button">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="5" Background="{DynamicResource ThemeTabHoverBrush}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabActiveBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Window.Resources>
+
+        <Border Margin="1" CornerRadius="12">
+    <Border x:Name="OuterBorder" CornerRadius="12" ClipToBounds="True"
+            BorderThickness="1">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar -->
+        <Border x:Name="TitleBarBorder" Grid.Row="0" Padding="16,8,0,0"
+                CornerRadius="11,11,0,0"
+                MouseLeftButtonDown="TitleBar_MouseDown">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Image Source="pack://application:,,,/oddsnap.ico" Width="16" Height="16"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           VerticalAlignment="Center" Margin="0,0,10,0" Opacity="0.85"/>
+                    <TextBlock x:Name="TitleText" Text="OddSnap" FontSize="12.5" FontWeight="SemiBold"
+                               FontFamily="Segoe UI Variable Display"
+                               Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.85" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-8,0,0">
+                    <Border Width="40" Height="34" CornerRadius="0" Cursor="Hand" Background="Transparent"
+                            MouseLeftButtonDown="MinimizeBtn_Click" MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave">
+                        <Image x:Name="MinimizeTitleIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.8"/>
+                    </Border>
+                    <Border x:Name="CloseTitleBtn" Width="40" Height="34" CornerRadius="0,11,0,0" Cursor="Hand" Background="Transparent"
+                            MouseLeftButtonDown="CloseBtn_Click" MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave">
+                        <Image x:Name="CloseTitleIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.8"/>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Sidebar + Content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="160"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Sidebar navigation -->
+            <Border Grid.Column="0" BorderBrush="{DynamicResource ThemeSeparatorBrush}" BorderThickness="0,0,1,0"
+                    Padding="6,10,6,10">
+                <StackPanel>
+                    <RadioButton x:Name="SettingsTab" Content="General" GroupName="Main"
+                                 IsChecked="True" Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <RadioButton x:Name="ToastTab" Content="Toast" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <RadioButton x:Name="HotkeysTab" Content="Tools" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <RadioButton x:Name="CaptureTab" Content="Capture" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <RadioButton x:Name="RecordingTab" Content="Recording" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <RadioButton x:Name="OcrTab" Content="OCR" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="8,6,8,6"/>
+                    <RadioButton x:Name="HistoryTab" Content="History" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <RadioButton x:Name="UploadsTab" Content="Uploads" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="8,6,8,6"/>
+                    <RadioButton x:Name="AboutTab" Content="About" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Content area -->
+            <Grid Grid.Column="1">
+
+
+            <!-- Tools (unified hotkeys + toolbar) -->
+            <ScrollViewer x:Name="HotkeysPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
+                <StackPanel>
+                    <CheckBox x:Name="ShowToolNumberBadgesCheck" Visibility="Collapsed"
+                              Checked="ShowToolNumberBadgesCheck_Changed" Unchecked="ShowToolNumberBadgesCheck_Changed"/>
+                    <StackPanel x:Name="ToolTogglePanel"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Capture + Saving -->
+            <ScrollViewer x:Name="CapturePanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
+                <StackPanel>
+                    <TextBlock Text="Capture Tool" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource Card}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Default capture tool" FontSize="13" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="DefaultCaptureModeCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                      SelectionChanged="DefaultCaptureModeCombo_SelectionChanged">
+                                <ComboBoxItem Content="Rectangle"/>
+                                <ComboBoxItem Content="Freeform"/>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Text="Overlay" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="ShowCursorCheck" Content="Show cursor in captures" FontSize="13"
+                                      Checked="ShowCursorCheck_Changed" Unchecked="ShowCursorCheck_Changed"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <CheckBox x:Name="CrosshairGuidesCheck" Content="Show crosshair guides" FontSize="13"
+                                      Checked="CrosshairGuidesCheck_Changed" Unchecked="CrosshairGuidesCheck_Changed"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <CheckBox x:Name="ShowCaptureMagnifierCheck" Content="Show pixel magnifier" FontSize="13"
+                                      Checked="ShowCaptureMagnifierCheck_Changed" Unchecked="ShowCaptureMagnifierCheck_Changed"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <CheckBox x:Name="OverlayAllMonitorsCheck" Content="Span screenshot overlay across all monitors" FontSize="13"
+                                      Checked="OverlayAllMonitorsCheck_Changed" Unchecked="OverlayAllMonitorsCheck_Changed"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <CheckBox x:Name="AnnotationStrokeShadowCheck" Content="Annotation stroke and shadow" FontSize="13"
+                                      Checked="AnnotationStrokeShadowCheck_Changed" Unchecked="AnnotationStrokeShadowCheck_Changed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Behavior" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Window detection" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="WindowDetectionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                          SelectionChanged="WindowDetectionCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Off"/>
+                                    <ComboBoxItem Content="Windows only"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Capture dock" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CaptureDockSideCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="CaptureDockSideCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Top"/>
+                                    <ComboBoxItem Content="Bottom"/>
+                                    <ComboBoxItem Content="Left"/>
+                                    <ComboBoxItem Content="Right"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="After capture" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="AfterCaptureCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                          SelectionChanged="AfterCaptureCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Copy to clipboard"/>
+                                    <ComboBoxItem Content="Preview + Copy"/>
+                                    <ComboBoxItem Content="Preview only"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Capture delay" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CaptureDelayCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                          SelectionChanged="CaptureDelayCombo_SelectionChanged">
+                                    <ComboBoxItem Content="None"/>
+                                    <ComboBoxItem Content="3 seconds"/>
+                                    <ComboBoxItem Content="5 seconds"/>
+                                    <ComboBoxItem Content="10 seconds"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Saving" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="SaveToFileCheck" Content="Save screenshots to file" FontSize="13"
+                                      Checked="SaveToFileCheck_Changed" Unchecked="SaveToFileCheck_Changed"/>
+                            <CheckBox x:Name="AskFileNameCheck" Content="Ask for file name every time" FontSize="13" Margin="0,8,0,0"
+                                      Checked="AskFileNameCheck_Changed" Unchecked="AskFileNameCheck_Changed"/>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="File name pattern" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="FileNameTemplateCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="200"
+                                          SelectionChanged="FileNameTemplateCombo_Changed"/>
+                            </Grid>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Default format" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CaptureFormatCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
+                                          SelectionChanged="CaptureFormatCombo_SelectionChanged">
+                                    <ComboBoxItem Content="PNG"/>
+                                    <ComboBoxItem Content="JPG"/>
+                                    <ComboBoxItem Content="BMP"/>
+                                </ComboBox>
+                            </Grid>
+                            <Grid x:Name="JpegQualityPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="JPG quality" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="JpegQualityCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
+                                          SelectionChanged="JpegQualityCombo_SelectionChanged">
+                                    <ComboBoxItem Content="100 - Best" Tag="100"/>
+                                    <ComboBoxItem Content="90 - High" Tag="90"/>
+                                    <ComboBoxItem Content="85 - Balanced" Tag="85"/>
+                                    <ComboBoxItem Content="75 - Smaller" Tag="75"/>
+                                    <ComboBoxItem Content="60 - Tiny" Tag="60"/>
+                                </ComboBox>
+                            </Grid>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Max image size" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CaptureSizeCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
+                                          SelectionChanged="CaptureSizeCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Original" Tag="0"/>
+                                    <ComboBoxItem Content="2160p" Tag="2160"/>
+                                    <ComboBoxItem Content="1440p" Tag="1440"/>
+                                    <ComboBoxItem Content="1080p" Tag="1080"/>
+                                    <ComboBoxItem Content="720p" Tag="720"/>
+                                    <ComboBoxItem Content="480p" Tag="480"/>
+                                </ComboBox>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" x:Name="SaveDirPanel" Visibility="Collapsed">
+                                <TextBox x:Name="SaveDirBox" IsReadOnly="True" FontSize="11" Padding="7,4" Width="280"
+                                          Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <Button Content="Browse" Margin="5,0,0,0" Click="BrowseButton_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="History" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="SaveHistoryCheck" Content="Save capture history" FontSize="13"
+                                      Checked="SaveHistoryCheck_Changed" Unchecked="SaveHistoryCheck_Changed"/>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Auto-clear history" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="HistoryRetentionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="120"
+                                          SelectionChanged="HistoryRetentionCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Never"/>
+                                    <ComboBoxItem Content="1 day"/>
+                                    <ComboBoxItem Content="7 days"/>
+                                    <ComboBoxItem Content="30 days"/>
+                                    <ComboBoxItem Content="3 months"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Recording -->
+            <ScrollViewer x:Name="RecordingPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
+                <StackPanel>
+                    <TextBlock Text="Recording" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="Format" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="RecordingFormatCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="RecordingFormatCombo_Changed">
+                                    <ComboBoxItem Content="GIF"/><ComboBoxItem Content="MP4"/><ComboBoxItem Content="WebM"/><ComboBoxItem Content="MKV"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="Quality" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="RecordingQualityCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="RecordingQualityCombo_Changed">
+                                    <ComboBoxItem Content="Original"/><ComboBoxItem Content="1080p"/><ComboBoxItem Content="720p"/><ComboBoxItem Content="480p"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="FPS" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="RecordingFpsCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="RecordingFpsCombo_Changed">
+                                    <ComboBoxItem Content="15" Tag="15"/><ComboBoxItem Content="24" Tag="24"/>
+                                    <ComboBoxItem Content="30" Tag="30"/><ComboBoxItem Content="60" Tag="60"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <CheckBox x:Name="RecordShowCursorCheck" Content="Show cursor in recordings" FontSize="13"
+                                      Checked="RecordShowCursorCheck_Changed" Unchecked="RecordShowCursorCheck_Changed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock x:Name="AudioSettingsLabel" Text="Audio" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border x:Name="VideoOnlySettings" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="RecordMicCheck" Content="Record microphone" FontSize="13"
+                                      Checked="RecordMicCheck_Changed" Unchecked="RecordMicCheck_Changed"/>
+                            <ComboBox x:Name="MicDeviceCombo" Grid.Column="1" FontSize="11" Padding="8,4" Margin="0,6,0,0"
+                                      SelectionChanged="MicDeviceCombo_Changed"/>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <CheckBox x:Name="RecordDesktopAudioCheck" Content="Record desktop audio" FontSize="13"
+                                      Checked="RecordDesktopAudioCheck_Changed" Unchecked="RecordDesktopAudioCheck_Changed"/>
+                            <ComboBox x:Name="DesktopAudioDeviceCombo" Grid.Column="1" FontSize="11" Padding="8,4" Margin="0,6,0,0"
+                                      SelectionChanged="DesktopAudioDeviceCombo_Changed"/>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- OCR & Translation -->
+            <ScrollViewer x:Name="OcrPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
+                <StackPanel>
+                    <TextBlock Text="Recognition" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource Card}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="OCR language" FontSize="13"/>
+                                <TextBlock x:Name="OcrLanguageStatusText" FontSize="10.5" Opacity="0.35" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <ComboBox x:Name="OcrLanguageCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="180"
+                                      IsEditable="True" IsTextSearchEnabled="False"
+                                      PreviewTextInput="OcrCombo_PreviewTextInput" PreviewKeyDown="OcrCombo_PreviewKeyDown"
+                                      SelectionChanged="OcrLanguageCombo_SelectionChanged"/>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Text="Translation" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Default source language" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="TranslateFromCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                          IsEditable="True" IsTextSearchEnabled="False"
+                                          PreviewTextInput="OcrCombo_PreviewTextInput" PreviewKeyDown="OcrCombo_PreviewKeyDown"
+                                          SelectionChanged="TranslateFromCombo_Changed"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Default target language" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="TranslateToCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="145"
+                                          IsEditable="True" IsTextSearchEnabled="False"
+                                          PreviewTextInput="OcrCombo_PreviewTextInput" PreviewKeyDown="OcrCombo_PreviewKeyDown"
+                                          SelectionChanged="TranslateToCombo_Changed"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Translation engine" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="TranslateModelCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="160"
+                                          SelectionChanged="TranslateModelCombo_Changed">
+                                    <ComboBoxItem Content="Open-source Local" Tag="2"/>
+                                    <ComboBoxItem Content="Argos Translate" Tag="0"/>
+                                    <ComboBoxItem Content="Google Translate" Tag="1"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Engines" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock FontSize="13">
+                                        <Run Text="Open-source Local"/>
+                                        <Run Text=" — fully local" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
+                                    </TextBlock>
+                                    <TextBlock x:Name="OpenSourceLocalStatusText" Text="Checking install state..." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
+                                    <ProgressBar x:Name="OpenSourceLocalProgressBar" Height="3" Margin="0,4,0,0"
+                                                 IsIndeterminate="True" Visibility="Collapsed"/>
+                                </StackPanel>
+                                <Button x:Name="OpenSourceLocalInstallBtn" Grid.Column="1" Content="Install" FontSize="11" Padding="12,5"
+                                        Click="OpenSourceLocalInstallBtn_Click"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock FontSize="13">
+                                        <Hyperlink NavigateUri="https://github.com/argosopentech/argos-translate" RequestNavigate="Hyperlink_Navigate"
+                                                   Foreground="{DynamicResource ThemeAccentBrush}" FontSize="13">Argos Translate</Hyperlink>
+                                        <Run Text=" — local fallback engine" FontSize="11" Foreground="{DynamicResource ThemeMutedBrush}"/>
+                                    </TextBlock>
+                                    <TextBlock x:Name="ArgosStatusText" Text="Checking install state..." FontSize="11" Opacity="0.45" Margin="0,2,0,0"/>
+                                    <ProgressBar x:Name="ArgosProgressBar" Height="3" Margin="0,4,0,0"
+                                                 IsIndeterminate="True" Visibility="Collapsed"/>
+                                </StackPanel>
+                                <Button x:Name="ArgosInstallBtn" Grid.Column="1" Content="Install" FontSize="11" Padding="12,5"
+                                        Click="ArgosInstallBtn_Click"/>
+                            </Grid>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Google Translate API key" FontSize="13" VerticalAlignment="Center"/>
+                                <TextBox x:Name="GoogleApiKeyBox" Grid.Column="1" FontSize="11" Padding="7,5" MinWidth="200"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}"
+                                         Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                         BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                         TextChanged="GoogleApiKeyBox_Changed"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Toolbar -->
+            <!-- Toolbar panel removed — merged into Hotkeys panel above -->
+
+            <!-- About panel placeholder - content is below -->
+
+            <!-- General panel content gets populated from the XAML below -->
+            <!-- We need to close and reopen for the General section -->
+            <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
+                <StackPanel>
+                    <TextBlock Text="Sound &amp; Motion" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="MuteSoundsCheck" Content="Mute capture sounds" FontSize="13"
+                                      Checked="MuteSoundsCheck_Changed" Unchecked="MuteSoundsCheck_Changed"/>
+                            <CheckBox x:Name="DisableAnimationsCheck" Content="Disable animations" FontSize="13" Margin="0,6,0,0"
+                                      Checked="DisableAnimationsCheck_Changed" Unchecked="DisableAnimationsCheck_Changed"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Sound pack" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="SoundPackCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="SoundPackCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Default"/>
+                                    <ComboBoxItem Content="Soft"/>
+                                    <ComboBoxItem Content="Retro"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Search" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border x:Name="GeneralImageSearchSettingsCard" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="ShowImageSearchBarCheck" Content="Show image search bar" FontSize="13"
+                                      Checked="ShowImageSearchBarCheck_Changed" Unchecked="ShowImageSearchBarCheck_Changed"/>
+                            <CheckBox x:Name="AutoIndexImagesCheck" Content="Auto-index images" FontSize="13" Margin="0,6,0,0"
+                                      Checked="AutoIndexImagesCheck_Changed" Unchecked="AutoIndexImagesCheck_Changed"/>
+                            <CheckBox x:Name="ShowImageSearchDiagnosticsCheck" Content="Show search diagnostics" FontSize="13" Margin="0,6,0,0"
+                                      Checked="ShowImageSearchDiagnosticsCheck_Changed" Unchecked="ShowImageSearchDiagnosticsCheck_Changed"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Image index cache" FontSize="13" VerticalAlignment="Center"/>
+                                <Button x:Name="ResetImageIndexesBtn" Grid.Column="1" Content="Reset" FontSize="11" Padding="10,5"
+                                        Margin="8,0,0,0" Click="ResetImageIndexesBtn_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+
+            <ScrollViewer x:Name="ToastPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18"
+                          PreviewMouseMove="ToastPanel_PreviewMouseMove"
+                          PreviewMouseLeftButtonUp="ToastPanel_PreviewMouseLeftButtonUp">
+                <StackPanel>
+                    <TextBlock Text="Placement" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Toast position" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="ToastPositionCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="ToastPositionCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Right"/>
+                                    <ComboBoxItem Content="Left"/>
+                                    <ComboBoxItem Content="Top Left"/>
+                                    <ComboBoxItem Content="Top Right"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Toast duration" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="ToastDurationCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="ToastDurationCombo_SelectionChanged">
+                                    <ComboBoxItem Content="1.5 seconds" Tag="1.5"/>
+                                    <ComboBoxItem Content="2 seconds" Tag="2"/>
+                                    <ComboBoxItem Content="2.5 seconds" Tag="2.5"/>
+                                    <ComboBoxItem Content="3 seconds" Tag="3"/>
+                                    <ComboBoxItem Content="4 seconds" Tag="4"/>
+                                    <ComboBoxItem Content="5 seconds" Tag="5"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Behavior" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="AutoPinPreviewsCheck" Content="Auto-pin screenshot previews" FontSize="13"
+                                      Checked="AutoPinPreviewsCheck_Changed" Unchecked="AutoPinPreviewsCheck_Changed"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+                            <CheckBox x:Name="ToastFadeOutCheck" Content="Fade out instead of sliding away" FontSize="13"
+                                      Checked="ToastFadeOutCheck_Changed" Unchecked="ToastFadeOutCheck_Changed"/>
+                            <Grid x:Name="ToastFadeDurationRow" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Fade-out duration" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="ToastFadeDurationCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="125"
+                                          SelectionChanged="ToastFadeDurationCombo_SelectionChanged">
+                                    <ComboBoxItem Content="1 second" Tag="1"/>
+                                    <ComboBoxItem Content="2 seconds" Tag="2"/>
+                                    <ComboBoxItem Content="3 seconds" Tag="3"/>
+                                    <ComboBoxItem Content="5 seconds" Tag="5"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Overlay Buttons" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Drag buttons to move them. You can also select one, then click a slot or another button." FontSize="13" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="ToastEditorSelectionText" Text="Selected: Close" Style="{StaticResource InfoText}" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <Button x:Name="ResetToastButtonsBtn" Grid.Column="1" Content="Reset Layout" FontSize="11" Padding="10,5"
+                                        Margin="8,0,0,0" Click="ResetToastButtonsBtn_Click"/>
+                            </Grid>
+
+                            <Border Margin="0,14,0,0"
+                                    CornerRadius="12"
+                                    BorderBrush="{DynamicResource ThemeInputBorderBrush}"
+                                    BorderThickness="1"
+                                    Background="{DynamicResource ThemeInputBackgroundBrush}"
+                                    Padding="16">
+                                <Grid x:Name="ToastEditorSurfaceRoot">
+                                    <StackPanel x:Name="ToastEditorStack" Width="356" HorizontalAlignment="Center">
+                                    <Border Width="356" Height="256" CornerRadius="18"
+                                            Background="#12000000"
+                                            BorderBrush="{DynamicResource ThemeWindowBorderBrush}"
+                                            BorderThickness="1">
+                                        <Grid x:Name="ToastEditorPreviewSurface">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="4"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Border Grid.Row="0" Margin="12,12,12,0" CornerRadius="14,14,10,10" Background="#D35A93E6">
+                                                <Grid>
+                                                    <Border x:Name="ToastSlotTopLeft"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                            Margin="8,8,0,0"
+                                                            Background="Transparent" BorderBrush="#2DFFFFFF" BorderThickness="1"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorSlot_MouseLeftButtonDown"
+                                                            DragEnter="ToastEditorSlot_DragEnter"
+                                                            DragOver="ToastEditorSlot_DragOver"
+                                                            DragLeave="ToastEditorSlot_DragLeave"
+                                                            Drop="ToastEditorSlot_Drop"
+                                                            Tag="TopLeft"/>
+                                                    <Border x:Name="ToastSlotTopInnerLeft"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                            Margin="48,8,0,0"
+                                                            Background="Transparent" BorderBrush="#2DFFFFFF" BorderThickness="1"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorSlot_MouseLeftButtonDown"
+                                                            DragEnter="ToastEditorSlot_DragEnter"
+                                                            DragOver="ToastEditorSlot_DragOver"
+                                                            DragLeave="ToastEditorSlot_DragLeave"
+                                                            Drop="ToastEditorSlot_Drop"
+                                                            Tag="TopInnerLeft"/>
+                                                    <Border x:Name="ToastSlotTopInnerRight"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                            Margin="0,8,48,0"
+                                                            Background="Transparent" BorderBrush="#2DFFFFFF" BorderThickness="1"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorSlot_MouseLeftButtonDown"
+                                                            DragEnter="ToastEditorSlot_DragEnter"
+                                                            DragOver="ToastEditorSlot_DragOver"
+                                                            DragLeave="ToastEditorSlot_DragLeave"
+                                                            Drop="ToastEditorSlot_Drop"
+                                                            Tag="TopInnerRight"/>
+                                                    <Border x:Name="ToastSlotTopRight"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                            Margin="0,8,8,0"
+                                                            Background="Transparent" BorderBrush="#2DFFFFFF" BorderThickness="1"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorSlot_MouseLeftButtonDown"
+                                                            DragEnter="ToastEditorSlot_DragEnter"
+                                                            DragOver="ToastEditorSlot_DragOver"
+                                                            DragLeave="ToastEditorSlot_DragLeave"
+                                                            Drop="ToastEditorSlot_Drop"
+                                                            Tag="TopRight"/>
+                                                    <Border x:Name="ToastSlotBottomLeft"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                                            Margin="8,0,0,8"
+                                                            Background="Transparent" BorderBrush="#2DFFFFFF" BorderThickness="1"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorSlot_MouseLeftButtonDown"
+                                                            DragEnter="ToastEditorSlot_DragEnter"
+                                                            DragOver="ToastEditorSlot_DragOver"
+                                                            DragLeave="ToastEditorSlot_DragLeave"
+                                                            Drop="ToastEditorSlot_Drop"
+                                                            Tag="BottomLeft"/>
+                                                    <Border x:Name="ToastSlotBottomInnerLeft"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                                            Margin="48,0,0,8"
+                                                            Background="Transparent" BorderBrush="#2DFFFFFF" BorderThickness="1"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorSlot_MouseLeftButtonDown"
+                                                            DragEnter="ToastEditorSlot_DragEnter"
+                                                            DragOver="ToastEditorSlot_DragOver"
+                                                            DragLeave="ToastEditorSlot_DragLeave"
+                                                            Drop="ToastEditorSlot_Drop"
+                                                            Tag="BottomInnerLeft"/>
+                                                    <Border x:Name="ToastSlotBottomInnerRight"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                            Margin="0,0,48,8"
+                                                            Background="Transparent" BorderBrush="#2DFFFFFF" BorderThickness="1"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorSlot_MouseLeftButtonDown"
+                                                            DragEnter="ToastEditorSlot_DragEnter"
+                                                            DragOver="ToastEditorSlot_DragOver"
+                                                            DragLeave="ToastEditorSlot_DragLeave"
+                                                            Drop="ToastEditorSlot_Drop"
+                                                            Tag="BottomInnerRight"/>
+                                                    <Border x:Name="ToastSlotBottomRight"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                            Margin="0,0,8,8"
+                                                            Background="Transparent" BorderBrush="#2DFFFFFF" BorderThickness="1"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorSlot_MouseLeftButtonDown"
+                                                            DragEnter="ToastEditorSlot_DragEnter"
+                                                            DragOver="ToastEditorSlot_DragOver"
+                                                            DragLeave="ToastEditorSlot_DragLeave"
+                                                            Drop="ToastEditorSlot_Drop"
+                                                            Tag="BottomRight"/>
+
+                                                    <Border x:Name="ToastEditorCloseBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastEditorButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastEditorButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastEditorButton_DragEnter"
+                                                            Drop="ToastEditorButton_Drop"
+                                                            Tag="Close">
+                                                        <Image x:Name="ToastEditorCloseIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <Border x:Name="ToastEditorPinBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastEditorButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastEditorButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastEditorButton_DragEnter"
+                                                            Drop="ToastEditorButton_Drop"
+                                                            Tag="Pin">
+                                                        <Image x:Name="ToastEditorPinIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <Border x:Name="ToastEditorSaveBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastEditorButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastEditorButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastEditorButton_DragEnter"
+                                                            Drop="ToastEditorButton_Drop"
+                                                            Tag="Save">
+                                                        <Image x:Name="ToastEditorSaveIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <Border x:Name="ToastEditorAiRedirectBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastEditorButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastEditorButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastEditorButton_DragEnter"
+                                                            Drop="ToastEditorButton_Drop"
+                                                            Tag="AiRedirect">
+                                                        <Image x:Name="ToastEditorAiRedirectIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <Border x:Name="ToastEditorDeleteBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastEditorButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastEditorButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastEditorButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastEditorButton_DragEnter"
+                                                            Drop="ToastEditorButton_Drop"
+                                                            Tag="Delete">
+                                                        <Image x:Name="ToastEditorDeleteIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="14,10,14,8">
+                                                <Border Width="30" Height="30" CornerRadius="9" Background="#12FFFFFF" Margin="0,0,12,0"/>
+                                                <StackPanel>
+                                                    <TextBlock Text="Screenshot saved" FontSize="12.5" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                                    <TextBlock Text="Preview toast with overlay buttons." FontSize="11.5" Opacity="0.62"
+                                                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <Border Grid.Row="2" Margin="12,0,12,12" CornerRadius="2" Background="#65FFFFFF"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Width="356" Margin="0,14,0,0"
+                                            CornerRadius="14"
+                                            Background="#10000000"
+                                            BorderBrush="{DynamicResource ThemeWindowBorderBrush}"
+                                            BorderThickness="1"
+                                            Padding="12">
+                                        <StackPanel>
+                                            <TextBlock Text="Shelf" FontSize="12.5" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                                            <TextBlock Text="Hidden buttons live here. Drag one back out or select it, then click a slot." Style="{StaticResource InfoText}" Margin="0,4,0,10"/>
+
+                                            <Border x:Name="ToastHiddenShelf"
+                                                    CornerRadius="12"
+                                                    Background="#12000000"
+                                                    BorderBrush="{DynamicResource ThemeInputBorderBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="10"
+                                                    MinHeight="68"
+                                                    AllowDrop="True"
+                                                    DragEnter="ToastShelf_DragEnter"
+                                                    DragOver="ToastShelf_DragOver"
+                                                    DragLeave="ToastShelf_DragLeave"
+                                                    Drop="ToastShelf_Drop">
+                                                <Grid>
+                                                    <Border x:Name="ToastHiddenShelfDropCue"
+                                                            CornerRadius="10"
+                                                            Background="#34FFFFFF"
+                                                            BorderBrush="#C8FFFFFF"
+                                                            BorderThickness="1.8"
+                                                            Visibility="Collapsed"
+                                                            Margin="-2">
+                                                        <TextBlock Text="Drop Here To Store"
+                                                                   FontSize="11.5"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <TextBlock x:Name="ToastHiddenShelfEmpty"
+                                                               Text="No hidden buttons. Drag one here to store it."
+                                                               Style="{StaticResource InfoText}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                    <WrapPanel x:Name="ToastHiddenButtonsPanel"/>
+                                                </Grid>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+                                    </StackPanel>
+
+                                    <Canvas x:Name="ToastDragLayer" IsHitTestVisible="False" Panel.ZIndex="50">
+                                        <Border x:Name="ToastDragGhost"
+                                                Width="30" Height="30" CornerRadius="9"
+                                                Background="#D0202020"
+                                                BorderBrush="#C0FFFFFF"
+                                                BorderThickness="1.6"
+                                                Visibility="Collapsed"
+                                                Opacity="0.92">
+                                            <Viewbox Width="14" Height="14" Stretch="Uniform">
+                                                <Grid x:Name="ToastDragGhostGlyphHost"/>
+                                            </Viewbox>
+                                        </Border>
+                                    </Canvas>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- About -->
+            <ScrollViewer x:Name="AboutPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
+                <StackPanel>
+                    <TextBlock Text="Updates" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="AutoUpdateCheck" Content="Automatically check for updates" FontSize="13"
+                                      Checked="AutoUpdateCheck_Changed" Unchecked="AutoUpdateCheck_Changed"/>
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="UpdateStatusText" Text="Checking for updates..." FontSize="12.5" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="UpdateDetailText" Text="" FontSize="11" Opacity="0.35" TextWrapping="Wrap" Margin="0,2,8,0"/>
+                                </StackPanel>
+                                <Button x:Name="CheckUpdatesButton" Grid.Column="1" Content="Check now" FontSize="11" Padding="10,5" Margin="8,0,0,0" Click="CheckUpdatesButton_Click"/>
+                                <Button x:Name="DownloadUpdateButton" Grid.Column="2" Content="Open release" FontSize="11" Padding="10,5" Margin="6,0,0,0" Visibility="Collapsed" Click="DownloadUpdateButton_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Links" Style="{StaticResource SectionLabel}" Margin="0,16,0,0"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,6">
+                                <Hyperlink NavigateUri="https://github.com/jasperdevs/odd-snap" RequestNavigate="Hyperlink_Navigate"
+                                           Foreground="{DynamicResource ThemeAccentBrush}" FontSize="12">Source Code</Hyperlink>
+                                <Run Text=" — GitHub repository" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                            </TextBlock>
+                            <TextBlock Margin="0,0,0,6">
+                                <Hyperlink NavigateUri="https://github.com/jasperdevs/odd-snap/releases/latest" RequestNavigate="Hyperlink_Navigate"
+                                           Foreground="{DynamicResource ThemeAccentBrush}" FontSize="12">Releases</Hyperlink>
+                                <Run Text=" — Download the latest version" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                            </TextBlock>
+                            <TextBlock Margin="0,0,0,6">
+                                <Hyperlink NavigateUri="https://github.com/jasperdevs/odd-snap/issues" RequestNavigate="Hyperlink_Navigate"
+                                           Foreground="{DynamicResource ThemeAccentBrush}" FontSize="12">Issues</Hyperlink>
+                                <Run Text=" — Report bugs or request features" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                            </TextBlock>
+                            <TextBlock>
+                                <Hyperlink NavigateUri="https://github.com/jasperdevs/odd-snap/blob/main/LICENSE" RequestNavigate="Hyperlink_Navigate"
+                                           Foreground="{DynamicResource ThemeAccentBrush}" FontSize="12">License</Hyperlink>
+                                <Run Text=" — MIT" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock x:Name="VersionText" FontSize="10.5" Opacity="0.22" HorizontalAlignment="Center" Margin="0,20,0,6"/>
+
+                    <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,12,0,12"/>
+
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <CheckBox x:Name="StartWithWindowsCheck" Grid.Row="0" Content="Launch on startup" FontSize="13"
+                                  VerticalAlignment="Center"
+                                  Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
+
+                        <WrapPanel Grid.Row="1" Margin="0,12,0,0" Orientation="Horizontal">
+                            <Button Content="Reset Settings" FontSize="12" Padding="10,6" MinWidth="108"
+                                    HorizontalAlignment="Left" Click="ResetSettingsButton_Click" Margin="0,0,10,10"/>
+                            <Button Content="Uninstall OddSnap" FontSize="12" Padding="10,6" MinWidth="108"
+                                    HorizontalAlignment="Left" Click="UninstallButton_Click" Margin="0,0,10,10"/>
+                            <Button Content="Export settings" FontSize="12" Padding="10,6" MinWidth="108"
+                                    Margin="0,0,10,10" Click="ExportSettingsButton_Click"/>
+                            <Button Content="Import settings" FontSize="12" Padding="10,6" MinWidth="108"
+                                    Margin="0,0,10,10" Click="ImportSettingsButton_Click"/>
+                        </WrapPanel>
+                    </Grid>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- History (merged: Screenshots + Text sub-tabs) -->
+            <Grid x:Name="HistoryPanel" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Category dropdown + actions -->
+                <Border Grid.Row="0" Padding="10,6,10,6">
+                    <StackPanel>
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Stretch">
+                                <Button x:Name="SelectBtn" Content="Select" FontSize="12" Padding="10,0"
+                                         Margin="0,0,4,0" VerticalAlignment="Stretch" MinHeight="0" Click="ToggleSelectMode"/>
+                                <Button x:Name="DeleteAllBtn" Content="Clear all" FontSize="12" Padding="10,0"
+                                        VerticalAlignment="Stretch" MinHeight="0" Click="DeleteAllClick"/>
+                                <Button x:Name="DeleteSelectedBtn" Content="Delete selected" FontSize="12"
+                                         Padding="10,0" Margin="4,0,0,0" VerticalAlignment="Stretch" MinHeight="0" Visibility="Collapsed" Click="DeleteSelectedClick"/>
+                            </StackPanel>
+                            <ComboBox x:Name="HistoryCategoryCombo" FontSize="12" Padding="8,5" MinWidth="130" Margin="0,0,8,0"
+                                      VerticalAlignment="Center" SelectionChanged="HistoryCategoryCombo_Changed"
+                                      PreviewMouseLeftButtonDown="HistoryCategoryCombo_PreviewMouseLeftButtonDown">
+                                <ComboBoxItem Content="Images" IsSelected="True"/>
+                                <ComboBoxItem Content="Text"/>
+                                <ComboBoxItem Content="Videos/GIFs"/>
+                                <ComboBoxItem Content="Colors"/>
+                                <ComboBoxItem Content="Stickers"/>
+                            </ComboBox>
+                        </DockPanel>
+
+                        <Grid x:Name="ImageSearchRow" Margin="0,8,0,0" Visibility="Visible">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                            <Border Background="{DynamicResource ThemeInputBackgroundBrush}"
+                                    BorderBrush="{DynamicResource ThemeInputBorderBrush}"
+                                    BorderThickness="1" CornerRadius="7" Padding="10,6">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Image x:Name="ImageSearchIcon" Width="14" Height="14" Stretch="Uniform"
+                                               VerticalAlignment="Center" Opacity="0.35"/>
+                                        <Grid Grid.Column="1" Margin="8,0,0,0">
+                                            <TextBox x:Name="ImageSearchBox" BorderThickness="0" Background="Transparent"
+                                                     FontSize="12" Padding="0" MinHeight="0" Height="20" VerticalContentAlignment="Center"
+                                                     TextChanged="ImageSearchBox_TextChanged"
+                                                     PreviewKeyDown="ImageSearchBox_PreviewKeyDown"
+                                                     GotKeyboardFocus="ImageSearchBox_FocusChanged"
+                                                     LostKeyboardFocus="ImageSearchBox_FocusChanged"/>
+                                            <TextBlock x:Name="ImageSearchPlaceholder" Text="Search screenshots, OCR text, or filenames..."
+                                                       FontSize="12" Opacity="0.28" VerticalAlignment="Center"
+                                                       IsHitTestVisible="False" Margin="0,0,0,0"/>
+                                        </Grid>
+                                    </Grid>
+
+                                    <TextBlock x:Name="ImageSearchFiltersSummaryText" Visibility="Collapsed"/>
+                                    <StackPanel x:Name="ReindexAllProgressPanel" Orientation="Horizontal" Visibility="Collapsed">
+                                        <ProgressBar x:Name="ReindexAllProgressBar" Width="60" Height="3" IsIndeterminate="True" Visibility="Collapsed"/>
+                                        <Button x:Name="ReindexAllBtn" Content="Index" FontSize="10.5" Padding="10,3" Click="ReindexAllBtn_Click"/>
+                                    </StackPanel>
+                                    <ProgressBar x:Name="ImageSearchLoadingBar" Width="110" Height="3"
+                                                 IsIndeterminate="True" Visibility="Collapsed"
+                                                 Margin="22,6,0,0" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                            </StackPanel>
+                            <Button x:Name="ImageSearchFiltersBtn" Grid.Column="1" Content="Filters" FontSize="10.5" Padding="10,3"
+                                    Margin="8,0,0,0" VerticalAlignment="Stretch" Click="ImageSearchFiltersBtn_Click">
+                                <Button.ContextMenu>
+                                    <ContextMenu x:Name="ImageSearchFiltersMenu" Placement="Bottom">
+                                        <MenuItem x:Name="ImageSearchFileNameCheck" Header="File name" IsCheckable="True"
+                                                  Checked="ImageSearchSourcesCheck_Changed" Unchecked="ImageSearchSourcesCheck_Changed"/>
+                                        <MenuItem x:Name="ImageSearchOcrCheck" Header="OCR text" IsCheckable="True"
+                                                  Checked="ImageSearchSourcesCheck_Changed" Unchecked="ImageSearchSourcesCheck_Changed"/>
+                                        <Separator/>
+                                        <MenuItem x:Name="ImageSearchExactMatchCheck" Header="Exact match" IsCheckable="True"
+                                                  ToolTip="Require exact phrase/token matches"
+                                                  Checked="ImageSearchExactMatchCheck_Changed" Unchecked="ImageSearchExactMatchCheck_Changed"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+                        </Grid>
+
+                    </StackPanel>
+                </Border>
+
+                <!-- Images history -->
+                <ScrollViewer x:Name="ImagesPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10,2,10,4"
+                              ScrollChanged="HistoryPanel_ScrollChanged">
+                    <StackPanel x:Name="HistoryStack"/>
+                </ScrollViewer>
+
+                <!-- Videos / GIF history -->
+                <ScrollViewer x:Name="GifsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10,2,10,4"
+                              ScrollChanged="GifPanel_ScrollChanged"
+                              Visibility="Collapsed">
+                    <StackPanel x:Name="GifStack"/>
+                </ScrollViewer>
+
+                <!-- Text history -->
+                <ScrollViewer x:Name="TextPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              Padding="14,2,14,14" Visibility="Collapsed"
+                              ScrollChanged="OcrPanel_ScrollChanged">
+                    <StackPanel x:Name="OcrStack"/>
+                </ScrollViewer>
+
+                <!-- Color history -->
+                <ScrollViewer x:Name="ColorsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              Padding="14,2,14,14" Visibility="Collapsed"
+                              ScrollChanged="ColorsPanel_ScrollChanged">
+                    <StackPanel x:Name="ColorStack"/>
+                </ScrollViewer>
+
+                <!-- Sticker history -->
+                <ScrollViewer x:Name="StickersPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              Padding="10,2,10,4" Visibility="Collapsed"
+                              ScrollChanged="StickerPanel_ScrollChanged">
+                    <StackPanel x:Name="StickerStack"/>
+                </ScrollViewer>
+
+                <!-- Empty states -->
+                <StackPanel x:Name="HistoryEmptyText" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Visibility="Collapsed" Margin="0,0,0,40">
+                    <TextBlock Text="No items" FontSize="16" FontFamily="Segoe UI Variable Text" FontWeight="SemiBold" HorizontalAlignment="Center" Opacity="0.15"/>
+                    <TextBlock x:Name="HistoryEmptyLabel" Text="No captures yet" FontSize="13" FontFamily="Segoe UI Variable Text"
+                               Opacity="0.3" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                </StackPanel>
+
+                <!-- Bottom bar -->
+                <Border Grid.Row="2" Padding="14,4,14,8">
+                    <DockPanel LastChildFill="False">
+                        <TextBlock x:Name="HistoryCountText" FontSize="11" Opacity="0.4" VerticalAlignment="Center"
+                                   DockPanel.Dock="Left"/>
+                        <TextBlock x:Name="HistorySearchStatusText" FontSize="11" Opacity="0.35" VerticalAlignment="Center"
+                                   HorizontalAlignment="Right" Margin="12,0,0,0"/>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- Uploads -->
+            <ScrollViewer x:Name="UploadsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" Padding="18,4,18,18">
+                <StackPanel>
+                    <Border Padding="0,0,0,10">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="UploadImagesSubTab" Content="Images" GroupName="UploadSub"
+                                         IsChecked="True" Click="UploadSubTabChanged" Style="{StaticResource SubTab}"/>
+                            <RadioButton x:Name="UploadAiRedirectsSubTab" Content="AI Redirects" GroupName="UploadSub"
+                                         Click="UploadSubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
+                            <RadioButton x:Name="UploadStickersSubTab" Content="Stickers" GroupName="UploadSub"
+                                         Click="UploadSubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
+                            <RadioButton x:Name="UploadUpscaleSubTab" Content="Upscale" GroupName="UploadSub"
+                                         Click="UploadSubTabChanged" Margin="2,0,0,0" Style="{StaticResource SubTab}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel x:Name="ImageUploadsPanel">
+                    <TextBlock Text="Destination" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Upload service" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="UploadDestCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="320" MaxDropDownHeight="280"
+                                          SelectionChanged="UploadDestCombo_Changed">
+                                    <ComboBoxItem Content="None" Tag="0"/>
+                                    <ComboBoxItem Content="Recommended: free/no-setup filter" Tag="21"/>
+                                    <ComboBoxItem Content="Litterbox (temp)" Tag="4"/>
+                                    <ComboBoxItem Content="tmpfiles.org (temp)" Tag="22"/>
+                                    <ComboBoxItem Content="Uguu (temp)" Tag="7"/>
+                                    <ComboBoxItem Content="Gofile (free)" Tag="23"/>
+                                    <ComboBoxItem Content="Catbox (free)" Tag="3"/>
+                                    <ComboBoxItem Content="file.io (temp)" Tag="6"/>
+                                    <ComboBoxItem Content="Imgur (API/client ID)" Tag="1"/>
+                                    <ComboBoxItem Content="ImgBB (API key)" Tag="2"/>
+                                    <ComboBoxItem Content="imgpile (API token)" Tag="24"/>
+                                    <ComboBoxItem Content="Gyazo (API token)" Tag="5"/>
+                                    <ComboBoxItem Content="Dropbox" Tag="9"/>
+                                    <ComboBoxItem Content="Google Drive" Tag="10"/>
+                                    <ComboBoxItem Content="OneDrive" Tag="11"/>
+                                    <ComboBoxItem Content="Azure Blob" Tag="12"/>
+                                    <ComboBoxItem Content="GitHub" Tag="13"/>
+                                    <ComboBoxItem Content="Immich" Tag="14"/>
+                                    <ComboBoxItem Content="FTP" Tag="15"/>
+                                    <ComboBoxItem Content="SFTP" Tag="16"/>
+                                    <ComboBoxItem Content="WebDAV" Tag="17"/>
+                                    <ComboBoxItem Content="S3 / R2 / B2" Tag="18"/>
+                                    <ComboBoxItem Content="Custom HTTP" Tag="19"/>
+                                </ComboBox>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Imgur settings -->
+                    <controls:ProviderSection x:Name="ImgurSettings" Header="IMGUR" IconSource="pack://application:,,,/Assets/imgur_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="PNG" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="JPG" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="GIF" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <TextBlock Text="  20MB images · 200MB GIF · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Client ID" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="ImgurClientIdBox" FontSize="11" Padding="7,4"
+                                     ToolTip="Optional — has built-in default for anonymous uploads"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="ImgurClientIdBox_Changed"/>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <TextBlock Text="Access token" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="ImgurTokenBox" FontSize="11" Padding="7,4"
+                                     ToolTip="Optional — for uploading to your Imgur account"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="ImgurTokenBox_Changed"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- ImgBB settings -->
+                    <controls:ProviderSection x:Name="ImgBBSettings" Header="IMGBB" IconSource="pack://application:,,,/Assets/imgbb_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="PNG" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="JPG" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="GIF" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <TextBlock Text="  32MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="API key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="ImgBBKeyBox" FontSize="11" Padding="7,4"
+                                     ToolTip="Get a free API key at api.imgbb.com"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="ImgBBKeyBox_Changed"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="ImgPileSettings" Header="IMGPILE" IconSource="pack://application:,,,/Assets/imgpile_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="Image" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="API token" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <TextBlock Text="  100MB max · Direct CDN URL" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="API token" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="ImgPileTokenBox" FontSize="11" Padding="7,4"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="ImgPileTokenBox_Changed"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- Catbox info -->
+                    <controls:ProviderSection x:Name="CatboxSettings" Header="CATBOX" IconSource="pack://application:,,,/Assets/catbox_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <TextBlock Text="  200MB max · Free · Permanent" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- Litterbox info -->
+                    <controls:ProviderSection x:Name="LitterboxSettings" Header="LITTERBOX" IconSource="pack://application:,,,/Assets/litterbox_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChipDanger}">
+                                    <TextBlock Text="Expires 72h" FontSize="9" Foreground="#EF4444"/>
+                                </Border>
+                                <TextBlock Text="  200MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Temporary host. No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- Gyazo settings -->
+                    <controls:ProviderSection x:Name="GyazoSettings" Header="GYAZO" IconSource="pack://application:,,,/Assets/gyazo_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="PNG" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="JPG" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="GIF" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <TextBlock Text="  25MB max · Free tier + Pro $4/mo" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Access token" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                            <TextBox x:Name="GyazoTokenBox" FontSize="11" Padding="7,4"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="GyazoTokenBox_Changed"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- file.io info -->
+                    <controls:ProviderSection x:Name="FileIoSettings" Header="FILE.IO" IconSource="pack://application:,,,/Assets/fileio_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChipDanger}">
+                                    <TextBlock Text="1 download then deleted" FontSize="9" Foreground="#EF4444"/>
+                                </Border>
+                                <TextBlock Text="  100MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="No setup required. Files delete after the first download." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- Uguu info -->
+                    <controls:ProviderSection x:Name="UguuSettings" Header="UGUU" IconSource="pack://application:,,,/Assets/uguu_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChipDanger}">
+                                    <TextBlock Text="Expires 48h" FontSize="9" Foreground="#EF4444"/>
+                                </Border>
+                                <TextBlock Text="  128MB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="Temporary host. No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="GofileSettings" Header="GOFILE" IconSource="pack://application:,,,/Assets/gofile_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <Border Style="{StaticResource InlineTagChip}">
+                                    <TextBlock Text="No setup" FontSize="9" Opacity="0.6"/>
+                                </Border>
+                                <TextBlock Text="  Free public share page" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="No setup required. Used after direct temporary hosts in the automatic filter." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- S3-Compatible settings -->
+                    <controls:ProviderSection x:Name="S3Settings" Header="S3 / R2 / B2" IconSource="pack://application:,,,/Assets/aws_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Border Style="{StaticResource InlineTagChip}">
+                                        <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
+                                    </Border>
+                                    <TextBlock Text="  AWS S3, Cloudflare R2, Backblaze B2, MinIO, and similar services" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <TextBlock Text="Endpoint URL" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="S3EndpointBox" FontSize="11" Padding="7,4"
+                                         ToolTip="e.g. https://s3.us-east-1.amazonaws.com or https://your-id.r2.cloudflarestorage.com"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                         TextChanged="S3EndpointBox_Changed"/>
+
+                                <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="Bucket" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="S3BucketBox" FontSize="11" Padding="7,4"
+                                                 Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                                 TextChanged="S3BucketBox_Changed"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="Region" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="S3RegionBox" FontSize="11" Padding="7,4" Text="auto"
+                                                 Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                                 TextChanged="S3RegionBox_Changed"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                                <TextBlock Text="Access Key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="S3AccessKeyBox" FontSize="11" Padding="7,4"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                         TextChanged="S3AccessKeyBox_Changed"/>
+
+                                <TextBlock Text="Secret Key" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="S3SecretKeyBox" FontSize="11" Padding="7,4"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                         TextChanged="S3SecretKeyBox_Changed"/>
+
+                                <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                                <TextBlock Text="Public URL (optional)" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="S3PublicUrlBox" FontSize="11" Padding="7,4"
+                                         ToolTip="Custom domain for public links, e.g. https://cdn.example.com"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                         TextChanged="S3PublicUrlBox_Changed"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- transfer.sh info -->
+                    <controls:ProviderSection x:Name="TransferSettings" Header="TRANSFER.SH" IconSource="pack://application:,,,/Assets/transfer_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Border Style="{StaticResource InlineTagChip}">
+                                        <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
+                                    </Border>
+                                    <Border Style="{StaticResource InlineTagChipDanger}">
+                                        <TextBlock Text="Expires 14d" FontSize="9" Foreground="#EF4444"/>
+                                    </Border>
+                                    <TextBlock Text="  10GB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="Temporary host. No setup required." FontSize="10" Opacity="0.25" Margin="0,0,0,4"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="DropboxSettings" Header="DROPBOX" IconSource="pack://application:,,,/Assets/dropbox_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="Access token" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="DropboxTokenBox" FontSize="11" Padding="7,4" TextChanged="DropboxTokenBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Folder / path prefix" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="DropboxPathBox" FontSize="11" Padding="7,4" TextChanged="DropboxPathBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="GoogleDriveSettings" Header="GOOGLE DRIVE" IconSource="pack://application:,,,/Assets/gdrive_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="Access token" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="GoogleDriveTokenBox" FontSize="11" Padding="7,4" TextChanged="GoogleDriveTokenBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Folder ID (optional)" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="GoogleDriveFolderBox" FontSize="11" Padding="7,4" TextChanged="GoogleDriveFolderBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="OneDriveSettings" Header="ONEDRIVE" IconSource="pack://application:,,,/Assets/onedrive_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="Access token" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="OneDriveTokenBox" FontSize="11" Padding="7,4" TextChanged="OneDriveTokenBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Folder" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="OneDriveFolderBox" FontSize="11" Padding="7,4" TextChanged="OneDriveFolderBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="AzureSettings" Header="AZURE BLOB" IconSource="pack://application:,,,/Assets/azure_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="Container SAS URL" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="AzureBlobSasBox" FontSize="11" Padding="7,4" TextChanged="AzureBlobSasBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="GitHubSettings" Header="GITHUB" IconSource="pack://application:,,,/Assets/github_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="Token" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="GitHubTokenBox" FontSize="11" Padding="7,4" TextChanged="GitHubTokenBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Repo (owner/name)" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="GitHubRepoBox" FontSize="11" Padding="7,4" TextChanged="GitHubRepoBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Branch" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="GitHubBranchBox" FontSize="11" Padding="7,4" TextChanged="GitHubBranchBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="ImmichSettings" Header="IMMICH" IconSource="pack://application:,,,/Assets/immich_sq.png" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="Base URL" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="ImmichUrlBox" FontSize="11" Padding="7,4" TextChanged="ImmichUrlBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="API key" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="ImmichApiKeyBox" FontSize="11" Padding="7,4" TextChanged="ImmichApiKeyBox_Changed"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="FtpSettings" Header="FTP" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="FTP URL" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="FtpUrlBox" FontSize="11" Padding="7,4" TextChanged="FtpUrlBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Username" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="FtpUsernameBox" FontSize="11" Padding="7,4" TextChanged="FtpUsernameBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Password" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="FtpPasswordBox" FontSize="11" Padding="7,4" TextChanged="FtpPasswordBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Public URL base (optional)" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="FtpPublicUrlBox" FontSize="11" Padding="7,4" TextChanged="FtpPublicUrlBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="SftpSettings" Header="SFTP" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="Host" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="SftpHostBox" FontSize="11" Padding="7,4" TextChanged="SftpHostBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Port" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="SftpPortBox" FontSize="11" Padding="7,4" TextChanged="SftpPortBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Username" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="SftpUsernameBox" FontSize="11" Padding="7,4" TextChanged="SftpUsernameBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Password" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="SftpPasswordBox" FontSize="11" Padding="7,4" TextChanged="SftpPasswordBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Remote path" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="SftpRemotePathBox" FontSize="11" Padding="7,4" TextChanged="SftpRemotePathBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Public URL base (optional)" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="SftpPublicUrlBox" FontSize="11" Padding="7,4" TextChanged="SftpPublicUrlBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Server fingerprint (SHA256 hex)" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="SftpHostKeyFingerprintBox" FontSize="11" Padding="7,4" TextChanged="SftpHostKeyFingerprintBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <controls:ProviderSection x:Name="WebDavSettings" Header="WEBDAV" Visibility="Collapsed">
+                        <StackPanel>
+                                <TextBlock Text="WebDAV URL" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                <TextBox x:Name="WebDavUrlBox" FontSize="11" Padding="7,4" TextChanged="WebDavUrlBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Username" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="WebDavUsernameBox" FontSize="11" Padding="7,4" TextChanged="WebDavUsernameBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Password" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="WebDavPasswordBox" FontSize="11" Padding="7,4" TextChanged="WebDavPasswordBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <TextBlock Text="Public URL base (optional)" FontSize="12" Opacity="0.6" Margin="0,8,0,4"/>
+                                <TextBox x:Name="WebDavPublicUrlBox" FontSize="11" Padding="7,4" TextChanged="WebDavPublicUrlBox_Changed" Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <!-- Custom HTTP settings -->
+                    <controls:ProviderSection x:Name="CustomUploadSettings" Header="CUSTOM HTTP" Visibility="Collapsed">
+                        <controls:ProviderSection.HeaderExtras>
+                            <Border Width="16" Height="16" CornerRadius="3" Background="#5865F2" Margin="0,0,6,0" VerticalAlignment="Center">
+                                <TextBlock Text="&#x2B06;" FontSize="9" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                            </Border>
+                        </controls:ProviderSection.HeaderExtras>
+                        <StackPanel>
+                            <TextBlock Text="Upload URL" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="CustomUrlBox" FontSize="11" Padding="7,4"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="CustomUrlBox_Changed"/>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <TextBlock Text="File form field name" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="CustomFieldBox" FontSize="11" Padding="7,4" Text="file"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="CustomFieldBox_Changed"/>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <TextBlock Text="Response JSON path to URL" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="CustomJsonPathBox" FontSize="11" Padding="7,4" Text="url"
+                                     ToolTip="Dot-separated path, e.g. data.url or just url"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="CustomJsonPathBox_Changed"/>
+
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                            <TextBlock Text="Custom headers" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                            <TextBox x:Name="CustomHeadersBox" FontSize="11" Padding="7,4" AcceptsReturn="True"
+                                     ToolTip="One per line, format: Name: Value"
+                                     Height="70" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                     Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                     TextChanged="CustomHeadersBox_Changed"/>
+                        </StackPanel>
+                    </controls:ProviderSection>
+
+                    <TextBlock x:Name="AutoUploadHeader" Text="Auto-upload" Style="{StaticResource SectionLabel}" Margin="4,16,0,6"/>
+
+                    <Border x:Name="AutoUploadCard" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="AutoUploadScreenshotsCheck" Content="Auto-upload screenshots" FontSize="13"
+                                      ToolTip="Uploads after every capture"
+                                      Checked="AutoUploadScreenshotsCheck_Changed" Unchecked="AutoUploadScreenshotsCheck_Changed"/>
+                            <CheckBox x:Name="AutoUploadGifsCheck" Content="Auto-upload GIFs" FontSize="13" Margin="0,6,0,0"
+                                      Checked="AutoUploadGifsCheck_Changed" Unchecked="AutoUploadGifsCheck_Changed"/>
+                            <CheckBox x:Name="AutoUploadVideosCheck" Content="Auto-upload videos" FontSize="13" Margin="0,6,0,0"
+                                      Checked="AutoUploadVideosCheck_Changed" Unchecked="AutoUploadVideosCheck_Changed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Test upload -->
+                    <TextBlock Text="Test" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"
+                               Visibility="{Binding Visibility, ElementName=TestUploadCard}"/>
+                    <Border Style="{StaticResource Card}" x:Name="TestUploadCard" Visibility="Collapsed">
+                        <Button x:Name="TestUploadBtn" Content="Test Upload" FontSize="12" Padding="12,6"
+                                ToolTip="Sends a tiny 1x1 pixel image to test your configuration"
+                                HorizontalAlignment="Left" Click="TestUpload_Click" Cursor="Hand"/>
+                    </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="AiRedirectUploadsPanel" Visibility="Collapsed">
+                        <TextBlock Text="Destination" Style="{StaticResource SectionLabel}"/>
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="AI tool" FontSize="13" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="AiRedirectProviderCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="240"
+                                          SelectionChanged="AiRedirectProviderCombo_Changed">
+                                    <ComboBoxItem Content="None" Tag="-1"/>
+                                    <ComboBoxItem Content="ChatGPT" Tag="0"/>
+                                    <ComboBoxItem Content="Claude" Tag="1"/>
+                                    <ComboBoxItem Content="Gemini" Tag="3"/>
+                                    <ComboBoxItem Content="Google Lens" Tag="4"/>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Text="Hotkey" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                        <Border Style="{StaticResource Card}">
+                            <Grid x:Name="AiRedirectHotkeyPanelRow">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="AI Redirect hotkey" FontSize="13" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox x:Name="AiRedirectPanelHotkeyBox"
+                                             Style="{StaticResource HotkeyBox}"
+                                             GotFocus="AiRedirectPanelHotkeyBox_GotFocus"
+                                             LostFocus="AiRedirectPanelHotkeyBox_LostFocus"
+                                             PreviewKeyDown="AiRedirectPanelHotkeyBox_PreviewKeyDown"
+                                             PreviewKeyUp="AiRedirectPanelHotkeyBox_PreviewKeyUp"/>
+                                    <Button x:Name="AiRedirectPanelHotkeyClearBtn"
+                                            Content="X"
+                                            Style="{StaticResource ClearBtn}"
+                                            Click="AiRedirectPanelHotkeyClearBtn_Click"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel x:Name="AiRedirectLensUploadHostPanelRow" Visibility="Collapsed">
+                            <TextBlock Text="Hosted Image" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <CheckBox x:Name="AiRedirectLensUploadSyncCheck"
+                                              Content="Synced with Images uploads"
+                                              FontSize="13"
+                                              Checked="AiRedirectLensUploadSyncCheck_Changed"
+                                              Unchecked="AiRedirectLensUploadSyncCheck_Changed"/>
+                                    <ComboBox x:Name="AiRedirectLensUploadDestPanelCombo" FontSize="12" Padding="8,5" Width="300" HorizontalAlignment="Left" Margin="0,10,0,0" MaxDropDownHeight="280"
+                                              SelectionChanged="AiRedirectLensUploadDestPanelCombo_Changed"/>
+                                    <TextBlock x:Name="AiRedirectLensUploadPanelHint" Visibility="Collapsed"
+                                               Text="Google Lens needs a public image URL, so OddSnap uploads first and then opens Lens."
+                                               FontSize="11" Opacity="0.24" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel x:Name="StickerUploadsPanel" Visibility="Collapsed">
+                        <TextBlock Text="Provider" Style="{StaticResource SectionLabel}"/>
+                        <Border Style="{StaticResource Card}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Sticker provider" FontSize="13" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="StickerProviderCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="240"
+                                              SelectionChanged="StickerProviderCombo_Changed">
+                                        <ComboBoxItem Content="None"/>
+                                        <ComboBoxItem Content="Remove.bg"/>
+                                        <ComboBoxItem Content="Photoroom"/>
+                                        <ComboBoxItem Content="Local (CPU/GPU)"/>
+                                    </ComboBox>
+                                </Grid>
+                        </Border>
+
+                                <StackPanel x:Name="StickerRemoveBgPanel" Visibility="Collapsed">
+                                    <TextBlock Text="remove.bg API key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="StickerRemoveBgKeyBox" FontSize="11" Padding="7,4"
+                                             Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                             TextChanged="StickerRemoveBgKeyBox_Changed"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="StickerPhotoroomPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Photoroom API key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="StickerPhotoroomKeyBox" FontSize="11" Padding="7,4"
+                                             Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                             TextChanged="StickerPhotoroomKeyBox_Changed"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="StickerLocalCpuPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Local Models" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+
+                                    <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Execution mode" FontSize="13" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="StickerLocalExecutionCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="220"
+                                                  SelectionChanged="StickerLocalExecutionCombo_Changed">
+                                            <ComboBoxItem Content="CPU"/>
+                                            <ComboBoxItem Content="GPU (CUDA)"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <Grid x:Name="StickerLocalCpuEnginePanel" Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="CPU model" FontSize="13" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="StickerLocalCpuEngineCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="240"
+                                                      SelectionChanged="StickerLocalCpuEngineCombo_Changed">
+                                            <ComboBoxItem Content="BRIA RMBG" Tag="BriaRmbg"/>
+                                            <ComboBoxItem Content="BiRefNet Lite (High quality)" Tag="BiRefNetLite"/>
+                                            <ComboBoxItem Content="ISNet General Use (Balanced)" Tag="IsNetGeneralUse"/>
+                                            <ComboBoxItem Content="U2Netp (Fastest)" Tag="U2Netp"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <Grid x:Name="StickerLocalGpuEnginePanel" Margin="0,0,0,8" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="GPU model" FontSize="13" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="StickerLocalGpuEngineCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="240"
+                                                      SelectionChanged="StickerLocalGpuEngineCombo_Changed">
+                                            <ComboBoxItem Content="BRIA RMBG" Tag="BriaRmbg"/>
+                                            <ComboBoxItem Content="BiRefNet Lite (High quality)" Tag="BiRefNetLite"/>
+                                            <ComboBoxItem Content="ISNet General Use (Balanced)" Tag="IsNetGeneralUse"/>
+                                            <ComboBoxItem Content="U2Netp (Fastest)" Tag="U2Netp"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
+
+                                    <TextBlock x:Name="StickerLocalEngineStatusText" Text="Pick a model. Models download automatically on first use." FontSize="11" Opacity="0.35" TextWrapping="Wrap"/>
+                                    <ProgressBar x:Name="StickerLocalEngineProgress" Height="6" Margin="0,8,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="StickerLocalEngineProgressText" FontSize="10" Opacity="0.25" Margin="0,4,0,0" Visibility="Collapsed"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button x:Name="StickerInstallDriversBtn" Content="Install runtime" FontSize="12" Padding="12,6"
+                                                Click="StickerInstallDriversBtn_Click" Cursor="Hand"/>
+                                        <Button x:Name="StickerDownloadRembgBtn" Content="Download model" FontSize="12" Padding="12,6"
+                                                Margin="8,0,0,0" Click="StickerDownloadRembgBtn_Click" Cursor="Hand"/>
+                                        <Button x:Name="StickerOpenLocalEngineRepoBtn" Content="Open engine project" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                                Click="StickerOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
+                                        <Button x:Name="StickerRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                                Click="StickerRemoveAllModelsBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
+                                        <Button x:Name="StickerCopyErrorBtn" Content="Copy status" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                                Click="StickerCopyErrorBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                    </StackPanel>
+                                    </Border>
+
+                                    <TextBlock Text="Output" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+
+                                    <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                    <CheckBox x:Name="StickerShadowCheck" Content="Add drop shadow" FontSize="13"
+                                              Checked="StickerShadowCheck_Changed" Unchecked="StickerShadowCheck_Changed"/>
+                                    <CheckBox x:Name="StickerStrokeCheck" Content="Add white stroke" FontSize="13" Margin="0,8,0,0"
+                                              Checked="StickerStrokeCheck_Changed" Unchecked="StickerStrokeCheck_Changed"/>
+                                    </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel x:Name="UpscaleUploadsPanel" Visibility="Collapsed">
+                        <TextBlock Text="Provider" Style="{StaticResource SectionLabel}"/>
+                        <Border Style="{StaticResource Card}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Upscale provider" FontSize="13" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="UpscaleProviderCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="240"
+                                              SelectionChanged="UpscaleProviderCombo_Changed">
+                                        <ComboBoxItem Content="None"/>
+                                        <ComboBoxItem Content="Local (CPU/GPU)"/>
+                                        <ComboBoxItem Content="DeepAI Super Resolution"/>
+                                        <ComboBoxItem Content="DeepAI Waifu2x"/>
+                                    </ComboBox>
+                                </Grid>
+                        </Border>
+
+                                <StackPanel x:Name="UpscaleDeepAiPanel" Visibility="Collapsed" Margin="0,0,0,10">
+                                    <TextBlock Text="DeepAI API key" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                    <TextBox x:Name="UpscaleDeepAiApiKeyBox" FontSize="11" Padding="7,4"
+                                             Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                             TextChanged="UpscaleDeepAiApiKeyBox_Changed"/>
+                                    <TextBlock Text="Optional cloud providers. Local remains the default." FontSize="11" Opacity="0.32" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <StackPanel x:Name="UpscaleLocalPanel" Visibility="Collapsed">
+                                    <TextBlock Text="Local Models" Style="{StaticResource SectionLabel}" Margin="4,14,0,6"/>
+
+                                    <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Execution mode" FontSize="13" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="UpscaleLocalExecutionCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="220"
+                                                  SelectionChanged="UpscaleLocalExecutionCombo_Changed">
+                                            <ComboBoxItem Content="CPU"/>
+                                            <ComboBoxItem Content="GPU (CUDA)"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <Grid x:Name="UpscaleLocalCpuEnginePanel" Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="CPU model" FontSize="13" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="UpscaleLocalCpuEngineCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="220"
+                                                      SelectionChanged="UpscaleLocalCpuEngineCombo_Changed">
+                                            <ComboBoxItem Content="SwinIR x4 (Faithful / UI)" Tag="SwinIrRealWorld"/>
+                                            <ComboBoxItem Content="Real-ESRGAN x4plus (Heavier)" Tag="RealEsrganX4Plus"/>
+                                        </ComboBox>
+                                    </Grid>
+
+                                    <Grid x:Name="UpscaleLocalGpuEnginePanel" Margin="0,0,0,8" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="GPU model" FontSize="13" VerticalAlignment="Center"/>
+                                        <ComboBox x:Name="UpscaleLocalGpuEngineCombo" Grid.Column="1" FontSize="12" Padding="8,5" Width="300" MaxDropDownHeight="220"
+                                                      SelectionChanged="UpscaleLocalGpuEngineCombo_Changed">
+                                            <ComboBoxItem Content="Real-ESRGAN x4plus (Best quality)" Tag="RealEsrganX4Plus"/>
+                                            <ComboBoxItem Content="SwinIR x4 (Faithful / UI)" Tag="SwinIrRealWorld"/>
+                                        </ComboBox>
+                                    </Grid>
+                                    <TextBlock x:Name="UpscaleLocalEngineStatusText" Text="Pick a model. Models download automatically on first use." FontSize="11" Opacity="0.35" TextWrapping="Wrap"/>
+                                    <ProgressBar x:Name="UpscaleLocalEngineProgress" Height="6" Margin="0,8,0,0" Minimum="0" Maximum="100" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="UpscaleLocalEngineProgressText" FontSize="10" Opacity="0.25" Margin="0,4,0,0" Visibility="Collapsed"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                        <Button x:Name="UpscaleInstallDriversBtn" Content="Install runtime" FontSize="12" Padding="12,6"
+                                                Click="UpscaleInstallDriversBtn_Click" Cursor="Hand"/>
+                                        <Button x:Name="UpscaleDownloadModelBtn" Content="Download model" FontSize="12" Padding="12,6"
+                                                Margin="8,0,0,0" Click="UpscaleDownloadModelBtn_Click" Cursor="Hand"/>
+                                        <Button x:Name="UpscaleOpenLocalEngineRepoBtn" Content="Open engine project" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                                Click="UpscaleOpenLocalEngineRepoBtn_Click" Cursor="Hand"/>
+                                        <Button x:Name="UpscaleRemoveAllModelsBtn" Content="Remove all models" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                                Click="UpscaleRemoveAllModelsBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
+                                        <Button x:Name="UpscaleCopyErrorBtn" Content="Copy status" FontSize="12" Padding="12,6" Margin="8,0,0,0"
+                                                Click="UpscaleCopyErrorBtn_Click" Cursor="Hand" Visibility="Collapsed"/>
+                                    </StackPanel>
+                                    </StackPanel>
+                                    </Border>
+
+                                    <TextBlock Text="Result Behavior" Style="{StaticResource SectionLabel}" Margin="0,2,0,6"/>
+
+                                    <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                    <CheckBox x:Name="UpscaleShowPreviewWindowCheck"
+                                              Content="Show upscale preview window after selection"
+                                              FontSize="13"
+                                              Margin="0,0,0,0"
+                                              Checked="UpscaleShowPreviewWindowCheck_Changed"
+                                              Unchecked="UpscaleShowPreviewWindowCheck_Changed"/>
+
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Default multiplier" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="UpscaleDefaultScaleHelpText"
+                                                       Text="Used when preview is off."
+                                                       FontSize="11"
+                                                       Opacity="0.32"
+                                                       Margin="0,0,0,6"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <ComboBox x:Name="UpscaleDefaultScaleCombo"
+                                                  Grid.Column="1"
+                                                  FontSize="12"
+                                                  Padding="8,5"
+                                                  MinWidth="120"
+                                                  Margin="10,0,0,0"
+                                                  SelectionChanged="UpscaleDefaultScaleCombo_Changed"/>
+                                    </Grid>
+                                    </StackPanel>
+                                    </Border>
+
+                                </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+    </Grid>
+    </Border>
+    </Border>
+</Window>

@@ -4,7 +4,7 @@ export function useStarCount() {
   const [stars, setStars] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("https://api.github.com/repos/jasperdevs/yoink")
+    fetch("https://api.github.com/repos/jasperdevs/odd-snap")
       .then((res) => res.json())
       .then((data) => {
         if (typeof data.stargazers_count === "number") {

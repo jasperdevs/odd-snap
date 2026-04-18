@@ -47,20 +47,20 @@ const showcase = [
 ];
 
 const faq = [
-  { q: "what is yoink?", a: "yoink is a free, open-source screenshot and screen recording tool for windows. it replaces tools like sharex with a clean, modern interface." },
-  { q: "is yoink free?", a: "yes, completely free and open source under the gpl-3.0 license. no ads, no tracking, no premium tiers." },
-  { q: "does yoink work offline?", a: "yes. all capture, annotation, ocr, and recording features work fully offline. only uploads and google translate require internet." },
+  { q: "what is oddsnap?", a: "oddsnap is a free, open-source screenshot and screen recording tool for windows. it replaces tools like sharex with a clean, modern interface." },
+  { q: "is oddsnap free?", a: "yes, completely free and open source under the gpl-3.0 license. no ads, no tracking, no premium tiers." },
+  { q: "does oddsnap work offline?", a: "yes. all capture, annotation, ocr, and recording features work fully offline. only uploads and google translate require internet." },
   { q: "what windows versions are supported?", a: "windows 10 (version 1903+) and windows 11. both x64 and arm64 are supported." },
-  { q: "how does ocr work?", a: "yoink uses the windows built-in ocr engine. no downloads or setup needed. it supports all languages installed in your windows language settings." },
-  { q: "can i upload screenshots automatically?", a: "yes. yoink supports auto-upload to 19 destinations: imgur, imgbb, catbox, litterbox, gyazo, file.io, uguu, tmpfiles, transfer.sh, dropbox, google drive, onedrive, azure blob, github, immich, ftp, sftp, webdav, s3-compatible storage (aws, cloudflare r2, backblaze b2), and custom http endpoints." },
-  { q: "where are screenshots saved?", a: "by default in your pictures/yoink folder. you can change this in settings along with the file format and naming pattern." },
+  { q: "how does ocr work?", a: "oddsnap uses the windows built-in ocr engine. no downloads or setup needed. it supports all languages installed in your windows language settings." },
+  { q: "can i upload screenshots automatically?", a: "yes. oddsnap supports auto-upload to 19 destinations: imgur, imgbb, catbox, litterbox, gyazo, file.io, uguu, tmpfiles, transfer.sh, dropbox, google drive, onedrive, azure blob, github, immich, ftp, sftp, webdav, s3-compatible storage (aws, cloudflare r2, backblaze b2), and custom http endpoints." },
+  { q: "where are screenshots saved?", a: "by default in your pictures/oddsnap folder. you can change this in settings along with the file format and naming pattern." },
   { q: "what recording formats are supported?", a: "gif, mp4, webm, and mkv. you can record with microphone audio, desktop audio, or both. frame rate and quality are configurable." },
-  { q: "what translation services are supported?", a: "yoink supports argos translate (fully offline, no api key needed) and google translate (requires internet). both support 35+ languages." },
-  { q: "how is yoink different from sharex?", a: "yoink has a modern, clean interface with built-in sticker creation, ai redirects, image upscaling, and semantic image search. it focuses on being simple to use while still being powerful." },
+  { q: "what translation services are supported?", a: "oddsnap supports argos translate (fully offline, no api key needed) and google translate (requires internet). both support 35+ languages." },
+  { q: "how is oddsnap different from sharex?", a: "oddsnap has a modern, clean interface with built-in sticker creation, ai redirects, image upscaling, and semantic image search. it focuses on being simple to use while still being powerful." },
   { q: "can i customize hotkeys?", a: "yes. every action has a configurable global hotkey. you can set hotkeys for screenshot, ocr, color picker, recording, stickers, and more in settings." },
-  { q: "does yoink have a portable version?", a: "yes. the downloads page includes both a windows installer (recommended) and a portable zip." },
-  { q: "how do i update yoink?", a: "installed builds can update through the app. you can also download the latest installer or portable build directly from the downloads page." },
-  { q: "does yoink support multiple monitors?", a: "yes. yoink fully supports multi-monitor setups for capture, recording, and color picking. you can capture regions across monitors or target a specific screen." },
+  { q: "does oddsnap have a portable version?", a: "yes. the downloads page includes both a windows installer (recommended) and a portable zip." },
+  { q: "how do i update oddsnap?", a: "installed builds can update through the app. you can also download the latest installer or portable build directly from the downloads page." },
+  { q: "does oddsnap support multiple monitors?", a: "yes. oddsnap fully supports multi-monitor setups for capture, recording, and color picking. you can capture regions across monitors or target a specific screen." },
 ];
 
 function detectArch(): "arm64" | "x64" {
@@ -199,9 +199,14 @@ export default function Home() {
 
   return (
     <div className="space-y-2">
-      <section className="pt-24 pb-28 flex flex-col items-center text-center">
-        <img src={base + "banner.svg"} alt="yoink" className="w-64 mb-8" />
-        <p className="text-black/70 leading-relaxed mb-10 max-w-[55ch] text-[15px]">
+      <section className="pt-36 pb-40 flex flex-col items-center text-center">
+        <img
+          src={base + "oddsnap.png"}
+          alt="OddSnap"
+          className="w-80 max-w-full mb-10"
+          style={{ filter: "invert(1)" }}
+        />
+        <p className="text-black/70 leading-relaxed mb-12 max-w-[55ch] text-[15px]">
           capture, annotate, ocr, translate, upscale, make stickers, record video, and upload. all in one open-source tool for windows.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
@@ -218,7 +223,7 @@ export default function Home() {
             </Button>
           )}
           <Button asChild size="lg" variant="tertiary">
-            <a href="https://github.com/jasperdevs/yoink" target="_blank" rel="noopener noreferrer">
+            <a href="https://github.com/jasperdevs/odd-snap" target="_blank" rel="noopener noreferrer">
               source code
             </a>
           </Button>
@@ -241,7 +246,7 @@ export default function Home() {
 
       <Section title="built for privacy">
         <p className="text-black/70 leading-relaxed max-w-[70ch]">
-          yoink runs entirely on your machine. no accounts, no telemetry, no cloud dependencies. your screenshots never leave your computer unless you choose to upload them.
+          oddsnap runs entirely on your machine. no accounts, no telemetry, no cloud dependencies. your screenshots never leave your computer unless you choose to upload them.
         </p>
       </Section>
 

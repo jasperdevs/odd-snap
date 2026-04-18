@@ -5,14 +5,14 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputDirectory,
 
-    [string]$PackageIdentifier = 'JasperDevs.Yoink',
-    [string]$PackageName = 'Yoink',
-    [string]$Publisher = 'Yoink Contributors',
-    [string]$PublisherUrl = 'https://github.com/jasperdevs/yoink',
-    [string]$PublisherSupportUrl = 'https://github.com/jasperdevs/yoink/issues',
+    [string]$PackageIdentifier = 'JasperDevs.OddSnap',
+    [string]$PackageName = 'OddSnap',
+    [string]$Publisher = 'OddSnap Contributors',
+    [string]$PublisherUrl = 'https://github.com/jasperdevs/odd-snap',
+    [string]$PublisherSupportUrl = 'https://github.com/jasperdevs/odd-snap/issues',
     [string]$License = 'GPL-3.0',
-    [string]$LicenseUrl = 'https://github.com/jasperdevs/yoink/blob/main/LICENSE',
-    [string]$Moniker = 'yoink',
+    [string]$LicenseUrl = 'https://github.com/jasperdevs/odd-snap/blob/main/LICENSE',
+    [string]$Moniker = 'oddsnap',
     [string]$Description = 'Screenshot, annotation, OCR, sticker, and recording tool for Windows',
     [string[]]$Tags = @('screenshot', 'capture', 'annotation', 'ocr', 'recording', 'stickers'),
     [Parameter(Mandatory = $true)]
@@ -96,8 +96,8 @@ MinimumOSVersion: 10.0.0.0
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
-  - RelativeFilePath: Yoink.exe
-    PortableCommandAlias: yoink
+  - RelativeFilePath: OddSnap.exe
+    PortableCommandAlias: oddsnap
 UpgradeBehavior: install
 Installers:
   - Architecture: x64

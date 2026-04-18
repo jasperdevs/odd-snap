@@ -48,17 +48,17 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGN_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGN_PFX_PASSWORD)) {
             exit 0
           }
-          $pfxPath = Join-Path $env:RUNNER_TEMP "yoink-signing-cert.pfx"
+          $pfxPath = Join-Path $env:RUNNER_TEMP "oddsnap-signing-cert.pfx"
           [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_SIGN_PFX_BASE64))
           Add-Content -Path $env:GITHUB_OUTPUT -Value "pfx_path=$pfxPath" -Encoding utf8
           Add-Content -Path $env:GITHUB_OUTPUT -Value "sign_params=/fd SHA256 /f `"$pfxPath`" /p `"$env:WINDOWS_SIGN_PFX_PASSWORD`" /tr `"http://timestamp.digicert.com`" /td SHA256" -Encoding utf8
 
       - name: Restore dependencies
-        run: dotnet restore src/Yoink/Yoink.csproj -r ${{ matrix.rid }}
+        run: dotnet restore src/OddSnap/OddSnap.csproj -r ${{ matrix.rid }}
 
       - name: Publish
         run: >
-          dotnet publish src/Yoink/Yoink.csproj
+          dotnet publish src/OddSnap/OddSnap.csproj
           -c Release
           -r ${{ matrix.rid }}
           --self-contained true
@@ -69,7 +69,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          [xml]$csproj = Get-Content src/Yoink/Yoink.csproj -Raw
+          [xml]$csproj = Get-Content src/OddSnap/OddSnap.csproj -Raw
           $version = ($csproj.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
           Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding utf8
 
@@ -81,13 +81,13 @@ jobs:
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
           $packArgs = @(
             'pack',
-            '--packId', 'JasperDevs.Yoink',
+            '--packId', 'JasperDevs.OddSnap',
             '--packVersion', '${{ steps.version.outputs.version }}',
             '--packDir', 'publish',
-            '--mainExe', 'Yoink.exe',
-            '--packTitle', 'Yoink',
+            '--mainExe', 'OddSnap.exe',
+            '--packTitle', 'OddSnap',
             '--packAuthors', 'jasperdevs',
-            '--icon', 'src/Yoink/yoink.ico',
+            '--icon', 'src/OddSnap/oddsnap.ico',
             '--channel', '${{ matrix.rid }}',
             '--runtime', '${{ matrix.rid }}',
             '--releaseNotes', 'docs/CHANGELOG.md'
@@ -132,7 +132,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          [xml]$csproj = Get-Content src/Yoink/Yoink.csproj -Raw
+          [xml]$csproj = Get-Content src/OddSnap/OddSnap.csproj -Raw
           $version = ($csproj.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
           Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding utf8
 
@@ -147,7 +147,7 @@ jobs:
             vpk upload github `
               --repoUrl $repoUrl `
               --token $env:GITHUB_TOKEN `
-              --releaseName "Yoink v${{ steps.version.outputs.version }}" `
+              --releaseName "OddSnap v${{ steps.version.outputs.version }}" `
               --tag "v${{ steps.version.outputs.version }}" `
               --channel $channel `
               --publish `
@@ -193,7 +193,7 @@ jobs:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINGET_TOKEN)) {
-            throw "WINGET_TOKEN secret is required to submit Yoink to microsoft/winget-pkgs."
+            throw "WINGET_TOKEN secret is required to submit OddSnap to microsoft/winget-pkgs."
           }
 
           $version = "${{ steps.version.outputs.version }}"

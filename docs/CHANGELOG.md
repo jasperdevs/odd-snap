@@ -1,4 +1,4 @@
-# Yoink v0.8.24
+# OddSnap v0.8.24
 
 ## Fixed
 - fix Velopack GitHub update source URL so in-app updates can download release packages.

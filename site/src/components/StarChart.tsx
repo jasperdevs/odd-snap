@@ -23,7 +23,7 @@ interface ChartLayout {
   niceMax: number;
 }
 
-const CACHE_KEY = "yoink-star-chart";
+const CACHE_KEY = "oddsnap-star-chart";
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 function getCachedData(): CachedStarData | null {
@@ -60,7 +60,7 @@ export default function StarChart() {
       return;
     }
 
-    fetch("https://api.github.com/repos/jasperdevs/yoink")
+    fetch("https://api.github.com/repos/jasperdevs/odd-snap")
       .then((r) => r.json())
       .then((d) => setTotal(d.stargazers_count))
       .catch(() => {});
@@ -73,7 +73,7 @@ export default function StarChart() {
       while (true) {
         try {
           const res = await fetch(
-            `https://api.github.com/repos/jasperdevs/yoink/stargazers?per_page=${perPage}&page=${page}`,
+            `https://api.github.com/repos/jasperdevs/odd-snap/stargazers?per_page=${perPage}&page=${page}`,
             { headers: { Accept: "application/vnd.github.v3.star+json" } }
           );
           if (!res.ok) break;

@@ -414,8 +414,8 @@ export default function Downloads() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 mb-10">
-        <InputCopy align="left" label="winget install" value="winget install JasperDevs.Yoink" />
-        <InputCopy align="left" label="winget upgrade" value="winget upgrade JasperDevs.Yoink" />
+        <InputCopy align="left" label="winget install" value="winget install --id JasperDevs.OddSnap -e" />
+        <InputCopy align="left" label="winget upgrade" value="winget upgrade --id JasperDevs.OddSnap -e" />
       </div>
 
       {loading ? (

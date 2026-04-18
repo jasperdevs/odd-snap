@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem in Yoink
+description: Report a reproducible problem in OddSnap
 labels: [bug]
 body:
   - type: textarea
@@ -7,7 +7,7 @@ body:
     attributes:
       label: Summary
       description: What went wrong?
-      placeholder: Yoink crashed when I...
+      placeholder: OddSnap crashed when I...
     validations:
       required: true
   - type: textarea
@@ -16,7 +16,7 @@ body:
       label: Steps to reproduce
       description: List the smallest set of steps that reproduces the problem.
       placeholder: |
-        1. Open Yoink
+        1. Open OddSnap
         2. Press...
         3. Observe...
     validations:
@@ -38,7 +38,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Yoink version
+      label: OddSnap version
       placeholder: v0.5.1
   - type: input
     id: windows

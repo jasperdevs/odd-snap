@@ -1,0 +1,258 @@
+<Window x:Class="OddSnap.UI.OcrResultWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Text Capture"
+        Height="520" Width="580"
+        MinHeight="400" MinWidth="420"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen"
+        Background="Transparent"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Topmost="True"
+        Icon="pack://application:,,,/oddsnap.ico"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        Deactivated="Window_Deactivated">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" GlassFrameThickness="0" CornerRadius="12"
+                      ResizeBorderThickness="8" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#FFF0F0F0"/>
+        <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#FF9A9A9A"/>
+        <SolidColorBrush x:Key="ThemeMutedBrush" Color="#FF686868"/>
+        <SolidColorBrush x:Key="ThemeCardBrush" Color="#FF2D2D2D"/>
+        <SolidColorBrush x:Key="ThemeInputBackgroundBrush" Color="#FF1E1E1E"/>
+        <SolidColorBrush x:Key="ThemeInputBorderBrush" Color="#15FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#12FFFFFF"/>
+        <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="ThemeSeparatorBrush" Color="#0CFFFFFF"/>
+        <SolidColorBrush x:Key="TranslationShimmerBrush" Color="#14FFFFFF"/>
+
+        <Style x:Key="OcrThumbStyle" TargetType="{x:Type Thumb}">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border CornerRadius="3"
+                                Background="#66FFFFFF"
+                                Margin="0,2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OcrScrollBarStyle" TargetType="{x:Type ScrollBar}">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid Background="Transparent" Width="{TemplateBinding Width}">
+                            <Track x:Name="PART_Track"
+                                   IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Focusable="False"
+                                                  IsTabStop="False"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource OcrThumbStyle}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Focusable="False"
+                                                  IsTabStop="False"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Height" Value="10"/>
+                    <Setter Property="Width" Value="Auto"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="OcrTextBoxStyle" TargetType="{x:Type TextBox}">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI, Malgun Gothic, Yu Gothic UI, Arial Unicode MS, Segoe UI Symbol"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TextBox}">
+                        <Grid>
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="RootBorder" CornerRadius="12" ClipToBounds="True">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24" ShadowDepth="2" Opacity="0.4" Color="Black"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Padding="16,8,0,0" MouseDown="TitleBar_MouseDown" Background="Transparent">
+                <Grid>
+                    <TextBlock Text="Text Capture" FontSize="12.5" FontWeight="SemiBold"
+                               FontFamily="Segoe UI Variable Display"
+                               Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.85"
+                               VerticalAlignment="Center"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-8,0,0">
+                        <Border Width="40" Height="34" CornerRadius="0" Cursor="Hand" Background="Transparent"
+                                MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
+                                MouseDown="MinimizeBtn_Click">
+                            <Image x:Name="MinimizeTitleIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.8"/>
+                        </Border>
+                        <Border x:Name="CloseTitleBtn" Width="40" Height="34" CornerRadius="0,11,0,0" Cursor="Hand" Background="Transparent"
+                                MouseEnter="TitleBtn_Enter" MouseLeave="TitleBtn_Leave"
+                                MouseDown="CloseBtn_Click">
+                            <Image x:Name="CloseTitleIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.8"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="1" Margin="14,0,14,0" CornerRadius="8" Padding="2"
+                    Background="{DynamicResource ThemeInputBackgroundBrush}"
+                    BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1">
+                <TextBox x:Name="OcrTextBox" AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         FontSize="13"
+                         Padding="10,8"
+                         Background="Transparent" BorderThickness="0"
+                         Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                         CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"
+                         Style="{StaticResource OcrTextBoxStyle}">
+                    <TextBox.Resources>
+                        <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource OcrScrollBarStyle}"/>
+                    </TextBox.Resources>
+                </TextBox>
+            </Border>
+
+            <Border Grid.Row="2" Margin="14,8,14,0">
+                <DockPanel>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ComboBox x:Name="FromLanguageCombo" FontSize="11" Padding="6,4" MinWidth="110"
+                                  IsEditable="True" IsTextSearchEnabled="False"
+                                  PreviewTextInput="FilterCombo_PreviewTextInput" PreviewKeyDown="FilterCombo_PreviewKeyDown"
+                                  SelectionChanged="FromLanguageCombo_Changed"/>
+                        <TextBlock Text="→" FontSize="14" Margin="6,0" VerticalAlignment="Center" Opacity="0.35"
+                                   Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontWeight="Bold"/>
+                        <ComboBox x:Name="ToLanguageCombo" FontSize="11" Padding="6,4" MinWidth="110"
+                                  IsEditable="True" IsTextSearchEnabled="False"
+                                  PreviewTextInput="FilterCombo_PreviewTextInput" PreviewKeyDown="FilterCombo_PreviewKeyDown"
+                                  SelectionChanged="ToLanguageCombo_Changed"/>
+                        <Border Width="1" Height="18" Background="{DynamicResource ThemeInputBorderBrush}" Margin="8,0"/>
+                        <ComboBox x:Name="ModelCombo" FontSize="10" Padding="5,4" MinWidth="115"
+                                  SelectionChanged="ModelCombo_Changed">
+                            <ComboBoxItem Content="Local model" Tag="2"/>
+                            <ComboBoxItem Content="Argos (offline)" Tag="0"/>
+                            <ComboBoxItem Content="Google Translate" Tag="1"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <Button x:Name="TranslateBtn" DockPanel.Dock="Right" Content="Translate"
+                            HorizontalAlignment="Right" FontSize="12" Padding="16,6"
+                            Click="TranslateBtn_Click" Style="{StaticResource ChromeButtonBase}"
+                            Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                            Background="{DynamicResource ThemeInputBackgroundBrush}"
+                            BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                            Cursor="Hand" MinHeight="30" FontWeight="SemiBold"/>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Row="3" Margin="14,8,14,0"
+                    CornerRadius="8" Padding="2"
+                    Background="{DynamicResource ThemeInputBackgroundBrush}"
+                    BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                    MinHeight="70" MaxHeight="200">
+                <Grid>
+                    <TextBox x:Name="TranslatedTextBox" AcceptsReturn="True" TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto" IsReadOnly="True"
+                             FontSize="13" FontFamily="Segoe UI"
+                             Padding="10,8"
+                             Background="Transparent" BorderThickness="0"
+                             Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                             CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"
+                             Style="{StaticResource OcrTextBoxStyle}">
+                        <TextBox.Resources>
+                            <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource OcrScrollBarStyle}"/>
+                        </TextBox.Resources>
+                    </TextBox>
+                    <Border x:Name="TranslationLoadingOverlay"
+                            Background="#0DFFFFFF"
+                            CornerRadius="6"
+                            Margin="6"
+                            Visibility="Collapsed"
+                            IsHitTestVisible="False">
+                        <Grid>
+                            <Rectangle x:Name="TranslationShimmerRect" Fill="{StaticResource TranslationShimmerBrush}" RadiusX="6" RadiusY="6"/>
+                            <StackPanel Margin="12,12,12,10" VerticalAlignment="Center">
+                                <Border Height="11" Width="150" CornerRadius="5.5" Background="#12FFFFFF" HorizontalAlignment="Left"/>
+                                <Border Height="9" Margin="0,10,0,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
+                                <Border Height="9" Margin="0,8,42,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
+                                <Border Height="9" Margin="0,8,86,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
+                                <ProgressBar x:Name="TranslateProgressBar"
+                                             Height="3"
+                                             Margin="0,14,0,0"
+                                             IsIndeterminate="True"
+                                             Opacity="0.9"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <TextBlock x:Name="TranslateStatus" FontSize="11"
+                               Opacity="0.25" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                               IsHitTestVisible="False" Visibility="Collapsed"/>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="4" Padding="14,10,14,12">
+                <DockPanel>
+                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                        <Button x:Name="CopyTranslationBtn" Content="Copy result" FontSize="11" Padding="10,6" Margin="0,0,6,0"
+                                Click="CopyTranslationBtn_Click" Style="{StaticResource ChromeButtonBase}"
+                                Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                Background="{DynamicResource ThemeInputBackgroundBrush}"
+                                BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                Cursor="Hand" MinHeight="30" Visibility="Collapsed"/>
+                        <Button x:Name="CopyBtn" Content="Copy text" FontSize="11" Padding="10,6"
+                                Click="CopyBtn_Click" Style="{StaticResource ChromeButtonBase}"
+                                Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                Background="{DynamicResource ThemeInputBackgroundBrush}"
+                                BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                Cursor="Hand" MinHeight="30"/>
+                    </StackPanel>
+                    <TextBlock x:Name="CharCountText" FontSize="10.5" Opacity="0.3" VerticalAlignment="Center"
+                               Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontFamily="Segoe UI Variable Text"/>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

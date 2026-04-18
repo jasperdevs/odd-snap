@@ -36,11 +36,11 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore src/Yoink/Yoink.csproj -r ${{ matrix.rid }}
+        run: dotnet restore src/OddSnap/OddSnap.csproj -r ${{ matrix.rid }}
 
       - name: Test
         if: matrix.rid == 'win-x64'
-        run: dotnet test tests/Yoink.Tests/Yoink.Tests.csproj -c Release
+        run: dotnet test tests/OddSnap.Tests/OddSnap.Tests.csproj -c Release
 
       - name: Install Velopack CLI
         shell: pwsh
@@ -54,14 +54,14 @@ jobs:
           WINDOWS_SIGN_PFX_BASE64: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 }}
           WINDOWS_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGN_PFX_PASSWORD }}
         run: |
-          $pfxPath = Join-Path $env:RUNNER_TEMP "yoink-signing-cert.pfx"
+          $pfxPath = Join-Path $env:RUNNER_TEMP "oddsnap-signing-cert.pfx"
           [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_SIGN_PFX_BASE64))
           Add-Content -Path $env:GITHUB_OUTPUT -Value "pfx_path=$pfxPath" -Encoding utf8
           Add-Content -Path $env:GITHUB_OUTPUT -Value "sign_params=/fd SHA256 /f `"$pfxPath`" /p `"$env:WINDOWS_SIGN_PFX_PASSWORD`" /tr `"http://timestamp.digicert.com`" /td SHA256" -Encoding utf8
 
       - name: Publish
         run: >
-          dotnet publish src/Yoink/Yoink.csproj
+          dotnet publish src/OddSnap/OddSnap.csproj
           -c Release
           -r ${{ matrix.rid }}
           --self-contained true
@@ -72,7 +72,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          [xml]$csproj = Get-Content src/Yoink/Yoink.csproj -Raw
+          [xml]$csproj = Get-Content src/OddSnap/OddSnap.csproj -Raw
           $version = ($csproj.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
           Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding utf8
 
@@ -84,13 +84,13 @@ jobs:
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
           vpk pack `
-            --packId JasperDevs.Yoink `
+            --packId JasperDevs.OddSnap `
             --packVersion "${{ steps.version.outputs.version }}" `
             --packDir publish `
-            --mainExe Yoink.exe `
-            --packTitle Yoink `
+            --mainExe OddSnap.exe `
+            --packTitle OddSnap `
             --packAuthors jasperdevs `
-            --icon src/Yoink/yoink.ico `
+            --icon src/OddSnap/oddsnap.ico `
             --channel "${{ matrix.rid }}" `
             --runtime "${{ matrix.rid }}" `
             --releaseNotes "docs/CHANGELOG.md" `
@@ -99,12 +99,12 @@ jobs:
 
           $rid = "${{ matrix.rid }}"
           $version = "${{ steps.version.outputs.version }}"
-          $setupName = if ($rid -eq 'win-x64') { 'Yoink App Setup.exe' } elseif ($rid -eq 'win-x86') { 'Yoink App Setup x86.exe' } else { 'Yoink App Setup arm64.exe' }
-          $portableName = if ($rid -eq 'win-x64') { 'Yoink Portable.zip' } elseif ($rid -eq 'win-x86') { 'Yoink Portable x86.zip' } else { 'Yoink Portable arm64.zip' }
-          $fullName = "Yoink Update $version $rid full.nupkg"
-          $releasesName = "Yoink Update RELEASES $rid"
-          $releaseJsonName = "Yoink Update releases $rid.json"
-          $assetsJsonName = "Yoink Update assets $rid.json"
+          $setupName = if ($rid -eq 'win-x64') { 'OddSnap App Setup.exe' } elseif ($rid -eq 'win-x86') { 'OddSnap App Setup x86.exe' } else { 'OddSnap App Setup arm64.exe' }
+          $portableName = if ($rid -eq 'win-x64') { 'OddSnap Portable.zip' } elseif ($rid -eq 'win-x86') { 'OddSnap Portable x86.zip' } else { 'OddSnap Portable arm64.zip' }
+          $fullName = "OddSnap Update $version $rid full.nupkg"
+          $releasesName = "OddSnap Update RELEASES $rid"
+          $releaseJsonName = "OddSnap Update releases $rid.json"
+          $assetsJsonName = "OddSnap Update assets $rid.json"
 
           $setup = Get-ChildItem $outDir -Filter '*-Setup.exe' | Select-Object -First 1
           if ($null -ne $setup) { Rename-Item -LiteralPath $setup.FullName -NewName $setupName }

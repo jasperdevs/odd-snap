@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an improvement to Yoink
+description: Suggest an improvement to OddSnap
 labels: [enhancement]
 body:
   - type: textarea
@@ -13,7 +13,7 @@ body:
     id: proposal
     attributes:
       label: Proposed change
-      description: What should Yoink do instead?
+      description: What should OddSnap do instead?
     validations:
       required: true
   - type: textarea

@@ -25,7 +25,7 @@ export function useReleases() {
 
   useEffect(() => {
     fetch(
-      "https://api.github.com/repos/jasperdevs/yoink/releases?per_page=20"
+      "https://api.github.com/repos/jasperdevs/odd-snap/releases?per_page=20"
     )
       .then((res) => res.json())
       .then((data) => {

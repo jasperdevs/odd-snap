@@ -37,7 +37,7 @@ nul
 publish/
 
 ## Temp icon build artifacts
-src/Yoink/yoink_*.png
+src/OddSnap/oddsnap_*.png
 
 ## Release zips
 *.zip
@@ -45,3 +45,4 @@ src/Yoink/yoink_*.png
 .claude/
 site/node_modules/
 *.tsbuildinfo
+site/vite-dev.*.log

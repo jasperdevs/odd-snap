@@ -1,4 +1,4 @@
-const REPOSITORY_API = "https://api.github.com/repos/jasperdevs/yoink";
+const REPOSITORY_API = "https://api.github.com/repos/jasperdevs/odd-snap";
 
 export async function fetchGitHubRepoJson<T>(path = "", init?: RequestInit): Promise<T> {
   const response = await fetch(`${REPOSITORY_API}${path}`, init);
