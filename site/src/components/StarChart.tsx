@@ -161,7 +161,7 @@ export default function StarChart() {
     ctx.strokeStyle = "rgba(0,0,0,0.06)";
     ctx.lineWidth = 1;
     ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.font = "11px 'Segoe UI Variable', 'Segoe UI', ui-sans-serif, system-ui, sans-serif";
+    ctx.font = "11px 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif";
     ctx.textAlign = "right";
     const yTicks = 4;
     for (let i = 0; i <= yTicks; i++) {

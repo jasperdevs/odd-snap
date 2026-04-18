@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { HashRouter, Routes, Route } from "react-router-dom";
+import "@fontsource-variable/inter/index.css";
 import "./index.css";
 import Layout from "./components/Layout";
 import ScrollToTop from "./components/ScrollToTop";
