@@ -8,7 +8,7 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 import { Tabs, TabsList, TabItem, TabPanel } from "@/components/ui/tabs";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 
 const features = [
   "region capture",
@@ -206,26 +206,22 @@ export default function Home() {
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {downloadUrl ? (
-            <a
-              href={downloadUrl}
-              className={buttonVariants({ size: "lg", variant: "primary" })}
-            >
-              <WindowsIcon />
-              download for windows
-            </a>
+            <Button asChild size="lg" variant="primary">
+              <a href={downloadUrl}>
+                <WindowsIcon />
+                download for windows
+              </a>
+            </Button>
           ) : (
             <Button size="lg" variant="primary" loading>
               loading
             </Button>
           )}
-          <a
-            href="https://github.com/jasperdevs/yoink"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={buttonVariants({ size: "lg", variant: "tertiary" })}
-          >
-            source code
-          </a>
+          <Button asChild size="lg" variant="tertiary">
+            <a href="https://github.com/jasperdevs/yoink" target="_blank" rel="noopener noreferrer">
+              source code
+            </a>
+          </Button>
         </div>
       </section>
 

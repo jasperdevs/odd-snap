@@ -82,6 +82,28 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const iconSize = size === "sm" ? 14 : size === "lg" ? 20 : 16;
     const shape = useShape();
 
+    if (asChild) {
+      return (
+        <Slot
+          ref={ref}
+          className={cn(
+            buttonVariants({
+              variant,
+              size,
+              iconLeft: !isIconOnly && !!LeadingIcon,
+              iconRight: !isIconOnly && !!TrailingIcon,
+            }),
+            shape.button,
+            className
+          )}
+          style={style}
+          {...props}
+        >
+          {children}
+        </Slot>
+      );
+    }
+
     return (
       <Comp
         ref={ref}

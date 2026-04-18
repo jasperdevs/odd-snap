@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useReleases } from "../hooks/useReleases";
 import type { Release, ReleaseAsset } from "../hooks/useReleases";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 function formatSize(bytes: number): string {
@@ -114,9 +114,9 @@ function getArchLabel(name: string): string {
 
 function PrimaryBtn({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a href={href} className={buttonVariants({ size: "md", variant: "primary" })}>
-      {children}
-    </a>
+    <Button asChild size="md" variant="primary">
+      <a href={href}>{children}</a>
+    </Button>
   );
 }
 
@@ -138,13 +138,11 @@ function ChevronRight() {
 
 function OutlineBtn({ href, external, children }: { href: string; external?: boolean; children: React.ReactNode }) {
   return (
-    <a
-      href={href}
-      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      className={buttonVariants({ size: "md", variant: "tertiary" })}
-    >
-      {children}
-    </a>
+    <Button asChild size="md" variant="tertiary">
+      <a href={href} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+        {children}
+      </a>
+    </Button>
   );
 }
 

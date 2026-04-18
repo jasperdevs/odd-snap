@@ -1,15 +1,12 @@
-import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 
 function PrimaryBtn({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={buttonVariants({ size: "md", variant: "primary" })}
-    >
-      {children}
-    </a>
+    <Button asChild size="md" variant="primary">
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    </Button>
   );
 }
 
