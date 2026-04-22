@@ -25,7 +25,23 @@ public sealed class FileNameTemplateTests
     {
         var value = FileNameTemplate.Format("   ");
 
-        Assert.StartsWith("oddsnap_", value, StringComparison.OrdinalIgnoreCase);
-        Assert.Matches(@"oddsnap_\d{8}_\d{6}_[a-f0-9]{4}", value);
+        Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2} [a-f0-9]{4}", value);
+    }
+
+    [Fact]
+    public void Format_PreservesCustomPrefix()
+    {
+        var value = FileNameTemplate.Format("Screenshot_{day}-{month}-{year}_{hour}-{min}");
+
+        Assert.StartsWith("Screenshot_", value, StringComparison.Ordinal);
+        Assert.False(value.StartsWith("oddsnap_", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void FormatExample_UsesSameSanitizationAsFormat()
+    {
+        var value = FileNameTemplate.FormatExample("Screenshot {day}/{month}/{year} {hour}:{min}");
+
+        Assert.Equal("Screenshot 05_04_2026 14_30", value);
     }
 }

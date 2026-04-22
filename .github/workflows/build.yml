@@ -99,30 +99,19 @@ jobs:
 
           $rid = "${{ matrix.rid }}"
           $version = "${{ steps.version.outputs.version }}"
-          $setupName = "OddSnap-Setup-$rid.exe"
-          $portableName = "OddSnap-Portable-$rid.zip"
-          $fullName = "OddSnap-Update-$version-$rid-full.nupkg"
-          $releasesName = "OddSnap-RELEASES-$rid"
-          $releaseJsonName = "OddSnap-releases-$rid.json"
-          $assetsJsonName = "OddSnap-assets-$rid.json"
-
-          $setup = Get-ChildItem $outDir -Filter '*-Setup.exe' | Select-Object -First 1
-          if ($null -ne $setup) { Rename-Item -LiteralPath $setup.FullName -NewName $setupName }
-
-          $portable = Get-ChildItem $outDir -Filter '*-Portable.zip' | Select-Object -First 1
-          if ($null -ne $portable) { Rename-Item -LiteralPath $portable.FullName -NewName $portableName }
-
-          $full = Get-ChildItem $outDir -Filter '*-full.nupkg' | Select-Object -First 1
-          if ($null -ne $full) { Rename-Item -LiteralPath $full.FullName -NewName $fullName }
-
-          $releases = Get-ChildItem $outDir -Filter 'RELEASES-*' | Select-Object -First 1
-          if ($null -ne $releases) { Rename-Item -LiteralPath $releases.FullName -NewName $releasesName }
-
-          $releaseJson = Get-ChildItem $outDir -Filter 'releases.*.json' | Select-Object -First 1
-          if ($null -ne $releaseJson) { Rename-Item -LiteralPath $releaseJson.FullName -NewName $releaseJsonName }
-
-          $assetsJson = Get-ChildItem $outDir -Filter 'assets.*.json' | Select-Object -First 1
-          if ($null -ne $assetsJson) { Rename-Item -LiteralPath $assetsJson.FullName -NewName $assetsJsonName }
+          $required = @(
+            '*-Setup.exe',
+            '*-Portable.zip',
+            '*-full.nupkg',
+            'RELEASES-*',
+            'releases.*.json',
+            'assets.*.json'
+          )
+          foreach ($pattern in $required) {
+            if (-not (Get-ChildItem $outDir -Filter $pattern | Select-Object -First 1)) {
+              throw "Expected Velopack output '$pattern' was not found in $outDir."
+            }
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

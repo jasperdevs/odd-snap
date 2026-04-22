@@ -37,10 +37,12 @@ public partial class App
                 string baseDir = s.SaveDirectory;
                 string ext = fmt switch { RecordingFormat.MP4 => ".mp4", RecordingFormat.WebM => ".webm", RecordingFormat.MKV => ".mkv", _ => ".gif" };
                 string saveRoot = fmt == RecordingFormat.GIF ? baseDir : Path.Combine(baseDir, "Videos");
-                string saveDir = Helpers.CaptureSavePath.GetMonthDirectory(saveRoot);
+                string saveDir = s.SaveInMonthlyFolders
+                    ? Helpers.CaptureSavePath.GetMonthDirectory(saveRoot)
+                    : saveRoot;
                 Directory.CreateDirectory(saveDir);
                 string fileName = $"{Helpers.FileNameTemplate.Format(s.FileNameTemplate)}{ext}";
-                string savePath = Path.Combine(saveDir, fileName);
+                string savePath = Helpers.CaptureSavePath.GetAvailablePath(Path.Combine(saveDir, fileName));
                 int maxH = s.RecordingQuality switch { RecordingQuality.P1080 => 1080, RecordingQuality.P720 => 720, RecordingQuality.P480 => 480, _ => 0 };
                 int fps = fmt == RecordingFormat.GIF ? s.GifFps : s.RecordingFps;
 

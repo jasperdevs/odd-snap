@@ -83,6 +83,12 @@ public partial class App
 
     private void OnGifHotkeyPressed()
     {
+        if (RecordingForm.Current != null)
+        {
+            RecordingForm.Current.RequestStop();
+            return;
+        }
+
         if (Interlocked.CompareExchange(ref _isCapturing, 1, 0) != 0) return;
         LaunchGifRecording();
     }

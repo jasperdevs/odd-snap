@@ -130,7 +130,8 @@ public partial class SettingsWindow
         OverlayAllMonitorsCheck.IsChecked = s.OverlayCaptureAllMonitors;
         ShowToolNumberBadgesCheck.IsChecked = s.ShowToolNumberBadges;
         AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
-        LoadFileNameTemplateCombo(s.FileNameTemplate);
+        MonthlyFoldersCheck.IsChecked = s.SaveInMonthlyFolders;
+        LoadFileNameTemplate(s.FileNameTemplate);
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
         CaptureDockSideCombo.SelectedIndex = (int)s.CaptureDockSide;
         WindowDetectionCombo.SelectedIndex = (int)s.WindowDetection;

@@ -15,6 +15,8 @@ public sealed class TrayIcon : IDisposable
     private readonly AppSettings? _settings;
     private Icon? _defaultIcon;
     private Icon? _recordingIcon;
+    private ContextMenuStrip? _menu;
+    private ToolStripMenuItem? _recordItem;
     private bool _isShowingRecording;
 
     public event Action? OnCapture;
@@ -41,10 +43,18 @@ public sealed class TrayIcon : IDisposable
         _notifyIcon.MouseClick += (_, e) =>
         {
             if (e.Button == MouseButtons.Left)
-                OnCapture?.Invoke();
+            {
+                if (Capture.RecordingForm.Current != null)
+                    Capture.RecordingForm.Current.RequestStop();
+                else
+                    OnCapture?.Invoke();
+            }
             else if (e.Button == MouseButtons.Right)
                 ShowMenu();
         };
+
+        _menu = CreateThemedMenu();
+        _notifyIcon.ContextMenuStrip = _menu;
     }
 
     public void UpdateRecordingState(bool isRecording)
@@ -55,9 +65,13 @@ public sealed class TrayIcon : IDisposable
         {
             _recordingIcon ??= CreateRecordingIcon();
             _notifyIcon.Icon = _recordingIcon;
+            _notifyIcon.Text = "OddSnap recording - click to stop, right-click for menu";
         }
         else
+        {
             _notifyIcon.Icon = _defaultIcon;
+            _notifyIcon.Text = "OddSnap - Click to capture, right-click for menu";
+        }
     }
 
     private ContextMenuStrip CreateThemedMenu()
@@ -72,6 +86,7 @@ public sealed class TrayIcon : IDisposable
         var recordItem   = isRec
             ? WindowsMenuRenderer.Item("Stop recording", null, "record", active: true, danger: true)
             : WindowsMenuRenderer.Item("Record", HotkeyHint("_record"), "record");
+        _recordItem = recordItem;
         var scrollItem   = WindowsMenuRenderer.Item("Scroll capture", HotkeyHint("_scrollCapture"), "scrollCapture");
         var settingsItem = WindowsMenuRenderer.Item("Settings", iconId: "gear");
         var historyItem  = WindowsMenuRenderer.Item("History", iconId: "folder");
@@ -132,15 +147,23 @@ public sealed class TrayIcon : IDisposable
 
     private void ShowMenu()
     {
-        RefreshTrayIconTheme();
-        var fresh = CreateThemedMenu();
-        var previous = _notifyIcon.ContextMenuStrip;
-        _notifyIcon.ContextMenuStrip = fresh;
-        previous?.Dispose();
+        UpdateRecordingMenuItem();
 
         var showMethod = typeof(NotifyIcon).GetMethod("ShowContextMenu",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         showMethod?.Invoke(_notifyIcon, null);
+    }
+
+    private void UpdateRecordingMenuItem()
+    {
+        if (_recordItem is null)
+            return;
+
+        bool isRec = Capture.RecordingForm.Current != null;
+        _recordItem.Text = isRec ? "Stop recording" : "Record";
+        _recordItem.ShortcutKeyDisplayString = isRec ? string.Empty : HotkeyHint("_record") ?? string.Empty;
+        _recordItem.Tag = isRec;
+        _recordItem.ForeColor = isRec ? Color.FromArgb(239, 68, 68) : UiChrome.SurfaceTextPrimary;
     }
 
     // ── Tray icon ────────────────────────────────────────────────
@@ -273,7 +296,8 @@ public sealed class TrayIcon : IDisposable
     public void Dispose()
     {
         _notifyIcon.Visible = false;
-        _notifyIcon.ContextMenuStrip?.Dispose();
+        _notifyIcon.ContextMenuStrip = null;
+        _menu?.Dispose();
         _notifyIcon.Dispose();
         _defaultIcon?.Dispose();
         _recordingIcon?.Dispose();

@@ -93,6 +93,24 @@ public sealed class VideoRecorderTests
     }
 
     [Fact]
+    public void BuildVideoCodecArguments_OriginalSizeSkipsScaleFilterAndUsesHighQualityCrf()
+    {
+        string args = VideoRecorder.BuildVideoCodecArguments(VideoRecorder.Format.MP4, 1920, 1080, 1920, 1080);
+
+        Assert.Contains("-crf 18", args);
+        Assert.DoesNotContain("-vf scale=", args, StringComparison.Ordinal);
+        Assert.Contains("-movflags +faststart", args);
+    }
+
+    [Fact]
+    public void BuildVideoCodecArguments_ResizedOutputUsesLanczosScaler()
+    {
+        string args = VideoRecorder.BuildVideoCodecArguments(VideoRecorder.Format.MP4, 3840, 2160, 1920, 1080);
+
+        Assert.Contains("-vf scale=1920:1080:flags=lanczos", args);
+    }
+
+    [Fact]
     public void GetFirstFrame_ReturnsIndependentBitmapClone()
     {
         var recorder = new VideoRecorder(new System.Drawing.Rectangle(0, 0, 100, 100), VideoRecorder.Format.MP4, fps: 30);

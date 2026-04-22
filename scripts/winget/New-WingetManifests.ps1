@@ -7,7 +7,7 @@ param(
 
     [string]$PackageIdentifier = 'JasperDevs.OddSnap',
     [string]$PackageName = 'OddSnap',
-    [string]$Publisher = 'OddSnap Contributors',
+    [string]$Publisher = 'JasperDevs',
     [string]$PublisherUrl = 'https://github.com/jasperdevs/odd-snap',
     [string]$PublisherSupportUrl = 'https://github.com/jasperdevs/odd-snap/issues',
     [string]$License = 'GPL-3.0',
@@ -93,11 +93,11 @@ $installerYaml = @"
 PackageIdentifier: $PackageIdentifier
 PackageVersion: $PackageVersion
 MinimumOSVersion: 10.0.0.0
-InstallerType: zip
-NestedInstallerType: portable
-NestedInstallerFiles:
-  - RelativeFilePath: OddSnap.exe
-    PortableCommandAlias: oddsnap
+InstallerType: exe
+Scope: user
+InstallerSwitches:
+  Silent: --silent
+  SilentWithProgress: --silent
 UpgradeBehavior: install
 Installers:
   - Architecture: x64

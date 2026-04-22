@@ -153,7 +153,7 @@ public sealed class AppSettings
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.PreviewAndCopy;
     public bool SaveToFile { get; set; } = true;
     public bool AskForFileNameOnSave { get; set; }
-    public string FileNameTemplate { get; set; } = "oddsnap_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}";
+    public string FileNameTemplate { get; set; } = Helpers.FileNameTemplate.DefaultTemplate;
     public CaptureImageFormat CaptureImageFormat { get; set; } = CaptureImageFormat.Png;
     public bool StyleScreenshots { get; set; }
     public bool AddScreenshotShadow { get; set; }
@@ -161,6 +161,7 @@ public sealed class AppSettings
     public int CaptureMaxLongEdge { get; set; }
     public string SaveDirectory { get; set; } = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "OddSnap");
+    public bool SaveInMonthlyFolders { get; set; } = true;
     public bool StartWithWindows { get; set; } = true;
     public bool AutoCheckForUpdates { get; set; } = true;
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;

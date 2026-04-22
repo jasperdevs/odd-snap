@@ -19,9 +19,10 @@ public partial class App
         string? requestedPath = null;
         if (settings.SaveToFile)
         {
-            var defaultPath = Helpers.CaptureSavePath.BuildMonthlyPath(
+            var defaultPath = Helpers.CaptureSavePath.BuildAvailablePath(
                 settings.SaveDirectory,
-                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}.{ext}");
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}.{ext}",
+                settings.SaveInMonthlyFolders);
             if (settings.AskForFileNameOnSave)
             {
                 // SaveFileDialog must run on the WPF dispatcher thread
@@ -104,9 +105,10 @@ public partial class App
         string? requestedPath = null;
         if (settings.SaveToFile)
         {
-            var defaultStickerPath = Helpers.CaptureSavePath.BuildMonthlyPath(
+            var defaultStickerPath = Helpers.CaptureSavePath.BuildAvailablePath(
                 settings.SaveDirectory,
-                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_sticker.png");
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_sticker.png",
+                settings.SaveInMonthlyFolders);
             requestedPath = settings.AskForFileNameOnSave
                 ? ResolveSavePath(defaultStickerPath, CaptureImageFormat.Png)
                 : defaultStickerPath;
@@ -167,9 +169,10 @@ public partial class App
         string? requestedPath = null;
         if (settings.SaveToFile)
         {
-            var defaultUpscalePath = Helpers.CaptureSavePath.BuildMonthlyPath(
+            var defaultUpscalePath = Helpers.CaptureSavePath.BuildAvailablePath(
                 settings.SaveDirectory,
-                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_upscale.png");
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_upscale.png",
+                settings.SaveInMonthlyFolders);
             requestedPath = settings.AskForFileNameOnSave
                 ? ResolveSavePath(defaultUpscalePath, CaptureImageFormat.Png)
                 : defaultUpscalePath;

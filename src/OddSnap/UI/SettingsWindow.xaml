@@ -506,14 +506,27 @@
                                       Checked="SaveToFileCheck_Changed" Unchecked="SaveToFileCheck_Changed"/>
                             <CheckBox x:Name="AskFileNameCheck" Content="Ask for file name every time" FontSize="13" Margin="0,8,0,0"
                                       Checked="AskFileNameCheck_Changed" Unchecked="AskFileNameCheck_Changed"/>
+                            <StackPanel Margin="0,10,0,0">
+                                <TextBlock Text="File name pattern" FontSize="13" Margin="0,0,0,5"/>
+                                <TextBox x:Name="FileNameTemplateBox" FontSize="12" Padding="8,5" MinWidth="420"
+                                         HorizontalAlignment="Stretch"
+                                         PreviewKeyDown="FileNameTemplateBox_PreviewKeyDown"
+                                         TextChanged="FileNameTemplateBox_TextChanged"
+                                         Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                         BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
+                                <WrapPanel x:Name="FileNameTokenPanel" Margin="0,8,0,0"/>
+                            </StackPanel>
+                            <TextBlock x:Name="FileNameTemplatePreviewText" FontSize="11" Margin="0,6,0,0"
+                                       Foreground="{DynamicResource ThemeTextSecondaryBrush}" TextTrimming="CharacterEllipsis"/>
+                            <CheckBox x:Name="MonthlyFoldersCheck" Content="Create monthly subfolders" FontSize="13" Margin="0,10,0,0"
+                                      Checked="MonthlyFoldersCheck_Changed" Unchecked="MonthlyFoldersCheck_Changed"/>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="File name pattern" FontSize="13" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="FileNameTemplateCombo" Grid.Column="1" FontSize="12" Padding="8,5" MinWidth="200"
-                                          SelectionChanged="FileNameTemplateCombo_Changed"/>
+                                <TextBlock Text="Save folder" FontSize="13" VerticalAlignment="Center"/>
+                                <Button Content="Browse" Grid.Column="1" MinWidth="90" Padding="10,5" Click="BrowseButton_Click"/>
                             </Grid>
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
@@ -561,8 +574,7 @@
                             </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0" x:Name="SaveDirPanel" Visibility="Collapsed">
                                 <TextBox x:Name="SaveDirBox" IsReadOnly="True" FontSize="11" Padding="7,4" Width="280"
-                                          Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
-                                <Button Content="Browse" Margin="5,0,0,0" Click="BrowseButton_Click"/>
+                                           Background="{DynamicResource ThemeInputBackgroundBrush}" Foreground="{DynamicResource ThemeTextPrimaryBrush}" BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"/>
                             </StackPanel>
                         </StackPanel>
                     </Border>

@@ -234,6 +234,9 @@ public sealed class SettingsService : IDisposable
         if (settings.CompressHistory && settings.CaptureImageFormat == CaptureImageFormat.Png)
             settings.CaptureImageFormat = CaptureImageFormat.Jpeg;
 
+        if (string.Equals(settings.FileNameTemplate, Helpers.FileNameTemplate.LegacyDefaultTemplate, StringComparison.Ordinal))
+            settings.FileNameTemplate = Helpers.FileNameTemplate.DefaultTemplate;
+
         settings.ImageSearchSources &= ImageSearchSourceOptions.All;
 
         // Migrate older settings to include newly added default tools.

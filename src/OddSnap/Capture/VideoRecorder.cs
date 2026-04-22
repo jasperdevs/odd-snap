@@ -157,12 +157,7 @@ public sealed class VideoRecorder : IDisposable
         outW = outW / 2 * 2;
         outH = outH / 2 * 2;
 
-        string codecArgs = _format switch
-        {
-            Format.WebM => $"-c:v libvpx-vp9 -deadline good -cpu-used 2 -row-mt 1 -crf 30 -b:v 0 -pix_fmt yuv420p -vf scale={outW}:{outH}",
-            Format.MKV => $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -vf scale={outW}:{outH}",
-            _ => $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -vf scale={outW}:{outH} -movflags +faststart",
-        };
+        string codecArgs = BuildVideoCodecArguments(_format, _region.Width, _region.Height, outW, outH);
 
         var args = $"-y -f rawvideo -pix_fmt bgra -s {_region.Width}x{_region.Height} -r {_fps} -i pipe:0 {codecArgs} \"{outputPath}\"";
 
@@ -792,10 +787,24 @@ public sealed class VideoRecorder : IDisposable
 
     private static string GetRepairVideoCodecArguments(Format format) => format switch
     {
-        Format.WebM => "-c:v libvpx-vp9 -deadline good -cpu-used 2 -row-mt 1 -crf 30 -b:v 0 -pix_fmt yuv420p",
-        Format.MKV => "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p",
-        _ => "-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -movflags +faststart",
+        Format.WebM => "-c:v libvpx-vp9 -deadline good -cpu-used 2 -row-mt 1 -crf 24 -b:v 0 -pix_fmt yuv420p",
+        Format.MKV => "-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p",
+        _ => "-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -movflags +faststart",
     };
+
+    internal static string BuildVideoCodecArguments(Format format, int inputWidth, int inputHeight, int outputWidth, int outputHeight)
+    {
+        string scaleFilter = inputWidth == outputWidth && inputHeight == outputHeight
+            ? string.Empty
+            : $" -vf scale={outputWidth}:{outputHeight}:flags=lanczos";
+
+        return format switch
+        {
+            Format.WebM => $"-c:v libvpx-vp9 -deadline good -cpu-used 2 -row-mt 1 -crf 24 -b:v 0 -pix_fmt yuv420p{scaleFilter}",
+            Format.MKV => $"-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p{scaleFilter}",
+            _ => $"-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p{scaleFilter} -movflags +faststart",
+        };
+    }
 
     private static string GetRepairAudioCodec(Format format)
         => format == Format.WebM ? "libopus" : "aac";

@@ -100,30 +100,19 @@ jobs:
 
           $rid = "${{ matrix.rid }}"
           $version = "${{ steps.version.outputs.version }}"
-          $setupName = "OddSnap-Setup-$rid.exe"
-          $portableName = "OddSnap-Portable-$rid.zip"
-          $fullName = "OddSnap-Update-$version-$rid-full.nupkg"
-          $releasesName = "OddSnap-RELEASES-$rid"
-          $releaseJsonName = "OddSnap-releases-$rid.json"
-          $assetsJsonName = "OddSnap-assets-$rid.json"
-
-          $setup = Get-ChildItem $outDir -Filter '*-Setup.exe' | Select-Object -First 1
-          if ($null -ne $setup) { Rename-Item -LiteralPath $setup.FullName -NewName $setupName }
-
-          $portable = Get-ChildItem $outDir -Filter '*-Portable.zip' | Select-Object -First 1
-          if ($null -ne $portable) { Rename-Item -LiteralPath $portable.FullName -NewName $portableName }
-
-          $full = Get-ChildItem $outDir -Filter '*-full.nupkg' | Select-Object -First 1
-          if ($null -ne $full) { Rename-Item -LiteralPath $full.FullName -NewName $fullName }
-
-          $releases = Get-ChildItem $outDir -Filter 'RELEASES-*' | Select-Object -First 1
-          if ($null -ne $releases) { Rename-Item -LiteralPath $releases.FullName -NewName $releasesName }
-
-          $releaseJson = Get-ChildItem $outDir -Filter 'releases.*.json' | Select-Object -First 1
-          if ($null -ne $releaseJson) { Rename-Item -LiteralPath $releaseJson.FullName -NewName $releaseJsonName }
-
-          $assetsJson = Get-ChildItem $outDir -Filter 'assets.*.json' | Select-Object -First 1
-          if ($null -ne $assetsJson) { Rename-Item -LiteralPath $assetsJson.FullName -NewName $assetsJsonName }
+          $required = @(
+            '*-Setup.exe',
+            '*-Portable.zip',
+            '*-full.nupkg',
+            'RELEASES-*',
+            'releases.*.json',
+            'assets.*.json'
+          )
+          foreach ($pattern in $required) {
+            if (-not (Get-ChildItem $outDir -Filter $pattern | Select-Object -First 1)) {
+              throw "Expected Velopack output '$pattern' was not found in $outDir."
+            }
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -170,9 +159,9 @@ jobs:
           $tag = "v$version"
           $baseUrl = "https://github.com/${{ github.repository }}/releases/download/$tag"
 
-          $x64Setup = Get-Item 'dist/OddSnap-Setup-win-x64.exe'
-          $x86Setup = Get-Item 'dist/OddSnap-Setup-win-x86.exe'
-          $arm64Setup = Get-Item 'dist/OddSnap-Setup-win-arm64.exe'
+          $x64Setup = Get-ChildItem 'dist' -Filter '*win-x64-Setup.exe' | Select-Object -First 1
+          $x86Setup = Get-ChildItem 'dist' -Filter '*win-x86-Setup.exe' | Select-Object -First 1
+          $arm64Setup = Get-ChildItem 'dist' -Filter '*win-arm64-Setup.exe' | Select-Object -First 1
 
           if ($null -eq $x64Setup -or $null -eq $x86Setup -or $null -eq $arm64Setup) {
             throw "Expected Velopack setup executables for x64/x86/arm64 were not found in dist."
@@ -194,12 +183,12 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           name: OddSnap v${{ steps.version.outputs.version }}
           files: |
-            dist/OddSnap-Setup-*.exe
-            dist/OddSnap-Portable-*.zip
-            dist/OddSnap-Update-*.nupkg
-            dist/OddSnap-RELEASES-*
-            dist/OddSnap-releases-*.json
-            dist/OddSnap-assets-*.json
+            dist/*-Setup.exe
+            dist/*-Portable.zip
+            dist/*-full.nupkg
+            dist/RELEASES-*
+            dist/releases.*.json
+            dist/assets.*.json
             dist/winget-manifests/**/*.yaml
           append_body: false
           body_path: docs/CHANGELOG.md

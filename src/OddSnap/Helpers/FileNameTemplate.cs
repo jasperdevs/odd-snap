@@ -2,11 +2,26 @@ namespace OddSnap.Helpers;
 
 public static class FileNameTemplate
 {
+    public const string DefaultTemplate = "{year}-{month}-{day} {hour}-{min}-{sec} {rand}";
+    public const string LegacyDefaultTemplate = "oddsnap_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}";
+
     public static string Format(string template, int width = 0, int height = 0)
     {
         var now = DateTime.Now;
         var randomToken = Guid.NewGuid().ToString("N").Substring(0, 4);
+        return Render(template, now, randomToken, width, height);
+    }
+
+    /// <summary>Format a preset with a fixed example date (2026-04-05 14:30:52) for display.</summary>
+    public static string FormatExample(string template)
+        => Render(template, new DateTime(2026, 4, 5, 14, 30, 52), "a3f1", 1920, 1080);
+
+    private static string Render(string template, DateTime now, string randomToken, int width, int height)
+    {
+        bool blankTemplate = string.IsNullOrWhiteSpace(template);
         template = NormalizeLegacyPlaceholders(template);
+        if (blankTemplate)
+            template = DefaultTemplate;
 
         var result = template
             .Replace("{datetime}", now.ToString("yyyyMMdd_HHmmss"))
@@ -22,11 +37,6 @@ public static class FileNameTemplate
             .Replace("{h}", height > 0 ? height.ToString() : "")
             .Replace("{rand}", randomToken);
 
-        // Ensure all filenames start with oddsnap_
-        if (!result.StartsWith("oddsnap", StringComparison.OrdinalIgnoreCase))
-            result = "oddsnap_" + result;
-
-        // Sanitize invalid filename chars
         foreach (var c in System.IO.Path.GetInvalidFileNameChars())
             result = result.Replace(c, '_');
 
@@ -39,24 +49,6 @@ public static class FileNameTemplate
             result = $"oddsnap_{now:yyyy-MM-dd_HH-mm-ss}_{randomToken}";
 
         return result;
-    }
-
-    /// <summary>Format a preset with a fixed example date (2026-04-05 14:30:52) for display.</summary>
-    public static string FormatExample(string template)
-    {
-        return template
-            .Replace("{datetime}", "20260405_143052")
-            .Replace("{date}", "20260405")
-            .Replace("{time}", "143052")
-            .Replace("{year}", "2026")
-            .Replace("{month}", "04")
-            .Replace("{day}", "05")
-            .Replace("{hour}", "14")
-            .Replace("{min}", "30")
-            .Replace("{sec}", "52")
-            .Replace("{w}", "1920")
-            .Replace("{h}", "1080")
-            .Replace("{rand}", "a3f1");
     }
 
     public static readonly string[] Presets =

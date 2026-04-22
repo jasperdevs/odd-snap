@@ -14,6 +14,21 @@ public partial class SettingsWindow : Window
 {
     private const string OpenSourceLocalTranslationJobKey = "runtime:translation-open-source-local";
     private const string ArgosTranslationJobKey = "runtime:translation-argos";
+    private static readonly (string Token, string Label)[] FileNameTokens =
+    [
+        ("{year}", "Year"),
+        ("{month}", "Month"),
+        ("{day}", "Day"),
+        ("{hour}", "Hour"),
+        ("{min}", "Minute"),
+        ("{sec}", "Second"),
+        ("{date}", "Date"),
+        ("{time}", "Time"),
+        ("{datetime}", "Date time"),
+        ("{w}", "Width"),
+        ("{h}", "Height"),
+        ("{rand}", "Random"),
+    ];
     private static readonly SemaphoreSlim ThumbDecodeGate = new(4);
     private readonly System.Windows.Threading.DispatcherTimer _historyMonitorTimer = new()
     {
@@ -74,6 +89,7 @@ public partial class SettingsWindow : Window
         Theme.ApplyTo(Application.Current.Resources);
         ApplyThemeColors();
         LoadStaticFluentIcons();
+        LoadFileNameTokenButtons();
         LoadSettings();
         Loaded += (_, _) => ApplyMicaBackdrop();
         Loaded += async (_, _) => await RefreshUpdateStatusAsync(false);
@@ -517,33 +533,123 @@ public partial class SettingsWindow : Window
         _settingsService.Save();
     }
 
-    private void LoadFileNameTemplateCombo(string currentTemplate)
+    private void LoadFileNameTemplate(string currentTemplate)
     {
-        FileNameTemplateCombo.Items.Clear();
-        foreach (var preset in Helpers.FileNameTemplate.Presets)
-        {
-            var example = Helpers.FileNameTemplate.FormatExample(preset) + ".png";
-            var item = new System.Windows.Controls.ComboBoxItem { Content = example, Tag = preset };
-            FileNameTemplateCombo.Items.Add(item);
-        }
-
-        var match = FileNameTemplateCombo.Items.OfType<System.Windows.Controls.ComboBoxItem>()
-            .FirstOrDefault(i => (string)i.Tag == currentTemplate);
-        if (match != null)
-            FileNameTemplateCombo.SelectedItem = match;
-        else if (FileNameTemplateCombo.Items.Count > 0)
-            FileNameTemplateCombo.SelectedIndex = 0;
-
+        FileNameTemplateBox.Text = currentTemplate;
+        UpdateFileNameTemplatePreview(currentTemplate);
     }
 
-    private void FileNameTemplateCombo_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void FileNameTemplateBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (!IsLoaded) return;
-        if (FileNameTemplateCombo.SelectedItem is System.Windows.Controls.ComboBoxItem item && item.Tag is string tag)
+        var template = FileNameTemplateBox.Text;
+        _settingsService.Settings.FileNameTemplate = template;
+        UpdateFileNameTemplatePreview(template);
+        _settingsService.Save();
+    }
+
+    private void UpdateFileNameTemplatePreview(string template)
+    {
+        if (FileNameTemplatePreviewText is null)
+            return;
+
+        FileNameTemplatePreviewText.Text = $"Preview: {Helpers.FileNameTemplate.FormatExample(template)}.png";
+    }
+
+    private void LoadFileNameTokenButtons()
+    {
+        FileNameTokenPanel.Children.Clear();
+        foreach (var (token, label) in FileNameTokens)
         {
-            _settingsService.Settings.FileNameTemplate = tag;
-            _settingsService.Save();
+            var button = new System.Windows.Controls.Button
+            {
+                Content = token,
+                ToolTip = label,
+                FontSize = 11,
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(0, 0, 6, 6),
+                Tag = token
+            };
+            button.Click += FileNameTokenButton_Click;
+            FileNameTokenPanel.Children.Add(button);
         }
+    }
+
+    private void FileNameTokenButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: string token })
+            return;
+
+        var box = FileNameTemplateBox;
+        var text = box.Text ?? "";
+        var start = Math.Clamp(box.SelectionStart, 0, text.Length);
+        var length = Math.Clamp(box.SelectionLength, 0, text.Length - start);
+        var insert = NeedsLeadingSpace(text, start) ? " " + token : token;
+
+        box.Text = text.Remove(start, length).Insert(start, insert);
+        box.Focus();
+        box.SelectionStart = start + insert.Length;
+        box.SelectionLength = 0;
+    }
+
+    private void FileNameTemplateBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.TextBox box || box.SelectionLength > 0)
+            return;
+
+        var text = box.Text ?? "";
+        var caret = box.SelectionStart;
+        var range = e.Key switch
+        {
+            Key.Back => FindTokenRangeBeforeCaret(text, caret),
+            Key.Delete => FindTokenRangeAfterCaret(text, caret),
+            _ => null
+        };
+
+        if (range is not { } tokenRange)
+            return;
+
+        box.Text = text.Remove(tokenRange.Start, tokenRange.Length);
+        box.SelectionStart = tokenRange.Start;
+        box.SelectionLength = 0;
+        e.Handled = true;
+    }
+
+    private static bool NeedsLeadingSpace(string text, int insertionIndex)
+        => insertionIndex > 0
+            && !char.IsWhiteSpace(text[insertionIndex - 1])
+            && text[insertionIndex - 1] is not '_' and not '-' and not '.' and not '(';
+
+    private static RangeSpec? FindTokenRangeBeforeCaret(string text, int caret)
+    {
+        foreach (var (token, _) in FileNameTokens)
+        {
+            var start = caret - token.Length;
+            if (start >= 0 && string.Equals(text.Substring(start, token.Length), token, StringComparison.OrdinalIgnoreCase))
+                return new RangeSpec(start, token.Length);
+        }
+
+        return null;
+    }
+
+    private static RangeSpec? FindTokenRangeAfterCaret(string text, int caret)
+    {
+        foreach (var (token, _) in FileNameTokens)
+        {
+            if (caret + token.Length <= text.Length && string.Equals(text.Substring(caret, token.Length), token, StringComparison.OrdinalIgnoreCase))
+                return new RangeSpec(caret, token.Length);
+        }
+
+        return null;
+    }
+
+    private sealed record RangeSpec(int Start, int Length);
+
+    private void MonthlyFoldersCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.SaveInMonthlyFolders = MonthlyFoldersCheck.IsChecked == true;
+        _settingsService.Save();
     }
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)

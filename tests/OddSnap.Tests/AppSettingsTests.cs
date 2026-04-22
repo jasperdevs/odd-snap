@@ -1,4 +1,5 @@
 using Xunit;
+using OddSnap.Helpers;
 using OddSnap.Models;
 using OddSnap.Services;
 
@@ -107,5 +108,34 @@ public sealed class AppSettingsTests
 
         Assert.True(settings.RecordDesktopAudio);
         Assert.False(settings.RecordMicrophone);
+    }
+
+    [Fact]
+    public void SaveInMonthlyFolders_DefaultsToEnabled()
+    {
+        var settings = new AppSettings();
+
+        Assert.True(settings.SaveInMonthlyFolders);
+    }
+
+    [Fact]
+    public void FileNameTemplate_DefaultsToHumanReadableScreenshotName()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(FileNameTemplate.DefaultTemplate, settings.FileNameTemplate);
+    }
+
+    [Fact]
+    public void TryDeserialize_MigratesLegacyDefaultFileNameTemplate()
+    {
+        var json = $$"""
+            {
+              "FileNameTemplate": "{{FileNameTemplate.LegacyDefaultTemplate}}"
+            }
+            """;
+
+        Assert.True(SettingsService.TryDeserialize(json, out var settings));
+        Assert.Equal(FileNameTemplate.DefaultTemplate, settings.FileNameTemplate);
     }
 }

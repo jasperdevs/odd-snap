@@ -21,6 +21,12 @@ public static class ScreenCapture
 
     public static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreens(bool includeCursor = false)
     {
+        var bounds = GetVirtualScreenBounds();
+        return CaptureWindowExclusion.RunWithoutIntersectingWindows(bounds, () => CaptureAllScreensCore(includeCursor, bounds));
+    }
+
+    private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensCore(bool includeCursor, Rectangle bounds)
+    {
         try
         {
             var capture = DxgiScreenCapture.CaptureAllScreens();
@@ -39,7 +45,7 @@ public static class ScreenCapture
             DxgiScreenCapture.ResetCache();
         }
 
-        return CaptureAllScreensLegacy(includeCursor);
+        return CaptureAllScreensLegacy(includeCursor, bounds);
     }
 
     /// <summary>Captures only the monitor that currently contains the cursor.</summary>
@@ -55,6 +61,9 @@ public static class ScreenCapture
     }
 
     public static Bitmap CaptureRegion(Rectangle region, bool includeCursor = false)
+        => CaptureWindowExclusion.RunWithoutIntersectingWindows(region, () => CaptureRegionCore(region, includeCursor));
+
+    private static Bitmap CaptureRegionCore(Rectangle region, bool includeCursor)
     {
         try
         {
@@ -87,9 +96,8 @@ public static class ScreenCapture
     internal static RecordingFrameCapturer CreateRecordingFrameCapturer(Rectangle region, bool includeCursor = false)
         => new(region, includeCursor);
 
-    private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensLegacy(bool includeCursor)
+    private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensLegacy(bool includeCursor, Rectangle bounds)
     {
-        var bounds = GetVirtualScreenBounds();
         int left = bounds.Left;
         int top = bounds.Top;
         int width = bounds.Width;
@@ -318,6 +326,26 @@ public static class ScreenCapture
             if (buffer is null || buffer.Length != BufferByteCount)
                 buffer = new byte[BufferByteCount];
 
+            CaptureCurrentFrame();
+
+            var rect = new Rectangle(0, 0, _bitmap.Width, _bitmap.Height);
+            var data = _bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                int byteCount = data.Stride * data.Height;
+                if (buffer.Length != byteCount)
+                    buffer = new byte[byteCount];
+                Marshal.Copy(data.Scan0, buffer, 0, byteCount);
+                return buffer;
+            }
+            finally
+            {
+                _bitmap.UnlockBits(data);
+            }
+        }
+
+        private void CaptureCurrentFrame()
+        {
             IntPtr hdcDest = IntPtr.Zero;
             try
             {
@@ -333,21 +361,6 @@ public static class ScreenCapture
             {
                 if (hdcDest != IntPtr.Zero)
                     _graphics.ReleaseHdc(hdcDest);
-            }
-
-            var rect = new Rectangle(0, 0, _bitmap.Width, _bitmap.Height);
-            var data = _bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            try
-            {
-                int byteCount = data.Stride * data.Height;
-                if (buffer.Length != byteCount)
-                    buffer = new byte[byteCount];
-                Marshal.Copy(data.Scan0, buffer, 0, byteCount);
-                return buffer;
-            }
-            finally
-            {
-                _bitmap.UnlockBits(data);
             }
         }
 
