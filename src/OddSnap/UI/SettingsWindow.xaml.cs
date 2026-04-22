@@ -27,6 +27,7 @@ public partial class SettingsWindow : Window
         ("{datetime}", "Date time"),
         ("{w}", "Width"),
         ("{h}", "Height"),
+        ("{aspect}", "Aspect"),
         ("{rand}", "Random"),
     ];
     private static readonly SemaphoreSlim ThumbDecodeGate = new(4);
@@ -584,7 +585,7 @@ public partial class SettingsWindow : Window
         var text = box.Text ?? "";
         var start = Math.Clamp(box.SelectionStart, 0, text.Length);
         var length = Math.Clamp(box.SelectionLength, 0, text.Length - start);
-        var insert = NeedsLeadingSpace(text, start) ? " " + token : token;
+        var insert = NeedsLeadingSeparator(text, start) ? "-" + token : token;
 
         box.Text = text.Remove(start, length).Insert(start, insert);
         box.Focus();
@@ -615,7 +616,7 @@ public partial class SettingsWindow : Window
         e.Handled = true;
     }
 
-    private static bool NeedsLeadingSpace(string text, int insertionIndex)
+    private static bool NeedsLeadingSeparator(string text, int insertionIndex)
         => insertionIndex > 0
             && !char.IsWhiteSpace(text[insertionIndex - 1])
             && text[insertionIndex - 1] is not '_' and not '-' and not '.' and not '(';

@@ -47,13 +47,15 @@ jobs:
         run: dotnet tool install -g vpk --version 0.0.1298
 
       - name: Prepare code signing
-        if: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' && secrets.WINDOWS_SIGN_PFX_PASSWORD != '' }}
         id: signing
         shell: pwsh
         env:
           WINDOWS_SIGN_PFX_BASE64: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 }}
           WINDOWS_SIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_SIGN_PFX_PASSWORD }}
         run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGN_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGN_PFX_PASSWORD)) {
+            exit 0
+          }
           $pfxPath = Join-Path $env:RUNNER_TEMP "oddsnap-signing-cert.pfx"
           [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_SIGN_PFX_BASE64))
           Add-Content -Path $env:GITHUB_OUTPUT -Value "pfx_path=$pfxPath" -Encoding utf8

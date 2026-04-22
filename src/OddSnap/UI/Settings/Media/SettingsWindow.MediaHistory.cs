@@ -17,6 +17,7 @@ namespace OddSnap.UI;
 public partial class SettingsWindow
 {
     private const string VideoThumbnailSeekOffset = "0.40";
+    private static readonly string[] VideoThumbnailSeekOffsets = ["0.40", "1.00", "2.00"];
 
     private void LoadMediaHistory()
     {
@@ -339,7 +340,7 @@ public partial class SettingsWindow
 
     private static async Task<string> EnsureVideoThumbnailAsync(string videoPath, string thumbPath)
     {
-        if (File.Exists(thumbPath))
+        if (File.Exists(thumbPath) && !IsLikelyBlankVideoThumbnail(thumbPath))
             return thumbPath;
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -350,19 +351,17 @@ public partial class SettingsWindow
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(thumbPath)!);
-            var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            try { if (File.Exists(thumbPath)) File.Delete(thumbPath); } catch { }
+
+            foreach (var seekOffset in VideoThumbnailSeekOffsets)
             {
-                FileName = ffmpeg,
-                Arguments = $"-y -ss {VideoThumbnailSeekOffset} -i \"{videoPath}\" -vframes 1 -q:v 4 \"{thumbPath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-            });
+                if (await TryCreateVideoThumbnailAsync(ffmpeg, videoPath, thumbPath, $"-y -ss {seekOffset} -i \"{videoPath}\" -vf \"scale=480:-1\" -vframes 1 -q:v 3 \"{thumbPath}\""))
+                    break;
+            }
 
-            if (proc == null)
-                return videoPath;
+            if (!File.Exists(thumbPath) || IsLikelyBlankVideoThumbnail(thumbPath))
+                await TryCreateVideoThumbnailAsync(ffmpeg, videoPath, thumbPath, $"-y -i \"{videoPath}\" -vf \"thumbnail=24,scale=480:-1\" -frames:v 1 -q:v 3 \"{thumbPath}\"");
 
-            await proc.WaitForExitAsync();
             var result = File.Exists(thumbPath) ? thumbPath : videoPath;
             sw.Stop();
             AppDiagnostics.LogInfo(
@@ -377,6 +376,61 @@ public partial class SettingsWindow
                 "history.video-thumb",
                 $"Failed to generate thumbnail for {Path.GetFileName(videoPath)} after {sw.ElapsedMilliseconds}ms.");
             return videoPath;
+        }
+    }
+
+    private static async Task<bool> TryCreateVideoThumbnailAsync(string ffmpeg, string videoPath, string thumbPath, string arguments)
+    {
+        try
+        {
+            try { if (File.Exists(thumbPath)) File.Delete(thumbPath); } catch { }
+            using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = ffmpeg,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+            });
+
+            if (proc == null)
+                return false;
+
+            await proc.WaitForExitAsync();
+            return proc.ExitCode == 0 && File.Exists(thumbPath) && !IsLikelyBlankVideoThumbnail(thumbPath);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsLikelyBlankVideoThumbnail(string thumbPath)
+    {
+        try
+        {
+            using var bitmap = new System.Drawing.Bitmap(thumbPath);
+            int samples = 0;
+            int darkSamples = 0;
+            int stepX = Math.Max(1, bitmap.Width / 12);
+            int stepY = Math.Max(1, bitmap.Height / 12);
+
+            for (int y = 0; y < bitmap.Height; y += stepY)
+            {
+                for (int x = 0; x < bitmap.Width; x += stepX)
+                {
+                    var color = bitmap.GetPixel(x, y);
+                    samples++;
+                    if (color.R <= 12 && color.G <= 12 && color.B <= 12)
+                        darkSamples++;
+                }
+            }
+
+            return samples > 0 && darkSamples >= samples * 0.92;
+        }
+        catch
+        {
+            return false;
         }
     }
 

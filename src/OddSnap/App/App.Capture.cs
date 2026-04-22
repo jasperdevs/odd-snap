@@ -41,7 +41,7 @@ public partial class App
                     ? Helpers.CaptureSavePath.GetMonthDirectory(saveRoot)
                     : saveRoot;
                 Directory.CreateDirectory(saveDir);
-                string fileName = $"{Helpers.FileNameTemplate.Format(s.FileNameTemplate)}{ext}";
+                string fileName = $"{Helpers.FileNameTemplate.Format(s.FileNameTemplate, 0, 0)}{ext}";
                 string savePath = Helpers.CaptureSavePath.GetAvailablePath(Path.Combine(saveDir, fileName));
                 int maxH = s.RecordingQuality switch { RecordingQuality.P1080 => 1080, RecordingQuality.P720 => 720, RecordingQuality.P480 => 480, _ => 0 };
                 int fps = fmt == RecordingFormat.GIF ? s.GifFps : s.RecordingFps;

@@ -2,7 +2,7 @@ namespace OddSnap.Helpers;
 
 public static class FileNameTemplate
 {
-    public const string DefaultTemplate = "{year}-{month}-{day} {hour}-{min}-{sec} {rand}";
+    public const string DefaultTemplate = "{year}-{month}-{day}-{hour}-{min}-{sec}-{rand}";
     public const string LegacyDefaultTemplate = "oddsnap_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}";
 
     public static string Format(string template, int width = 0, int height = 0)
@@ -35,6 +35,7 @@ public static class FileNameTemplate
             .Replace("{sec}", now.ToString("ss"))
             .Replace("{w}", width > 0 ? width.ToString() : "")
             .Replace("{h}", height > 0 ? height.ToString() : "")
+            .Replace("{aspect}", FormatAspectRatio(width, height))
             .Replace("{rand}", randomToken);
 
         foreach (var c in System.IO.Path.GetInvalidFileNameChars())
@@ -86,5 +87,28 @@ public static class FileNameTemplate
             $@"(?i)(?<![A-Za-z0-9{{\[(]){escapedToken}(?![A-Za-z0-9}}\])])",
             replacement);
         return template;
+    }
+
+    private static string FormatAspectRatio(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+            return "";
+
+        var gcd = GreatestCommonDivisor(width, height);
+        return $"{width / gcd}x{height / gcd}";
+    }
+
+    private static int GreatestCommonDivisor(int a, int b)
+    {
+        a = Math.Abs(a);
+        b = Math.Abs(b);
+        while (b != 0)
+        {
+            var next = a % b;
+            a = b;
+            b = next;
+        }
+
+        return Math.Max(1, a);
     }
 }

@@ -25,7 +25,7 @@ public sealed class FileNameTemplateTests
     {
         var value = FileNameTemplate.Format("   ");
 
-        Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2} [a-f0-9]{4}", value);
+        Assert.Matches(@"\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}-[a-f0-9]{4}", value);
     }
 
     [Fact]
@@ -43,5 +43,16 @@ public sealed class FileNameTemplateTests
         var value = FileNameTemplate.FormatExample("Screenshot {day}/{month}/{year} {hour}:{min}");
 
         Assert.Equal("Screenshot 05_04_2026 14_30", value);
+    }
+
+    [Theory]
+    [InlineData(1920, 1080, "16x9")]
+    [InlineData(1000, 1000, "1x1")]
+    [InlineData(1200, 800, "3x2")]
+    public void Format_ReplacesAspectRatioToken(int width, int height, string expected)
+    {
+        var value = FileNameTemplate.Format("{aspect}", width, height);
+
+        Assert.Equal(expected, value);
     }
 }

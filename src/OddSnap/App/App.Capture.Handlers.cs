@@ -21,7 +21,7 @@ public partial class App
         {
             var defaultPath = Helpers.CaptureSavePath.BuildAvailablePath(
                 settings.SaveDirectory,
-                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}.{ext}",
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}.{ext}",
                 settings.SaveInMonthlyFolders);
             if (settings.AskForFileNameOnSave)
             {
@@ -107,7 +107,7 @@ public partial class App
         {
             var defaultStickerPath = Helpers.CaptureSavePath.BuildAvailablePath(
                 settings.SaveDirectory,
-                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_sticker.png",
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}_sticker.png",
                 settings.SaveInMonthlyFolders);
             requestedPath = settings.AskForFileNameOnSave
                 ? ResolveSavePath(defaultStickerPath, CaptureImageFormat.Png)
@@ -171,7 +171,7 @@ public partial class App
         {
             var defaultUpscalePath = Helpers.CaptureSavePath.BuildAvailablePath(
                 settings.SaveDirectory,
-                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate)}_upscale.png",
+                $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}_upscale.png",
                 settings.SaveInMonthlyFolders);
             requestedPath = settings.AskForFileNameOnSave
                 ? ResolveSavePath(defaultUpscalePath, CaptureImageFormat.Png)
