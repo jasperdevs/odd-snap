@@ -116,10 +116,43 @@ jobs:
           }
 
           $archLabel = "${{ matrix.arch }}"
+          $setupName = "0-OddSnap-Setup-$archLabel.exe"
+          $portableName = "0-OddSnap-Portable-$archLabel.zip"
+          $fullName = "OddSnap-Update-$version-$rid-full.nupkg"
+
           $setup = Get-ChildItem $outDir -Filter '*-Setup.exe' | Select-Object -First 1
           $portable = Get-ChildItem $outDir -Filter '*-Portable.zip' | Select-Object -First 1
-          Move-Item -LiteralPath $setup.FullName -Destination (Join-Path $outDir "0-OddSnap-Setup-$archLabel.exe") -Force
-          Move-Item -LiteralPath $portable.FullName -Destination (Join-Path $outDir "0-OddSnap-Portable-$archLabel.zip") -Force
+          $full = Get-ChildItem $outDir -Filter '*-full.nupkg' | Select-Object -First 1
+          $setupOldName = $setup.Name
+          $portableOldName = $portable.Name
+          $fullOldName = $full.Name
+
+          Move-Item -LiteralPath $setup.FullName -Destination (Join-Path $outDir $setupName) -Force
+          Move-Item -LiteralPath $portable.FullName -Destination (Join-Path $outDir $portableName) -Force
+          Move-Item -LiteralPath $full.FullName -Destination (Join-Path $outDir $fullName) -Force
+
+          foreach ($releasesFile in Get-ChildItem $outDir -Filter 'RELEASES-*') {
+            $content = Get-Content -LiteralPath $releasesFile.FullName -Raw
+            Set-Content -LiteralPath $releasesFile.FullName -Value ($content.Replace($fullOldName, $fullName)) -NoNewline -Encoding utf8
+          }
+
+          foreach ($releaseJsonFile in Get-ChildItem $outDir -Filter 'releases.*.json') {
+            $releaseJson = Get-Content -LiteralPath $releaseJsonFile.FullName -Raw | ConvertFrom-Json
+            foreach ($asset in @($releaseJson.Assets)) {
+              if ($asset.FileName -eq $fullOldName) { $asset.FileName = $fullName }
+            }
+            $releaseJson | ConvertTo-Json -Depth 20 -Compress | Set-Content -LiteralPath $releaseJsonFile.FullName -NoNewline -Encoding utf8
+          }
+
+          foreach ($assetsJsonFile in Get-ChildItem $outDir -Filter 'assets.*.json') {
+            $assetsJson = Get-Content -LiteralPath $assetsJsonFile.FullName -Raw | ConvertFrom-Json
+            foreach ($asset in @($assetsJson)) {
+              if ($asset.RelativeFileName -eq $setupOldName) { $asset.RelativeFileName = $setupName }
+              if ($asset.RelativeFileName -eq $portableOldName) { $asset.RelativeFileName = $portableName }
+              if ($asset.RelativeFileName -eq $fullOldName) { $asset.RelativeFileName = $fullName }
+            }
+            $assetsJson | ConvertTo-Json -Depth 20 -Compress | Set-Content -LiteralPath $assetsJsonFile.FullName -NoNewline -Encoding utf8
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
