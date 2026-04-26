@@ -116,8 +116,8 @@ jobs:
           }
 
           $archLabel = "${{ matrix.arch }}"
-          $setupName = "0-OddSnap-Setup-$archLabel.exe"
-          $portableName = "0-OddSnap-Portable-$archLabel.zip"
+          $setupName = "App-OddSnap-Setup-$archLabel.exe"
+          $portableName = "App-OddSnap-Portable-$archLabel.zip"
           $fullName = "OddSnap-Update-$version-$rid-full.nupkg"
 
           $setup = Get-ChildItem $outDir -Filter '*-Setup.exe' | Select-Object -First 1

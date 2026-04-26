@@ -115,8 +115,8 @@ jobs:
           }
 
           $archLabel = $rid -replace '^win-', ''
-          $setupName = "0-OddSnap-Setup-$archLabel.exe"
-          $portableName = "0-OddSnap-Portable-$archLabel.zip"
+          $setupName = "App-OddSnap-Setup-$archLabel.exe"
+          $portableName = "App-OddSnap-Portable-$archLabel.zip"
           $fullName = "OddSnap-Update-$version-$rid-full.nupkg"
 
           $setup = Get-ChildItem $outDir -Filter '*-Setup.exe' | Select-Object -First 1
@@ -198,9 +198,9 @@ jobs:
           $tag = "v$version"
           $baseUrl = "https://github.com/${{ github.repository }}/releases/download/$tag"
 
-          $x64Setup = Get-ChildItem 'dist' -Filter '0-OddSnap-Setup-x64.exe' | Select-Object -First 1
-          $x86Setup = Get-ChildItem 'dist' -Filter '0-OddSnap-Setup-x86.exe' | Select-Object -First 1
-          $arm64Setup = Get-ChildItem 'dist' -Filter '0-OddSnap-Setup-arm64.exe' | Select-Object -First 1
+          $x64Setup = Get-ChildItem 'dist' -Filter 'App-OddSnap-Setup-x64.exe' | Select-Object -First 1
+          $x86Setup = Get-ChildItem 'dist' -Filter 'App-OddSnap-Setup-x86.exe' | Select-Object -First 1
+          $arm64Setup = Get-ChildItem 'dist' -Filter 'App-OddSnap-Setup-arm64.exe' | Select-Object -First 1
 
           if ($null -eq $x64Setup -or $null -eq $x86Setup -or $null -eq $arm64Setup) {
             throw "Expected Velopack setup executables for x64/x86/arm64 were not found in dist."
@@ -247,10 +247,10 @@ jobs:
           $downloadNotes = @'
           ## Downloads
 
-          Most people should download **0-OddSnap-Setup-x64.exe**.
+          Most people should download **App-OddSnap-Setup-x64.exe**.
 
-          - **0-OddSnap-Setup-x64.exe** - Windows installer for most PCs
-          - **0-OddSnap-Portable-x64.zip** - portable copy for most PCs
+          - **App-OddSnap-Setup-x64.exe** - Windows installer for most PCs
+          - **App-OddSnap-Portable-x64.zip** - portable copy for most PCs
           - **arm64** - Windows on ARM
           - **x86** - older 32-bit Windows
 
@@ -268,8 +268,8 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           name: OddSnap v${{ steps.version.outputs.version }}
           files: |
-            dist/0-OddSnap-Setup-*.exe
-            dist/0-OddSnap-Portable-*.zip
+            dist/App-OddSnap-Setup-*.exe
+            dist/App-OddSnap-Portable-*.zip
             dist/OddSnap-Update-*.nupkg
             dist/RELEASES-*
             dist/releases.*.json
