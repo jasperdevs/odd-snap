@@ -82,13 +82,16 @@ public static class UpscaleService
         if (string.IsNullOrWhiteSpace(settings.DeepAiApiKey))
             return new UpscaleResult { Error = $"{providerName} API key not configured", ProviderName = providerName };
 
-        var temp = CaptureOutputService.SaveBitmapToTempPng(input, "oddsnap_upscale");
         try
         {
+            using var imageStream = new MemoryStream();
+            CaptureOutputService.WritePng(input, imageStream);
+            imageStream.Position = 0;
+
             using var form = new MultipartFormDataContent();
-            var imageContent = new StreamContent(new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan));
+            var imageContent = new StreamContent(imageStream);
             imageContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/png");
-            form.Add(imageContent, "image", Path.GetFileName(temp));
+            form.Add(imageContent, "image", "oddsnap_upscale.png");
 
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
             {
@@ -136,10 +139,6 @@ public static class UpscaleService
         {
             return new UpscaleResult { Error = ex.Message, ProviderName = providerName };
         }
-        finally
-        {
-            try { File.Delete(temp); } catch { }
-        }
     }
 
     private static async Task<UpscaleResult> ProcessLocalAsync(Bitmap input, UpscaleSettings settings)
@@ -177,11 +176,11 @@ public static class UpscaleService
     {
         try
         {
-            using var processed = await Task.Run(() => LocalUpscaleEngineService.Process(input, engine, executionProvider, scaleFactor));
+            var processed = await Task.Run(() => LocalUpscaleEngineService.Process(input, engine, executionProvider, scaleFactor));
             return new UpscaleResult
             {
                 Success = true,
-                Image = new Bitmap(processed),
+                Image = processed,
                 ProviderName = LocalUpscaleEngineService.GetEngineLabel(engine)
             };
         }

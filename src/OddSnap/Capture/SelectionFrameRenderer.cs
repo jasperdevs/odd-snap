@@ -7,6 +7,14 @@ internal static class SelectionFrameRenderer
 {
     private static readonly Color FillTint = Color.FromArgb(34, 0, 0, 0);
     private static readonly Color Stroke = Color.FromArgb(248, 255, 255, 255);
+    private static readonly SolidBrush FillBrush = new(FillTint);
+    private static readonly Pen RectangleStrokePen = new(Stroke, 2f) { LineJoin = LineJoin.Miter };
+    private static readonly Pen PathStrokePen = new(Stroke, 2f)
+    {
+        LineJoin = LineJoin.Round,
+        StartCap = LineCap.Round,
+        EndCap = LineCap.Round
+    };
 
     public static void DrawRectangle(Graphics g, Rectangle rect, bool fill = true)
     {
@@ -17,17 +25,13 @@ internal static class SelectionFrameRenderer
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         if (fill)
-        {
-            using var tint = new SolidBrush(FillTint);
-            g.FillRectangle(tint, rect);
-        }
+            g.FillRectangle(FillBrush, rect);
 
         var outline = rect;
         outline.Width = Math.Max(1, outline.Width - 1);
         outline.Height = Math.Max(1, outline.Height - 1);
 
-        using var stroke = new Pen(Stroke, 2f) { LineJoin = LineJoin.Miter };
-        g.DrawRectangle(stroke, outline);
+        g.DrawRectangle(RectangleStrokePen, outline);
 
         g.SmoothingMode = oldSmoothing;
     }
@@ -38,7 +42,10 @@ internal static class SelectionFrameRenderer
             return;
 
         using var path = new GraphicsPath();
-        path.AddLines(points.ToArray());
+        path.StartFigure();
+        path.AddLine(points[0], points[1]);
+        for (int i = 2; i < points.Count; i++)
+            path.AddLine(points[i - 1], points[i]);
         if (closed && points.Count >= 3)
             path.CloseFigure();
 
@@ -51,13 +58,9 @@ internal static class SelectionFrameRenderer
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         if (fill)
-        {
-            using var tint = new SolidBrush(FillTint);
-            g.FillPath(tint, path);
-        }
+            g.FillPath(FillBrush, path);
 
-        using var stroke = new Pen(Stroke, 2f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
-        g.DrawPath(stroke, path);
+        g.DrawPath(PathStrokePen, path);
 
         g.SmoothingMode = oldSmoothing;
     }

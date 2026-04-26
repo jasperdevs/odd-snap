@@ -73,7 +73,7 @@ public static class CaptureOutputService
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        SavePngCore(bitmap, filePath);
+        SaveWithAtomicWrite(bitmap, filePath, SavePngCore);
     }
 
     public static void WritePng(Bitmap bitmap, Stream stream) => SavePngCore(bitmap, stream);

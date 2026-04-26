@@ -90,7 +90,7 @@ public sealed partial class RegionOverlayForm
     {
         _moreToolsMenuMonitorTimer?.Stop();
         _moreToolsMenuMonitorTimer?.Dispose();
-        _moreToolsMenuMonitorTimer = new System.Windows.Forms.Timer { Interval = 25 };
+        _moreToolsMenuMonitorTimer = new System.Windows.Forms.Timer { Interval = 50 };
         _moreToolsMenuMonitorTimer.Tick += (_, _) => UpdateMoreToolsMenuHoverState();
         _moreToolsMenuMonitorTimer.Start();
     }

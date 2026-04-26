@@ -71,7 +71,7 @@ public static class WindowsMenuRenderer
             Height = RowHeight,
             Width = DefaultWidth - 8,
             ForeColor = color,
-            Image = iconId is null ? null : StreamlineIcons.RenderBitmap(iconId, imageColor, 20, active),
+            Image = iconId is null ? null : FluentIcons.RenderBitmap(iconId, imageColor, 20, active),
             ImageScaling = ToolStripItemImageScaling.None,
             ShortcutKeyDisplayString = shortcut ?? string.Empty,
             Tag = active

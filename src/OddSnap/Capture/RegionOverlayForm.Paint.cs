@@ -292,7 +292,7 @@ public sealed partial class RegionOverlayForm
                             to.X + nx * tickHalf, to.Y + ny * tickHalf);
 
         string text = $"{(int)dist}px  \u00b7  {Math.Abs(dx):0} \u00d7 {Math.Abs(dy):0}  \u00b7  {angle:0.0}\u00b0";
-        var font = UiChrome.ChromeFont(9.5f);
+        using var font = UiChrome.ChromeFont(9.5f);
         var sz = g.MeasureString(text, font);
         var mid = new PointF((from.X + to.X) / 2f, (from.Y + to.Y) / 2f);
         var label = new RectangleF(mid.X - sz.Width / 2f - 10, mid.Y - sz.Height - 14, sz.Width + 20, sz.Height + 10);

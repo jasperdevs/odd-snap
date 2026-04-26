@@ -25,6 +25,12 @@ public sealed class PickerMagnifierForm : Form
     private string _hex = "000000";
     private string _rgb = "0, 0, 0";
     private Color _picked = Color.Black;
+    private Size _lastSurfaceSize = Size.Empty;
+    private bool _lastShowInfo = true;
+    private Bitmap? _lastMagnifier;
+    private string _lastHex = "";
+    private string _lastRgb = "";
+    private int _lastPickedArgb;
 
     // Cached GDI objects
     private readonly Font _hexFont = UiChrome.ChromeFont(9.5f, FontStyle.Bold);
@@ -82,13 +88,31 @@ public sealed class PickerMagnifierForm : Form
 
     public void UpdateMagnifier(Bitmap magnifier, Point cursor, Color picked, string hex, string rgb, bool showInfo = true)
     {
+        var targetSize = new Size(TotalW, GetTotalHeight(showInfo));
+        if (_lastSurfaceSize == targetSize &&
+            _lastShowInfo == showInfo &&
+            ReferenceEquals(_lastMagnifier, magnifier) &&
+            _lastPickedArgb == picked.ToArgb() &&
+            string.Equals(_lastHex, hex, StringComparison.Ordinal) &&
+            string.Equals(_lastRgb, rgb, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         _magnifier = magnifier;
         _picked = picked;
         _hex = hex;
         _rgb = rgb;
         _showInfo = showInfo;
-        Size = new Size(TotalW, GetTotalHeight(showInfo));
+        if (Size != targetSize)
+            Size = targetSize;
         UpdateSurface();
+        _lastSurfaceSize = targetSize;
+        _lastShowInfo = showInfo;
+        _lastMagnifier = magnifier;
+        _lastPickedArgb = picked.ToArgb();
+        _lastHex = hex;
+        _lastRgb = rgb;
     }
 
     protected override void OnShown(EventArgs e)
@@ -247,6 +271,7 @@ public sealed class PickerMagnifierForm : Form
     {
         if (disposing)
         {
+            _lastMagnifier = null;
             _surfaceGraphics?.Dispose();
             _surface?.Dispose();
             _hexFont.Dispose();

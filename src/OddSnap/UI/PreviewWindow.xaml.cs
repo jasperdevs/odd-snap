@@ -156,7 +156,7 @@ public partial class PreviewWindow : Window
         var iconColor = Theme.IsDark
             ? System.Drawing.Color.FromArgb(255, 255, 255, 255)
             : System.Drawing.Color.FromArgb(255, 24, 24, 24);
-        icon.Source = StreamlineIcons.RenderWpf(iconId, iconColor, 22, active);
+        icon.Source = FluentIcons.RenderWpf(iconId, iconColor, 22, active);
     }
 
     private void HookOverlayHover(System.Windows.Controls.Border button, System.Windows.Controls.Image icon, string iconId)

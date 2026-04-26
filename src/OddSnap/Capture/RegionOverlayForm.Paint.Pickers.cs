@@ -40,7 +40,7 @@ public sealed partial class RegionOverlayForm
             g.DrawPath(focusBorder, searchPath);
         }
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-        var searchFont = UiChrome.ChromeFont(10f);
+        using var searchFont = UiChrome.ChromeFont(10f);
         string searchDisplay = _emojiSearch.Length > 0 ? _emojiSearch : "Search emoji...";
         using var searchBrush = new SolidBrush(_emojiSearch.Length > 0
             ? UiChrome.SurfaceTextPrimary
@@ -56,7 +56,7 @@ public sealed partial class RegionOverlayForm
         }
 
         // Hint text (right aligned)
-        var searchHintFont = UiChrome.ChromeFont(8f);
+        using var searchHintFont = UiChrome.ChromeFont(8f);
         using var searchHintBrush = new SolidBrush(UiChrome.SurfaceTextMuted);
         var hintSize = g.MeasureString("Type to search", searchHintFont);
         g.DrawString("Type to search", searchHintFont, searchHintBrush, searchRect.Right - hintSize.Width - 6, searchRect.Y + 9);
@@ -145,7 +145,7 @@ public sealed partial class RegionOverlayForm
         string searchDisplay = _fontSearch.Length > 0 ? _fontSearch : "Search fonts...";
         using var searchBrush = new SolidBrush(_fontSearch.Length > 0
             ? UiChrome.SurfaceTextPrimary : UiChrome.SurfaceTextMuted);
-        var searchFont = UiChrome.ChromeFont(10f);
+        using var searchFont = UiChrome.ChromeFont(10f);
         g.DrawString(searchDisplay, searchFont, searchBrush, searchRect.X + 10, searchRect.Y + 7);
         if (_fontSearch.Length > 0)
         {
@@ -227,10 +227,10 @@ public sealed partial class RegionOverlayForm
 
         float btnH = 28, btnPad = 3, pad = 6, sepW = 8;
 
-        var uiFont = UiChrome.ChromeFont(9.5f);
-        var uiFontBold = UiChrome.ChromeFont(10f, FontStyle.Bold);
-        var uiFontItalic = UiChrome.ChromeFont(10f, FontStyle.Italic);
-        var uiFontSmall = UiChrome.ChromeFont(8f);
+        using var uiFont = UiChrome.ChromeFont(9.5f);
+        using var uiFontBold = UiChrome.ChromeFont(10f, FontStyle.Bold);
+        using var uiFontItalic = UiChrome.ChromeFont(10f, FontStyle.Italic);
+        using var uiFontSmall = UiChrome.ChromeFont(8f);
 
         string fontLabel = _textFontFamily.Length > 14 ? _textFontFamily[..13] + ".." : _textFontFamily;
         var fontLabelSize = g.MeasureString(fontLabel, uiFont);
@@ -303,7 +303,7 @@ public sealed partial class RegionOverlayForm
             return RectangleF.Empty;
 
         float btnH = 28, btnPad = 3, pad = 6, sepW = 8;
-        var uiFont = UiChrome.ChromeFont(9.5f);
+        using var uiFont = UiChrome.ChromeFont(9.5f);
         string fontLabel = _textFontFamily.Length > 14 ? _textFontFamily[..13] + ".." : _textFontFamily;
         using var tmpBmp = new Bitmap(1, 1);
         using var tmpG = Graphics.FromImage(tmpBmp);

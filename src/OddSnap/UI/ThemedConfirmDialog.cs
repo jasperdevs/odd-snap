@@ -170,7 +170,7 @@ internal sealed class ThemedConfirmDialog : Window
             Cursor = WpfCursors.Hand,
             Child = new System.Windows.Controls.Image
             {
-                Source = StreamlineIcons.RenderWpf("close", ToDrawingColor(Theme.TextSecondary, 220), 16),
+                Source = FluentIcons.RenderWpf("close", ToDrawingColor(Theme.TextSecondary, 220), 16),
                 Width = 16,
                 Height = 16,
                 Stretch = Stretch.Uniform,
@@ -213,7 +213,7 @@ internal sealed class ThemedConfirmDialog : Window
             BorderThickness = new Thickness(1),
             Child = new System.Windows.Controls.Image
             {
-                Source = StreamlineIcons.RenderWpf("warning", ToDrawingColor(accent, 230), 22),
+                Source = FluentIcons.RenderWpf("warning", ToDrawingColor(accent, 230), 22),
                 Width = 18,
                 Height = 18,
                 Stretch = Stretch.Uniform,

@@ -767,7 +767,7 @@ public sealed class VideoRecorder : IDisposable
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = ffmpegPath,
-                    Arguments = $"-hide_banner -i \"{mediaPath}\" -f null -",
+                    Arguments = $"-hide_banner -i \"{mediaPath}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardError = true,

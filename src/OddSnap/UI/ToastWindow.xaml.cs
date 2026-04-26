@@ -352,11 +352,11 @@ public partial class ToastWindow : Window
 
     private void LoadOverlayIcons()
     {
-        CloseIcon.Source = StreamlineIcons.RenderWpf("close", IconWhite, 20);
-        PinIcon.Source = StreamlineIcons.RenderWpf("pin", IconWhite, 20);
-        SaveIcon.Source = StreamlineIcons.RenderWpf("download", IconWhite, 20);
+        CloseIcon.Source = FluentIcons.RenderWpf("close", IconWhite, 20);
+        PinIcon.Source = FluentIcons.RenderWpf("pin", IconWhite, 20);
+        SaveIcon.Source = FluentIcons.RenderWpf("download", IconWhite, 20);
         AiRedirectIcon.Source = ToolIcons.RenderAiRedirectWpf(System.Drawing.Color.FromArgb(230, 255, 255, 255), 20);
-        DeleteIcon.Source = StreamlineIcons.RenderWpf("trash", IconWhite, 20);
+        DeleteIcon.Source = FluentIcons.RenderWpf("trash", IconWhite, 20);
         ApplyToastOverlayButtonVisual(CloseBtn, CloseIcon, "close", active: false);
         ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: false);
         ApplyToastOverlayButtonVisual(SaveBtn, SaveIcon, "download", active: false);
@@ -394,7 +394,7 @@ public partial class ToastWindow : Window
         var iconColor = Theme.IsDark
             ? System.Drawing.Color.FromArgb(255, 255, 255, 255)
             : System.Drawing.Color.FromArgb(255, 24, 24, 24);
-        icon.Source = StreamlineIcons.RenderWpf(iconId, iconColor, 22, active);
+        icon.Source = FluentIcons.RenderWpf(iconId, iconColor, 22, active);
     }
 
     private void HookOverlayButtons()

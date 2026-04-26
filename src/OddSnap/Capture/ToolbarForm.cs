@@ -17,6 +17,9 @@ public sealed class ToolbarForm : Form
     private readonly RegionOverlayForm _owner;
     private Bitmap? _surface;
     private Graphics? _surfaceGraphics;
+    private int _lastRenderVersion = int.MinValue;
+    private Size _lastRenderSize;
+    private Point _lastRenderLocation;
 
     public ToolbarForm(RegionOverlayForm owner)
     {
@@ -50,6 +53,16 @@ public sealed class ToolbarForm : Form
     {
         var sz = Size;
         if (sz.Width <= 0 || sz.Height <= 0) return;
+
+        var location = Location;
+        var renderVersion = _owner.ToolbarRenderVersion;
+        if (_surface is not null &&
+            _lastRenderVersion == renderVersion &&
+            _lastRenderSize == sz &&
+            _lastRenderLocation == location)
+        {
+            return;
+        }
 
         if (_surface == null || _surface.Width != sz.Width || _surface.Height != sz.Height)
         {
@@ -101,6 +114,9 @@ public sealed class ToolbarForm : Form
             hOld = Native.User32.SelectObject(hdcMem, hBmp);
             Native.User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPt, ref size,
                 hdcMem, ref srcPt, 0, ref blend, 2 /* ULW_ALPHA */);
+            _lastRenderVersion = renderVersion;
+            _lastRenderSize = sz;
+            _lastRenderLocation = location;
         }
         finally
         {

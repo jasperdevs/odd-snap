@@ -15,6 +15,8 @@ public sealed partial class RegionOverlayForm
     private bool _pickerReady;
     private bool _pickerBusy;
     private int _lastPickedArgb;
+    private int _lastRenderedPickerArgb;
+    private int _lastRenderedCapturePickerArgb;
     private Point _lastRenderedPickerPoint = Point.Empty;
     private Point _lastRenderedCapturePickerPoint = Point.Empty;
     private Point _pendingPickerPoint;
@@ -85,7 +87,10 @@ public sealed partial class RegionOverlayForm
     private void RenderColorPickerFrame(Point overlayPoint)
     {
         if (_pickerBusy) return;
-        if (_pickerReady && overlayPoint == _lastRenderedPickerPoint && _pickerForm != null)
+        if (_pickerReady &&
+            overlayPoint == _lastRenderedPickerPoint &&
+            _lastPickedArgb == _lastRenderedPickerArgb &&
+            _pickerForm != null)
             return;
 
         _pickerBusy = true;
@@ -106,6 +111,7 @@ public sealed partial class RegionOverlayForm
                 pickerForm.Show(this);
             pickerForm.UpdateMagnifier(_magBitmap, _pickerCursorPos, _pickedColor, _hexStr, _rgbStr);
             _lastRenderedPickerPoint = overlayPoint;
+            _lastRenderedPickerArgb = _lastPickedArgb;
             _pickerStopwatch.Restart();
         }
         finally
@@ -148,7 +154,9 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
-        if (_lastRenderedCapturePickerPoint == overlayPoint && _captureMagnifierForm != null)
+        if (_lastRenderedCapturePickerPoint == overlayPoint &&
+            _lastPickedArgb == _lastRenderedCapturePickerArgb &&
+            _captureMagnifierForm != null)
             return;
 
         _pickerCursorPos = overlayPoint;
@@ -168,6 +176,7 @@ public sealed partial class RegionOverlayForm
         Native.User32.SetWindowPos(magForm.Handle, Native.User32.HWND_TOPMOST, 0, 0, 0, 0,
             Native.User32.SWP_NOMOVE | Native.User32.SWP_NOSIZE | Native.User32.SWP_NOACTIVATE | Native.User32.SWP_SHOWWINDOW);
         _lastRenderedCapturePickerPoint = overlayPoint;
+        _lastRenderedCapturePickerArgb = _lastPickedArgb;
         _capturePickerStopwatch.Restart();
     }
 

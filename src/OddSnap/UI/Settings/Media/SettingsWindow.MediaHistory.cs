@@ -23,7 +23,8 @@ public partial class SettingsWindow
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var cacheKey = BuildMediaHistoryCacheKey();
-        if (!_mediaHistoryCacheReady || !string.Equals(_mediaHistoryCacheKey, cacheKey, StringComparison.Ordinal))
+        var cacheHit = _mediaHistoryCacheReady && string.Equals(_mediaHistoryCacheKey, cacheKey, StringComparison.Ordinal);
+        if (!cacheHit)
         {
             _allGifItems = BuildCombinedMediaEntries();
             _mediaHistoryCacheReady = true;
@@ -48,7 +49,7 @@ public partial class SettingsWindow
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-media",
-            $"items={_allGifItems.Count} rendered={_gifRenderCount} cacheHit={string.Equals(_mediaHistoryCacheKey, cacheKey, StringComparison.Ordinal)} elapsedMs={sw.ElapsedMilliseconds}");
+            $"items={_allGifItems.Count} rendered={_gifRenderCount} cacheHit={cacheHit} elapsedMs={sw.ElapsedMilliseconds}");
     }
 
     private string BuildMediaHistoryCacheKey()
@@ -72,7 +73,7 @@ public partial class SettingsWindow
         var items = new List<HistoryItemVM>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var entry in _historyService.MediaEntries.OrderByDescending(e => e.CapturedAt))
+        foreach (var entry in _historyService.MediaEntries)
         {
             if (!seen.Add(entry.FilePath))
                 continue;
@@ -88,9 +89,7 @@ public partial class SettingsWindow
             });
         }
 
-        return items
-            .OrderByDescending(i => i.Entry.CapturedAt)
-            .ToList();
+        return items;
     }
 
     private void QueueOrphanVideoThumbnailCleanup(IEnumerable<HistoryItemVM> items)
@@ -256,13 +255,12 @@ public partial class SettingsWindow
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,
-            Child = new System.Windows.Shapes.Path
+            Child = new TextBlock
             {
-                Data = System.Windows.Media.Geometry.Parse("M8,5 L8,19 L19,12 Z"),
-                Fill = System.Windows.Media.Brushes.White,
-                Stretch = System.Windows.Media.Stretch.Uniform,
-                Width = 14, Height = 14,
-                Margin = new Thickness(2, 0, 0, 0),
+                Text = "\uE768",
+                FontFamily = new System.Windows.Media.FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
+                FontSize = 15,
+                Foreground = System.Windows.Media.Brushes.White,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             }

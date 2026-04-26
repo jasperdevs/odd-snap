@@ -89,7 +89,7 @@ public partial class App
         ConfigureTrayIcon();
         RegisterHotkeys();
         WarmDxgiCapture();
-        Helpers.StreamlineIcons.Preload();
+        Helpers.FluentIcons.Preload();
 
         if (_settingsService.Settings.AutoCheckForUpdates)
             _ = CheckForUpdatesOnStartupAsync();

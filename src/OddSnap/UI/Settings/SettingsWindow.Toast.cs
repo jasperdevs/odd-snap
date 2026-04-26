@@ -38,11 +38,11 @@ public partial class SettingsWindow
     private void LoadToastLayoutIcons()
     {
         var white = System.Drawing.Color.FromArgb(230, 255, 255, 255);
-        ToastLayoutCloseIcon.Source = Helpers.StreamlineIcons.RenderWpf("close", white, 20);
-        ToastLayoutPinIcon.Source = Helpers.StreamlineIcons.RenderWpf("pin", white, 20);
-        ToastLayoutSaveIcon.Source = Helpers.StreamlineIcons.RenderWpf("download", white, 20);
+        ToastLayoutCloseIcon.Source = Helpers.FluentIcons.RenderWpf("close", white, 20);
+        ToastLayoutPinIcon.Source = Helpers.FluentIcons.RenderWpf("pin", white, 20);
+        ToastLayoutSaveIcon.Source = Helpers.FluentIcons.RenderWpf("download", white, 20);
         ToastLayoutAiRedirectIcon.Source = Helpers.ToolIcons.RenderAiRedirectWpf(white, 20);
-        ToastLayoutDeleteIcon.Source = Helpers.StreamlineIcons.RenderWpf("trash", white, 20);
+        ToastLayoutDeleteIcon.Source = Helpers.FluentIcons.RenderWpf("trash", white, 20);
     }
 
     private void RefreshToastButtonLayoutDesigner()
@@ -95,19 +95,19 @@ public partial class SettingsWindow
         switch (button)
         {
             case ToastButtonKind.Close:
-                ToastLayoutCloseIcon.Source = Helpers.StreamlineIcons.RenderWpf("close", color, 22, active);
+                ToastLayoutCloseIcon.Source = Helpers.FluentIcons.RenderWpf("close", color, 22, active);
                 break;
             case ToastButtonKind.Pin:
-                ToastLayoutPinIcon.Source = Helpers.StreamlineIcons.RenderWpf("pin", color, 22, active);
+                ToastLayoutPinIcon.Source = Helpers.FluentIcons.RenderWpf("pin", color, 22, active);
                 break;
             case ToastButtonKind.Save:
-                ToastLayoutSaveIcon.Source = Helpers.StreamlineIcons.RenderWpf("download", color, 22, active);
+                ToastLayoutSaveIcon.Source = Helpers.FluentIcons.RenderWpf("download", color, 22, active);
                 break;
             case ToastButtonKind.AiRedirect:
                 ToastLayoutAiRedirectIcon.Source = Helpers.ToolIcons.RenderAiRedirectWpf(color, 22, active);
                 break;
             case ToastButtonKind.Delete:
-                ToastLayoutDeleteIcon.Source = Helpers.StreamlineIcons.RenderWpf("trash", color, 22, active);
+                ToastLayoutDeleteIcon.Source = Helpers.FluentIcons.RenderWpf("trash", color, 22, active);
                 break;
         }
     }
@@ -541,12 +541,12 @@ public partial class SettingsWindow
         RefreshToastButtonLayoutDesigner();
     }
 
-    private static System.Windows.Controls.Image BuildStreamlineIcon(string id)
+    private static System.Windows.Controls.Image BuildFluentIcon(string id)
     {
         var white = System.Drawing.Color.FromArgb(230, 255, 255, 255);
         var img = new System.Windows.Controls.Image
         {
-            Source = Helpers.StreamlineIcons.RenderWpf(id, white, 20),
+            Source = Helpers.FluentIcons.RenderWpf(id, white, 20),
             Width = 14,
             Height = 14,
             Stretch = Stretch.Uniform,
@@ -557,9 +557,9 @@ public partial class SettingsWindow
         return img;
     }
 
-    private static System.Windows.Controls.Image BuildCloseGlyph() => BuildStreamlineIcon("close");
-    private static System.Windows.Controls.Image BuildPinGlyph() => BuildStreamlineIcon("pin");
-    private static System.Windows.Controls.Image BuildSaveGlyph() => BuildStreamlineIcon("download");
+    private static System.Windows.Controls.Image BuildCloseGlyph() => BuildFluentIcon("close");
+    private static System.Windows.Controls.Image BuildPinGlyph() => BuildFluentIcon("pin");
+    private static System.Windows.Controls.Image BuildSaveGlyph() => BuildFluentIcon("download");
     private static System.Windows.Controls.Image BuildAiRedirectGlyph()
     {
         var white = System.Drawing.Color.FromArgb(230, 255, 255, 255);
@@ -575,5 +575,5 @@ public partial class SettingsWindow
         System.Windows.Media.RenderOptions.SetBitmapScalingMode(img, System.Windows.Media.BitmapScalingMode.HighQuality);
         return img;
     }
-    private static System.Windows.Controls.Image BuildDeleteGlyph() => BuildStreamlineIcon("trash");
+    private static System.Windows.Controls.Image BuildDeleteGlyph() => BuildFluentIcon("trash");
 }

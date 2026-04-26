@@ -63,9 +63,11 @@ public partial class SettingsWindow
     private Border? _historyTopSpacer;
     private Border? _historyBottomSpacer;
     private WrapPanel? _historyVirtualizedPanel;
+    private readonly Dictionary<OcrHistoryEntry, string> _ocrSearchTextCache = new();
+    private readonly Dictionary<ColorHistoryEntry, string> _colorSearchTextCache = new();
 
     private bool ShouldUseVirtualizedImageHistory(IReadOnlyCollection<HistoryItemVM> items)
-        => false;
+        => items.Count >= HistoryVirtualizationThreshold;
 
     private sealed record PreparedHistoryItemData(
         HistoryEntry Entry,
@@ -815,6 +817,10 @@ public partial class SettingsWindow
 
     private void StickerPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
+        if (e.VerticalOffset + e.ViewportHeight < e.ExtentHeight - 420)
+            return;
+
+        AppendNextStickerHistoryPage();
     }
 
     private void AppendNextStickerHistoryPage()
@@ -845,6 +851,7 @@ public partial class SettingsWindow
         WrapPanel? currentWrap = target.Children.Count > 0 ? target.Children[target.Children.Count - 1] as WrapPanel : null;
         DateTime? currentDate = currentWrap?.Tag is DateTime tagDate ? tagDate : null;
 
+        var updatedWraps = new HashSet<WrapPanel>();
         foreach (var item in items)
         {
             var itemDate = item.Entry.CapturedAt.Date;
@@ -877,8 +884,11 @@ public partial class SettingsWindow
             }
 
             currentWrap.Children.Add(cardFactory(item));
-            UpdateHistoryWrapPanelCardWidths(currentWrap);
+            updatedWraps.Add(currentWrap);
         }
+
+        foreach (var wrap in updatedWraps)
+            UpdateHistoryWrapPanelCardWidths(wrap);
     }
 
     private WrapPanel CreateHistoryWrapPanel(DateTime itemDate)

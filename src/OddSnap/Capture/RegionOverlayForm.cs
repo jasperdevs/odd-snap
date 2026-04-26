@@ -54,6 +54,7 @@ public sealed partial class RegionOverlayForm : Form
     private Rectangle _toolbarRect;
     private Rectangle _toolbarAnchorArea;
     private Rectangle _lastOverlayUiBounds;
+    private int _toolbarRenderVersion;
     private float _toolbarAnim;
     private Point _lastCursorPos;
     private Point _prevCursorPos; // crosshair ghosting fix
@@ -387,7 +388,6 @@ public sealed partial class RegionOverlayForm : Form
                 _toolbarRect.Width + 24, _toolbarRect.Height + 160));
             if (_toolbarAnim >= 1f)
             {
-                _toolbarForm?.UpdateSurface();
                 _animTimer.Stop();
             }
         };

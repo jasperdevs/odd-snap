@@ -69,11 +69,14 @@ public static class LocalUpscaleEngineService
     {
         var maxScale = GetScaleFactor(engine);
         var requestedScale = scaleFactor <= 0 ? maxScale : Math.Clamp(scaleFactor, GetMinScaleFactor(engine), maxScale);
-        using var native = UpscaleRuntimeService.UpscaleAsync(input, engine, provider, maxScale).GetAwaiter().GetResult();
+        var native = UpscaleRuntimeService.UpscaleAsync(input, engine, provider, maxScale).GetAwaiter().GetResult();
         if (requestedScale == maxScale)
-            return new Bitmap(native);
+            return native;
 
-        return ResizeBitmap(native, input.Width * requestedScale, input.Height * requestedScale);
+        using (native)
+        {
+            return ResizeBitmap(native, input.Width * requestedScale, input.Height * requestedScale);
+        }
     }
 
     private static Bitmap ResizeBitmap(Bitmap source, int width, int height)

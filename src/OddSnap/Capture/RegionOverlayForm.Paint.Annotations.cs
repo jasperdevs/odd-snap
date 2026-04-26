@@ -273,7 +273,7 @@ public sealed partial class RegionOverlayForm
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
-        var font = UiChrome.ChromeFont(11f, FontStyle.Bold);
+        using var font = UiChrome.ChromeFont(11f, FontStyle.Bold);
         string text = num.ToString();
         var sz = g.MeasureString(text, font);
 

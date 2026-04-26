@@ -36,12 +36,12 @@ public partial class SettingsWindow
         ClearHistoryListPreservingSearch(OcrStack, _ocrSearchSurface);
 
         var allEntries = _historyService.OcrEntries;
+        PruneOcrSearchCache(allEntries);
 
-        // Filter entries by search query
         var query = _ocrSearchQuery.Trim();
         var entries = string.IsNullOrWhiteSpace(query)
             ? allEntries
-            : allEntries.Where(e => e.Text.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            : allEntries.Where(e => GetOcrSearchText(e).Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
 
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HistoryEmptyLabel.Text = allEntries.Count == 0 ? "No text captures yet"
@@ -70,10 +70,11 @@ public partial class SettingsWindow
         ClearHistoryListPreservingSearch(ColorStack, _colorSearchSurface);
 
         var allEntries = _historyService.ColorEntries;
+        PruneColorSearchCache(allEntries);
         var query = _colorSearchQuery.Trim();
         var entries = string.IsNullOrWhiteSpace(query)
             ? allEntries
-            : allEntries.Where(entry => ColorMatchesQuery(entry, query)).ToList();
+            : allEntries.Where(entry => ColorMatchesCachedQuery(entry, query)).ToList();
 
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HistoryEmptyLabel.Text = allEntries.Count == 0 ? "No colors yet"
@@ -213,7 +214,7 @@ public partial class SettingsWindow
             : System.Drawing.Color.FromArgb(170, 0, 0, 0);
         layout.Children.Add(new System.Windows.Controls.Image
         {
-            Source = Helpers.StreamlineIcons.RenderWpf("search", iconColor, 18),
+            Source = Helpers.FluentIcons.RenderWpf("search", iconColor, 18),
             Width = 14,
             Height = 14,
             Stretch = Stretch.Uniform,
@@ -557,6 +558,52 @@ public partial class SettingsWindow
         var searchable = BuildColorSearchText(entry);
         var terms = query.Split(new[] { ' ', '\t', ',', '/', '-', '_' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return terms.All(term => searchable.Contains(term, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool ColorMatchesCachedQuery(ColorHistoryEntry entry, string query)
+    {
+        var searchable = GetColorSearchText(entry);
+        var terms = query.Split(new[] { ' ', '\t', ',', '/', '-', '_' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return terms.All(term => searchable.Contains(term, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string GetOcrSearchText(OcrHistoryEntry entry)
+    {
+        if (_ocrSearchTextCache.TryGetValue(entry, out var cached))
+            return cached;
+
+        _ocrSearchTextCache[entry] = entry.Text;
+        return entry.Text;
+    }
+
+    private string GetColorSearchText(ColorHistoryEntry entry)
+    {
+        if (_colorSearchTextCache.TryGetValue(entry, out var cached))
+            return cached;
+
+        var searchText = BuildColorSearchText(entry);
+        _colorSearchTextCache[entry] = searchText;
+        return searchText;
+    }
+
+    private void PruneOcrSearchCache(IReadOnlyCollection<OcrHistoryEntry> currentEntries)
+    {
+        if (_ocrSearchTextCache.Count <= currentEntries.Count + 64)
+            return;
+
+        var current = currentEntries.ToHashSet();
+        foreach (var entry in _ocrSearchTextCache.Keys.Where(entry => !current.Contains(entry)).ToList())
+            _ocrSearchTextCache.Remove(entry);
+    }
+
+    private void PruneColorSearchCache(IReadOnlyCollection<ColorHistoryEntry> currentEntries)
+    {
+        if (_colorSearchTextCache.Count <= currentEntries.Count + 64)
+            return;
+
+        var current = currentEntries.ToHashSet();
+        foreach (var entry in _colorSearchTextCache.Keys.Where(entry => !current.Contains(entry)).ToList())
+            _colorSearchTextCache.Remove(entry);
     }
 
     private static string BuildColorSearchText(ColorHistoryEntry entry)

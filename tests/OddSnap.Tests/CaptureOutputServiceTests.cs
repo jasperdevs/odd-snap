@@ -63,6 +63,31 @@ public sealed class CaptureOutputServiceTests
         }
     }
 
+    [Fact]
+    public void SavePng_WritesWithoutLeavingTempFiles()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            using var bitmap = new Bitmap(10, 6);
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.Clear(Color.MediumSeaGreen);
+            }
+
+            var filePath = Path.Combine(root, "direct", "capture.png");
+            CaptureOutputService.SavePng(bitmap, filePath);
+
+            Assert.True(File.Exists(filePath));
+            Assert.NotEmpty(File.ReadAllBytes(filePath));
+            Assert.DoesNotContain(Directory.EnumerateFiles(Path.GetDirectoryName(filePath)!), path => path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteRoot(root);
+        }
+    }
+
     private static string CreateTempRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "oddsnap-tests", Guid.NewGuid().ToString("N"));

@@ -168,10 +168,10 @@ public sealed partial class RegionOverlayForm
         if (icon == "color") return;
 
         // Try Streamline icon first (line=inactive, solid=active)
-        if (StreamlineIcons.HasIcon(icon))
+        if (FluentIcons.HasIcon(icon))
         {
             float inset = active ? 6f : 7f;
-            StreamlineIcons.DrawIcon(g, icon, b, c, inset, active);
+            FluentIcons.DrawIcon(g, icon, b, c, inset, active);
             return;
         }
 

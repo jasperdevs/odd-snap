@@ -54,7 +54,7 @@ public partial class UpscaleResultWindow : Window
 
     private void LoadIcons()
     {
-        UseResultIcon.Source = StreamlineIcons.RenderWpf("download", System.Drawing.Color.FromArgb(245, 255, 255, 255), 18);
+        UseResultIcon.Source = FluentIcons.RenderWpf("download", System.Drawing.Color.FromArgb(245, 255, 255, 255), 18);
     }
 
     private void PopulateDownloadedModels(UpscaleSettings settings)
@@ -146,8 +146,7 @@ public partial class UpscaleResultWindow : Window
             upscaleSettings.LocalEngine = _selectedEngine;
             _settingsService.Save();
 
-            using var input = new Bitmap(_originalBitmap);
-            var result = await UpscaleService.ProcessAsync(input, upscaleSettings);
+            var result = await UpscaleService.ProcessAsync(_originalBitmap, upscaleSettings);
             if (!result.Success || result.Image is null)
             {
                 ToastWindow.ShowError("Upscale failed", result.Error);
@@ -155,7 +154,7 @@ public partial class UpscaleResultWindow : Window
             }
 
             _processedBitmap?.Dispose();
-            _processedBitmap = new Bitmap(result.Image);
+            _processedBitmap = result.Image;
             _providerName = result.ProviderName;
 
             CompareAfterImage.Source = BitmapPerf.ToBitmapSource(_processedBitmap);

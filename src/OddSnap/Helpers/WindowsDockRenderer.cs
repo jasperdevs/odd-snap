@@ -70,6 +70,6 @@ public static class WindowsDockRenderer
 
     public static void PaintIcon(Graphics g, string iconId, Rectangle bounds, Color color, bool active = false)
     {
-        StreamlineIcons.DrawIcon(g, iconId, bounds, color, active ? 5.5f : 6.5f, active);
+        FluentIcons.DrawIcon(g, iconId, bounds, color, active ? 5.5f : 6.5f, active);
     }
 }

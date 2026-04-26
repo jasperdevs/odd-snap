@@ -74,6 +74,7 @@ public sealed partial class RegionOverlayForm
             _toolbarForm.Show(this);
         }
 
+        MarkToolbarRenderDirty();
         _toolbarForm.UpdateSurface();
         Invalidate(new Rectangle(_toolbarRect.X - 12, _toolbarRect.Y - 48,
             _toolbarRect.Width + 24, _toolbarRect.Height + 96));
@@ -119,7 +120,8 @@ public sealed partial class RegionOverlayForm
             _virtualBounds.Y + uiBounds.Y,
             Math.Max(1, uiBounds.Width),
             Math.Max(1, uiBounds.Height));
-        _toolbarForm.Bounds = bounds;
+        if (_toolbarForm.Bounds != bounds)
+            _toolbarForm.Bounds = bounds;
     }
 
     private static Rectangle[] GetScreenWorkingAreas()
@@ -338,6 +340,7 @@ public sealed partial class RegionOverlayForm
         var oldUiBounds = _lastOverlayUiBounds;
         CalcToolbar();
         PositionToolbarForm();
+        MarkToolbarRenderDirty();
         _toolbarForm?.UpdateSurface();
         var newUiBounds = GetOverlayUiBounds();
         _lastOverlayUiBounds = newUiBounds;
@@ -349,6 +352,7 @@ public sealed partial class RegionOverlayForm
 
     internal void UpdateToolbarSurfaceOnly()
     {
+        MarkToolbarRenderDirty();
         _toolbarForm?.UpdateSurface();
     }
 
@@ -356,6 +360,7 @@ public sealed partial class RegionOverlayForm
     {
         var oldUiBounds = _lastOverlayUiBounds;
         PositionToolbarForm();
+        MarkToolbarRenderDirty();
         _toolbarForm?.UpdateSurface();
         var newUiBounds = GetOverlayUiBounds();
         _lastOverlayUiBounds = newUiBounds;
@@ -439,6 +444,16 @@ public sealed partial class RegionOverlayForm
     {
         _verticalCrosshairForm?.Hide();
         _horizontalCrosshairForm?.Hide();
+    }
+
+    internal int ToolbarRenderVersion => _toolbarRenderVersion;
+
+    private void MarkToolbarRenderDirty()
+    {
+        unchecked
+        {
+            _toolbarRenderVersion++;
+        }
     }
 
     private void EnsureSelectionAdorner()

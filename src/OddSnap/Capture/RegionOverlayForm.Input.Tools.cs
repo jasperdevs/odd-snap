@@ -107,7 +107,9 @@ public sealed partial class RegionOverlayForm
             InvalidateActiveTextLayout();
             var newRect = Rectangle.Round(GetActiveTextRect());
             var newToolbarRect = Rectangle.Round(GetTextToolbarBounds());
-            InvalidateLiveTransform();
+            InvalidateLiveTransform(
+                Rectangle.Union(oldRect, oldToolbarRect),
+                Rectangle.Union(newRect, newToolbarRect));
             return;
         }
 
@@ -132,7 +134,9 @@ public sealed partial class RegionOverlayForm
             InvalidateActiveTextLayout();
             var newRect = Rectangle.Round(GetActiveTextRect());
             var newToolbarRect = Rectangle.Round(GetTextToolbarBounds());
-            InvalidateLiveTransform();
+            InvalidateLiveTransform(
+                Rectangle.Union(oldRect, oldToolbarRect),
+                Rectangle.Union(newRect, newToolbarRect));
             return;
         }
 
@@ -429,8 +433,6 @@ public sealed partial class RegionOverlayForm
         if (toolbarDirty)
             RefreshToolbar();
     }
-
-    private void InvalidateLiveTransform() => Invalidate();
 
     private void InvalidateLiveTransform(Rectangle oldBounds, Rectangle newBounds)
     {

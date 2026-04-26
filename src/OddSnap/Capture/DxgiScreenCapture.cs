@@ -39,22 +39,32 @@ internal static class DxgiScreenCapture
 
                 foreach (var output in EnumerateOutputs(deviceBundle.Adapter))
                 {
-                    var outputBounds = ToRectangle(output.Description.DesktopCoordinates);
-                    var overlap = Rectangle.Intersect(region, outputBounds);
-                    if (overlap.Width <= 0 || overlap.Height <= 0)
-                        continue;
+                    using (output)
+                    {
+                        var outputBounds = ToRectangle(output.Description.DesktopCoordinates);
+                        var overlap = Rectangle.Intersect(region, outputBounds);
+                        if (overlap.Width <= 0 || overlap.Height <= 0)
+                            continue;
 
-                    using var duplication = output.Output.DuplicateOutput(deviceBundle.Device);
-                    using var frame = AcquireFrame(duplication);
-                    using var desktopTexture = frame.Resource.QueryInterface<ID3D11Texture2D>();
-                    var staging = deviceBundle.GetOrCreateStagingTexture(outputBounds.Width, outputBounds.Height);
+                        using var duplication = output.Output.DuplicateOutput(deviceBundle.Device);
+                        using var frame = AcquireFrame(duplication);
+                        using var desktopTexture = frame.Resource.QueryInterface<ID3D11Texture2D>();
+                        var staging = deviceBundle.GetOrCreateStagingTexture(overlap.Width, overlap.Height);
 
-                    int sourceX = overlap.Left - outputBounds.Left;
-                    int sourceY = overlap.Top - outputBounds.Top;
-                    deviceBundle.Context.CopyResource(staging, desktopTexture);
+                        int sourceX = overlap.Left - outputBounds.Left;
+                        int sourceY = overlap.Top - outputBounds.Top;
+                        var sourceBox = new Vortice.Mathematics.Box(
+                            sourceX,
+                            sourceY,
+                            0,
+                            sourceX + overlap.Width,
+                            sourceY + overlap.Height,
+                            1);
+                        deviceBundle.Context.CopySubresourceRegion(staging, 0, 0, 0, 0, desktopTexture, 0, sourceBox);
 
-                    var target = new Rectangle(overlap.Left - region.Left, overlap.Top - region.Top, overlap.Width, overlap.Height);
-                    CopyTextureToBitmap(deviceBundle.Context, staging, result, target, sourceX, sourceY);
+                        var target = new Rectangle(overlap.Left - region.Left, overlap.Top - region.Top, overlap.Width, overlap.Height);
+                        CopyTextureToBitmap(deviceBundle.Context, staging, result, target);
+                    }
                 }
 
                 return result;
@@ -183,9 +193,7 @@ internal static class DxgiScreenCapture
         ID3D11DeviceContext context,
         ID3D11Texture2D texture,
         Bitmap bitmap,
-        Rectangle destination,
-        int sourceX,
-        int sourceY)
+        Rectangle destination)
     {
         var map = context.Map(texture, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
         try
@@ -198,7 +206,7 @@ internal static class DxgiScreenCapture
                 {
                     for (int row = 0; row < destination.Height; row++)
                     {
-                        byte* src = (byte*)map.DataPointer + ((row + sourceY) * (long)map.RowPitch) + (sourceX * 4L);
+                        byte* src = (byte*)map.DataPointer + row * (long)map.RowPitch;
                         byte* dst = (byte*)bitmapData.Scan0 + row * bitmapData.Stride;
                         Buffer.MemoryCopy(src, dst, rowBytes, rowBytes);
                     }
@@ -228,7 +236,20 @@ internal static class DxgiScreenCapture
             if (_stagingTextures.TryGetValue(key, out var cached))
                 return cached;
 
+            var reusable = _stagingTextures
+                .Where(entry => entry.Key.Width >= width && entry.Key.Height >= height)
+                .OrderBy(entry => entry.Key.Width * entry.Key.Height)
+                .FirstOrDefault();
+            if (reusable.Value is not null)
+                return reusable.Value;
+
             var created = CreateStagingTexture(Device, width, height);
+            foreach (var entry in _stagingTextures.Where(entry => entry.Key.Width <= width && entry.Key.Height <= height).ToArray())
+            {
+                entry.Value.Dispose();
+                _stagingTextures.Remove(entry.Key);
+            }
+
             _stagingTextures[key] = created;
             return created;
         }

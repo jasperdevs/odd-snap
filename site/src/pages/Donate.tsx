@@ -52,7 +52,7 @@ const options = [
   {
     title: "ko-fi",
     description: "buy me a coffee to support development.",
-    url: "https://ko-fi.com/jasperdevs",
+    url: "https://ko-fi.com/T6T71X9ZAM",
     buttonText: "donate on ko-fi",
     logo: <KofiLogo />,
   },

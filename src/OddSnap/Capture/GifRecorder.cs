@@ -22,10 +22,13 @@ public sealed class GifRecorder : IDisposable
     private readonly string _tempDir;
     private readonly CancellationTokenSource _cts = new();
     private readonly BlockingCollection<(Bitmap frame, int index)> _frameQueue = new(boundedCapacity: 60);
+    private readonly string? _ffmpegPath;
+    private readonly string? _rawFramePath;
 
     private Thread? _captureThread;
     private Thread? _writerThread;
     private int _frameCount;
+    private int _writtenFrameCount;
     private DateTime _startTime;
     private bool _disposed;
     private int _initialCaptureDelayMs = DefaultInitialCaptureDelayMs;
@@ -42,6 +45,8 @@ public sealed class GifRecorder : IDisposable
         _showCursor = showCursor;
         _tempDir = Path.Combine(Path.GetTempPath(), $"oddsnap_gif_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
+        _ffmpegPath = VideoRecorder.FindFfmpeg();
+        _rawFramePath = _ffmpegPath is null ? null : Path.Combine(_tempDir, "frames.bgra");
     }
 
     public void Start(int initialCaptureDelayMs = DefaultInitialCaptureDelayMs)
@@ -106,6 +111,12 @@ public sealed class GifRecorder : IDisposable
     {
         try
         {
+            if (_rawFramePath is not null)
+            {
+                WriteRawFrameStream();
+                return;
+            }
+
             foreach (var (frame, index) in _frameQueue.GetConsumingEnumerable())
             {
                 string path = Path.Combine(_tempDir, $"frame_{index:D6}.bmp");
@@ -113,9 +124,24 @@ public sealed class GifRecorder : IDisposable
                 {
                     frame.Save(path, ImageFormat.Bmp);
                 }
+                Interlocked.Increment(ref _writtenFrameCount);
             }
         }
         catch (ObjectDisposedException) { }
+    }
+
+    private void WriteRawFrameStream()
+    {
+        using var stream = new BufferedStream(File.Create(_rawFramePath!), 1 << 20);
+        byte[]? frameBuffer = null;
+        foreach (var (frame, _) in _frameQueue.GetConsumingEnumerable())
+        {
+            using (frame)
+            {
+                frameBuffer = WriteBitmapBgra(frame, stream, frameBuffer);
+            }
+            Interlocked.Increment(ref _writtenFrameCount);
+        }
     }
 
     /// <summary>Stops recording and encodes frames to GIF. Uses FFmpeg if available (10-50x faster).</summary>
@@ -133,21 +159,28 @@ public sealed class GifRecorder : IDisposable
 
         try
         {
-            var frameFiles = Directory.EnumerateFiles(_tempDir, "frame_*.bmp").ToArray();
-            Array.Sort(frameFiles, StringComparer.Ordinal);
+            var frameFiles = _rawFramePath is null
+                ? Directory.EnumerateFiles(_tempDir, "frame_*.bmp").ToArray()
+                : Array.Empty<string>();
+            if (frameFiles.Length > 1)
+                Array.Sort(frameFiles, StringComparer.Ordinal);
 
-            if (frameFiles.Length == 0)
+            int writtenFrameCount = Math.Max(_writtenFrameCount, frameFiles.Length);
+            if (writtenFrameCount == 0)
                 throw new InvalidOperationException("No frames captured.");
 
             // Try FFmpeg first (much faster GIF encoding with palette optimization).
             // If FFmpeg fails for any reason, fall back to in-process encoding.
             Exception? ffmpegError = null;
-            var ffmpeg = VideoRecorder.FindFfmpeg();
+            var ffmpeg = _ffmpegPath;
             if (ffmpeg != null)
             {
                 try
                 {
-                    EncodeFfmpegGif(ffmpeg, outputPath);
+                    if (_rawFramePath is not null && File.Exists(_rawFramePath))
+                        EncodeFfmpegGifFromRaw(ffmpeg, outputPath, writtenFrameCount);
+                    else
+                        EncodeFfmpegGifFromBmpSequence(ffmpeg, outputPath);
                 }
                 catch (Exception ex)
                 {
@@ -158,6 +191,12 @@ public sealed class GifRecorder : IDisposable
 
             if (!IsValidOutputFile(outputPath))
             {
+                if (frameFiles.Length == 0)
+                    throw new InvalidOperationException(
+                        ffmpegError != null
+                            ? $"GIF encoding failed. FFmpeg error: {ffmpegError.Message}"
+                            : "GIF encoding failed.");
+
                 try
                 {
                     EncodeAnimatedGif(outputPath, frameFiles);
@@ -183,7 +222,28 @@ public sealed class GifRecorder : IDisposable
         }
     }
 
-    private void EncodeFfmpegGif(string ffmpegPath, string outputPath)
+    private void EncodeFfmpegGifFromRaw(string ffmpegPath, string outputPath, int frameCount)
+    {
+        string paletteFile = Path.Combine(_tempDir, "palette.png");
+        string rawInput = _rawFramePath!;
+        string inputArgs = $"-f rawvideo -pix_fmt bgra -s {_region.Width}x{_region.Height} -framerate {_fps} -i \"{rawInput}\"";
+
+        RunFfmpegChecked(ffmpegPath,
+            $"-y {inputArgs} -vf \"palettegen=stats_mode=diff\" \"{paletteFile}\"",
+            timeoutMs: 120_000);
+
+        if (!File.Exists(paletteFile) || new FileInfo(paletteFile).Length == 0)
+            throw new InvalidOperationException("FFmpeg palette generation failed — no palette file produced.");
+
+        RunFfmpegChecked(ffmpegPath,
+            $"-y {inputArgs} -i \"{paletteFile}\" -lavfi \"paletteuse=dither=sierra2_4a:diff_mode=rectangle\" -frames:v {frameCount} \"{outputPath}\"",
+            timeoutMs: 120_000);
+
+        if (!IsValidOutputFile(outputPath))
+            throw new InvalidOperationException("FFmpeg GIF encoding failed — no output file produced.");
+    }
+
+    private void EncodeFfmpegGifFromBmpSequence(string ffmpegPath, string outputPath)
     {
         // FFmpeg two-pass: generate palette then encode with it for best quality
         string paletteFile = Path.Combine(_tempDir, "palette.png");
@@ -297,6 +357,25 @@ public sealed class GifRecorder : IDisposable
     {
         try { return File.Exists(path) && new FileInfo(path).Length > 0; }
         catch { return false; }
+    }
+
+    private static byte[] WriteBitmapBgra(Bitmap bitmap, Stream stream, byte[]? buffer)
+    {
+        var rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
+        var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            int bytes = data.Stride * data.Height;
+            if (buffer is null || buffer.Length != bytes)
+                buffer = new byte[bytes];
+            System.Runtime.InteropServices.Marshal.Copy(data.Scan0, buffer, 0, bytes);
+            stream.Write(buffer, 0, bytes);
+            return buffer;
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
     }
 
     private sealed class LimitedTextBuffer(int maxChars)

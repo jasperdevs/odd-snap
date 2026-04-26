@@ -1,16 +1,13 @@
-# OddSnap v0.8.28
-
-## Added
-- add interface localization and language switching with bundled translation files (#32).
-- add customizable capture toolbar tools, center/ruler modes, and per-tool hotkeys.
+# OddSnap v0.8.29
 
 ## Changed
-- restyle Settings, result windows, hotkey controls, and shared window chrome to match the Windows 11 app theme.
-- tighten capture overlay selection handles, toolbar icons, readouts, and magnifier placement.
+- replace bundled PNG toolbar assets with Windows Fluent/MDL2 icon rendering.
+- lower the desktop app target to Windows 10 19041.
+- pin WinUI package versions used by the experimental shell.
 
 ## Fixed
-- fix tool hotkey recording, conflict handling, and setup hotkey styling (#34).
-- store portable settings and logs beside the portable app instead of Roaming AppData (#35).
-- prevent screenshot cancel from flashing native window chrome.
-- prevent the capture magnifier from overlapping the selected screenshot region.
-- keep icon glyphs stable when switching interface languages.
+- fix DXGI region capture to copy only the selected monitor overlap.
+- speed up GIF recording by streaming raw frames to FFmpeg.
+- reduce selection, toolbar, magnifier, color picker, and history redraw work.
+- avoid temp files for PNG saves and DeepAI upscale uploads.
+- fix OCR and color history search cache churn.

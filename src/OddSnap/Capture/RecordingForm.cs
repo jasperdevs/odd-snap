@@ -36,6 +36,7 @@ public sealed partial class RecordingForm : Form
     // Selection
     private bool _isDragging;
     private Point _dragStart;
+    private Point _selectionCursor;
     private Rectangle _selection;
 
     // Recording
@@ -195,6 +196,7 @@ public sealed partial class RecordingForm : Form
         {
             _isDragging = true;
             _dragStart = e.Location;
+            _selectionCursor = e.Location;
             _selection = Rectangle.Empty;
             UpdateLiveSelectionAdorner();
         }
@@ -213,9 +215,12 @@ public sealed partial class RecordingForm : Form
         {
             if (_isDragging)
             {
+                var oldSelection = _selection;
+                var oldCursor = _selectionCursor;
                 _selection = NormRect(_dragStart, e.Location);
+                _selectionCursor = e.Location;
                 UpdateLiveSelectionAdorner();
-                Invalidate();
+                InvalidateSelectionChrome(oldSelection, oldCursor, _selection, e.Location);
             }
             _magHelper?.Update(e.Location, this, _virtualBounds, _isDragging ? GetMagnifierAvoidBounds() : Rectangle.Empty);
             return;
@@ -237,6 +242,7 @@ public sealed partial class RecordingForm : Form
         {
             _isDragging = false;
             _selection = NormRect(_dragStart, e.Location);
+            _selectionCursor = e.Location;
             UpdateLiveSelectionAdorner();
             if (_selection.Width > 10 && _selection.Height > 10)
                 StartRecording();
@@ -411,6 +417,37 @@ public sealed partial class RecordingForm : Form
         return readoutBounds.IsEmpty
             ? _selection
             : Rectangle.Union(_selection, InflateForRepaint(readoutBounds, 8));
+    }
+
+    private void InvalidateSelectionChrome(Rectangle oldSelection, Point oldCursor, Rectangle newSelection, Point newCursor)
+    {
+        var oldDirty = GetSelectionChromeBounds(oldSelection, oldCursor);
+        var newDirty = GetSelectionChromeBounds(newSelection, newCursor);
+
+        if (!oldDirty.IsEmpty && !newDirty.IsEmpty)
+            Invalidate(Rectangle.Union(oldDirty, newDirty));
+        else if (!oldDirty.IsEmpty)
+            Invalidate(oldDirty);
+        else if (!newDirty.IsEmpty)
+            Invalidate(newDirty);
+    }
+
+    private Rectangle GetSelectionChromeBounds(Rectangle selection, Point cursor)
+    {
+        if (selection.Width <= 2 || selection.Height <= 2)
+            return Rectangle.Empty;
+
+        var dirty = InflateForRepaint(selection, 16);
+        var readoutBounds = SelectionSizeReadout.GetBounds(
+            cursor,
+            selection,
+            _readoutFont,
+            ClientRectangle,
+            GetRecordingReadoutDetails());
+        if (!readoutBounds.IsEmpty)
+            dirty = Rectangle.Union(dirty, InflateForRepaint(readoutBounds, 10));
+
+        return dirty;
     }
 
     protected override void Dispose(bool disposing)

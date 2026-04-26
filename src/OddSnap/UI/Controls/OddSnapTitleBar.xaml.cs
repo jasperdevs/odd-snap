@@ -35,8 +35,8 @@ public partial class OddSnapTitleBar : UserControl
     public void RefreshIcons()
     {
         var titleIcon = System.Drawing.Color.FromArgb(210, Theme.TextSecondary.R, Theme.TextSecondary.G, Theme.TextSecondary.B);
-        MinimizeIcon.Source = Helpers.StreamlineIcons.RenderWpf("minimize", titleIcon, 18);
-        CloseIcon.Source = Helpers.StreamlineIcons.RenderWpf("close", titleIcon, 18);
+        MinimizeIcon.Source = Helpers.FluentIcons.RenderWpf("minimize", titleIcon, 18);
+        CloseIcon.Source = Helpers.FluentIcons.RenderWpf("close", titleIcon, 18);
     }
 
     private Window? OwnerWindow => Window.GetWindow(this);

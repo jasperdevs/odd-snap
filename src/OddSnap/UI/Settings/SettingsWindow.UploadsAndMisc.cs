@@ -808,8 +808,8 @@ public partial class SettingsWindow
         var color = Theme.IsDark
             ? System.Drawing.Color.FromArgb(220, 255, 255, 255)
             : System.Drawing.Color.FromArgb(210, 24, 24, 24);
-        return Helpers.StreamlineIcons.RenderWpf(iconId, color, 18)
-            ?? Helpers.StreamlineIcons.RenderWpf("folder", color, 18)!;
+        return Helpers.FluentIcons.RenderWpf(iconId, color, 18)
+            ?? Helpers.FluentIcons.RenderWpf("folder", color, 18)!;
     }
 
     private (ImageSource Source, bool IsBrand) GetUploadDestinationIcon(Services.UploadDestination destination)

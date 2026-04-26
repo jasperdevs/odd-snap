@@ -182,7 +182,7 @@ public partial class SettingsWindow : Window
         var color = Theme.IsDark
             ? System.Drawing.Color.FromArgb(210, 255, 255, 255)
             : System.Drawing.Color.FromArgb(170, 0, 0, 0);
-        ImageSearchIcon.Source = Helpers.StreamlineIcons.RenderWpf("search", color, 18);
+        ImageSearchIcon.Source = Helpers.FluentIcons.RenderWpf("search", color, 18);
     }
 
     private void TryProcessPendingTrayHistoryOpen()
