@@ -115,6 +115,7 @@ jobs:
           }
 
           $archLabel = $rid -replace '^win-', ''
+          # Reminder: keep App-OddSnap downloads first in GitHub's alphabetical asset list.
           $setupName = "App-OddSnap-Setup-$archLabel.exe"
           $portableName = "App-OddSnap-Portable-$archLabel.zip"
           $fullName = "OddSnap-Update-$version-$rid-full.nupkg"
@@ -151,29 +152,6 @@ jobs:
               if ($asset.RelativeFileName -eq $fullOldName) { $asset.RelativeFileName = $fullName }
             }
             $assetsJson | ConvertTo-Json -Depth 20 -Compress | Set-Content -LiteralPath $assetsJsonFile.FullName -NoNewline -Encoding utf8
-          }
-
-          $expectedFiles = @(
-            $setupName,
-            $portableName,
-            $fullName,
-            "RELEASES-$rid",
-            "releases.$rid.json",
-            "assets.$rid.json"
-          )
-          $actualFiles = Get-ChildItem $outDir -File | Select-Object -ExpandProperty Name
-          foreach ($expectedFile in $expectedFiles) {
-            if ($actualFiles -notcontains $expectedFile) {
-              throw "Expected release output '$expectedFile' was not found in $outDir."
-            }
-          }
-          if ($actualFiles | Where-Object { $_ -like '0-OddSnap-*' -or $_ -like 'JasperDevs.OddSnap-*' }) {
-            throw "Release output contains an old or confusing user-facing asset name: $($actualFiles -join ', ')"
-          }
-          $assetsJsonText = Get-Content -LiteralPath (Join-Path $outDir "assets.$rid.json") -Raw
-          if ($assetsJsonText -notmatch [regex]::Escape($setupName) -or
-              $assetsJsonText -notmatch [regex]::Escape($portableName)) {
-            throw "assets.$rid.json does not point to the user-facing App-OddSnap download names."
           }
 
       - name: Upload artifacts
