@@ -92,6 +92,12 @@ public enum CenterSelectionAspectRatio
     Portrait9x16
 }
 
+public enum ScrollingCaptureMode
+{
+    Automatic,
+    Manual
+}
+
 [Flags]
 public enum ImageSearchSourceOptions
 {
@@ -179,6 +185,7 @@ public sealed class AppSettings
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
     public WindowDetectionMode WindowDetection { get; set; } = WindowDetectionMode.WindowOnly;
     public CaptureDockSide CaptureDockSide { get; set; } = CaptureDockSide.Top;
+    public ScrollingCaptureMode ScrollingCaptureMode { get; set; } = ScrollingCaptureMode.Automatic;
     public int CaptureDelaySeconds { get; set; }
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }

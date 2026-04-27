@@ -55,6 +55,7 @@ public sealed partial class RecordingForm : Form
     private readonly bool _showMagnifier;
     private readonly CaptureMagnifierHelper? _magHelper;
     private LiveSelectionAdornerForm? _selectionAdorner;
+    private CaptureEscapeKeyHook? _escapeHook;
     private System.Windows.Forms.Timer? _tickTimer;
     private readonly string _savePath;
 
@@ -147,6 +148,7 @@ public sealed partial class RecordingForm : Form
         User32.SetForegroundWindow(Handle);
         Activate();
         Focus();
+        _escapeHook = CaptureEscapeKeyHook.Install(this, CancelFromEscape);
         _selectionAdorner?.Show(this);
     }
 
@@ -269,21 +271,21 @@ public sealed partial class RecordingForm : Form
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.CompositingMode = CompositingMode.SourceOver;
-        g.CompositingQuality = CompositingQuality.HighQuality;
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.CompositingQuality = CompositingQuality.AssumeLinear;
+        g.InterpolationMode = InterpolationMode.NearestNeighbor;
+        g.PixelOffsetMode = PixelOffsetMode.None;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
         var screenshot = _screenshot;
         if (screenshot is null)
             g.Clear(UiChrome.SurfaceWindowBackground);
         else
-            g.DrawImage(screenshot, 0, 0);
+            g.DrawImage(screenshot, ClientRectangle,
+                new Rectangle(0, 0, screenshot.Width, screenshot.Height),
+                GraphicsUnit.Pixel);
 
         if (_selection.Width > 2 && _selection.Height > 2)
         {
-            if (screenshot is not null)
-                g.DrawImage(screenshot, _selection, _selection, GraphicsUnit.Pixel);
             SelectionFrameRenderer.DrawRectangle(g, _selection);
             SelectionSizeReadout.Draw(
                 g,
@@ -317,9 +319,9 @@ public sealed partial class RecordingForm : Form
         g.Clear(TransKey);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.CompositingMode = CompositingMode.SourceOver;
-        g.CompositingQuality = CompositingQuality.HighQuality;
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.CompositingQuality = CompositingQuality.AssumeLinear;
+        g.InterpolationMode = InterpolationMode.NearestNeighbor;
+        g.PixelOffsetMode = PixelOffsetMode.None;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -455,6 +457,8 @@ public sealed partial class RecordingForm : Form
         if (disposing)
         {
             Current = null;
+            _escapeHook?.Dispose();
+            _escapeHook = null;
             _tickTimer?.Dispose();
             _recorder?.Dispose();
             _videoRecorder?.Dispose();

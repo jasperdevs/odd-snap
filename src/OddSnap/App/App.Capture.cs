@@ -196,7 +196,8 @@ public partial class App
                 bool showCursor = _settingsService!.Settings.ShowCursor;
                 var (selectionScreenshot, bounds) = ScreenCapture.CaptureAllScreens(showCursor);
                 var form = new ScrollingCaptureForm(selectionScreenshot, bounds, showCursor,
-                    _settingsService!.Settings.ShowCaptureMagnifier);
+                    _settingsService!.Settings.ShowCaptureMagnifier,
+                    _settingsService!.Settings.ScrollingCaptureMode);
 
                 form.CaptureCompleted += result =>
                 {

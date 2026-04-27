@@ -12,133 +12,184 @@ public sealed partial class ScrollingCaptureForm
 {
     // ─── Frame stitching ────────────────────────────────────────────
 
-    private Bitmap? StitchFrames()
-    {
-        if (_frames.Count == 0) return null;
-        if (_frames.Count == 1) return new Bitmap(_frames[0]);
-
-        try
-        {
-            int frameW = _frames[0].Width;
-            int frameH = _frames[0].Height;
-            int stripH = Math.Min(MatchStripHeight, frameH / 4);
-
-            var yPositions = new List<int> { 0 };
-            int runningY = 0;
-
-            for (int i = 1; i < _frames.Count; i++)
-            {
-                int overlap = FindOverlap(_frames[i - 1], _frames[i], stripH);
-                int newContent = frameH - overlap;
-                if (newContent <= 0) newContent = 1;
-                runningY += newContent;
-                yPositions.Add(runningY);
-            }
-
-            int totalHeight = runningY + frameH;
-
-            // Cap at 32000 pixels tall (GDI+ limit safety)
-            if (totalHeight > 32000)
-                totalHeight = 32000;
-
-            var result = new Bitmap(frameW, totalHeight, PixelFormat.Format32bppArgb);
-            using var g = Graphics.FromImage(result);
-            g.InterpolationMode = InterpolationMode.NearestNeighbor;
-            g.PixelOffsetMode = PixelOffsetMode.None;
-
-            for (int i = 0; i < _frames.Count; i++)
-            {
-                int y = yPositions[i];
-                if (y >= totalHeight) break;
-                int drawH = Math.Min(frameH, totalHeight - y);
-                g.DrawImage(_frames[i], new Rectangle(0, y, frameW, drawH),
-                    new Rectangle(0, 0, frameW, drawH), GraphicsUnit.Pixel);
-            }
-
-            return result;
-        }
-        finally
-        {
-            DisposeFrames();
-        }
-    }
+    private readonly record struct ScrollAppendMatch(
+        bool Success,
+        Bitmap? Image,
+        int NewContentHeight,
+        int MatchCount,
+        int MatchIndex,
+        int IgnoreBottomOffset,
+        bool UsedBestGuess);
 
     /// <summary>
     /// Finds the vertical overlap between two frames by sliding a horizontal strip
     /// from the bottom of the previous frame over the top of the current frame.
     /// </summary>
-    private static int FindOverlap(Bitmap prev, Bitmap curr, int stripHeight)
-    {
-        int w = Math.Min(prev.Width, curr.Width);
-        int h = Math.Min(prev.Height, curr.Height);
-        if (w <= 0 || h <= 0) return 0;
+    internal static int EstimateNewContentHeight(Bitmap prev, Bitmap curr)
+        => TryEstimateNewContentHeight(prev, curr, out int newContent) ? newContent : curr.Height;
 
-        var prevData = prev.LockBits(new Rectangle(0, 0, prev.Width, prev.Height),
+    internal static bool TryEstimateNewContentHeight(Bitmap prev, Bitmap curr, out int newContent)
+    {
+        var match = TryFindScrollingAppend(prev, curr, 0, 0, 0);
+        if (!match.Success)
+        {
+            newContent = curr.Height;
+            return false;
+        }
+
+        newContent = match.NewContentHeight;
+        return true;
+    }
+
+    internal static int FindOverlap(Bitmap prev, Bitmap curr, int stripHeight)
+    {
+        var match = TryFindScrollingAppend(prev, curr, 0, 0, 0);
+        return match.Success ? curr.Height - match.NewContentHeight : 0;
+    }
+
+    private static ScrollAppendMatch TryAppendScrollingFrame(Bitmap result, Bitmap currentImage,
+        int bestMatchCount, int bestMatchIndex, int bestIgnoreBottomOffset)
+    {
+        var match = TryFindScrollingAppend(result, currentImage, bestMatchCount, bestMatchIndex, bestIgnoreBottomOffset);
+        if (!match.Success)
+            return match;
+
+        int keepResultHeight = result.Height - match.IgnoreBottomOffset;
+        int totalHeight = keepResultHeight + match.NewContentHeight;
+        if (totalHeight > 32000)
+            totalHeight = 32000;
+
+        if (totalHeight <= keepResultHeight)
+            return match with { Success = false };
+
+        var newResult = new Bitmap(result.Width, totalHeight, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(newResult);
+        g.CompositingMode = CompositingMode.SourceCopy;
+        g.InterpolationMode = InterpolationMode.NearestNeighbor;
+        g.PixelOffsetMode = PixelOffsetMode.None;
+        g.DrawImage(result,
+            new Rectangle(0, 0, result.Width, keepResultHeight),
+            new Rectangle(0, 0, result.Width, keepResultHeight),
+            GraphicsUnit.Pixel);
+
+        int drawHeight = totalHeight - keepResultHeight;
+        g.DrawImage(currentImage,
+            new Rectangle(0, keepResultHeight, currentImage.Width, drawHeight),
+            new Rectangle(0, match.MatchIndex + 1, currentImage.Width, drawHeight),
+            GraphicsUnit.Pixel);
+
+        return match with { Image = newResult };
+    }
+
+    private static ScrollAppendMatch TryFindScrollingAppend(Bitmap result, Bitmap currentImage,
+        int bestMatchCount, int bestMatchIndex, int bestIgnoreBottomOffset)
+    {
+        if (result.Width != currentImage.Width || result.Height <= 0 || currentImage.Height <= 0)
+            return new ScrollAppendMatch(false, null, 0, 0, 0, 0, false);
+
+        int matchCount = 0;
+        int matchIndex = 0;
+        int matchLimit = Math.Max(1, currentImage.Height / 2);
+        int ignoreSideOffset = Math.Max(50, currentImage.Width / 20);
+        ignoreSideOffset = Math.Min(ignoreSideOffset, currentImage.Width / 3);
+        int compareWidth = currentImage.Width - ignoreSideOffset * 2;
+        if (compareWidth <= 0)
+        {
+            ignoreSideOffset = 0;
+            compareWidth = currentImage.Width;
+        }
+
+        int ignoreBottomOffsetMax = Math.Max(0, currentImage.Height / 3);
+        int ignoreBottomOffset = 0;
+
+        var resultData = result.LockBits(new Rectangle(0, 0, result.Width, result.Height),
             ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        var currData = curr.LockBits(new Rectangle(0, 0, curr.Width, curr.Height),
+        var currentData = currentImage.LockBits(new Rectangle(0, 0, currentImage.Width, currentImage.Height),
             ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
 
         try
         {
-            int bestOverlap = 0;
-            double bestScore = 0;
-
-            int maxOverlap = (int)(h * 0.85);
-            int minOverlap = Math.Min(stripHeight, h / 8);
-
-            // Coarse pass: step by 8 pixels
-            int coarseBest = 0;
-            double coarseBestScore = 0;
-            for (int overlap = maxOverlap; overlap >= minOverlap; overlap -= 8)
+            if (ignoreBottomOffsetMax > 0)
             {
-                double score = CompareRegions(prevData, currData, w,
-                    prev.Height - overlap, 0, Math.Min(stripHeight, overlap));
-                if (score > coarseBestScore)
+                int resultLastY = result.Height - 1;
+                int currentLastY = currentImage.Height - 1;
+                for (int offset = 0; offset <= ignoreBottomOffsetMax; offset++)
                 {
-                    coarseBestScore = score;
-                    coarseBest = overlap;
-                }
-                if (score > 0.998) break;
-            }
-
-            // Fine pass: refine around the coarse best
-            if (coarseBestScore > 0.9)
-            {
-                int lo = Math.Max(minOverlap, coarseBest - 10);
-                int hi = Math.Min(maxOverlap, coarseBest + 10);
-                for (int overlap = hi; overlap >= lo; overlap--)
-                {
-                    double score = CompareRegions(prevData, currData, w,
-                        prev.Height - overlap, 0, Math.Min(stripHeight, overlap));
-
-                    if (score > DuplicateThreshold)
+                    if (!RowsEqual(resultData, currentData, resultLastY - offset, currentLastY - offset,
+                            ignoreSideOffset, compareWidth))
                     {
-                        int midCheck = overlap / 2;
-                        if (midCheck > stripHeight)
-                        {
-                            double midScore = CompareRegions(prevData, currData, w,
-                                prev.Height - overlap + midCheck, midCheck,
-                                Math.Min(stripHeight, overlap - midCheck));
-                            score = (score + midScore) / 2.0;
-                        }
-
-                        if (score > bestScore)
-                        {
-                            bestScore = score;
-                            bestOverlap = overlap;
-                        }
-                        if (score > 0.998) break;
+                        ignoreBottomOffset = offset;
+                        break;
                     }
                 }
+
+                ignoreBottomOffset = Math.Max(ignoreBottomOffset, bestIgnoreBottomOffset);
+                ignoreBottomOffset = Math.Min(ignoreBottomOffset, ignoreBottomOffsetMax);
             }
 
-            return bestOverlap;
+            int resultBottomY = result.Height - ignoreBottomOffset - 1;
+            if (resultBottomY < 0)
+                return new ScrollAppendMatch(false, null, 0, 0, 0, ignoreBottomOffset, false);
+
+            for (int currentY = currentImage.Height - 1; currentY >= 0 && matchCount < matchLimit; currentY--)
+            {
+                int currentMatchCount = 0;
+                for (int row = 0; currentY - row >= 0 && resultBottomY - row >= 0 && currentMatchCount < matchLimit; row++)
+                {
+                    if (!RowsEqual(resultData, currentData, resultBottomY - row, currentY - row,
+                            ignoreSideOffset, compareWidth))
+                        break;
+
+                    currentMatchCount++;
+                }
+
+                if (currentMatchCount > matchCount)
+                {
+                    matchCount = currentMatchCount;
+                    matchIndex = currentY;
+                }
+            }
         }
         finally
         {
-            prev.UnlockBits(prevData);
-            curr.UnlockBits(currData);
+            result.UnlockBits(resultData);
+            currentImage.UnlockBits(currentData);
         }
+
+        bool usedBestGuess = false;
+        if (matchCount == 0 && bestMatchCount > 0)
+        {
+            matchCount = bestMatchCount;
+            matchIndex = bestMatchIndex;
+            ignoreBottomOffset = bestIgnoreBottomOffset;
+            usedBestGuess = true;
+        }
+
+        if (matchCount <= 0)
+            return new ScrollAppendMatch(false, null, 0, 0, 0, ignoreBottomOffset, false);
+
+        int newContentHeight = currentImage.Height - matchIndex - 1;
+        if (newContentHeight <= 0)
+            return new ScrollAppendMatch(false, null, 0, matchCount, matchIndex, ignoreBottomOffset, usedBestGuess);
+
+        return new ScrollAppendMatch(true, null, newContentHeight, matchCount, matchIndex, ignoreBottomOffset, usedBestGuess);
+    }
+
+    private static unsafe bool RowsEqual(BitmapData aData, BitmapData bData, int aY, int bY, int x, int width)
+    {
+        if (aY < 0 || aY >= aData.Height || bY < 0 || bY >= bData.Height || width <= 0)
+            return false;
+
+        byte* a = (byte*)aData.Scan0 + aY * aData.Stride + x * 4;
+        byte* b = (byte*)bData.Scan0 + bY * bData.Stride + x * 4;
+        int bytes = width * 4;
+        for (int i = 0; i < bytes; i++)
+        {
+            if (a[i] != b[i])
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>Compares a horizontal strip between two locked bitmaps. Returns 0..1 similarity.</summary>
@@ -176,7 +227,7 @@ public sealed partial class ScrollingCaptureForm
         return total > 0 ? (double)matches / total : 0;
     }
 
-    private static bool AreFramesDuplicate(Bitmap a, Bitmap b)
+    internal static bool AreFramesDuplicate(Bitmap a, Bitmap b)
     {
         if (a.Width != b.Width || a.Height != b.Height) return false;
 

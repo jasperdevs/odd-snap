@@ -117,12 +117,13 @@ internal sealed class LiveSelectionAdornerForm : Form
         }
 
         var g = _surfaceGraphics!;
+        g.CompositingMode = CompositingMode.SourceCopy;
         g.Clear(Color.Transparent);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.CompositingMode = CompositingMode.SourceOver;
         g.CompositingQuality = CompositingQuality.HighQuality;
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.InterpolationMode = InterpolationMode.NearestNeighbor;
+        g.PixelOffsetMode = PixelOffsetMode.None;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         g.TranslateTransform(-_contentBounds.X, -_contentBounds.Y);
 
@@ -239,7 +240,7 @@ internal sealed class LiveSelectionAdornerForm : Form
             hdcMem = Native.User32.CreateCompatibleDC(hdcScreen);
             hBmp = _surface.GetHbitmap(Color.FromArgb(0));
             hOld = Native.User32.SelectObject(hdcMem, hBmp);
-        Native.User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPoint, ref size,
+            Native.User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPoint, ref size,
                 hdcMem, ref sourcePoint, 0, ref blend, 2);
         }
         finally

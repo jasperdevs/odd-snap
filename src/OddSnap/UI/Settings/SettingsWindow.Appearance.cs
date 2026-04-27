@@ -158,6 +158,9 @@ public partial class SettingsWindow
         LoadFileNameTemplate(s.FileNameTemplate);
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
         CaptureDockSideCombo.SelectedIndex = (int)s.CaptureDockSide;
+        ScrollingCaptureModeCombo.SelectedIndex = Enum.IsDefined(typeof(ScrollingCaptureMode), s.ScrollingCaptureMode)
+            ? (int)s.ScrollingCaptureMode
+            : 0;
         WindowDetectionCombo.SelectedIndex = (int)s.WindowDetection;
         ShowCursorCheck.IsChecked = s.ShowCursor;
         AnnotationStrokeShadowCheck.IsChecked = s.AnnotationStrokeShadow;

@@ -162,6 +162,15 @@ public partial class SettingsWindow
         _settingsService.Save();
     }
 
+    private void ScrollingCaptureModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        _settingsService.Settings.ScrollingCaptureMode = ScrollingCaptureModeCombo.SelectedIndex == 1
+            ? ScrollingCaptureMode.Manual
+            : ScrollingCaptureMode.Automatic;
+        _settingsService.Save();
+    }
+
     private void ToastFadeOutCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded) return;

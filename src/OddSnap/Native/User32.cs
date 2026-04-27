@@ -12,6 +12,7 @@ internal static partial class User32
     public const uint MOD_WIN = 0x0008;
     public const uint MOD_NOREPEAT = 0x4000;
     public const uint VK_SNAPSHOT = 0x2C;
+    public const uint VK_ESCAPE = 0x1B;
     public const uint VK_SPACE = 0x20;
     public const int VK_SHIFT = 0x10;
     public const int VK_CONTROL = 0x11;
@@ -27,6 +28,9 @@ internal static partial class User32
     public const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
     public const int SRCCOPY = 0x00CC0020;
+    public const int WH_KEYBOARD_LL = 13;
+    public const int WM_KEYDOWN = 0x0100;
+    public const int WM_SYSKEYDOWN = 0x0104;
 
     public const int SM_XVIRTUALSCREEN = 76;
     public const int SM_YVIRTUALSCREEN = 77;
@@ -50,6 +54,7 @@ internal static partial class User32
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
     public delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
+    public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -70,6 +75,16 @@ internal static partial class User32
 
     [LibraryImport("user32.dll")]
     public static partial int GetLastError();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
     [LibraryImport("user32.dll")]
     public static partial short GetKeyState(int nVirtKey);

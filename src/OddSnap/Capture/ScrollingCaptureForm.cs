@@ -5,17 +5,19 @@ using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using OddSnap.Helpers;
+using OddSnap.Models;
 using OddSnap.Native;
 using OddSnap.Services;
 
 namespace OddSnap.Capture;
 
 /// <summary>
-/// Two-phase scrolling capture (passive, ShareX-style):
+/// Two-phase scrolling capture:
 /// 1. User selects a region on a fullscreen overlay.
 /// 2. Overlay hides and a floating control bar appears. User clicks Start,
-///    then manually scrolls the content. Frames are captured at a regular
-///    interval. User clicks Stop (or presses Escape) when done.
+///    then scrolls the content. Automatic mode captures useful stable scroll deltas;
+///    manual mode captures only when the user presses the frame button.
+///    User clicks Stop (or presses Escape) when done.
 /// 3. Captured frames are stitched into a single tall image via overlap detection.
 /// </summary>
 public sealed partial class ScrollingCaptureForm : Form
@@ -29,6 +31,7 @@ public sealed partial class ScrollingCaptureForm : Form
     private Bitmap? _screenshot;
     private readonly Rectangle _virtualBounds;
     private readonly bool _showCursor;
+    private readonly ScrollingCaptureMode _captureMode;
     private State _state = State.Selecting;
 
     // Selection
@@ -38,17 +41,26 @@ public sealed partial class ScrollingCaptureForm : Form
     private Rectangle _selection;
 
     // Capture
-    private readonly List<Bitmap> _frames = new();
     private Rectangle _screenRegion;
-    private const int CaptureIntervalMs = 400;
+    private const int CaptureIntervalMs = 100;
     private const int MatchStripHeight = 48;
+    private const int MinimumAutoNewContentPixels = 24;
     private const double DuplicateThreshold = 0.985;
     private int _initialCaptureFailures;
     private string? _initialCaptureFailureMessage;
+    private Bitmap? _pendingAutoFrame;
+    private Bitmap? _stitchedResult;
+    private Bitmap? _previousCapturedFrame;
+    private int _frameCount;
+    private int _bestMatchCount;
+    private int _bestMatchIndex;
+    private int _bestIgnoreBottomOffset;
+    private enum FrameCaptureResult { Accepted, Pending, Duplicate, Rejected, Failed }
 
     // Control bar
     private CaptureControlBar? _controlBar;
     private System.Windows.Forms.Timer? _captureTimer;
+    private CaptureEscapeKeyHook? _escapeHook;
 
     // Magnifier
     private readonly bool _showMagnifier;
@@ -61,12 +73,14 @@ public sealed partial class ScrollingCaptureForm : Form
     private readonly SolidBrush _hintBrush = new(UiChrome.SurfaceTextMuted);
 
     public ScrollingCaptureForm(Bitmap? screenshot, Rectangle virtualBounds, bool showCursor = false,
-                                bool showMagnifier = false)
+                                bool showMagnifier = false,
+                                ScrollingCaptureMode captureMode = ScrollingCaptureMode.Automatic)
     {
         OddSnap.UI.Theme.Refresh();
         _screenshot = screenshot;
         _virtualBounds = virtualBounds;
         _showCursor = showCursor;
+        _captureMode = Enum.IsDefined(captureMode) ? captureMode : ScrollingCaptureMode.Automatic;
         _showMagnifier = showMagnifier;
         if (_showMagnifier && screenshot is not null)
         {
@@ -110,6 +124,7 @@ public sealed partial class ScrollingCaptureForm : Form
         User32.SetForegroundWindow(Handle);
         Activate();
         Focus();
+        _escapeHook = CaptureEscapeKeyHook.Install(this, HandleEscape);
         _selectionAdorner?.Show(this);
     }
 
@@ -140,7 +155,7 @@ public sealed partial class ScrollingCaptureForm : Form
 
     private void HandleEscape()
     {
-        if (_state == State.Capturing && _frames.Count > 1)
+        if (_state == State.Capturing && _frameCount > 1)
             StopCapturing();
         else
             Cancel();
@@ -207,51 +222,61 @@ public sealed partial class ScrollingCaptureForm : Form
             _selection.Y + _virtualBounds.Y,
             _selection.Width, _selection.Height);
 
-        // Make the overlay transparent so the user can see content, but keep the border visible.
+        // Keep the fullscreen selector hidden while capturing so it cannot flash over the page.
         Opacity = 1;
         BackColor = TransKey;
         TransparencyKey = TransKey;
 
-        _controlBar = new CaptureControlBar(_screenRegion);
+        _controlBar = new CaptureControlBar(_screenRegion, _captureMode);
         _controlBar.StopClicked += () => StopCapturing();
         _controlBar.CancelClicked += () => Cancel();
+        _controlBar.ManualFrameClicked += () => CaptureFrame(forceAccept: true);
         _controlBar.Show();
-        Invalidate();
-        Visible = true;
 
-        // Start capturing immediately (like recording)
         _state = State.Capturing;
-        _controlBar.SetCapturing(true);
         Services.SoundService.PlayRecordStartSound();
 
-        CaptureFrame();
+        CaptureFrame(forceAccept: true);
+        if (_captureMode == ScrollingCaptureMode.Automatic)
+            StartAutomaticTimer();
+    }
+
+    private void StartAutomaticTimer()
+    {
+        if (_captureTimer is not null)
+            return;
 
         _captureTimer = new System.Windows.Forms.Timer { Interval = CaptureIntervalMs };
-        _captureTimer.Tick += (_, _) => CaptureFrame();
+        _captureTimer.Tick += (_, _) => CaptureFrame(forceAccept: false);
         _captureTimer.Start();
     }
 
-    private void CaptureFrame()
+    private void StopAutomaticTimer()
+    {
+        _captureTimer?.Stop();
+        _captureTimer?.Dispose();
+        _captureTimer = null;
+    }
+
+    private FrameCaptureResult CaptureFrame(bool forceAccept)
     {
         try
         {
             var frame = ScreenCapture.CaptureRegion(_screenRegion, _showCursor);
 
-            // Skip exact duplicates of the last frame (no scroll happened)
-            if (_frames.Count > 0 && AreFramesDuplicate(_frames[^1], frame))
+            if (forceAccept || _captureMode == ScrollingCaptureMode.Manual)
             {
-                frame.Dispose();
-                return;
+                ClearPendingAutoFrame();
+                return TryAcceptFrame(frame, forceAccept);
             }
 
-            _frames.Add(frame);
-            _controlBar?.SetFrameCount(_frames.Count);
+            return ProcessAutomaticFrame(frame);
         }
         catch (Exception ex)
         {
             // Capture can fail transiently; skip this tick.
             // If we never captured a frame at all, surface a failure instead of a silent cancel.
-            if (_frames.Count == 0 && _state == State.Capturing)
+            if (_frameCount == 0 && _state == State.Capturing)
             {
                 _initialCaptureFailures++;
                 if (string.IsNullOrWhiteSpace(_initialCaptureFailureMessage))
@@ -263,14 +288,118 @@ public sealed partial class ScrollingCaptureForm : Form
                 if (_initialCaptureFailures >= 3)
                     Fail(_initialCaptureFailureMessage);
             }
+
+            return FrameCaptureResult.Failed;
         }
+    }
+
+    private FrameCaptureResult ProcessAutomaticFrame(Bitmap frame)
+    {
+        if (_previousCapturedFrame is not null && AreFramesDuplicate(_previousCapturedFrame, frame))
+        {
+            ClearPendingAutoFrame();
+            frame.Dispose();
+            return FrameCaptureResult.Duplicate;
+        }
+
+        if (ShouldKeepFrame(frame, forceAccept: false))
+        {
+            ClearPendingAutoFrame();
+            return TryAcceptFrame(frame, forceAccept: false);
+        }
+
+        _pendingAutoFrame?.Dispose();
+        _pendingAutoFrame = frame;
+        return FrameCaptureResult.Pending;
+    }
+
+    private FrameCaptureResult TryAcceptFrame(Bitmap frame, bool forceAccept)
+    {
+        if (_stitchedResult is null)
+        {
+            AcceptFirstFrame(frame);
+            return FrameCaptureResult.Accepted;
+        }
+
+        if (_previousCapturedFrame is not null && AreFramesDuplicate(_previousCapturedFrame, frame))
+        {
+            frame.Dispose();
+            return FrameCaptureResult.Duplicate;
+        }
+
+        var match = TryAppendScrollingFrame(_stitchedResult, frame, _bestMatchCount, _bestMatchIndex, _bestIgnoreBottomOffset);
+        if (!match.Success)
+        {
+            frame.Dispose();
+            return FrameCaptureResult.Rejected;
+        }
+
+        int minimumNewContent = forceAccept || _captureMode == ScrollingCaptureMode.Manual
+            ? 1
+            : Math.Max(MinimumAutoNewContentPixels, frame.Height / 20);
+        if (match.NewContentHeight < minimumNewContent)
+        {
+            match.Image?.Dispose();
+            frame.Dispose();
+            return FrameCaptureResult.Rejected;
+        }
+
+        bool usedBestGuess = match.UsedBestGuess;
+        if (!usedBestGuess)
+        {
+            _bestMatchCount = Math.Max(_bestMatchCount, match.MatchCount);
+            _bestMatchIndex = match.MatchIndex;
+            _bestIgnoreBottomOffset = match.IgnoreBottomOffset;
+        }
+
+        _stitchedResult.Dispose();
+        _stitchedResult = match.Image;
+        ReplacePreviousCapturedFrame(frame);
+        _frameCount++;
+        if (usedBestGuess)
+            _controlBar?.SetStatus($"Auto: {_frameCount} frames (partial)");
+        else
+            _controlBar?.SetFrameCount(_frameCount);
+        return FrameCaptureResult.Accepted;
+    }
+
+    private void AcceptFirstFrame(Bitmap frame)
+    {
+        _stitchedResult = (Bitmap)frame.Clone();
+        ReplacePreviousCapturedFrame(frame);
+        _frameCount = 1;
+        _controlBar?.SetFrameCount(_frameCount);
+    }
+
+    private void ReplacePreviousCapturedFrame(Bitmap frame)
+    {
+        _previousCapturedFrame?.Dispose();
+        _previousCapturedFrame = frame;
+    }
+
+    private bool ShouldKeepFrame(Bitmap frame, bool forceAccept)
+    {
+        if (_stitchedResult is null)
+            return true;
+
+        if (_previousCapturedFrame is not null && AreFramesDuplicate(_previousCapturedFrame, frame))
+            return false;
+
+        var match = TryFindScrollingAppend(_stitchedResult, frame, _bestMatchCount, _bestMatchIndex, _bestIgnoreBottomOffset);
+        if (!match.Success)
+            return false;
+
+        int minimumNewContent = forceAccept || _captureMode == ScrollingCaptureMode.Manual
+            ? 1
+            : Math.Max(MinimumAutoNewContentPixels, frame.Height / 20);
+        return match.NewContentHeight >= minimumNewContent;
     }
 
     private void StopCapturing()
     {
-        _captureTimer?.Stop();
-        _captureTimer?.Dispose();
-        _captureTimer = null;
+        StopAutomaticTimer();
+        TryAcceptPendingAutoFrame();
+        ClearPendingAutoFrame();
         Services.SoundService.PlayRecordStopSound();
 
         _state = State.Stitching;
@@ -285,25 +414,26 @@ public sealed partial class ScrollingCaptureForm : Form
         _controlBar?.Dispose();
         _controlBar = null;
 
-        if (_frames.Count == 0)
+        if (_stitchedResult is null)
         {
             Fail(_initialCaptureFailureMessage ?? "No frames captured.");
             return;
         }
 
-        if (_frames.Count == 1)
+        if (_frameCount <= 1)
         {
-            var frame = _frames[0];
-            _frames.RemoveAt(0);
-            DisposeFrames();
-            CaptureCompleted?.Invoke(frame);
+            var singleFrame = _stitchedResult;
+            _stitchedResult = null;
+            ReleaseCaptureBitmaps();
+            CaptureCompleted?.Invoke(singleFrame);
             _state = State.Done;
             Close();
             return;
         }
 
-        var stitched = StitchFrames();
-        DisposeFrames();
+        var stitched = _stitchedResult;
+        _stitchedResult = null;
+        ReleaseCaptureBitmaps();
 
         if (stitched != null)
         {
@@ -323,9 +453,8 @@ public sealed partial class ScrollingCaptureForm : Form
 
         try
         {
-            _captureTimer?.Stop();
-            _captureTimer?.Dispose();
-            _captureTimer = null;
+            StopAutomaticTimer();
+            ClearPendingAutoFrame();
         }
         catch { }
 
@@ -339,7 +468,7 @@ public sealed partial class ScrollingCaptureForm : Form
         try { _controlBar?.Dispose(); } catch { }
         _controlBar = null;
 
-        DisposeFrames();
+        ReleaseCaptureBitmaps();
 
         try { CaptureFailed?.Invoke(message); } catch { }
         try { CaptureCancelled?.Invoke(); } catch { }
@@ -349,13 +478,12 @@ public sealed partial class ScrollingCaptureForm : Form
 
     private void Cancel()
     {
-        _captureTimer?.Stop();
-        _captureTimer?.Dispose();
-        _captureTimer = null;
+        StopAutomaticTimer();
+        ClearPendingAutoFrame();
         _controlBar?.Close();
         _controlBar?.Dispose();
         _controlBar = null;
-        DisposeFrames();
+        ReleaseCaptureBitmaps();
         CaptureCancelled?.Invoke();
         _state = State.Done;
         Close();
@@ -384,20 +512,26 @@ public sealed partial class ScrollingCaptureForm : Form
 
     private void PaintSelectionPhase(Graphics g)
     {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.CompositingMode = CompositingMode.SourceOver;
+        g.CompositingQuality = CompositingQuality.AssumeLinear;
+        g.InterpolationMode = InterpolationMode.NearestNeighbor;
+        g.PixelOffsetMode = PixelOffsetMode.None;
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
         if (_screenshot is null)
             g.Clear(UiChrome.SurfaceWindowBackground);
         else
-            g.DrawImage(_screenshot, 0, 0);
+            g.DrawImage(_screenshot, ClientRectangle,
+                new Rectangle(0, 0, _screenshot.Width, _screenshot.Height),
+                GraphicsUnit.Pixel);
 
         if (_selection.Width > 2 && _selection.Height > 2)
         {
-            if (_screenshot is not null)
-                g.DrawImage(_screenshot, _selection, _selection, GraphicsUnit.Pixel);
             SelectionFrameRenderer.DrawRectangle(g, _selection);
         }
         else
         {
-            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
             string hint = "Drag to select scrolling area";
             var hintSz = g.MeasureString(hint, _hintFont);
             g.DrawString(hint, _hintFont, _hintBrush,
@@ -472,10 +606,32 @@ public sealed partial class ScrollingCaptureForm : Form
         return rect;
     }
 
-    private void DisposeFrames()
+    private void ReleaseCaptureBitmaps()
     {
-        foreach (var f in _frames) f.Dispose();
-        _frames.Clear();
+        _stitchedResult?.Dispose();
+        _stitchedResult = null;
+        _previousCapturedFrame?.Dispose();
+        _previousCapturedFrame = null;
+        _frameCount = 0;
+        _bestMatchCount = 0;
+        _bestMatchIndex = 0;
+        _bestIgnoreBottomOffset = 0;
+    }
+
+    private void ClearPendingAutoFrame()
+    {
+        _pendingAutoFrame?.Dispose();
+        _pendingAutoFrame = null;
+    }
+
+    private void TryAcceptPendingAutoFrame()
+    {
+        if (_pendingAutoFrame is null)
+            return;
+
+        var frame = _pendingAutoFrame;
+        _pendingAutoFrame = null;
+        TryAcceptFrame(frame, forceAccept: false);
     }
 
     private void ReleaseSelectionPreview()
@@ -489,12 +645,15 @@ public sealed partial class ScrollingCaptureForm : Form
         if (disposing)
         {
             _magHelper?.Dispose();
+            _escapeHook?.Dispose();
+            _escapeHook = null;
             _selectionAdorner?.Dispose();
             _selectionAdorner = null;
             _captureTimer?.Stop();
             _captureTimer?.Dispose();
             _controlBar?.Dispose();
-            DisposeFrames();
+            ClearPendingAutoFrame();
+            ReleaseCaptureBitmaps();
             ReleaseSelectionPreview();
             _readoutFont.Dispose();
             _hintFont.Dispose();
@@ -514,61 +673,66 @@ public sealed partial class ScrollingCaptureForm : Form
     {
         public event Action? StopClicked;
         public event Action? CancelClicked;
+        public event Action? ManualFrameClicked;
 
-        private const int BarWidth = 320;
+        private const int AutoBarWidth = 320;
+        private const int ManualBarWidth = 370;
         private const int BarHeight = WindowsDockRenderer.SurfaceHeight;
         private const int CornerR = WindowsDockRenderer.SurfaceRadius;
 
+        private readonly ScrollingCaptureMode _mode;
         private int _frameCount;
-        private string _status = "Scroll now";
+        private string _status;
 
         // Cached GDI objects
         private readonly Font _statusFont = UiChrome.ChromeFont(10f, FontStyle.Bold);
         private readonly Font _btnFont = UiChrome.ChromeFont(9.5f, FontStyle.Bold);
 
         // Button hit-test rects
+        private Rectangle _manualFrameBtnRect;
         private Rectangle _actionBtnRect;
         private Rectangle _cancelBtnRect;
         private Rectangle? _hoveredBtn;
         private Rectangle _statusRect;
 
-        public CaptureControlBar(Rectangle captureRegion)
+        public CaptureControlBar(Rectangle captureRegion, ScrollingCaptureMode mode)
         {
+            _mode = mode;
+            _status = mode == ScrollingCaptureMode.Automatic ? "Auto: scroll now" : "Manual: click capture";
+
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
             StartPosition = FormStartPosition.Manual;
-            Size = new Size(BarWidth, BarHeight);
+            int barWidth = mode == ScrollingCaptureMode.Manual ? ManualBarWidth : AutoBarWidth;
+            Size = new Size(barWidth, BarHeight);
             BackColor = UiChrome.SurfaceWindowBackground;
             KeyPreview = true;
             DoubleBuffered = true;
             Cursor = Cursors.Default;
 
-            int x = captureRegion.X + (captureRegion.Width - BarWidth) / 2;
+            int x = captureRegion.X + (captureRegion.Width - barWidth) / 2;
             int y = captureRegion.Y - BarHeight - 12;
             if (y < 0) y = captureRegion.Bottom + 12;
             Location = new Point(Math.Max(4, x), Math.Max(4, y));
 
-            Region = CreateRoundedRegion(BarWidth, BarHeight, CornerR);
+            Region = CreateRoundedRegion(barWidth, BarHeight, CornerR);
 
-            // Button layout
             int btnY = (BarHeight - WindowsDockRenderer.IconButtonSize) / 2;
-            _cancelBtnRect = new Rectangle(BarWidth - WindowsDockRenderer.SurfacePadding - WindowsDockRenderer.IconButtonSize, btnY, WindowsDockRenderer.IconButtonSize, WindowsDockRenderer.IconButtonSize);
+            _cancelBtnRect = new Rectangle(barWidth - WindowsDockRenderer.SurfacePadding - WindowsDockRenderer.IconButtonSize, btnY, WindowsDockRenderer.IconButtonSize, WindowsDockRenderer.IconButtonSize);
             _actionBtnRect = new Rectangle(_cancelBtnRect.X - WindowsDockRenderer.ButtonSpacing - WindowsDockRenderer.IconButtonSize, btnY, WindowsDockRenderer.IconButtonSize, WindowsDockRenderer.IconButtonSize);
-            _statusRect = new Rectangle(16, 0, _actionBtnRect.X - 24, BarHeight);
-        }
-
-        public void SetCapturing(bool capturing)
-        {
-            _status = "Scroll now";
-            Invalidate(_statusRect);
+            _manualFrameBtnRect = mode == ScrollingCaptureMode.Manual
+                ? new Rectangle(_actionBtnRect.X - WindowsDockRenderer.ButtonSpacing - WindowsDockRenderer.IconButtonSize, btnY, WindowsDockRenderer.IconButtonSize, WindowsDockRenderer.IconButtonSize)
+                : Rectangle.Empty;
+            int firstButtonX = _manualFrameBtnRect.IsEmpty ? _actionBtnRect.X : _manualFrameBtnRect.X;
+            _statusRect = new Rectangle(16, 0, firstButtonX - 24, BarHeight);
         }
 
         public void SetFrameCount(int count)
         {
             if (InvokeRequired) { BeginInvoke(() => SetFrameCount(count)); return; }
             _frameCount = count;
-            _status = $"{count} frames";
+            _status = FormatFrameStatus(count);
             Invalidate(_statusRect);
         }
 
@@ -588,13 +752,16 @@ public sealed partial class ScrollingCaptureForm : Form
             var barRect = new RectangleF(0, 0, Width, Height);
             WindowsDockRenderer.PaintSurface(g, barRect, CornerR);
 
-            // Status text — clip before buttons
             using var statusBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
-            int maxTextW = _actionBtnRect.X - 24;
-            var statusRect = new RectangleF(16, 0, maxTextW, Height);
+            var statusRect = new RectangleF(16, 0, _statusRect.Width, Height);
             var statusFmt = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
             g.DrawString(_status, _statusFont, statusBrush, statusRect, statusFmt);
 
+            if (!_manualFrameBtnRect.IsEmpty)
+            {
+                DrawIconBtn(g, _manualFrameBtnRect, "record", UiChrome.SurfaceTextPrimary,
+                    _hoveredBtn == _manualFrameBtnRect, active: true);
+            }
             DrawIconBtn(g, _actionBtnRect, "stopSquare", UiChrome.SurfaceTextPrimary, _hoveredBtn == _actionBtnRect, active: false);
             DrawIconBtn(g, _cancelBtnRect, "close", UiChrome.SurfaceTextPrimary, _hoveredBtn == _cancelBtnRect, active: false);
         }
@@ -610,7 +777,9 @@ public sealed partial class ScrollingCaptureForm : Form
         {
             base.OnMouseMove(e);
             Rectangle? prev = _hoveredBtn;
-            if (_actionBtnRect.Contains(e.Location))
+            if (!_manualFrameBtnRect.IsEmpty && _manualFrameBtnRect.Contains(e.Location))
+                _hoveredBtn = _manualFrameBtnRect;
+            else if (_actionBtnRect.Contains(e.Location))
                 _hoveredBtn = _actionBtnRect;
             else if (_cancelBtnRect.Contains(e.Location))
                 _hoveredBtn = _cancelBtnRect;
@@ -639,15 +808,24 @@ public sealed partial class ScrollingCaptureForm : Form
         protected override void OnMouseClick(MouseEventArgs e)
         {
             base.OnMouseClick(e);
-            if (_actionBtnRect.Contains(e.Location))
+            if (!_manualFrameBtnRect.IsEmpty && _manualFrameBtnRect.Contains(e.Location))
+            {
+                ManualFrameClicked?.Invoke();
+            }
+            else if (_actionBtnRect.Contains(e.Location))
+            {
                 StopClicked?.Invoke();
+            }
             else if (_cancelBtnRect.Contains(e.Location))
+            {
                 CancelClicked?.Invoke();
+            }
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if ((keyData & Keys.KeyCode) == Keys.Escape)
+            var key = keyData & Keys.KeyCode;
+            if (key == Keys.Escape)
             {
                 if (_frameCount > 1)
                     StopClicked?.Invoke();
@@ -655,6 +833,13 @@ public sealed partial class ScrollingCaptureForm : Form
                     CancelClicked?.Invoke();
                 return true;
             }
+
+            if (_mode == ScrollingCaptureMode.Manual && (key == Keys.Space || key == Keys.Enter))
+            {
+                ManualFrameClicked?.Invoke();
+                return true;
+            }
+
             return base.ProcessCmdKey(ref msg, keyData);
         }
 
@@ -678,6 +863,14 @@ public sealed partial class ScrollingCaptureForm : Form
         {
             if (disposing) { _statusFont.Dispose(); _btnFont.Dispose(); }
             base.Dispose(disposing);
+        }
+
+        private string FormatFrameStatus(int count)
+        {
+            string label = count == 1 ? "frame" : "frames";
+            return _mode == ScrollingCaptureMode.Automatic
+                ? $"Auto: {count} {label}"
+                : $"Manual: {count} {label}";
         }
 
         private static Region CreateRoundedRegion(int w, int h, int r)

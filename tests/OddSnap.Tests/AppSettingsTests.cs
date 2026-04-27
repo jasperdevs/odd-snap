@@ -80,6 +80,14 @@ public sealed class AppSettingsTests
     }
 
     [Fact]
+    public void ScrollingCaptureMode_DefaultsToAutomatic()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(ScrollingCaptureMode.Automatic, settings.ScrollingCaptureMode);
+    }
+
+    [Fact]
     public void OverlayCaptureAllMonitors_DefaultsToEnabled()
     {
         var settings = new AppSettings();
@@ -196,5 +204,18 @@ public sealed class AppSettingsTests
 
         Assert.True(SettingsService.TryDeserialize(json, out var settings));
         Assert.Equal(CaptureMode.Freeform, settings.DefaultCaptureMode);
+    }
+
+    [Fact]
+    public void TryDeserialize_NormalizesInvalidScrollingCaptureModeToAutomatic()
+    {
+        var json = """
+            {
+              "ScrollingCaptureMode": 99
+            }
+            """;
+
+        Assert.True(SettingsService.TryDeserialize(json, out var settings));
+        Assert.Equal(ScrollingCaptureMode.Automatic, settings.ScrollingCaptureMode);
     }
 }

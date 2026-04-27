@@ -33,6 +33,7 @@ public sealed partial class RegionOverlayForm
             Native.User32.SWP_NOMOVE | Native.User32.SWP_NOSIZE | Native.User32.SWP_SHOWWINDOW);
         Activate();
         Focus();
+        _escapeHook = CaptureEscapeKeyHook.Install(this, Cancel);
         EnsureToolbarReady();
         Invalidate();
         Update();
@@ -512,6 +513,8 @@ public sealed partial class RegionOverlayForm
         {
             if (_currentOverlay == this)
                 _currentOverlay = null;
+            _escapeHook?.Dispose();
+            _escapeHook = null;
             ClearCrosshairGuides();
             if (_verticalCrosshairForm != null)
                 WindowDetector.UnregisterIgnoredWindow(_verticalCrosshairForm.Handle);

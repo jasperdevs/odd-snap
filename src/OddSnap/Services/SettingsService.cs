@@ -278,6 +278,8 @@ public sealed class SettingsService : IDisposable
 
         settings.ImageSearchSources &= ImageSearchSourceOptions.All;
         settings.InterfaceLanguage = LocalizationService.NormalizeLanguageSetting(settings.InterfaceLanguage);
+        if (!Enum.IsDefined(settings.ScrollingCaptureMode))
+            settings.ScrollingCaptureMode = ScrollingCaptureMode.Automatic;
         settings.OcrDefaultTranslateFrom = TranslationService.ResolveSourceLanguage(settings.OcrDefaultTranslateFrom);
         settings.OcrDefaultTranslateTo = NormalizeTranslationTargetSetting(settings.OcrDefaultTranslateTo);
 

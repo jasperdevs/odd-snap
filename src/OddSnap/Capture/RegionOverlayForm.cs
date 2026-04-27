@@ -61,6 +61,7 @@ public sealed partial class RegionOverlayForm : Form
     private Rectangle _lastSelectionRect;
     private Rectangle _lastAutoDetectRect;
     private LiveSelectionAdornerForm? _selectionAdorner;
+    private CaptureEscapeKeyHook? _escapeHook;
     private CrosshairGuideForm? _verticalCrosshairForm;
     private CrosshairGuideForm? _horizontalCrosshairForm;
     private readonly System.Windows.Forms.Timer _animTimer;

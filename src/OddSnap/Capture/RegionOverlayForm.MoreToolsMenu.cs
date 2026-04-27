@@ -27,7 +27,7 @@ public sealed partial class RegionOverlayForm
             if (e.KeyCode == Keys.Escape)
             {
                 e.IsInputKey = true;
-                CloseMoreToolsDropdown();
+                Cancel();
                 return;
             }
 

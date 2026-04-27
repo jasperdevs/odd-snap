@@ -737,6 +737,27 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE7F0;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Scrolling capture mode" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Choose whether scrolling capture collects frames itself or only when you click capture." Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                                <ComboBox x:Name="ScrollingCaptureModeCombo" Grid.Column="2" FontSize="12.5" Padding="10,5" MinWidth="170"
+                                          VerticalAlignment="Center"
+                                          SelectionChanged="ScrollingCaptureModeCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Automatic"/>
+                                    <ComboBoxItem Content="Manual"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
                                     <TextBlock Text="&#xE930;" Style="{StaticResource SettingIconGlyph}"/>
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">

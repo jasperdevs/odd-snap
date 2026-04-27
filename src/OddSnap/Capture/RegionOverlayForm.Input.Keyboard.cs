@@ -11,10 +11,7 @@ public sealed partial class RegionOverlayForm
     {
         if ((keyData & Keys.KeyCode) == Keys.Escape)
         {
-            if (_flyoutOpen)
-                CloseMoreToolsDropdown();
-            else
-                Cancel();
+            Cancel();
             return true;
         }
         if (_flyoutOpen && TryHandleAnnotationToolHotkey(keyData & Keys.KeyCode))
