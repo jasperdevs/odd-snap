@@ -47,6 +47,12 @@ public sealed class EmojiRenderer : IDisposable
         return rendered;
     }
 
+    public bool TryGetCachedEmoji(string emoji, float size, out Bitmap bitmap)
+    {
+        int sizeKey = (int)MathF.Round(size * 10);
+        return _cache.TryGetValue((emoji, sizeKey), out bitmap!);
+    }
+
     private Bitmap Render(string emoji, float size)
     {
         uint w = (uint)(size * 1.4f) + 4;

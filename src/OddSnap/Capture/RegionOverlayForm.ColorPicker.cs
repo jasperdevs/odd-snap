@@ -355,10 +355,9 @@ public sealed partial class RegionOverlayForm
         int formW = PickerMagnifierForm.TotalW;
         int formH = PickerMagnifierForm.GetTotalHeight(showInfo);
         int margin = 12;
-        int preferredIndex = avoidRect.IsEmpty ? 0 : _captureMagnifierPlacementIndex;
+        int preferredIndex = _captureMagnifierPlacementIndex;
         var (px, py, index) = ResolveMagnifierPosition(c, ClientSize, formW, formH, margin, MagOff, avoidRect, preferredIndex);
-        if (!avoidRect.IsEmpty)
-            _captureMagnifierPlacementIndex = index;
+        _captureMagnifierPlacementIndex = index;
         return (px, py);
     }
 

@@ -178,15 +178,13 @@ public sealed partial class RegionOverlayForm
             _selectedEmoji = null;
             _emojiSearch = "";
             _emojiScrollOffset = 0;
-            int cols = 8, emojiSize = 32, pad = 6, visibleRows = 4;
-            int searchBarH = 28;
+            int cols = EmojiPickerColumns, emojiSize = EmojiPickerIconSize, pad = EmojiPickerPadding, visibleRows = EmojiPickerVisibleRows;
+            int searchBarH = EmojiPickerSearchBarHeight;
             int pw = cols * (emojiSize + pad) + pad;
             int ph = searchBarH + pad + visibleRows * (emojiSize + pad) + pad;
             _emojiPickerRect = PositionPopupFromAnchor(_toolbarRect, pw, ph);
             ShowEmojiSearchBox();
-            _emojiWarmupIndex = 0;
-            _emojiWarmupPending = true;
-            _pickerTimer.Start();
+            QueueEmojiWarmup();
         }
         else
         {
@@ -253,7 +251,8 @@ public sealed partial class RegionOverlayForm
     {
         if (cursor == Point.Empty)
             return Rectangle.Empty;
-        return new Rectangle(cursor.X - 60, cursor.Y - 60, 160, 160);
+        const int srcSize = 40;
+        return GetMagnifierPaintBounds(cursor, new Rectangle(cursor.X - srcSize / 2, cursor.Y - srcSize / 2, srcSize, srcSize), ClientSize);
     }
 
     private Rectangle GetEmojiPreviewRect(Point cursor)
@@ -353,9 +352,9 @@ public sealed partial class RegionOverlayForm
 
     private Rectangle GetEmojiPickerBounds()
     {
-        int cols = 8, emojiSize = 32, pad = 6;
-        int searchBarH = 28;
-        int visibleRows = 4;
+        int cols = EmojiPickerColumns, emojiSize = EmojiPickerIconSize, pad = EmojiPickerPadding;
+        int searchBarH = EmojiPickerSearchBarHeight;
+        int visibleRows = EmojiPickerVisibleRows;
         int pw = cols * (emojiSize + pad) + pad;
         int ph = searchBarH + pad + visibleRows * (emojiSize + pad) + pad;
         return PositionPopupFromAnchor(_toolbarRect, pw, ph);

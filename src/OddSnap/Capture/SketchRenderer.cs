@@ -10,6 +10,8 @@ namespace OddSnap.Capture;
 /// </summary>
 public static partial class SketchRenderer
 {
+    private const float AnnotationStrokeWidth = 6f;
+
     // Match text annotation shadow/stroke values exactly
     private static readonly Color AnnotShadow1 = Color.FromArgb(50, 0, 0, 0);
     private static readonly Color AnnotShadow2 = Color.FromArgb(25, 0, 0, 0);
@@ -92,18 +94,18 @@ public static partial class SketchRenderer
 
         if (strokeShadow)
         {
-            DrawSoftLineShadow(g, from, shaftEnd, 3.4f);
-            DrawArrowhead(g, new PointF(to.X + 2, to.Y + 2), nx, ny, len, Color.FromArgb(42, 0, 0, 0), 3.6f, seed + 3000);
+            DrawSoftLineShadow(g, from, shaftEnd, AnnotationStrokeWidth);
+            DrawArrowhead(g, new PointF(to.X + 2, to.Y + 2), nx, ny, len, Color.FromArgb(42, 0, 0, 0), AnnotationStrokeWidth, seed + 3000);
         }
 
-        using var pen = new Pen(color, 3.4f)
+        using var pen = new Pen(color, AnnotationStrokeWidth)
         {
             StartCap = LineCap.Round,
             EndCap = LineCap.Round,
             LineJoin = LineJoin.Round
         };
         g.DrawLine(pen, from, shaftEnd);
-        DrawArrowhead(g, to, nx, ny, len, color, 3.6f, seed + 6000);
+        DrawArrowhead(g, to, nx, ny, len, color, AnnotationStrokeWidth, seed + 6000);
 
         g.SmoothingMode = SmoothingMode.Default;
     }
@@ -116,16 +118,18 @@ public static partial class SketchRenderer
         // Simplify jagged input into a smooth polyline
         points = SimplifyPoints(points, 2.5f);
         if (points.Count < 2) return;
+        var curvePts = SmoothCurvePoints(points, minDistance: 1.2f);
+        if (curvePts.Length < 2) return;
 
         float len = 0;
-        for (int i = 1; i < points.Count; i++)
+        for (int i = 1; i < curvePts.Length; i++)
         {
-            float ddx = points[i].X - points[i - 1].X, ddy = points[i].Y - points[i - 1].Y;
+            float ddx = curvePts[i].X - curvePts[i - 1].X, ddy = curvePts[i].Y - curvePts[i - 1].Y;
             len += MathF.Sqrt(ddx * ddx + ddy * ddy);
         }
         if (len < 3) return;
 
-        const float thickness = 3.5f;
+        const float thickness = AnnotationStrokeWidth;
 
         // Calculate arrowhead size first — we need it to find the right direction distance
         float headSize = Math.Clamp(12f + len / 15f, 12f, 28f);
@@ -133,16 +137,16 @@ public static partial class SketchRenderer
 
         // Walk backward along the polyline to find a point ~headSize away from tip
         // This gives a stable tangent that matches where the curve is actually going
-        var tip = points[^1];
+        var tip = curvePts[^1];
         float walkTarget = Math.Max(headSize, 20f);
         float walked = 0;
-        Point dirFrom = points[^2];
-        for (int i = points.Count - 1; i > 0; i--)
+        PointF dirFrom = curvePts[^2];
+        for (int i = curvePts.Length - 1; i > 0; i--)
         {
-            float seg = MathF.Sqrt((points[i].X - points[i - 1].X) * (points[i].X - points[i - 1].X) +
-                                    (points[i].Y - points[i - 1].Y) * (points[i].Y - points[i - 1].Y));
+            float seg = MathF.Sqrt((curvePts[i].X - curvePts[i - 1].X) * (curvePts[i].X - curvePts[i - 1].X) +
+                                    (curvePts[i].Y - curvePts[i - 1].Y) * (curvePts[i].Y - curvePts[i - 1].Y));
             walked += seg;
-            if (walked >= walkTarget) { dirFrom = points[i - 1]; break; }
+            if (walked >= walkTarget) { dirFrom = curvePts[i - 1]; break; }
         }
         float dx = tip.X - dirFrom.X, dy = tip.Y - dirFrom.Y;
         float l = MathF.Sqrt(dx * dx + dy * dy);
@@ -150,32 +154,30 @@ public static partial class SketchRenderer
         float nx = dx / l, ny = dy / l;
 
         // Shorten the curve: pull the last point back so the line doesn't poke through the arrowhead
-        var shortenedPts = points.ToArray();
-        shortenedPts[^1] = new Point(
-            (int)(tip.X - nx * headSize * 0.4f),
-            (int)(tip.Y - ny * headSize * 0.4f));
+        var shortenedPts = (PointF[])curvePts.Clone();
+        shortenedPts[^1] = new PointF(
+            tip.X - nx * headSize * 0.55f,
+            tip.Y - ny * headSize * 0.55f);
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
         // Helper to draw curve with a given pen
-        void DrawCurve(Point[] pts, int count, Pen pen)
+        void DrawCurve(PointF[] pts, Pen pen)
         {
-            if (count >= 4)
-                g.DrawCurve(pen, pts, 0, count - 1, 0.5f);
+            if (pts.Length >= 4)
+                g.DrawCurve(pen, pts, 0.45f);
             else
-                g.DrawLines(pen, pts.AsSpan(0, count).ToArray());
+                g.DrawLines(pen, pts);
         }
-
-        int ptCount = shortenedPts.Length;
 
         if (strokeShadow)
         {
-            DrawSoftCurveShadow(g, shortenedPts, thickness, ptCount >= 4);
+            DrawSoftCurveShadow(g, shortenedPts, thickness, shortenedPts.Length >= 4);
             DrawArrowhead(g, new PointF(tip.X + 2, tip.Y + 2), nx, ny, len, Color.FromArgb(42, 0, 0, 0), thickness + 0.5f, seed + 4000);
         }
 
         using var mainPen = new Pen(color, thickness) { StartCap = LineCap.Round, EndCap = LineCap.Flat, LineJoin = LineJoin.Round };
-        DrawCurve(shortenedPts, ptCount, mainPen);
+        DrawCurve(shortenedPts, mainPen);
         DrawArrowhead(g, tip, nx, ny, len, color, thickness + 0.5f, seed + 7000);
 
         g.SmoothingMode = SmoothingMode.Default;
@@ -191,8 +193,26 @@ public static partial class SketchRenderer
         var left = RotatePoint(new PointF(bx, by), tip, -angle);
         var right = RotatePoint(new PointF(bx, by), tip, angle);
 
-        DrawRoughStrokeLine(g, left, tip, color, seed + 1, thickness, 0.45f);
-        DrawRoughStrokeLine(g, right, tip, color, seed + 2, thickness, 0.45f);
+        using var pen = new Pen(color, thickness)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
+        g.DrawLine(pen, left, tip);
+        g.DrawLine(pen, right, tip);
+
+        if (color.A > 80)
+        {
+            using var echoPen = new Pen(Color.FromArgb((int)(color.A * 0.35f), color.R, color.G, color.B), Math.Max(1.4f, thickness * 0.55f))
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            };
+            g.DrawLine(echoPen, left, tip);
+            g.DrawLine(echoPen, right, tip);
+        }
     }
 
     private static float GetArrowheadSize(float shaftLen)
@@ -223,6 +243,43 @@ public static partial class SketchRenderer
             return 0;
         var rng = new Random(seed);
         return rng.Next(-max, max + 1);
+    }
+
+    private static PointF[] SmoothCurvePoints(List<Point> points, float minDistance)
+    {
+        var compact = new List<PointF>(points.Count);
+        PointF last = new(points[0].X, points[0].Y);
+        compact.Add(last);
+
+        float minDistanceSq = minDistance * minDistance;
+        for (int i = 1; i < points.Count; i++)
+        {
+            var next = new PointF(points[i].X, points[i].Y);
+            float dx = next.X - last.X;
+            float dy = next.Y - last.Y;
+            if (dx * dx + dy * dy < minDistanceSq)
+                continue;
+
+            compact.Add(next);
+            last = next;
+        }
+
+        if (compact.Count < 4)
+            return compact.ToArray();
+
+        var smoothed = new PointF[compact.Count];
+        smoothed[0] = compact[0];
+        for (int i = 1; i < compact.Count - 1; i++)
+        {
+            var prev = compact[i - 1];
+            var cur = compact[i];
+            var next = compact[i + 1];
+            smoothed[i] = new PointF(
+                (prev.X + cur.X * 2f + next.X) / 4f,
+                (prev.Y + cur.Y * 2f + next.Y) / 4f);
+        }
+        smoothed[^1] = compact[^1];
+        return smoothed;
     }
 
     /// <summary>Draw a wobbly line between two points (like rough.js).</summary>

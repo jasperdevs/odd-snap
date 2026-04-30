@@ -42,8 +42,36 @@ public sealed partial class RegionOverlayForm
     /// </summary>
     private void RenderAnnotationsTo(Graphics g)
     {
-        for (int i = 0; i < _undoStack.Count; i++)
-            RenderAnnotationTo(g, _undoStack[i]);
+        using var paintedBlurRegion = new Region();
+        paintedBlurRegion.MakeEmpty();
+        var highlightRegions = BuildHighlightRegions();
+        var paintedHighlightColors = new HashSet<int>();
+
+        try
+        {
+            for (int i = 0; i < _undoStack.Count; i++)
+            {
+                switch (_undoStack[i])
+                {
+                    case BlurRect blur:
+                        PaintBlurRectOnce(g, blur, paintedBlurRegion);
+                        break;
+                    case HighlightAnnotation h:
+                        int colorKey = h.Color.ToArgb();
+                        if (paintedHighlightColors.Add(colorKey) && highlightRegions.TryGetValue(colorKey, out var region))
+                            PaintHighlightRegion(g, region, h.Color);
+                        break;
+                    default:
+                        RenderAnnotationTo(g, _undoStack[i]);
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            foreach (var region in highlightRegions.Values)
+                region.Dispose();
+        }
     }
 
     private void RenderAnnotationTo(Graphics g, Annotation entry)
@@ -61,7 +89,9 @@ public sealed partial class RegionOverlayForm
                 SketchRenderer.DrawFreehandStroke(g, ds.Points, ds.Color, 6f, AnnotationStrokeShadow);
                 break;
             case HighlightAnnotation h:
-                SketchRenderer.DrawHighlightRect(g, h.Rect, h.Color);
+                using (var path = SketchRenderer.RoundedRect(h.Rect, 5))
+                using (var region = new Region(path))
+                    PaintHighlightRegion(g, region, h.Color);
                 break;
             case RectShapeAnnotation rs:
                 SketchRenderer.DrawRectShape(g, rs.Rect, rs.Color, AnnotationStrokeShadow);
@@ -94,5 +124,64 @@ public sealed partial class RegionOverlayForm
                 PaintEmojiAnnotation(g, ea.Pos, ea.Emoji, ea.Size);
                 break;
         }
+    }
+
+    private Dictionary<int, Region> BuildHighlightRegions()
+    {
+        var regions = new Dictionary<int, Region>();
+        foreach (var annotation in _undoStack)
+        {
+            if (annotation is not HighlightAnnotation highlight || highlight.Rect.Width <= 0 || highlight.Rect.Height <= 0)
+                continue;
+
+            int colorKey = highlight.Color.ToArgb();
+            if (!regions.TryGetValue(colorKey, out var region))
+            {
+                region = new Region();
+                region.MakeEmpty();
+                regions[colorKey] = region;
+            }
+
+            using var path = SketchRenderer.RoundedRect(highlight.Rect, 5);
+            region.Union(path);
+        }
+        return regions;
+    }
+
+    private static void PaintHighlightRegion(Graphics g, Region region, Color color)
+    {
+        var state = g.Save();
+        try
+        {
+            g.SetClip(region, CombineMode.Replace);
+            using var brush = new SolidBrush(Color.FromArgb(92, color.R, color.G, color.B));
+            g.FillRegion(brush, region);
+        }
+        finally
+        {
+            g.Restore(state);
+        }
+    }
+
+    private void PaintBlurRectOnce(Graphics g, BlurRect blur, Region paintedBlurRegion)
+    {
+        if (blur.Rect.Width <= 0 || blur.Rect.Height <= 0)
+            return;
+
+        using var drawRegion = new Region(blur.Rect);
+        drawRegion.Exclude(paintedBlurRegion);
+
+        var state = g.Save();
+        try
+        {
+            g.SetClip(drawRegion, CombineMode.Replace);
+            PaintBlurRect(g, blur.Rect);
+        }
+        finally
+        {
+            g.Restore(state);
+        }
+
+        paintedBlurRegion.Union(blur.Rect);
     }
 }

@@ -345,35 +345,36 @@ public sealed partial class RegionOverlayForm
                     UpdateCaptureMagnifier(e.Location);
                 break;
             case CaptureMode.Highlight when _isHighlighting:
-                Invalidate();
+                InvalidateLivePreview(NormRect(_highlightStart, oldCursor), NormRect(_highlightStart, e.Location), 18);
                 break;
             case CaptureMode.RectShape when _isRectShapeDragging:
-                Invalidate();
+                InvalidateLivePreview(GetShapeRect(oldCursor), GetShapeRect(e.Location), 18);
                 break;
             case CaptureMode.CircleShape when _isCircleShapeDragging:
-                Invalidate();
+                InvalidateLivePreview(GetShapeRect(oldCursor), GetShapeRect(e.Location), 18);
                 break;
             case CaptureMode.Line when _isLineDragging:
-                Invalidate();
+                InvalidateLivePreview(RectFromPoints(_lineStart, oldCursor, 1), RectFromPoints(_lineStart, e.Location, 1), 18);
                 break;
             case CaptureMode.Ruler when _isRulerDragging:
-                Invalidate();
+                InvalidateLivePreview(RectFromPoints(_rulerStart, GetRulerEnd(oldCursor), 1), RectFromPoints(_rulerStart, GetRulerEnd(e.Location), 1), 56);
                 break;
             case CaptureMode.Arrow when _isArrowDragging:
-                Invalidate();
+                InvalidateLivePreview(RectFromPoints(_arrowStart, oldCursor, 1), RectFromPoints(_arrowStart, e.Location, 1), 32);
                 break;
             case CaptureMode.Blur when _isBlurring:
-                Invalidate();
+                InvalidateLivePreview(NormRect(_blurStart, oldCursor), NormRect(_blurStart, e.Location), 18);
                 break;
             case CaptureMode.Eraser when _isEraserDragging:
-                Invalidate();
+                InvalidateLivePreview(NormRect(_eraserStart, oldCursor), NormRect(_eraserStart, e.Location), 18);
                 break;
             case CaptureMode.Emoji when _isPlacingEmoji:
-                Invalidate();
+                InvalidateLivePreview(GetEmojiPreviewRect(oldCursor), GetEmojiPreviewRect(e.Location), 10);
                 break;
             case CaptureMode.Draw when _isSelecting:
                 if (_currentStroke is { Count: > 0 })
                 {
+                    var oldDirty = GetDrawPreviewBounds();
                     if ((ModifierKeys & Keys.Shift) != 0)
                     {
                         var start = _currentStroke[0];
@@ -386,12 +387,18 @@ public sealed partial class RegionOverlayForm
                     {
                         _currentStroke.Add(e.Location);
                     }
-                    Invalidate();
+                    InvalidateLivePreview(oldDirty, GetDrawPreviewBounds(), 18);
                 }
                 break;
             case CaptureMode.CurvedArrow when _isCurvedArrowDragging:
+                var oldCurveDirty = _currentCurvedArrow is { Count: > 0 }
+                    ? BoundsOfPoints(_currentCurvedArrow, 16)
+                    : Rectangle.Empty;
                 _currentCurvedArrow?.Add(e.Location);
-                Invalidate();
+                var newCurveDirty = _currentCurvedArrow is { Count: > 0 }
+                    ? BoundsOfPoints(_currentCurvedArrow, 16)
+                    : Rectangle.Empty;
+                InvalidateLivePreview(oldCurveDirty, newCurveDirty, 18);
                 break;
         }
 
@@ -410,8 +417,8 @@ public sealed partial class RegionOverlayForm
         if (_emojiPickerOpen)
         {
             var filtered = GetFilteredEmojiPalette();
-            int cols = 8, emojiSize = 32, pad = 6;
-            int searchBarH = 28;
+            int cols = EmojiPickerColumns, emojiSize = EmojiPickerIconSize, pad = EmojiPickerPadding;
+            int searchBarH = EmojiPickerSearchBarHeight;
             int gridY = _emojiPickerRect.Y + pad + searchBarH + pad;
             int relX = e.Location.X - _emojiPickerRect.X - pad;
             int relY = e.Location.Y - gridY;
@@ -447,6 +454,41 @@ public sealed partial class RegionOverlayForm
             Invalidate(newDirty);
         else
             Invalidate();
+    }
+
+    private void InvalidateLivePreview(Rectangle oldBounds, Rectangle newBounds, int pad)
+    {
+        var oldDirty = InflateForRepaint(oldBounds, pad);
+        var newDirty = InflateForRepaint(newBounds, pad);
+
+        if (!oldDirty.IsEmpty && !newDirty.IsEmpty)
+            Invalidate(Rectangle.Union(oldDirty, newDirty));
+        else if (!oldDirty.IsEmpty)
+            Invalidate(oldDirty);
+        else if (!newDirty.IsEmpty)
+            Invalidate(newDirty);
+    }
+
+    private Rectangle GetDrawPreviewBounds()
+    {
+        if (_currentStroke is not { Count: > 0 })
+            return Rectangle.Empty;
+
+        return (ModifierKeys & Keys.Shift) != 0 && _currentStroke.Count >= 2
+            ? RectFromPoints(_currentStroke[0], _currentStroke[^1], 8)
+            : BoundsOfPoints(_currentStroke, 8);
+    }
+
+    private static float GetPathLength(List<Point> points)
+    {
+        float length = 0f;
+        for (int i = 1; i < points.Count; i++)
+        {
+            float dx = points[i].X - points[i - 1].X;
+            float dy = points[i].Y - points[i - 1].Y;
+            length += MathF.Sqrt(dx * dx + dy * dy);
+        }
+        return length;
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -511,7 +553,7 @@ public sealed partial class RegionOverlayForm
                 float ldy = lineEnd.Y - _lineStart.Y;
                 if (MathF.Sqrt(ldx * ldx + ldy * ldy) > 5)
                     AddAnnotation(new LineAnnotation(_lineStart, lineEnd, _toolColor));
-                Invalidate(InflateForRepaint(NormRect(_lineStart, lineEnd)));
+                Invalidate(InflateForRepaint(RectFromPoints(_lineStart, lineEnd, 1)));
                 break;
             case CaptureMode.Ruler when _isRulerDragging:
                 _isRulerDragging = false;
@@ -520,7 +562,7 @@ public sealed partial class RegionOverlayForm
                 float rdy = rulerEnd.Y - _rulerStart.Y;
                 if (MathF.Sqrt(rdx * rdx + rdy * rdy) > 3)
                     AddAnnotation(new RulerAnnotation(_rulerStart, rulerEnd));
-                Invalidate(InflateForRepaint(NormRect(_rulerStart, rulerEnd)));
+                Invalidate(InflateForRepaint(RectFromPoints(_rulerStart, rulerEnd, 1)));
                 break;
             case CaptureMode.Arrow when _isArrowDragging:
                 _isArrowDragging = false;
@@ -529,11 +571,11 @@ public sealed partial class RegionOverlayForm
                 float dy = end.Y - _arrowStart.Y;
                 if (MathF.Sqrt(dx * dx + dy * dy) > 5)
                     AddAnnotation(new ArrowAnnotation(_arrowStart, end, _toolColor));
-                Invalidate(InflateForRepaint(NormRect(_arrowStart, end)));
+                Invalidate(InflateForRepaint(RectFromPoints(_arrowStart, end, 1)));
                 break;
             case CaptureMode.CurvedArrow when _isCurvedArrowDragging:
                 _isCurvedArrowDragging = false;
-                if (_currentCurvedArrow is { Count: >= 2 })
+                if (_currentCurvedArrow is { Count: >= 2 } && GetPathLength(_currentCurvedArrow) > 5f)
                 {
                     AddAnnotation(new CurvedArrowAnnotation(_currentCurvedArrow, _toolColor));
                     Invalidate(InflateForRepaint(BoundsOfPoints(_currentCurvedArrow, 10)));
@@ -636,22 +678,20 @@ public sealed partial class RegionOverlayForm
         bool actuallyLeft = clientPos.X < 0 || clientPos.Y < 0
             || clientPos.X >= ClientSize.Width || clientPos.Y >= ClientSize.Height;
 
-        _hoveredButton = -1;
-        CloseCaptureMagnifier();
-        _autoDetectTimer.Stop();
-
         if (actuallyLeft)
         {
+            _hoveredButton = -1;
+            CloseCaptureMagnifier();
+            _autoDetectTimer.Stop();
             ClearCrosshairGuides();
             _prevCursorPos = _lastCursorPos;
             _lastCursorPos = Point.Empty;
             _lastAutoDetectRect = Rectangle.Empty;
             _autoDetectRect = Rectangle.Empty;
             _autoDetectActive = false;
+            Invalidate();
+            RefreshToolbar();
         }
-
-        Invalidate();
-        RefreshToolbar();
     }
 
     protected override void OnMouseWheel(MouseEventArgs e)
@@ -666,10 +706,13 @@ public sealed partial class RegionOverlayForm
         else if (_emojiPickerOpen)
         {
             var filtered = GetFilteredEmojiPalette();
-            int cols = 8, visibleRows = 4;
+            int cols = EmojiPickerColumns, visibleRows = EmojiPickerVisibleRows;
             int totalRows = (filtered.Length + cols - 1) / cols;
             int maxScroll = Math.Max(0, totalRows - visibleRows);
+            int oldScroll = _emojiScrollOffset;
             _emojiScrollOffset = Math.Clamp(_emojiScrollOffset + (e.Delta > 0 ? -1 : 1), 0, maxScroll);
+            if (_emojiScrollOffset != oldScroll)
+                QueueEmojiWarmup();
             RefreshToolbar();
         }
         else if (_mode == CaptureMode.Emoji && _isPlacingEmoji)

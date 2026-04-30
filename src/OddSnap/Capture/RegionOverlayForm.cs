@@ -229,6 +229,12 @@ public sealed partial class RegionOverlayForm : Form
     private float _emojiPlaceSize = 32f;
     private int _emojiWarmupIndex;
     private bool _emojiWarmupPending;
+    private const int EmojiPickerColumns = 8;
+    private const int EmojiPickerVisibleRows = 4;
+    private const int EmojiPickerIconSize = 32;
+    private const int EmojiPickerPadding = 8;
+    private const int EmojiPickerSearchBarHeight = 32;
+    private const float EmojiPickerRenderSize = 22f;
 
     // Full emoji palette (searchable by name - includes semantic tags after |)
     private static readonly (string emoji, string name)[] EmojiPalette = {

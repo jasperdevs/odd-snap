@@ -329,20 +329,29 @@ public sealed partial class RegionOverlayForm
 
     private void PaintBlurRect(Graphics g, Rectangle rect)
     {
-        int blockSize = Math.Max(6, Math.Min(rect.Width, rect.Height) / 8);
         if (rect.Width < 3 || rect.Height < 3) return;
         var clamped = Rectangle.Intersect(rect, new Rectangle(0, 0, _bmpW, _bmpH));
         if (clamped.Width < 1 || clamped.Height < 1) return;
+        int blockSize = Math.Clamp(Math.Min(clamped.Width, clamped.Height) / 12, 6, 18);
         int sw = Math.Max(1, clamped.Width / blockSize);
         int sh = Math.Max(1, clamped.Height / blockSize);
         var small = GetBlurPreviewGraphics(new Size(sw, sh));
         small.Clear(Color.Transparent);
-        small.InterpolationMode = InterpolationMode.Bilinear;
+        small.InterpolationMode = InterpolationMode.NearestNeighbor;
+        small.PixelOffsetMode = PixelOffsetMode.Half;
         small.DrawImage(_screenshot, new Rectangle(0, 0, sw, sh), clamped, GraphicsUnit.Pixel);
-        g.InterpolationMode = InterpolationMode.NearestNeighbor;
-        g.PixelOffsetMode = PixelOffsetMode.Half;
-        g.DrawImage(_blurPreviewBitmap!, clamped);
-        g.InterpolationMode = InterpolationMode.Default;
-        g.PixelOffsetMode = PixelOffsetMode.Default;
+
+        var state = g.Save();
+        try
+        {
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+            g.DrawImage(_blurPreviewBitmap!, clamped);
+        }
+        finally
+        {
+            g.Restore(state);
+        }
     }
+
 }

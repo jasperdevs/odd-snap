@@ -457,6 +457,7 @@ public sealed partial class RecordingForm : Form
         if (disposing)
         {
             Current = null;
+            CaptureWindowExclusion.Unregister(Handle);
             _escapeHook?.Dispose();
             _escapeHook = null;
             _tickTimer?.Dispose();

@@ -268,7 +268,7 @@ public sealed partial class RegionOverlayForm
     private bool IsPointInEmojiPickerSearch(Point p)
     {
         if (!_emojiPickerRect.Contains(p)) return false;
-        int pad = 6, searchBarH = 28;
+        int pad = EmojiPickerPadding, searchBarH = EmojiPickerSearchBarHeight;
         int searchBottom = _emojiPickerRect.Y + pad + searchBarH + pad;
         return p.Y < searchBottom;
     }
@@ -278,8 +278,8 @@ public sealed partial class RegionOverlayForm
         if (!_emojiPickerRect.Contains(p)) return false;
 
         var filtered = GetFilteredEmojiPalette();
-        int cols = 8, emojiSize = 32, pad = 6;
-        int searchBarH = 28;
+        int cols = EmojiPickerColumns, emojiSize = EmojiPickerIconSize, pad = EmojiPickerPadding;
+        int searchBarH = EmojiPickerSearchBarHeight;
         int gridY = _emojiPickerRect.Y + pad + searchBarH + pad;
         int relX = p.X - _emojiPickerRect.X - pad;
         int relY = p.Y - gridY;
@@ -304,8 +304,8 @@ public sealed partial class RegionOverlayForm
 
         var filtered = GetFilteredEmojiPalette();
 
-        int cols = 8, emojiSize = 32, pad = 6;
-        int searchBarH = 28;
+        int cols = EmojiPickerColumns, emojiSize = EmojiPickerIconSize, pad = EmojiPickerPadding;
+        int searchBarH = EmojiPickerSearchBarHeight;
         int gridY = _emojiPickerRect.Y + pad + searchBarH + pad;
 
         // Check if clicking in search bar area (just keep focus, absorb click)

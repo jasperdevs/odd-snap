@@ -66,7 +66,7 @@ public sealed partial class RegionOverlayForm
         // Emoji placing: Tab re-opens picker
         if (_mode == CaptureMode.Emoji && _isPlacingEmoji)
         {
-            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; ShowEmojiSearchBox(); RefreshToolbar(); }
+            if (e.KeyCode == Keys.Tab) { _emojiPickerOpen = true; _isPlacingEmoji = false; ShowEmojiSearchBox(); QueueEmojiWarmup(); RefreshToolbar(); }
             return;
         }
 

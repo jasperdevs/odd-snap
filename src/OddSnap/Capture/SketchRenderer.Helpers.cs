@@ -38,6 +38,23 @@ public static partial class SketchRenderer
         }
     }
 
+    private static void DrawSoftCurveShadow(Graphics g, PointF[] points, float thickness, bool asCurve)
+    {
+        foreach (var step in SoftShadowSteps)
+        {
+            var shadowPts = new PointF[points.Length];
+            for (int i = 0; i < points.Length; i++)
+                shadowPts[i] = new PointF(points[i].X + step.dx, points[i].Y + step.dy);
+
+            using var pen = new Pen(Color.FromArgb(step.alpha, 0, 0, 0), thickness + (step.dx > 0 ? 1.2f : 0.5f))
+                { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+            if (asCurve && shadowPts.Length >= 4)
+                g.DrawCurve(pen, shadowPts, 0.45f);
+            else
+                g.DrawLines(pen, shadowPts);
+        }
+    }
+
     public static void DrawSoftPathShadow(Graphics g, GraphicsPath path, float extraSpread = 0f)
     {
         foreach (var step in SoftShadowSteps)

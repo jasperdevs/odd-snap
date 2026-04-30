@@ -320,7 +320,7 @@ public sealed partial class RegionOverlayForm
         EraserFill ef => ef.Rect,
         StepNumberAnnotation sn => new Rectangle(sn.Pos.X - 14, sn.Pos.Y - 14, 28, 28),
         EmojiAnnotation em => new Rectangle(em.Pos.X, em.Pos.Y, (int)em.Size, (int)em.Size),
-        MagnifierAnnotation mg => new Rectangle(mg.Pos.X - 40, mg.Pos.Y - 40, 80, 80),
+        MagnifierAnnotation mg => GetMagnifierPaintBounds(mg.Pos, mg.SrcRect, Size.Empty),
         TextAnnotation ta => GetTextBounds(ta),
         _ => Rectangle.Empty
     };

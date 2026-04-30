@@ -172,8 +172,21 @@ public sealed partial class RecordingForm
 
         BackColor = TransKey;
         TransparencyKey = TransKey;
+        CaptureWindowExclusion.SetLogicalBounds(Handle, GetRecordingChromeScreenBounds);
         Invalidate();
         Visible = true;
+    }
+
+    private Rectangle GetRecordingChromeScreenBounds()
+    {
+        if (_toolbarRect.Width <= 0 || _toolbarRect.Height <= 0)
+            return Rectangle.Empty;
+
+        return new Rectangle(
+            _virtualBounds.X + _toolbarRect.X,
+            _virtualBounds.Y + _toolbarRect.Y,
+            _toolbarRect.Width,
+            _toolbarRect.Height);
     }
 
     /// <summary>External stop (called from tray menu).</summary>

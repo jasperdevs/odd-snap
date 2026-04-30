@@ -15,11 +15,11 @@ public sealed partial class RegionOverlayForm
         // Filter emojis by search
         var filtered = GetFilteredEmojiPalette();
 
-        int cols = 8, emojiSize = 32, pad = 8;
-        int visibleRows = 4;
+        int cols = EmojiPickerColumns, emojiSize = EmojiPickerIconSize, pad = EmojiPickerPadding;
+        int visibleRows = EmojiPickerVisibleRows;
         int totalRows = (filtered.Length + cols - 1) / cols;
         int gridH = visibleRows * (emojiSize + pad);
-        int searchBarH = 32;
+        int searchBarH = EmojiPickerSearchBarHeight;
         int pw = cols * (emojiSize + pad) + pad;
         int ph = searchBarH + pad + gridH + pad;
 
@@ -82,8 +82,14 @@ public sealed partial class RegionOverlayForm
                 g.FillPath(hoverBg, hoverPath);
             }
 
-            var emojiBmp = _emojiRenderer.GetEmoji(filtered[idx].emoji, 22f);
-            g.DrawImage(emojiBmp, ex + 2, ey + 2);
+            if (_emojiRenderer.TryGetCachedEmoji(filtered[idx].emoji, EmojiPickerRenderSize, out var emojiBmp))
+            {
+                g.DrawImage(emojiBmp, ex + 2, ey + 2);
+            }
+            else
+            {
+                DrawEmojiPlaceholder(g, ex, ey, emojiSize);
+            }
         }
 
         // Scroll indicator (rounded track + thumb)
@@ -103,6 +109,15 @@ public sealed partial class RegionOverlayForm
         }
 
         g.SmoothingMode = SmoothingMode.Default;
+    }
+
+    private static void DrawEmojiPlaceholder(Graphics g, int x, int y, int size)
+    {
+        using var pen = new Pen(Color.FromArgb(55, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B), 1f);
+        using var brush = new SolidBrush(Color.FromArgb(18, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B));
+        var rect = new RectangleF(x + 5, y + 5, size - 10, size - 10);
+        g.FillEllipse(brush, rect);
+        g.DrawEllipse(pen, rect);
     }
 
     private void PaintFontPicker(Graphics g)

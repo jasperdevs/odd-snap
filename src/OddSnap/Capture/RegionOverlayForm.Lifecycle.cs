@@ -250,7 +250,8 @@ public sealed partial class RegionOverlayForm
                 if (_emojiSearchBox == null) return;
                 _emojiSearch = _emojiSearchBox.Text;
                 _emojiScrollOffset = 0;
-                RefreshToolbar();
+                QueueEmojiWarmup();
+                UpdateToolbarSurfaceOnly();
             };
             _emojiSearchBox.KeyDown += (_, e) =>
             {
@@ -274,6 +275,13 @@ public sealed partial class RegionOverlayForm
         if (_emojiSearchBox != null) { _emojiSearchBox.Visible = false; Focus(); }
     }
 
+    private void QueueEmojiWarmup()
+    {
+        _emojiWarmupIndex = 0;
+        _emojiWarmupPending = true;
+        _pickerTimer.Start();
+    }
+
     private void WarmEmojiPickerCacheBatch()
     {
         if (!_emojiWarmupPending || !_emojiPickerOpen)
@@ -286,16 +294,46 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
-        int batchSize = 4;
-        int end = Math.Min(filtered.Length, _emojiWarmupIndex + batchSize);
-        for (int i = _emojiWarmupIndex; i < end; i++)
-            _emojiRenderer.GetEmoji(filtered[i].emoji, 22f);
+        const int batchSize = 8;
+        int rendered = WarmEmojiRange(filtered, _emojiScrollOffset * EmojiPickerColumns, EmojiPickerVisibleRows * EmojiPickerColumns, batchSize);
+        if (rendered < batchSize)
+        {
+            int end = Math.Min(filtered.Length, _emojiWarmupIndex + batchSize - rendered);
+            for (int i = _emojiWarmupIndex; i < end; i++)
+                _emojiRenderer.GetEmoji(filtered[i].emoji, EmojiPickerRenderSize);
+            _emojiWarmupIndex = end;
+        }
 
-        _emojiWarmupIndex = end;
-        if (_emojiWarmupIndex >= filtered.Length)
+        if (_emojiWarmupIndex >= filtered.Length && IsVisibleEmojiRangeWarm(filtered))
             _emojiWarmupPending = false;
 
-        Invalidate(InflateForRepaint(GetEmojiPickerBounds(), 12));
+        UpdateToolbarSurfaceOnly();
+    }
+
+    private int WarmEmojiRange((string emoji, string name)[] filtered, int start, int count, int maxRender)
+    {
+        int rendered = 0;
+        int end = Math.Min(filtered.Length, start + count);
+        for (int i = Math.Max(0, start); i < end && rendered < maxRender; i++)
+        {
+            if (_emojiRenderer.TryGetCachedEmoji(filtered[i].emoji, EmojiPickerRenderSize, out _))
+                continue;
+            _emojiRenderer.GetEmoji(filtered[i].emoji, EmojiPickerRenderSize);
+            rendered++;
+        }
+        return rendered;
+    }
+
+    private bool IsVisibleEmojiRangeWarm((string emoji, string name)[] filtered)
+    {
+        int start = _emojiScrollOffset * EmojiPickerColumns;
+        int end = Math.Min(filtered.Length, start + EmojiPickerVisibleRows * EmojiPickerColumns);
+        for (int i = start; i < end; i++)
+        {
+            if (!_emojiRenderer.TryGetCachedEmoji(filtered[i].emoji, EmojiPickerRenderSize, out _))
+                return false;
+        }
+        return true;
     }
 
     private void ShowFontSearchBox()

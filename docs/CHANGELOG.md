@@ -1,3 +1,11 @@
+# OddSnap v0.8.32
+
+## Fixed
+- smooth draw, arrow, and curved arrow annotation rendering.
+- fix blur, highlight, emoji picker, and magnifier annotation paint issues.
+- keep recording and capture chrome out of captured output more reliably.
+- reduce annotation preview repaint work during mouse movement.
+
 # OddSnap v0.8.31
 
 ## Added

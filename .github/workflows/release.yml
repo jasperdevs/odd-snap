@@ -248,12 +248,17 @@ jobs:
           $downloadNotes = @'
           ## Downloads
 
-          Most people should download **App-OddSnap-Setup-x64.exe**.
+          Start here:
 
-          - **App-OddSnap-Setup-x64.exe** - Windows installer for most PCs
-          - **App-OddSnap-Portable-x64.zip** - portable copy for most PCs
-          - **arm64** - Windows on ARM
-          - **x86** - older 32-bit Windows
+          - **App-OddSnap-Setup-x64.exe** - recommended installer for most Windows PCs
+
+          Other downloads:
+
+          - **App-OddSnap-Portable-x64.zip** - portable copy for most Windows PCs
+          - **App-OddSnap-Setup-arm64.exe** - installer for Windows on ARM
+          - **App-OddSnap-Portable-arm64.zip** - portable copy for Windows on ARM
+          - **App-OddSnap-Setup-x86.exe** - installer for older 32-bit Windows
+          - **App-OddSnap-Portable-x86.zip** - portable copy for older 32-bit Windows
 
           Files named `.nupkg`, `releases.*.json`, `assets.*.json`, `RELEASES-*`, or `.yaml` are for automatic updates and package managers. They are not the normal download.
 

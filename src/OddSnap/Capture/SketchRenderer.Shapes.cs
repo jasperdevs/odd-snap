@@ -11,64 +11,26 @@ public static partial class SketchRenderer
     public static void DrawFreehandStroke(Graphics g, List<Point> points, Color color, float size, bool strokeShadow = false)
     {
         if (points.Count < 2) return;
-        // Simplify jagged input
         points = SimplifyPoints(points, 2.0f);
         if (points.Count < 2) return;
-        var floatPts = points.Select(p => new PointF(p.X, p.Y)).ToList();
-
-        // Shift-constrained draw uses only two points. That should render as a real line,
-        // not vanish because the freehand outline collapses to an empty path.
-        if (points.Count == 2)
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            DrawSoftLineShadow(g, floatPts[0], floatPts[1], size);
-            using var pen = new Pen(color, Math.Max(2f, size))
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round,
-                LineJoin = LineJoin.Round
-            };
-            g.DrawLine(pen, floatPts[0], floatPts[1]);
-            g.SmoothingMode = SmoothingMode.Default;
-            return;
-        }
-
-        var outline = GetStrokeOutline(floatPts, size, 0.5f, 0.5f, 0.5f);
-        if (outline.Length < 3)
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            DrawSoftLineShadow(g, floatPts[0], floatPts[^1], size);
-            using var pen = new Pen(color, Math.Max(2f, size))
-            {
-                StartCap = LineCap.Round,
-                EndCap = LineCap.Round,
-                LineJoin = LineJoin.Round
-            };
-            g.DrawLine(pen, floatPts[0], floatPts[^1]);
-            g.SmoothingMode = SmoothingMode.Default;
-            return;
-        }
+        var floatPts = SmoothStrokePoints(points, minDistance: 0.8f);
+        if (floatPts.Count < 2) return;
 
         g.SmoothingMode = SmoothingMode.AntiAlias;
-
-        using var path = OutlineToPath(outline);
+        using var path = BuildSmoothStrokePath(floatPts);
 
         if (strokeShadow)
         {
-            // Soft shadow only. Heavy outline strokes made freehand marks look muddy.
-            using var shadowPath = (GraphicsPath)path.Clone();
-            var m = new System.Drawing.Drawing2D.Matrix();
-            m.Translate(2, 2);
-            shadowPath.Transform(m);
-            g.FillPath(BrushShadow1, shadowPath);
-            m.Reset(); m.Translate(1, 1); // from (2,2) to (3,3)
-            shadowPath.Transform(m);
-            g.FillPath(BrushShadow2, shadowPath);
+            DrawSoftPathStrokeShadow(g, path, size);
         }
 
-        // Main pass
-        using var brush = new SolidBrush(color);
-        g.FillPath(brush, path);
+        using var pen = new Pen(color, Math.Max(2f, size))
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
+        g.DrawPath(pen, path);
         g.SmoothingMode = SmoothingMode.Default;
     }
 
@@ -79,8 +41,8 @@ public static partial class SketchRenderer
     {
         if (rect.Width < 1 || rect.Height < 1) return;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var brush = new SolidBrush(Color.FromArgb(90, color.R, color.G, color.B));
-        using var path = RoundedRect(rect, 3);
+        using var path = RoundedRect(rect, 5);
+        using var brush = new SolidBrush(Color.FromArgb(92, color.R, color.G, color.B));
         g.FillPath(brush, path);
         g.SmoothingMode = SmoothingMode.Default;
     }
@@ -158,8 +120,8 @@ public static partial class SketchRenderer
         }
 
         // 2. Generate left/right outline points
-        var left = new List<PointF>();
-        var right = new List<PointF>();
+        var left = new List<PointF>(pts.Count + 8);
+        var right = new List<PointF>(pts.Count + 8);
 
         for (int i = 1; i < pts.Count; i++)
         {
@@ -177,12 +139,109 @@ public static partial class SketchRenderer
             right.Add(new PointF(pts[i].point.X - px, pts[i].point.Y - py));
         }
 
+        AddRoundCap(left, right, pts[^1].point, pts.Count > 1 ? pts[^2].point : pts[^1].point, size / 2f, atEnd: true);
+        AddRoundCap(left, right, pts[0].point, pts.Count > 1 ? pts[1].point : pts[0].point, size / 2f, atEnd: false);
+
         // 3. Combine: left forward + right reversed
         right.Reverse();
-        var outline = new List<PointF>();
+        var outline = new List<PointF>(left.Count + right.Count);
         outline.AddRange(left);
         outline.AddRange(right);
         return outline.ToArray();
+    }
+
+    private static List<PointF> SmoothStrokePoints(List<Point> input, float minDistance)
+    {
+        var compact = new List<PointF>(input.Count);
+        PointF last = new(input[0].X, input[0].Y);
+        compact.Add(last);
+
+        float minDistanceSq = minDistance * minDistance;
+        for (int i = 1; i < input.Count; i++)
+        {
+            var next = new PointF(input[i].X, input[i].Y);
+            float dx = next.X - last.X;
+            float dy = next.Y - last.Y;
+            if (dx * dx + dy * dy < minDistanceSq)
+                continue;
+            compact.Add(next);
+            last = next;
+        }
+
+        if (compact.Count < 4)
+            return compact;
+
+        var smoothed = new List<PointF>(compact.Count);
+        smoothed.Add(compact[0]);
+        for (int i = 1; i < compact.Count - 1; i++)
+        {
+            var prev = compact[i - 1];
+            var cur = compact[i];
+            var next = compact[i + 1];
+            smoothed.Add(new PointF(
+                (prev.X + cur.X * 2f + next.X) / 4f,
+                (prev.Y + cur.Y * 2f + next.Y) / 4f));
+        }
+        smoothed.Add(compact[^1]);
+        return smoothed;
+    }
+
+    private static void AddRoundCap(List<PointF> left, List<PointF> right, PointF center, PointF neighbor, float radius, bool atEnd)
+    {
+        float dx = center.X - neighbor.X;
+        float dy = center.Y - neighbor.Y;
+        float len = MathF.Sqrt(dx * dx + dy * dy);
+        if (len < 0.001f)
+            return;
+
+        float angle = MathF.Atan2(dy, dx);
+        float start = atEnd ? angle - MathF.PI / 2f : angle + MathF.PI / 2f;
+        float sweep = atEnd ? MathF.PI : -MathF.PI;
+        const int steps = 6;
+
+        for (int i = 1; i < steps; i++)
+        {
+            float t = start + sweep * i / steps;
+            var p = new PointF(center.X + MathF.Cos(t) * radius, center.Y + MathF.Sin(t) * radius);
+            if (atEnd)
+                left.Add(p);
+            else
+                right.Add(p);
+        }
+    }
+
+    private static GraphicsPath BuildSmoothStrokePath(List<PointF> points)
+    {
+        var path = new GraphicsPath();
+        if (points.Count < 2)
+            return path;
+
+        if (points.Count < 4)
+        {
+            path.AddLines(points.ToArray());
+            return path;
+        }
+
+        path.AddCurve(points.ToArray(), 0.35f);
+        return path;
+    }
+
+    private static void DrawSoftPathStrokeShadow(Graphics g, GraphicsPath path, float thickness)
+    {
+        foreach (var step in SoftShadowSteps)
+        {
+            using var shadowPath = (GraphicsPath)path.Clone();
+            using var matrix = new Matrix();
+            matrix.Translate(step.dx, step.dy);
+            shadowPath.Transform(matrix);
+            using var pen = new Pen(Color.FromArgb(step.alpha, 0, 0, 0), thickness + (step.dx > 0 ? 1.2f : 0.5f))
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+                LineJoin = LineJoin.Round
+            };
+            g.DrawPath(pen, shadowPath);
+        }
     }
 
     /// <summary>Convert outline points to a smooth GraphicsPath using quadratic bezier approximation.</summary>

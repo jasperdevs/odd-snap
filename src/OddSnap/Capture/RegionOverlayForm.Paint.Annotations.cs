@@ -17,10 +17,12 @@ public sealed partial class RegionOverlayForm
     // This method only renders live previews for the in-progress tool state.
     private void PaintAnnotations(Graphics g)
     {
+        var cursorPoint = GetLiveAnnotationCursorPoint();
+
         // Active tool previews
         if (_mode == CaptureMode.Eraser && _isEraserDragging)
         {
-            var pr = NormRect(_eraserStart, PointToClient(System.Windows.Forms.Cursor.Position));
+            var pr = NormRect(_eraserStart, cursorPoint);
             if (pr.Width > 0 && pr.Height > 0)
             {
                 using var brush = new SolidBrush(Color.FromArgb(180, _eraserColor));
@@ -31,45 +33,40 @@ public sealed partial class RegionOverlayForm
         }
         if (_mode == CaptureMode.Blur && _isBlurring)
         {
-            var pr = NormRect(_blurStart, PointToClient(System.Windows.Forms.Cursor.Position));
+            var pr = NormRect(_blurStart, cursorPoint);
             if (pr.Width > 2 && pr.Height > 2)
-            {
-                using var pen = new Pen(UiChrome.SurfaceTextPrimary, 1f) { DashStyle = DashStyle.Dash };
-                g.DrawRectangle(pen, pr);
-            }
+                PaintBlurRect(g, pr);
         }
         if (_mode == CaptureMode.Highlight && _isHighlighting)
         {
-            var pr = NormRect(_highlightStart, PointToClient(System.Windows.Forms.Cursor.Position));
+            var pr = NormRect(_highlightStart, cursorPoint);
             if (pr.Width > 1 && pr.Height > 1)
                 SketchRenderer.DrawHighlightRect(g, pr, DefaultHighlightColor);
         }
         if (_mode == CaptureMode.RectShape && _isRectShapeDragging)
         {
-            var pr = GetShapeRect(PointToClient(System.Windows.Forms.Cursor.Position));
+            var pr = GetShapeRect(cursorPoint);
             if (pr.Width > 1 && pr.Height > 1)
                 SketchRenderer.DrawRectShape(g, pr, _toolColor, AnnotationStrokeShadow);
         }
         if (_mode == CaptureMode.CircleShape && _isCircleShapeDragging)
         {
-            var pr = GetShapeRect(PointToClient(System.Windows.Forms.Cursor.Position));
+            var pr = GetShapeRect(cursorPoint);
             if (pr.Width > 1 && pr.Height > 1)
                 SketchRenderer.DrawCircleShape(g, pr, _toolColor, AnnotationStrokeShadow);
         }
         if (_mode == CaptureMode.Line && _isLineDragging)
         {
-            var cur = PointToClient(System.Windows.Forms.Cursor.Position);
-            SketchRenderer.DrawLine(g, _lineStart, cur, _toolColor, _lineStart.GetHashCode(), AnnotationStrokeShadow);
+            SketchRenderer.DrawLine(g, _lineStart, cursorPoint, _toolColor, _lineStart.GetHashCode(), AnnotationStrokeShadow);
         }
         if (_mode == CaptureMode.Ruler && _isRulerDragging)
         {
-            var cur = GetRulerEnd(PointToClient(System.Windows.Forms.Cursor.Position));
+            var cur = GetRulerEnd(cursorPoint);
             PaintRuler(g, _rulerStart, cur);
         }
         if (_mode == CaptureMode.Arrow && _isArrowDragging)
         {
-            var cur = PointToClient(System.Windows.Forms.Cursor.Position);
-            SketchRenderer.DrawArrow(g, _arrowStart, cur, _toolColor, _arrowStart.GetHashCode(), strokeShadow: AnnotationStrokeShadow);
+            SketchRenderer.DrawArrow(g, _arrowStart, cursorPoint, _toolColor, _arrowStart.GetHashCode(), strokeShadow: AnnotationStrokeShadow);
         }
         if (_mode == CaptureMode.CurvedArrow && _isCurvedArrowDragging && _currentCurvedArrow is { Count: >= 2 })
             SketchRenderer.DrawCurvedArrow(g, _currentCurvedArrow, _toolColor, 42, AnnotationStrokeShadow);
@@ -78,7 +75,7 @@ public sealed partial class RegionOverlayForm
             if ((ModifierKeys & Keys.Shift) != 0)
             {
                 var start = _currentStroke[0];
-                var end = GetConstrainedDrawPoint(PointToClient(System.Windows.Forms.Cursor.Position));
+                var end = GetConstrainedDrawPoint(cursorPoint);
                 if (start != end)
                     SketchRenderer.DrawLine(g, start, end, _toolColor, start.GetHashCode(), AnnotationStrokeShadow);
             }
@@ -168,8 +165,7 @@ public sealed partial class RegionOverlayForm
         // Emoji placing preview (follow cursor)
         if (_mode == CaptureMode.Emoji && _isPlacingEmoji && _selectedEmoji != null)
         {
-            var cur = PointToClient(System.Windows.Forms.Cursor.Position);
-            PaintEmojiAnnotation(g, new Point(cur.X - (int)(_emojiPlaceSize / 2), cur.Y - (int)(_emojiPlaceSize / 2)),
+            PaintEmojiAnnotation(g, new Point(cursorPoint.X - (int)(_emojiPlaceSize / 2), cursorPoint.Y - (int)(_emojiPlaceSize / 2)),
                 _selectedEmoji, _emojiPlaceSize, 0.6f);
         }
 
@@ -180,6 +176,11 @@ public sealed partial class RegionOverlayForm
 
         // Color/emoji/font picker popups are painted on the separate ToolbarForm
     }
+
+    private Point GetLiveAnnotationCursorPoint()
+        => _lastCursorPos != Point.Empty
+            ? _lastCursorPos
+            : PointToClient(System.Windows.Forms.Cursor.Position);
 
     private void PaintGlobalSnapGuides(Graphics g)
     {
@@ -312,6 +313,29 @@ public sealed partial class RegionOverlayForm
     private void PaintPlacedMagnifier(Graphics g, Point pos, Rectangle srcRect)
     {
         PaintMagnifierAt(g, pos, srcRect, 1f);
+    }
+
+    private static Rectangle GetMagnifierPaintBounds(Point pos, Rectangle srcRect, Size clientSize)
+    {
+        int zoom = 3;
+        int dstSize = srcRect.Width * zoom;
+
+        int px = pos.X + 20;
+        int py = pos.Y + 20;
+        if (!clientSize.IsEmpty)
+        {
+            if (px + dstSize + 6 > clientSize.Width) px = pos.X - 20 - dstSize;
+            if (py + dstSize + 6 > clientSize.Height) py = pos.Y - 20 - dstSize;
+        }
+        else
+        {
+            int spread = dstSize + 34;
+            return new Rectangle(pos.X - spread, pos.Y - spread, spread * 2, spread * 2);
+        }
+
+        var bounds = new Rectangle(px - 4, py - 4, dstSize + 8, dstSize + 8);
+        bounds.Inflate(6, 6);
+        return bounds;
     }
 
     private void PaintMagnifierAt(Graphics g, Point pos, Rectangle srcRect, float opacity)
