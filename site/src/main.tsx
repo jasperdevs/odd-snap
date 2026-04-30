@@ -8,6 +8,7 @@ import ScrollToTop from "./components/ScrollToTop";
 import Home from "./pages/Home";
 import Downloads from "./pages/Downloads";
 import Donate from "./pages/Donate";
+import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
 
 createRoot(document.getElementById("root")!).render(
@@ -19,6 +20,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/" element={<Home />} />
           <Route path="/downloads" element={<Downloads />} />
           <Route path="/donate" element={<Donate />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

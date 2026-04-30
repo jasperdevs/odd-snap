@@ -69,6 +69,7 @@ export default function Layout() {
             <a href="https://github.com/jasperdevs/odd-snap" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">github</a>
             <a href="https://ko-fi.com/jasperdevs" target="_blank" rel="noopener noreferrer" className="hover:text-black transition-colors">ko-fi</a>
             <Link to="/downloads" className="hover:text-black transition-colors">downloads</Link>
+            <Link to="/privacy" className="hover:text-black transition-colors">privacy</Link>
           </div>
         </div>
       </footer>
