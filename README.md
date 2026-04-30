@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/readme/3banner-readme-v2.png" alt="oddsnap screenshot" width="680" />
+  <img src="assets/mainshot.png" alt="oddsnap screenshot" width="680" />
 </p>
 
 <h2 align="center">Download</h2>
