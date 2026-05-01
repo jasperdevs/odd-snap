@@ -80,7 +80,8 @@ public static partial class UploadService
         UploadDestination.Litterbox,
         UploadDestination.TmpFiles,
         UploadDestination.Uguu,
-        UploadDestination.Gofile
+        UploadDestination.Gofile,
+        UploadDestination.Catbox
     };
 
     private static JsonNode? TryParseJson(string text)
@@ -305,7 +306,7 @@ public static partial class UploadService
             UploadDestination.FileIo => 100L * 1024 * 1024,
             UploadDestination.Uguu => 128L * 1024 * 1024,
             UploadDestination.TransferSh => 10L * 1024 * 1024 * 1024,
-            UploadDestination.Dropbox => 350L * 1024 * 1024,
+            UploadDestination.Dropbox => 150L * 1024 * 1024,
             UploadDestination.GoogleDrive => 5L * 1024 * 1024 * 1024,
             UploadDestination.OneDrive => 250L * 1024 * 1024,
             UploadDestination.AzureBlob => 5L * 1024 * 1024 * 1024,

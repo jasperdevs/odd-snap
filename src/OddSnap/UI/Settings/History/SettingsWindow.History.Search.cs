@@ -60,7 +60,7 @@ public partial class SettingsWindow
 
     private void ApplyImmediateImageFilter(string query, ImageSearchSourceOptions sources, bool exactMatch)
     {
-        var rankedItems = RankLocalImageItems(query, sources, exactMatch);
+        var rankedItems = ApplyHistoryUploadFilter(RankLocalImageItems(query, sources, exactMatch)).ToList();
         var filteredItems = FilterSearchResultsForLoadedThumbnails(rankedItems, query);
         var shouldVirtualize = ShouldUseVirtualizedImageHistory(filteredItems);
         var renderModeChanged = _useVirtualizedImageHistory != shouldVirtualize;
@@ -75,11 +75,12 @@ public partial class SettingsWindow
         foreach (var item in _filteredHistoryItems)
             visibleBytes += item.Entry.FileSizeBytes;
 
+        var uploadFilterActive = IsHistoryUploadFilterActive();
         var searchEnabled = sources != ImageSearchSourceOptions.None;
         var usingSearch = searchEnabled && !string.IsNullOrWhiteSpace(query);
         var sizeStr = FormatStorageSize(visibleBytes);
         var totalCount = _allImageHistoryEntries.Count;
-        if (usingSearch)
+        if (usingSearch || uploadFilterActive)
         {
             HistoryCountText.Text = $"{_filteredHistoryItems.Count} of {totalCount} capture{(totalCount == 1 ? "" : "s")} · {sizeStr}";
         }
@@ -97,7 +98,9 @@ public partial class SettingsWindow
             ? "Enable at least one search source"
             : usingSearch
                 ? "No screenshots match your search"
-                : "No captures yet";
+                : uploadFilterActive
+                    ? "No screenshots match this filter"
+                    : "No captures yet";
 
         if (resultSetChanged || renderModeChanged)
             RenderHistoryItems();
@@ -112,7 +115,10 @@ public partial class SettingsWindow
         var normalizedQuery = ImageSearchQueryMatcher.Normalize(query);
         if (string.IsNullOrWhiteSpace(normalizedQuery))
         {
-            EnsureMaterializedImageHistoryItems(_historyRenderCount <= 0 ? ImageHistoryPageSize : _historyRenderCount);
+            if (IsHistoryUploadFilterActive())
+                EnsureAllImageHistoryItemsMaterialized();
+            else
+                EnsureMaterializedImageHistoryItems(_historyRenderCount <= 0 ? ImageHistoryPageSize : _historyRenderCount);
             var fullList = _allHistoryItems.ToList();
             RememberImmediateSearch(normalizedQuery, sources, exactMatch, fullList);
             return fullList;
@@ -133,14 +139,19 @@ public partial class SettingsWindow
         if (CanReuseImmediateSearchScope(normalizedQuery, sources, exactMatch))
             candidateItems = _lastImmediateSearchResults;
 
-        if (allowOcr)
+        if (allowOcr && candidateItems.Count() < HistoryVirtualizationThreshold)
             HydrateHistoryItemsForSearch(candidateItems);
 
         var rankedItems = candidateItems
             .Select(item => new
             {
                 Item = item,
-                Score = ScoreLocalImageItem(normalizedQuery, item, allowFileName, allowOcr, exactMatch)
+                Score = ScoreLocalImageItem(
+                    normalizedQuery,
+                    item,
+                    allowFileName,
+                    allowOcr && item.SearchMetadataHydrated,
+                    exactMatch)
             })
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
@@ -172,11 +183,13 @@ public partial class SettingsWindow
                 return;
 
             var entries = _historyService.ImageEntries;
-            var rankedEntries = await _imageSearchIndexService.SearchAsync(
-                entries,
-                query,
-                sources,
-                exactMatch,
+            var rankedEntries = await Task.Run(
+                () => _imageSearchIndexService.SearchAsync(
+                    entries,
+                    query,
+                    sources,
+                    exactMatch,
+                    cancellationToken),
                 cancellationToken);
 
             if (!IsLoaded || version != _searchFilterVersion || cancellationToken.IsCancellationRequested)
@@ -198,7 +211,7 @@ public partial class SettingsWindow
             if (!IsLoaded || version != _searchFilterVersion || cancellationToken.IsCancellationRequested)
                 return;
 
-            var filteredItems = FilterSearchResultsForLoadedThumbnails(filtered, query);
+            var filteredItems = FilterSearchResultsForLoadedThumbnails(ApplyHistoryUploadFilter(filtered).ToList(), query);
             var shouldVirtualize = ShouldUseVirtualizedImageHistory(filteredItems);
             var renderModeChanged = _useVirtualizedImageHistory != shouldVirtualize;
             var resultSetChanged = !HasSameHistorySequence(_filteredHistoryItems, filteredItems);
@@ -370,11 +383,33 @@ public partial class SettingsWindow
     private void UpdateImageSearchUi()
     {
         var isImages = HistoryCategoryCombo.SelectedIndex == 0;
-        var showSearch = isImages && _settingsService.Settings.ShowImageSearchBar && !_imageSearchRowAutoHidden;
+        var isText = HistoryCategoryCombo.SelectedIndex == 1;
+        var isColors = HistoryCategoryCombo.SelectedIndex == 3;
+        var showSearch = (isImages && _settingsService.Settings.ShowImageSearchBar && !_imageSearchRowAutoHidden) ||
+                         isText ||
+                         isColors;
         ImageSearchRow.Visibility = showSearch ? Visibility.Visible : Visibility.Collapsed;
+        ImageSearchFiltersBtn.Visibility = isImages ? Visibility.Visible : Visibility.Collapsed;
+        if (!isImages)
+            ImageSearchLoadingBar.Visibility = Visibility.Collapsed;
         if (showSearch)
         {
-            LoadImageSearchSources();
+            if (isImages)
+                LoadImageSearchSources();
+
+            var expectedText = isImages
+                ? _imageSearchQuery
+                : isText
+                    ? _ocrSearchQuery
+                    : _colorSearchQuery;
+            if (!string.Equals(ImageSearchBox.Text, expectedText, StringComparison.Ordinal))
+            {
+                _suppressHistorySearchBoxTextEvents = true;
+                try { ImageSearchBox.Text = expectedText; }
+                finally { _suppressHistorySearchBoxTextEvents = false; }
+            }
+
+            UpdateImageSearchPlaceholderText();
             ImageSearchPlaceholder.Visibility = string.IsNullOrWhiteSpace(ImageSearchBox.Text) && !ImageSearchBox.IsKeyboardFocused
                 ? Visibility.Visible
                 : Visibility.Collapsed;

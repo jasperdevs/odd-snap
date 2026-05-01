@@ -19,6 +19,9 @@ public static class OcrService
 {
     public const string EngineId = "winocr-v1";
     private static readonly SemaphoreSlim RecognizeGate = new(1, 1);
+    private static readonly object EngineCacheGate = new();
+    private static readonly Dictionary<string, OcrEngine> EngineCache = new(StringComparer.OrdinalIgnoreCase);
+    private static IReadOnlyList<string>? AvailableLanguageCache;
     internal readonly record struct OcrLineLayout(string Text, double Left, double Top, double Right, double Bottom)
     {
         public double Width => Math.Max(0, Right - Left);
@@ -29,14 +32,32 @@ public static class OcrService
     public static bool IsReady() => true;
 
     /// <summary>Dispose is a no-op for Windows OCR.</summary>
-    public static void ClearEngines() { }
+    public static void ClearEngines()
+    {
+        lock (EngineCacheGate)
+        {
+            EngineCache.Clear();
+            AvailableLanguageCache = null;
+        }
+    }
 
     /// <summary>Returns BCP-47 language tags for all installed Windows OCR languages.</summary>
     public static IReadOnlyList<string> GetAvailableRecognizerLanguages(bool refresh = false)
     {
-        return OcrEngine.AvailableRecognizerLanguages
+        lock (EngineCacheGate)
+        {
+            if (!refresh && AvailableLanguageCache is not null)
+                return AvailableLanguageCache;
+        }
+
+        var languages = OcrEngine.AvailableRecognizerLanguages
             .Select(l => l.LanguageTag)
             .ToList();
+
+        lock (EngineCacheGate)
+            AvailableLanguageCache = languages;
+
+        return languages;
     }
 
     public static async Task<string> RecognizeAsync(Bitmap bitmap, string? languageTag = null, OcrWorkload workload = OcrWorkload.Full)
@@ -191,6 +212,40 @@ public static class OcrService
     }
 
     private static OcrEngine? CreateEngine(string? languageTag)
+    {
+        var cacheKey = GetEngineCacheKey(languageTag);
+        lock (EngineCacheGate)
+        {
+            if (EngineCache.TryGetValue(cacheKey, out var cached))
+                return cached;
+        }
+
+        var engine = CreateEngineUncached(languageTag);
+        if (engine is not null)
+        {
+            lock (EngineCacheGate)
+                EngineCache[cacheKey] = engine;
+        }
+
+        return engine;
+    }
+
+    private static string GetEngineCacheKey(string? languageTag)
+    {
+        if (!string.IsNullOrWhiteSpace(languageTag) && languageTag != "auto")
+            return languageTag.Trim().ToLowerInvariant();
+
+        try
+        {
+            return "auto:" + LocalizationService.ResolveContentLanguageCode();
+        }
+        catch
+        {
+            return "auto";
+        }
+    }
+
+    private static OcrEngine? CreateEngineUncached(string? languageTag)
     {
         // If specific language requested, try it
         if (!string.IsNullOrWhiteSpace(languageTag) && languageTag != "auto")

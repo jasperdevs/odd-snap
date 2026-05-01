@@ -21,20 +21,9 @@ public partial class App
 
     private void HideSettingsForCapture()
     {
-        if (_settingsWindow is not { IsVisible: true } settingsWindow)
-            return;
-
-        void Hide()
-        {
-            if (_settingsWindow is { IsVisible: true } win)
-                win.Hide();
-        }
-
-        Interlocked.Exchange(ref _settingsHiddenForCapture, 1);
-        if (Dispatcher.CheckAccess())
-            Hide();
-        else
-            Dispatcher.Invoke(Hide);
+        // Keep app windows capturable. Hiding Settings here made attempts to
+        // capture OddSnap's own UI disappear before the screenshot started, and
+        // could also change the active window before active-window capture.
     }
 
     private void RestoreSettingsAfterCapture()
@@ -63,9 +52,11 @@ public partial class App
             try
             {
                 Theme.Refresh();
-                bool showCursor = _settingsService!.Settings.ShowCursor;
+                var settings = _settingsService!.Settings;
+                Helpers.UiChrome.SetUiScale(settings.UiScale);
+                bool showCursor = settings.ShowCursor;
                 var (selectionScreenshot, bounds) = ScreenCapture.CaptureAllScreens(showCursor);
-                var s = _settingsService!.Settings;
+                var s = settings;
                 var fmt = s.RecordingFormat;
 
                 string baseDir = s.SaveDirectory;
@@ -334,7 +325,8 @@ public partial class App
                     DetectWindows = _settingsService.Settings.DetectWindows,
                     ShowCaptureMagnifier = _settingsService.Settings.ShowCaptureMagnifier,
                     AnnotationStrokeShadow = _settingsService.Settings.AnnotationStrokeShadow,
-                    CaptureDockSide = _settingsService.Settings.CaptureDockSide
+                    CaptureDockSide = _settingsService.Settings.CaptureDockSide,
+                    UiScale = _settingsService.Settings.UiScale
                 };
                 overlay.SetEnabledTools(_settingsService.Settings.EnabledTools);
                 overlay.SetShowToolNumberBadges(_settingsService.Settings.ShowToolNumberBadges);

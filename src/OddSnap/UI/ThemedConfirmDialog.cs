@@ -39,7 +39,9 @@ internal sealed class ThemedConfirmDialog : Window
         FontFamily = new WpfFontFamily(UiChrome.PreferredFamilyName);
         Foreground = Theme.Brush(Theme.TextPrimary);
 
-        Content = BuildContent(title, message, primaryText, secondaryText, danger);
+        var content = BuildContent(title, message, primaryText, secondaryText, danger);
+        Content = content;
+        UiScale.ApplyToWindow(this, content, scaleWindowBounds: false);
 
         PreviewKeyDown += (_, e) =>
         {
@@ -71,8 +73,8 @@ internal sealed class ThemedConfirmDialog : Window
         var shell = new Border
         {
             CornerRadius = new CornerRadius(10),
-            Background = Theme.Brush(Theme.BgElevated),
-            BorderBrush = Theme.Brush(Theme.WindowBorder),
+            Background = Theme.Brush(SettingsWindowBackground),
+            BorderBrush = Theme.Brush(SettingsWindowBorder),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(0),
             Effect = new System.Windows.Media.Effects.DropShadowEffect
@@ -141,7 +143,7 @@ internal sealed class ThemedConfirmDialog : Window
     {
         var header = new Border
         {
-            Background = Theme.Brush(Theme.TitleBar),
+            Background = Theme.Brush(SettingsWindowBackground),
             CornerRadius = new CornerRadius(10, 10, 0, 0),
             Padding = new Thickness(14, 0, 0, 0),
             MinHeight = 40
@@ -247,13 +249,13 @@ internal sealed class ThemedConfirmDialog : Window
             : Theme.Brush(Theme.Accent);
         primaryBg.Freeze();
 
-        button.Background = isPrimary ? primaryBg : Theme.Brush(Theme.AccentSubtle);
+        button.Background = isPrimary ? primaryBg : Theme.Brush(SettingsInputBackground);
         button.Foreground = isPrimary
             ? (Theme.IsDark ? WpfBrushes.Black : WpfBrushes.White)
             : Theme.Brush(Theme.TextPrimary);
         button.BorderBrush = isPrimary
             ? WpfBrushes.Transparent
-            : Theme.Brush(Theme.BorderSubtle);
+            : Theme.Brush(SettingsInputBorder);
         button.BorderThickness = new Thickness(1);
 
         button.Template = BuildButtonTemplate();
@@ -276,4 +278,16 @@ internal sealed class ThemedConfirmDialog : Window
 
         return new ControlTemplate(typeof(Button)) { VisualTree = border };
     }
+
+    private static WpfColor SettingsWindowBackground =>
+        Theme.IsDark ? WpfColor.FromRgb(31, 31, 31) : WpfColor.FromRgb(243, 243, 243);
+
+    private static WpfColor SettingsInputBackground =>
+        Theme.IsDark ? WpfColor.FromRgb(36, 36, 36) : WpfColor.FromRgb(249, 249, 249);
+
+    private static WpfColor SettingsInputBorder =>
+        Theme.IsDark ? WpfColor.FromArgb(28, 255, 255, 255) : WpfColor.FromArgb(22, 0, 0, 0);
+
+    private static WpfColor SettingsWindowBorder =>
+        Theme.IsDark ? WpfColor.FromArgb(30, 255, 255, 255) : WpfColor.FromArgb(22, 0, 0, 0);
 }

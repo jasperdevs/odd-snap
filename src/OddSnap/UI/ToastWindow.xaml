@@ -78,6 +78,16 @@
                                RenderOptions.BitmapScalingMode="HighQuality"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
+                    <Border x:Name="OfficeBtn" Width="32" Height="32" CornerRadius="8"
+                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                            ToolTipService.IsEnabled="False"
+                            Cursor="Hand"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Margin="48,8,0,0" Opacity="0" Visibility="Collapsed">
+                        <Image x:Name="OfficeIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
                     <Border x:Name="AiRedirectBtn" Width="32" Height="32" CornerRadius="8"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
                             ToolTipService.IsEnabled="False"

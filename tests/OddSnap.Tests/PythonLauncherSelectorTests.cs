@@ -41,14 +41,14 @@ public sealed class PythonLauncherSelectorTests
 
         var selected = PythonLauncherSelector.SelectOnnxRuntimeLauncherArgument(entries);
 
-        Assert.Equal("-3.12", selected);
+        Assert.Equal("-3.13", selected);
     }
 
     [Fact]
     public void SelectOnnxRuntimeLauncherArgument_ReturnsNullWhenOnlyUnsupportedVersionsExist()
     {
         var entries = PythonLauncherSelector.ParseLauncherListOutput("""
-             -V:3.13 *        C:\Python313\python.exe
+             -V:3.10 *        C:\Python310\python.exe
              -V:3.9           C:\Python39\python.exe
             """);
 
@@ -58,10 +58,11 @@ public sealed class PythonLauncherSelectorTests
     }
 
     [Theory]
-    [InlineData("Python 3.10.11", true)]
+    [InlineData("Python 3.10.11", false)]
     [InlineData("Python 3.11.9", true)]
     [InlineData("Python 3.12.4", true)]
-    [InlineData("Python 3.13.1", false)]
+    [InlineData("Python 3.13.1", true)]
+    [InlineData("Python 3.14.0", true)]
     [InlineData("Python 3.9.13", false)]
     public void IsSupportedOnnxRuntimeVersion_MatchesExpectedVersions(string versionText, bool expected)
     {
@@ -74,14 +75,14 @@ public sealed class PythonLauncherSelectorTests
     public void BuildOnnxRuntimeMissingVersionMessage_IncludesDiscoveredVersions()
     {
         var entries = PythonLauncherSelector.ParseLauncherListOutput("""
-             -V:3.13 *        C:\Python313\python.exe
+             -V:3.10 *        C:\Python310\python.exe
              -V:3.9           C:\Python39\python.exe
             """);
 
         var message = PythonLauncherSelector.BuildOnnxRuntimeMissingVersionMessage(entries);
 
-        Assert.Contains("3.10, 3.11, or 3.12", message, StringComparison.Ordinal);
-        Assert.Contains("3.13", message, StringComparison.Ordinal);
+        Assert.Contains("3.11, 3.12, 3.13, or 3.14", message, StringComparison.Ordinal);
+        Assert.Contains("3.10", message, StringComparison.Ordinal);
         Assert.Contains("3.9", message, StringComparison.Ordinal);
     }
 }

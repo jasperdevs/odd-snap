@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -37,12 +38,13 @@ public partial class SettingsWindow
 
     private void LoadToastLayoutIcons()
     {
-        var white = System.Drawing.Color.FromArgb(230, 255, 255, 255);
-        ToastLayoutCloseIcon.Source = Helpers.FluentIcons.RenderWpf("close", white, 20);
-        ToastLayoutPinIcon.Source = Helpers.FluentIcons.RenderWpf("pin", white, 20);
-        ToastLayoutSaveIcon.Source = Helpers.FluentIcons.RenderWpf("download", white, 20);
-        ToastLayoutAiRedirectIcon.Source = Helpers.ToolIcons.RenderAiRedirectWpf(white, 20);
-        ToastLayoutDeleteIcon.Source = Helpers.FluentIcons.RenderWpf("trash", white, 20);
+        var iconColor = GetToastLayoutIconColor(active: false);
+        ToastLayoutCloseIcon.Source = Helpers.FluentIcons.RenderWpf("close", iconColor, 20);
+        ToastLayoutPinIcon.Source = Helpers.FluentIcons.RenderWpf("pin", iconColor, 20);
+        ToastLayoutSaveIcon.Source = Helpers.FluentIcons.RenderWpf("download", iconColor, 20);
+        ToastLayoutOfficeIcon.Source = Helpers.FluentIcons.RenderWpf("copy", iconColor, 20);
+        ToastLayoutAiRedirectIcon.Source = Helpers.ToolIcons.RenderAiRedirectWpf(iconColor, 20);
+        ToastLayoutDeleteIcon.Source = Helpers.FluentIcons.RenderWpf("trash", iconColor, 20);
     }
 
     private void RefreshToastButtonLayoutDesigner()
@@ -53,6 +55,7 @@ public partial class SettingsWindow
         UpdateToastLayoutButton(ToastLayoutCloseBtn, ToastButtonKind.Close);
         UpdateToastLayoutButton(ToastLayoutPinBtn, ToastButtonKind.Pin);
         UpdateToastLayoutButton(ToastLayoutSaveBtn, ToastButtonKind.Save);
+        UpdateToastLayoutButton(ToastLayoutOfficeBtn, ToastButtonKind.Office);
         UpdateToastLayoutButton(ToastLayoutAiRedirectBtn, ToastButtonKind.AiRedirect);
         UpdateToastLayoutButton(ToastLayoutDeleteBtn, ToastButtonKind.Delete);
         UpdateToastLayoutSlot(ToastSlotTopLeft, ToastButtonSlot.TopLeft);
@@ -89,9 +92,7 @@ public partial class SettingsWindow
 
     private void UpdateToastLayoutIcon(ToastButtonKind button, bool active)
     {
-        var color = Theme.IsDark
-            ? System.Drawing.Color.FromArgb(active ? 255 : 220, 255, 255, 255)
-            : System.Drawing.Color.FromArgb(active ? 255 : 210, 24, 24, 24);
+        var color = GetToastLayoutIconColor(active);
         switch (button)
         {
             case ToastButtonKind.Close:
@@ -102,6 +103,9 @@ public partial class SettingsWindow
                 break;
             case ToastButtonKind.Save:
                 ToastLayoutSaveIcon.Source = Helpers.FluentIcons.RenderWpf("download", color, 22, active);
+                break;
+            case ToastButtonKind.Office:
+                ToastLayoutOfficeIcon.Source = Helpers.FluentIcons.RenderWpf("copy", color, 22, active);
                 break;
             case ToastButtonKind.AiRedirect:
                 ToastLayoutAiRedirectIcon.Source = Helpers.ToolIcons.RenderAiRedirectWpf(color, 22, active);
@@ -118,11 +122,11 @@ public partial class SettingsWindow
 
         slotBorder.Visibility = Visibility.Visible;
         slotBorder.Background = selectedTarget
-            ? Theme.Brush(Color.FromArgb(82, 255, 255, 255))
+            ? Theme.Brush(Theme.IsDark ? Color.FromArgb(82, 255, 255, 255) : Color.FromArgb(38, 0, 0, 0))
             : System.Windows.Media.Brushes.Transparent;
         slotBorder.BorderBrush = selectedTarget
-            ? Theme.Brush(Color.FromArgb(230, 255, 255, 255))
-            : new SolidColorBrush(Color.FromArgb(72, 255, 255, 255));
+            ? Theme.Brush(Theme.IsDark ? Color.FromArgb(230, 255, 255, 255) : Color.FromArgb(155, 0, 0, 0))
+            : Theme.Brush(Theme.IsDark ? Color.FromArgb(72, 255, 255, 255) : Color.FromArgb(46, 0, 0, 0));
         slotBorder.BorderThickness = selectedTarget ? new Thickness(2) : new Thickness(1);
         slotBorder.Opacity = _toastButtonDragActive ? 1 : (selectedTarget ? 0.95 : 0.55);
     }
@@ -247,7 +251,7 @@ public partial class SettingsWindow
         if (!e.Data.GetDataPresent(System.Windows.DataFormats.Text))
             return;
 
-        ToastHiddenShelf.BorderBrush = Theme.Brush(Color.FromArgb(130, 255, 255, 255));
+        ToastHiddenShelf.BorderBrush = Theme.Brush(GetToastLayoutAccentBorder());
         e.Effects = System.Windows.DragDropEffects.Move;
     }
 
@@ -256,7 +260,7 @@ public partial class SettingsWindow
         if (!e.Data.GetDataPresent(System.Windows.DataFormats.Text))
             return;
 
-        ToastHiddenShelf.BorderBrush = Theme.Brush(Color.FromArgb(130, 255, 255, 255));
+        ToastHiddenShelf.BorderBrush = Theme.Brush(GetToastLayoutAccentBorder());
         e.Effects = System.Windows.DragDropEffects.Move;
         e.Handled = true;
     }
@@ -294,6 +298,7 @@ public partial class SettingsWindow
     {
         "Pin" => ToastButtonKind.Pin,
         "Save" => ToastButtonKind.Save,
+        "Office" => ToastButtonKind.Office,
         "AiRedirect" => ToastButtonKind.AiRedirect,
         "Delete" => ToastButtonKind.Delete,
         _ => ToastButtonKind.Close
@@ -317,7 +322,7 @@ public partial class SettingsWindow
         ToastHiddenShelfDropCue.Visibility = Visibility.Collapsed;
         ToastHiddenButtonsPanel.Children.Clear();
 
-        foreach (var button in new[] { ToastButtonKind.Close, ToastButtonKind.Pin, ToastButtonKind.Save, ToastButtonKind.AiRedirect, ToastButtonKind.Delete })
+        foreach (var button in new[] { ToastButtonKind.Close, ToastButtonKind.Pin, ToastButtonKind.Save, ToastButtonKind.Office, ToastButtonKind.AiRedirect, ToastButtonKind.Delete })
         {
             if (ToastButtonLayout.IsVisible(ToastButtons, button))
                 continue;
@@ -338,8 +343,8 @@ public partial class SettingsWindow
             Height = 44,
             CornerRadius = new CornerRadius(12),
             Margin = new Thickness(0, 0, 8, 8),
-            Background = new SolidColorBrush(Color.FromArgb(122, 11, 13, 16)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(48, 255, 255, 255)),
+            Background = Theme.Brush(Theme.IsDark ? Color.FromArgb(122, 11, 13, 16) : Color.FromArgb(255, 246, 246, 246)),
+            BorderBrush = Theme.Brush(Theme.BorderSubtle),
             BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
             Tag = button.ToString()
@@ -350,6 +355,7 @@ public partial class SettingsWindow
             ToastButtonKind.Close => BuildCloseGlyph(),
             ToastButtonKind.Pin => BuildPinGlyph(),
             ToastButtonKind.Save => BuildSaveGlyph(),
+            ToastButtonKind.Office => BuildOfficeGlyph(),
             ToastButtonKind.AiRedirect => BuildAiRedirectGlyph(),
             _ => BuildDeleteGlyph()
         };
@@ -422,6 +428,7 @@ public partial class SettingsWindow
         if (IsPointOverElement(ToastLayoutCloseBtn, pos) && ToastLayoutCloseBtn.Visibility == Visibility.Visible) return ToastButtonKind.Close;
         if (IsPointOverElement(ToastLayoutPinBtn, pos) && ToastLayoutPinBtn.Visibility == Visibility.Visible) return ToastButtonKind.Pin;
         if (IsPointOverElement(ToastLayoutSaveBtn, pos) && ToastLayoutSaveBtn.Visibility == Visibility.Visible) return ToastButtonKind.Save;
+        if (IsPointOverElement(ToastLayoutOfficeBtn, pos) && ToastLayoutOfficeBtn.Visibility == Visibility.Visible) return ToastButtonKind.Office;
         if (IsPointOverElement(ToastLayoutAiRedirectBtn, pos) && ToastLayoutAiRedirectBtn.Visibility == Visibility.Visible) return ToastButtonKind.AiRedirect;
         if (IsPointOverElement(ToastLayoutDeleteBtn, pos) && ToastLayoutDeleteBtn.Visibility == Visibility.Visible) return ToastButtonKind.Delete;
         return null;
@@ -453,7 +460,7 @@ public partial class SettingsWindow
     private void UpdateShelfHover(bool hovered)
     {
         ToastHiddenShelf.BorderBrush = hovered
-            ? Theme.Brush(Color.FromArgb(130, 255, 255, 255))
+            ? Theme.Brush(GetToastLayoutAccentBorder())
             : Theme.Brush(Theme.BorderSubtle);
         ToastHiddenShelfDropCue.Visibility = hovered ? Visibility.Visible : Visibility.Collapsed;
         ToastHiddenShelfEmpty.Visibility = hovered || ToastHiddenButtonsPanel.Children.Count > 0
@@ -471,6 +478,7 @@ public partial class SettingsWindow
                 ToastButtonKind.Close => BuildCloseGlyph(),
                 ToastButtonKind.Pin => BuildPinGlyph(),
                 ToastButtonKind.Save => BuildSaveGlyph(),
+                ToastButtonKind.Office => BuildOfficeGlyph(),
                 ToastButtonKind.AiRedirect => BuildAiRedirectGlyph(),
                 _ => BuildDeleteGlyph()
             });
@@ -543,10 +551,10 @@ public partial class SettingsWindow
 
     private static System.Windows.Controls.Image BuildFluentIcon(string id)
     {
-        var white = System.Drawing.Color.FromArgb(230, 255, 255, 255);
+        var iconColor = GetToastLayoutIconColor(active: false);
         var img = new System.Windows.Controls.Image
         {
-            Source = Helpers.FluentIcons.RenderWpf(id, white, 20),
+            Source = Helpers.FluentIcons.RenderWpf(id, iconColor, 20),
             Width = 14,
             Height = 14,
             Stretch = Stretch.Uniform,
@@ -560,12 +568,13 @@ public partial class SettingsWindow
     private static System.Windows.Controls.Image BuildCloseGlyph() => BuildFluentIcon("close");
     private static System.Windows.Controls.Image BuildPinGlyph() => BuildFluentIcon("pin");
     private static System.Windows.Controls.Image BuildSaveGlyph() => BuildFluentIcon("download");
+    private static System.Windows.Controls.Image BuildOfficeGlyph() => BuildFluentIcon("copy");
     private static System.Windows.Controls.Image BuildAiRedirectGlyph()
     {
-        var white = System.Drawing.Color.FromArgb(230, 255, 255, 255);
+        var iconColor = GetToastLayoutIconColor(active: false);
         var img = new System.Windows.Controls.Image
         {
-            Source = Helpers.ToolIcons.RenderAiRedirectWpf(white, 20),
+            Source = Helpers.ToolIcons.RenderAiRedirectWpf(iconColor, 20),
             Width = 14,
             Height = 14,
             Stretch = Stretch.Uniform,
@@ -576,4 +585,14 @@ public partial class SettingsWindow
         return img;
     }
     private static System.Windows.Controls.Image BuildDeleteGlyph() => BuildFluentIcon("trash");
+
+    private static System.Drawing.Color GetToastLayoutIconColor(bool active)
+        => Theme.IsDark
+            ? System.Drawing.Color.FromArgb(active ? 255 : 220, 255, 255, 255)
+            : System.Drawing.Color.FromArgb(active ? 255 : 210, 24, 24, 24);
+
+    private static Color GetToastLayoutAccentBorder()
+        => Theme.IsDark
+            ? Color.FromArgb(130, 255, 255, 255)
+            : Color.FromArgb(115, 0, 0, 0);
 }

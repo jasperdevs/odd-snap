@@ -25,6 +25,7 @@ public sealed class HistoryEntry
     public HistoryKind Kind { get; set; } = HistoryKind.Image;
     public string? UploadUrl { get; set; }
     public string? UploadProvider { get; set; }
+    public string? UploadError { get; set; }
 }
 
 public sealed class OcrHistoryEntry
@@ -65,6 +66,7 @@ public sealed partial class HistoryService : IDisposable
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
 
     private List<HistoryEntry> _entries = new();
+    private Dictionary<string, HistoryEntry> _entriesByPath = new(StringComparer.OrdinalIgnoreCase);
     private List<OcrHistoryEntry> _ocrEntries = new();
     private List<ColorHistoryEntry> _colorEntries = new();
     private IReadOnlyList<HistoryEntry>? _imageEntries;
@@ -107,6 +109,16 @@ public sealed partial class HistoryService : IDisposable
         _stickerEntries = null;
         _videoEntries = null;
         _mediaEntries = null;
+    }
+
+    private void RebuildEntryLookup_NoLock()
+    {
+        _entriesByPath = new Dictionary<string, HistoryEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in _entries)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.FilePath))
+                _entriesByPath[entry.FilePath] = entry;
+        }
     }
 
     private void NotifyChanged()
@@ -213,8 +225,10 @@ public sealed partial class HistoryService : IDisposable
         HistoryEntry entry;
         lock (_gate)
         {
-            entry = _entries.FirstOrDefault(existing => existing.FilePath.Equals(mediaPath, StringComparison.OrdinalIgnoreCase))
-                ?? new HistoryEntry();
+            if (!_entriesByPath.TryGetValue(mediaPath, out entry!))
+                entry = new HistoryEntry();
+            else
+                _entries.Remove(entry);
 
             entry.FileName = fi.Name;
             entry.FilePath = mediaPath;
@@ -224,8 +238,8 @@ public sealed partial class HistoryService : IDisposable
             entry.FileSizeBytes = fi.Length;
             entry.Kind = kind;
 
-            _entries.RemoveAll(existing => existing.FilePath.Equals(mediaPath, StringComparison.OrdinalIgnoreCase));
             _entries.Insert(0, entry);
+            _entriesByPath[entry.FilePath] = entry;
             InvalidateFilteredCache();
             QueueEntryUpsert_NoLock(entry);
             ScheduleFlush_NoLock();
@@ -260,6 +274,7 @@ public sealed partial class HistoryService : IDisposable
                 UploadProvider = providerName
             };
             _entries.Insert(0, entry);
+            _entriesByPath[entry.FilePath] = entry;
             InvalidateFilteredCache();
             QueueEntryUpsert_NoLock(entry);
             ScheduleFlush_NoLock();
@@ -277,8 +292,10 @@ public sealed partial class HistoryService : IDisposable
         HistoryEntry entry;
         lock (_gate)
         {
-            entry = _entries.FirstOrDefault(existing => existing.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase))
-                ?? new HistoryEntry();
+            if (!_entriesByPath.TryGetValue(filePath, out entry!))
+                entry = new HistoryEntry();
+            else
+                _entries.Remove(entry);
 
             entry.FileName = info.Name;
             entry.FilePath = filePath;
@@ -289,8 +306,8 @@ public sealed partial class HistoryService : IDisposable
             entry.Kind = kind;
             entry.UploadProvider = providerName;
 
-            _entries.RemoveAll(existing => existing.FilePath.Equals(filePath, StringComparison.OrdinalIgnoreCase));
             _entries.Insert(0, entry);
+            _entriesByPath[entry.FilePath] = entry;
             InvalidateFilteredCache();
             QueueEntryUpsert_NoLock(entry);
             ScheduleFlush_NoLock();
@@ -323,6 +340,7 @@ public sealed partial class HistoryService : IDisposable
                 Kind = HistoryKind.Image
             };
             _entries.Insert(0, entry);
+            _entriesByPath[entry.FilePath] = entry;
             InvalidateFilteredCache();
             QueueEntryUpsert_NoLock(entry);
             ScheduleFlush_NoLock();
@@ -348,6 +366,7 @@ public sealed partial class HistoryService : IDisposable
         lock (_gate)
         {
             _entries.RemoveAll(existing => existing.FilePath.Equals(entry.FilePath, StringComparison.OrdinalIgnoreCase));
+            _entriesByPath.Remove(entry.FilePath);
             InvalidateFilteredCache();
             try { File.Delete(entry.FilePath); } catch { }
             TryDeleteManagedThumbnail_NoLock(entry.FilePath);
@@ -372,6 +391,8 @@ public sealed partial class HistoryService : IDisposable
                 TryDeleteManagedThumbnail_NoLock(entry.FilePath);
             }
             _entries.RemoveAll(entry => paths.Contains(entry.FilePath));
+            foreach (var path in paths)
+                _entriesByPath.Remove(path);
             InvalidateFilteredCache();
             QueueEntryDeletes_NoLock(paths);
             ScheduleFlush_NoLock();
@@ -451,6 +472,7 @@ public sealed partial class HistoryService : IDisposable
                 try { File.Delete(e.FilePath); } catch { }
                 TryDeleteManagedThumbnail_NoLock(e.FilePath);
                 _entries.Remove(e);
+                _entriesByPath.Remove(e.FilePath);
             }
             InvalidateFilteredCache();
             QueueEntryDeletes_NoLock(images.Select(entry => entry.FilePath));
@@ -469,6 +491,7 @@ public sealed partial class HistoryService : IDisposable
                 try { File.Delete(e.FilePath); } catch { }
                 TryDeleteManagedThumbnail_NoLock(e.FilePath);
                 _entries.Remove(e);
+                _entriesByPath.Remove(e.FilePath);
             }
             InvalidateFilteredCache();
             QueueEntryDeletes_NoLock(gifs.Select(entry => entry.FilePath));
@@ -507,6 +530,7 @@ public sealed partial class HistoryService : IDisposable
                 TryDeleteManagedThumbnail_NoLock(e.FilePath);
             }
             _entries.Clear();
+            _entriesByPath.Clear();
             InvalidateFilteredCache();
             MarkEntriesRewrite_NoLock();
             ScheduleFlush_NoLock();
@@ -524,6 +548,7 @@ public sealed partial class HistoryService : IDisposable
                 try { File.Delete(e.FilePath); } catch { }
                 TryDeleteManagedThumbnail_NoLock(e.FilePath);
                 _entries.Remove(e);
+                _entriesByPath.Remove(e.FilePath);
             }
             InvalidateFilteredCache();
             QueueEntryDeletes_NoLock(stickers.Select(entry => entry.FilePath));

@@ -103,10 +103,12 @@ public sealed class AppSettingsTests
         Assert.True(settings.ToastButtons.ShowClose);
         Assert.True(settings.ToastButtons.ShowPin);
         Assert.True(settings.ToastButtons.ShowSave);
+        Assert.False(settings.ToastButtons.ShowOffice);
         Assert.False(settings.ToastButtons.ShowDelete);
         Assert.Equal(ToastButtonSlot.TopRight, settings.ToastButtons.CloseSlot);
         Assert.Equal(ToastButtonSlot.TopLeft, settings.ToastButtons.PinSlot);
         Assert.Equal(ToastButtonSlot.BottomRight, settings.ToastButtons.SaveSlot);
+        Assert.Equal(ToastButtonSlot.TopInnerLeft, settings.ToastButtons.OfficeSlot);
         Assert.Equal(ToastButtonSlot.BottomLeft, settings.ToastButtons.DeleteSlot);
     }
 
@@ -141,6 +143,14 @@ public sealed class AppSettingsTests
         var settings = new AppSettings();
 
         Assert.Equal("auto", settings.InterfaceLanguage);
+    }
+
+    [Fact]
+    public void UiScale_DefaultsToNormal()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(1.0, settings.UiScale);
     }
 
     [Fact]
@@ -217,5 +227,21 @@ public sealed class AppSettingsTests
 
         Assert.True(SettingsService.TryDeserialize(json, out var settings));
         Assert.Equal(ScrollingCaptureMode.Automatic, settings.ScrollingCaptureMode);
+    }
+
+    [Theory]
+    [InlineData(0.25, 0.8)]
+    [InlineData(1.2, 1.2)]
+    [InlineData(3.0, 1.4)]
+    public void TryDeserialize_ClampsUiScale(double input, double expected)
+    {
+        var json = $$"""
+            {
+              "UiScale": {{input.ToString(System.Globalization.CultureInfo.InvariantCulture)}}
+            }
+            """;
+
+        Assert.True(SettingsService.TryDeserialize(json, out var settings));
+        Assert.Equal(expected, settings.UiScale, precision: 3);
     }
 }

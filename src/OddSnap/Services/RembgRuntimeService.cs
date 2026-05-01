@@ -5,15 +5,15 @@ namespace OddSnap.Services;
 
 public static class RembgRuntimeService
 {
-    private const int RuntimeLayoutVersion = 3;
-    private const string PipPackage = "pip==26.0.1";
+    private const int RuntimeLayoutVersion = 4;
+    private const string PipPackage = "pip==26.1";
     private const string SetuptoolsPackage = "setuptools==82.0.1";
     private const string WheelPackage = "wheel==0.47.0";
-    private const string RembgPackage = "rembg==2.0.74";
+    private const string RembgPackage = "rembg==2.0.75";
     private const string NumpyPackage = "numpy==2.4.4";
     private const string PillowPackage = "pillow==12.2.0";
-    private const string OnnxRuntimePackage = "onnxruntime==1.24.2";
-    private const string OnnxRuntimeGpuPackage = "onnxruntime-gpu==1.24.4";
+    private const string OnnxRuntimePackage = "onnxruntime==1.25.1";
+    private const string OnnxRuntimeGpuPackage = "onnxruntime-gpu==1.25.1";
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
 
     private sealed record ProbeState(bool? Ready, string Status, DateTime CheckedUtc);

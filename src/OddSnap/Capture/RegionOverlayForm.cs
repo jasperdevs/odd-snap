@@ -483,7 +483,7 @@ public sealed partial class RegionOverlayForm : Form
         KeyPreview = true;
     }
 
-    private const int GroupGap = UiChrome.ToolbarGroupGap; // spacing between tool groups (includes separator line)
+    private static int GroupGap => UiChrome.ScaledToolbarGroupGap; // spacing between tool groups (includes separator line)
 
     // Separator indices (computed dynamically based on visible tools)
     private int[] _sepAfter = Array.Empty<int>();
@@ -536,13 +536,16 @@ public sealed partial class RegionOverlayForm : Form
         gaps.Add(_mainBarTools.Length - 1 + (hasMore ? 1 : 0)); // gap before color/gear/close
         _sepAfter = gaps.ToArray();
 
-        int pad = UiChrome.ToolbarInnerPadding;
-        int primarySpan = UiChrome.ToolbarButtonSize * BtnCount
-                        + UiChrome.ToolbarButtonSpacing * (BtnCount - 1)
+        int pad = UiChrome.ScaledToolbarInnerPadding;
+        int buttonSize = UiChrome.ScaledToolbarButtonSize;
+        int buttonSpacing = UiChrome.ScaledToolbarButtonSpacing;
+        int toolbarHeight = UiChrome.ScaledToolbarHeight;
+        int primarySpan = buttonSize * BtnCount
+                        + buttonSpacing * (BtnCount - 1)
                         + pad * 2
-                        + _sepAfter.Length * UiChrome.ToolbarGroupGap;
-        int w = IsVerticalDock ? UiChrome.ToolbarHeight : primarySpan;
-        int h = IsVerticalDock ? primarySpan : UiChrome.ToolbarHeight;
+                        + _sepAfter.Length * GroupGap;
+        int w = IsVerticalDock ? toolbarHeight : primarySpan;
+        int h = IsVerticalDock ? primarySpan : toolbarHeight;
         Point? cursorScreenPoint = null;
         try
         {
@@ -560,31 +563,37 @@ public sealed partial class RegionOverlayForm : Form
             screenWorkingAreas);
         Rectangle screenBounds = _toolbarAnchorArea.IsEmpty ? _virtualBounds : _toolbarAnchorArea;
 
-        _toolbarRect = ToolbarLayout.GetToolbarRect(_virtualBounds, screenBounds, w, h, CaptureDockSide);
+        _toolbarRect = ToolbarLayout.GetToolbarRect(
+            _virtualBounds,
+            screenBounds,
+            w,
+            h,
+            CaptureDockSide,
+            UiChrome.ScaledToolbarTopMargin);
         int cx = _toolbarRect.X + pad;
         int cy = _toolbarRect.Y + pad;
         for (int i = 0; i < BtnCount; i++)
         {
             _toolbarButtons[i] = IsVerticalDock
                 ? new Rectangle(
-                    _toolbarRect.X + (UiChrome.ToolbarHeight - UiChrome.ToolbarButtonSize) / 2,
+                    _toolbarRect.X + (toolbarHeight - buttonSize) / 2,
                     cy,
-                    UiChrome.ToolbarButtonSize,
-                    UiChrome.ToolbarButtonSize)
+                    buttonSize,
+                    buttonSize)
                 : new Rectangle(
                     cx,
-                    _toolbarRect.Y + (UiChrome.ToolbarHeight - UiChrome.ToolbarButtonSize) / 2,
-                    UiChrome.ToolbarButtonSize,
-                    UiChrome.ToolbarButtonSize);
+                    _toolbarRect.Y + (toolbarHeight - buttonSize) / 2,
+                    buttonSize,
+                    buttonSize);
 
             if (IsVerticalDock)
             {
-                cy += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
+                cy += buttonSize + buttonSpacing;
                 if (Array.IndexOf(_sepAfter, i) >= 0) cy += GroupGap;
             }
             else
             {
-                cx += UiChrome.ToolbarButtonSize + UiChrome.ToolbarButtonSpacing;
+                cx += buttonSize + buttonSpacing;
                 if (Array.IndexOf(_sepAfter, i) >= 0) cx += GroupGap;
             }
         }

@@ -147,12 +147,20 @@ public static partial class UploadService
         var json = await resp.Content.ReadAsStringAsync();
         var node = TryParseJson(json);
 
-        if (node?["success"]?.GetValue<bool>() == true)
+        if (node is null)
+            return new UploadResult { Error = BuildHttpError("file.io", resp, json), IsRateLimit = (int)resp.StatusCode == 429 };
+
+        if (resp.IsSuccessStatusCode && node["success"]?.GetValue<bool>() == true)
         {
+            var url = node["link"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out _))
+                return new UploadResult { Error = "file.io did not return a usable link." };
+
             return new UploadResult
             {
                 Success = true,
-                Url = node["link"]?.GetValue<string>() ?? ""
+                Url = url,
+                ProviderName = "file.io"
             };
         }
 

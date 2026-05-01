@@ -11,6 +11,7 @@ using FontFamily = System.Windows.Media.FontFamily;
 using Image = System.Windows.Controls.Image;
 using OddSnap.Models;
 using OddSnap.Helpers;
+using OddSnap.Services;
 
 namespace OddSnap.UI;
 
@@ -92,6 +93,28 @@ public partial class SettingsWindow
             suppressOpenAction = true;
             copyAction();
         }));
+        if (!string.IsNullOrWhiteSpace(vm.Entry.UploadUrl))
+        {
+            actionMenu.Items.Add(CreateCardActionMenuItem("Copy URL", () =>
+            {
+                suppressOpenAction = true;
+                ClipboardService.CopyTextToClipboard(vm.Entry.UploadUrl!);
+                ToastWindow.Show("Copied", vm.Entry.UploadUrl!);
+            }));
+            actionMenu.Items.Add(CreateCardActionMenuItem("Open URL", () =>
+            {
+                suppressOpenAction = true;
+                OpenExternal(vm.Entry.UploadUrl!);
+            }));
+        }
+        if (IsDraggableFile(vm.Entry.FilePath))
+        {
+            actionMenu.Items.Add(CreateCardActionMenuItem("Retry upload", () =>
+            {
+                suppressOpenAction = true;
+                _ = RetryHistoryUploadAsync(vm);
+            }));
+        }
         if (IsDraggableFile(vm.Entry.FilePath))
         {
             actionMenu.Items.Add(CreateCardActionMenuItem("Show in folder", () =>
@@ -219,6 +242,37 @@ public partial class SettingsWindow
         return new MediaCardShell(card, imgContainer, info, actionMenuBtn, img, selectionBadge);
     }
 
+    private static void AddUploadInfo(StackPanel panel, HistoryEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = entry.UploadUrl,
+                FontSize = 9.5,
+                FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+                Opacity = 0.45,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                ToolTip = entry.UploadUrl
+            });
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.UploadError))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = entry.UploadError,
+                FontSize = 9.5,
+                FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+                Foreground = Theme.Brush(Theme.DangerHover),
+                Opacity = 0.9,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                ToolTip = entry.UploadError
+            });
+        }
+    }
+
     private ContextMenu CreateCardActionMenu()
     {
         var menu = new ContextMenu();
@@ -306,6 +360,24 @@ public partial class SettingsWindow
             {
             }
         });
+    }
+
+    private static void OpenExternal(string target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+            return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = target,
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+        }
     }
 
 }

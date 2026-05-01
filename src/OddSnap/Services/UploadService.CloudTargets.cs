@@ -27,7 +27,10 @@ public static partial class UploadService
         uploadReq.Content = CreateFileStreamContent(filePath);
         using var uploadResp = await Http.SendAsync(uploadReq);
         if (!uploadResp.IsSuccessStatusCode)
-            return new UploadResult { Error = $"Dropbox upload failed: {uploadResp.StatusCode}" };
+        {
+            var uploadBody = await uploadResp.Content.ReadAsStringAsync();
+            return new UploadResult { Error = BuildHttpError("Dropbox upload", uploadResp, uploadBody, TryParseJson(uploadBody)) };
+        }
 
         using var shareReq = new HttpRequestMessage(HttpMethod.Post, "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings");
         shareReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.DropboxAccessToken);
@@ -62,19 +65,38 @@ public static partial class UploadService
         if (string.IsNullOrWhiteSpace(s.GoogleDriveAccessToken))
             return new UploadResult { Error = "Google Drive access token not configured" };
 
-        string ext = Path.GetExtension(filePath).ToLowerInvariant();
-        string mimeType = ext switch
-        {
-            ".png" => "image/png",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".gif" => "image/gif",
-            _ => "application/octet-stream"
-        };
+        var mimeType = GetUploadContentType(filePath);
+        var metadata = BuildGoogleDriveMetadata(filePath, s);
+        var fileSize = new FileInfo(filePath).Length;
+        var id = fileSize <= 5L * 1024 * 1024
+            ? await UploadGoogleDriveMultipart(filePath, s, metadata, mimeType).ConfigureAwait(false)
+            : await UploadGoogleDriveResumable(filePath, s, metadata, mimeType, fileSize).ConfigureAwait(false);
 
+        if (!id.Success)
+            return id.Result;
+
+        using var permReq = new HttpRequestMessage(HttpMethod.Post, $"https://www.googleapis.com/drive/v3/files/{id.FileId}/permissions");
+        permReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.GoogleDriveAccessToken);
+        permReq.Content = new StringContent("{\"role\":\"reader\",\"type\":\"anyone\"}", Encoding.UTF8, "application/json");
+        using var permResp = await Http.SendAsync(permReq);
+        var permBody = await permResp.Content.ReadAsStringAsync();
+        if (!permResp.IsSuccessStatusCode)
+            return new UploadResult { Error = BuildHttpError("Google Drive permissions", permResp, permBody, TryParseJson(permBody)) };
+
+        return new UploadResult { Success = true, Url = $"https://drive.google.com/file/d/{id.FileId}/view" };
+    }
+
+    private static JsonObject BuildGoogleDriveMetadata(string filePath, UploadSettings s)
+    {
         var metadata = new JsonObject { ["name"] = Path.GetFileName(filePath) };
         if (!string.IsNullOrWhiteSpace(s.GoogleDriveFolderId))
             metadata["parents"] = new JsonArray(s.GoogleDriveFolderId);
 
+        return metadata;
+    }
+
+    private static async Task<GoogleDriveUploadId> UploadGoogleDriveMultipart(string filePath, UploadSettings s, JsonObject metadata, string mimeType)
+    {
         using var content = new MultipartFormDataContent("foo_bar_baz");
         content.Add(new StringContent(metadata.ToJsonString(), Encoding.UTF8, "application/json"), "metadata");
         content.Add(CreateFileStreamContent(filePath, mimeType), "file", Path.GetFileName(filePath));
@@ -85,22 +107,50 @@ public static partial class UploadService
         using var resp = await Http.SendAsync(req);
         var body = await resp.Content.ReadAsStringAsync();
         if (!resp.IsSuccessStatusCode)
-            return new UploadResult { Error = $"Google Drive upload failed: {resp.StatusCode}" };
+            return GoogleDriveUploadId.Fail(BuildHttpError("Google Drive upload", resp, body, TryParseJson(body)));
 
         var node = TryParseJson(body);
         var id = node?["id"]?.GetValue<string>();
         if (string.IsNullOrWhiteSpace(id))
-            return new UploadResult { Error = "Google Drive returned no file ID" };
+            return GoogleDriveUploadId.Fail("Google Drive returned no file ID");
 
-        using var permReq = new HttpRequestMessage(HttpMethod.Post, $"https://www.googleapis.com/drive/v3/files/{id}/permissions");
-        permReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.GoogleDriveAccessToken);
-        permReq.Content = new StringContent("{\"role\":\"reader\",\"type\":\"anyone\"}", Encoding.UTF8, "application/json");
-        using var permResp = await Http.SendAsync(permReq);
-        var permBody = await permResp.Content.ReadAsStringAsync();
-        if (!permResp.IsSuccessStatusCode)
-            return new UploadResult { Error = BuildHttpError("Google Drive permissions", permResp, permBody, TryParseJson(permBody)) };
+        return GoogleDriveUploadId.Ok(id);
+    }
 
-        return new UploadResult { Success = true, Url = $"https://drive.google.com/file/d/{id}/view" };
+    private static async Task<GoogleDriveUploadId> UploadGoogleDriveResumable(string filePath, UploadSettings s, JsonObject metadata, string mimeType, long fileSize)
+    {
+        using var startReq = new HttpRequestMessage(HttpMethod.Post, "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id");
+        startReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.GoogleDriveAccessToken);
+        startReq.Headers.TryAddWithoutValidation("X-Upload-Content-Type", mimeType);
+        startReq.Headers.TryAddWithoutValidation("X-Upload-Content-Length", fileSize.ToString());
+        startReq.Content = new StringContent(metadata.ToJsonString(), Encoding.UTF8, "application/json");
+        using var startResp = await Http.SendAsync(startReq);
+        var startBody = await startResp.Content.ReadAsStringAsync();
+        if (!startResp.IsSuccessStatusCode)
+            return GoogleDriveUploadId.Fail(BuildHttpError("Google Drive upload session", startResp, startBody, TryParseJson(startBody)));
+
+        if (startResp.Headers.Location is null)
+            return GoogleDriveUploadId.Fail("Google Drive did not return an upload session URL.");
+
+        using var uploadReq = new HttpRequestMessage(HttpMethod.Put, startResp.Headers.Location);
+        uploadReq.Content = CreateFileStreamContent(filePath, mimeType);
+        uploadReq.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);
+        using var uploadResp = await Http.SendAsync(uploadReq);
+        var uploadBody = await uploadResp.Content.ReadAsStringAsync();
+        if (!uploadResp.IsSuccessStatusCode)
+            return GoogleDriveUploadId.Fail(BuildHttpError("Google Drive resumable upload", uploadResp, uploadBody, TryParseJson(uploadBody)));
+
+        var node = TryParseJson(uploadBody);
+        var id = node?["id"]?.GetValue<string>();
+        return string.IsNullOrWhiteSpace(id)
+            ? GoogleDriveUploadId.Fail("Google Drive returned no file ID")
+            : GoogleDriveUploadId.Ok(id);
+    }
+
+    private sealed record GoogleDriveUploadId(bool Success, string FileId, UploadResult Result)
+    {
+        public static GoogleDriveUploadId Ok(string id) => new(true, id, new UploadResult());
+        public static GoogleDriveUploadId Fail(string error) => new(false, "", new UploadResult { Error = error });
     }
 
     private static async Task<UploadResult> UploadOneDrive(string filePath, UploadSettings s)
@@ -217,6 +267,14 @@ public static partial class UploadService
             return new UploadResult { Error = "Immich base URL or API key not configured" };
 
         using var content = new MultipartFormDataContent();
+        var fileInfo = new FileInfo(filePath);
+        var createdAt = new DateTimeOffset(fileInfo.CreationTimeUtc == DateTime.MinValue ? fileInfo.LastWriteTimeUtc : fileInfo.CreationTimeUtc, TimeSpan.Zero);
+        var modifiedAt = new DateTimeOffset(fileInfo.LastWriteTimeUtc, TimeSpan.Zero);
+        content.Add(new StringContent($"{Environment.MachineName}-{Path.GetFullPath(filePath)}-{fileInfo.Length}-{fileInfo.LastWriteTimeUtc.Ticks}"), "deviceAssetId");
+        content.Add(new StringContent("OddSnap"), "deviceId");
+        content.Add(new StringContent(createdAt.ToString("O")), "fileCreatedAt");
+        content.Add(new StringContent(modifiedAt.ToString("O")), "fileModifiedAt");
+        content.Add(new StringContent(Path.GetFileName(filePath)), "filename");
         content.Add(CreateFileStreamContent(filePath), "assetData", Path.GetFileName(filePath));
 
         using var req = new HttpRequestMessage(HttpMethod.Post, s.ImmichBaseUrl.TrimEnd('/') + "/api/assets");
@@ -232,6 +290,22 @@ public static partial class UploadService
         return !string.IsNullOrWhiteSpace(id)
             ? new UploadResult { Success = true, Url = s.ImmichBaseUrl.TrimEnd('/') + "/photos/" + id }
             : new UploadResult { Error = "Immich returned no asset ID" };
+    }
+
+    private static string GetUploadContentType(string filePath)
+    {
+        return Path.GetExtension(filePath).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".bmp" => "image/bmp",
+            ".webp" => "image/webp",
+            ".mp4" => "video/mp4",
+            ".webm" => "video/webm",
+            ".mkv" => "video/x-matroska",
+            _ => "application/octet-stream"
+        };
     }
 
     private static async Task<UploadResult> UploadFtp(string filePath, UploadSettings s)

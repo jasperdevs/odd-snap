@@ -42,7 +42,8 @@ internal static class HistoryStore
                 file_size_bytes INTEGER NOT NULL,
                 kind INTEGER NOT NULL,
                 upload_url TEXT NULL,
-                upload_provider TEXT NULL
+                upload_provider TEXT NULL,
+                upload_error TEXT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_history_entries_kind_captured_at
                 ON history_entries(kind, captured_at_ticks DESC);
@@ -66,6 +67,7 @@ internal static class HistoryStore
                 ON color_entries(captured_at_ticks DESC);
             """;
         command.ExecuteNonQuery();
+        EnsureColumn(connection, "history_entries", "upload_error", "TEXT NULL");
     }
 
     public static HistoryLoadResult Load(string databasePath)
@@ -81,7 +83,7 @@ internal static class HistoryStore
         using (var entriesCommand = connection.CreateCommand())
         {
             entriesCommand.CommandText = """
-                SELECT file_name, file_path, captured_at_ticks, width, height, file_size_bytes, kind, upload_url, upload_provider
+                SELECT file_name, file_path, captured_at_ticks, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error
                 FROM history_entries
                 ORDER BY captured_at_ticks DESC;
                 """;
@@ -98,7 +100,8 @@ internal static class HistoryStore
                     FileSizeBytes = reader.GetInt64(5),
                     Kind = (HistoryKind)reader.GetInt32(6),
                     UploadUrl = reader.IsDBNull(7) ? null : reader.GetString(7),
-                    UploadProvider = reader.IsDBNull(8) ? null : reader.GetString(8)
+                    UploadProvider = reader.IsDBNull(8) ? null : reader.GetString(8),
+                    UploadError = reader.IsDBNull(9) ? null : reader.GetString(9)
                 };
 
                 if (!File.Exists(entry.FilePath))
@@ -182,22 +185,28 @@ internal static class HistoryStore
             clearEntries.CommandText = "DELETE FROM history_entries;";
             clearEntries.ExecuteNonQuery();
 
+            using var upsertEntry = CreateUpsertEntryCommand(connection, transaction);
             foreach (var entry in request.Entries)
-                UpsertEntry(connection, transaction, entry);
+                UpsertEntry(upsertEntry, entry);
         }
         else
         {
-            foreach (var filePath in request.PendingEntryDeletes)
+            if (request.PendingEntryDeletes.Count > 0)
             {
                 using var deleteEntry = connection.CreateCommand();
                 deleteEntry.Transaction = transaction;
                 deleteEntry.CommandText = "DELETE FROM history_entries WHERE file_path = $filePath;";
-                deleteEntry.Parameters.AddWithValue("$filePath", filePath);
-                deleteEntry.ExecuteNonQuery();
+                var filePathParam = deleteEntry.Parameters.Add("$filePath", SqliteType.Text);
+                foreach (var filePath in request.PendingEntryDeletes)
+                {
+                    filePathParam.Value = filePath;
+                    deleteEntry.ExecuteNonQuery();
+                }
             }
 
+            using var upsertEntry = CreateUpsertEntryCommand(connection, transaction);
             foreach (var entry in request.PendingEntryUpserts.Values)
-                UpsertEntry(connection, transaction, entry);
+                UpsertEntry(upsertEntry, entry);
         }
 
         if (wroteOcr)
@@ -207,16 +216,18 @@ internal static class HistoryStore
             clearOcr.CommandText = "DELETE FROM ocr_entries;";
             clearOcr.ExecuteNonQuery();
 
+            using var insertOcr = connection.CreateCommand();
+            insertOcr.Transaction = transaction;
+            insertOcr.CommandText = """
+                INSERT INTO ocr_entries(text, captured_at_ticks)
+                VALUES($text, $capturedAtTicks);
+                """;
+            var ocrText = insertOcr.Parameters.Add("$text", SqliteType.Text);
+            var ocrCapturedAtTicks = insertOcr.Parameters.Add("$capturedAtTicks", SqliteType.Integer);
             foreach (var entry in request.OcrEntries)
             {
-                using var insertOcr = connection.CreateCommand();
-                insertOcr.Transaction = transaction;
-                insertOcr.CommandText = """
-                    INSERT INTO ocr_entries(text, captured_at_ticks)
-                    VALUES($text, $capturedAtTicks);
-                    """;
-                insertOcr.Parameters.AddWithValue("$text", entry.Text);
-                insertOcr.Parameters.AddWithValue("$capturedAtTicks", entry.CapturedAt.ToBinary());
+                ocrText.Value = entry.Text;
+                ocrCapturedAtTicks.Value = entry.CapturedAt.ToBinary();
                 insertOcr.ExecuteNonQuery();
             }
         }
@@ -228,16 +239,18 @@ internal static class HistoryStore
             clearColor.CommandText = "DELETE FROM color_entries;";
             clearColor.ExecuteNonQuery();
 
+            using var insertColor = connection.CreateCommand();
+            insertColor.Transaction = transaction;
+            insertColor.CommandText = """
+                INSERT INTO color_entries(hex, captured_at_ticks)
+                VALUES($hex, $capturedAtTicks);
+                """;
+            var colorHex = insertColor.Parameters.Add("$hex", SqliteType.Text);
+            var colorCapturedAtTicks = insertColor.Parameters.Add("$capturedAtTicks", SqliteType.Integer);
             foreach (var entry in request.ColorEntries)
             {
-                using var insertColor = connection.CreateCommand();
-                insertColor.Transaction = transaction;
-                insertColor.CommandText = """
-                    INSERT INTO color_entries(hex, captured_at_ticks)
-                    VALUES($hex, $capturedAtTicks);
-                    """;
-                insertColor.Parameters.AddWithValue("$hex", entry.Hex);
-                insertColor.Parameters.AddWithValue("$capturedAtTicks", entry.CapturedAt.ToBinary());
+                colorHex.Value = entry.Hex;
+                colorCapturedAtTicks.Value = entry.CapturedAt.ToBinary();
                 insertColor.ExecuteNonQuery();
             }
         }
@@ -257,13 +270,13 @@ internal static class HistoryStore
         return connection;
     }
 
-    private static void UpsertEntry(SqliteConnection connection, SqliteTransaction transaction, HistoryEntry entry)
+    private static SqliteCommand CreateUpsertEntryCommand(SqliteConnection connection, SqliteTransaction transaction)
     {
-        using var command = connection.CreateCommand();
+        var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO history_entries(file_path, file_name, captured_at_ticks, width, height, file_size_bytes, kind, upload_url, upload_provider)
-            VALUES($filePath, $fileName, $capturedAtTicks, $width, $height, $fileSizeBytes, $kind, $uploadUrl, $uploadProvider)
+            INSERT INTO history_entries(file_path, file_name, captured_at_ticks, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error)
+            VALUES($filePath, $fileName, $capturedAtTicks, $width, $height, $fileSizeBytes, $kind, $uploadUrl, $uploadProvider, $uploadError)
             ON CONFLICT(file_path) DO UPDATE SET
                 file_name = excluded.file_name,
                 captured_at_ticks = excluded.captured_at_ticks,
@@ -272,18 +285,51 @@ internal static class HistoryStore
                 file_size_bytes = excluded.file_size_bytes,
                 kind = excluded.kind,
                 upload_url = excluded.upload_url,
-                upload_provider = excluded.upload_provider;
+                upload_provider = excluded.upload_provider,
+                upload_error = excluded.upload_error;
             """;
-        command.Parameters.AddWithValue("$filePath", entry.FilePath);
-        command.Parameters.AddWithValue("$fileName", entry.FileName);
-        command.Parameters.AddWithValue("$capturedAtTicks", entry.CapturedAt.ToBinary());
-        command.Parameters.AddWithValue("$width", entry.Width);
-        command.Parameters.AddWithValue("$height", entry.Height);
-        command.Parameters.AddWithValue("$fileSizeBytes", entry.FileSizeBytes);
-        command.Parameters.AddWithValue("$kind", (int)entry.Kind);
-        command.Parameters.AddWithValue("$uploadUrl", (object?)entry.UploadUrl ?? DBNull.Value);
-        command.Parameters.AddWithValue("$uploadProvider", (object?)entry.UploadProvider ?? DBNull.Value);
+        command.Parameters.Add("$filePath", SqliteType.Text);
+        command.Parameters.Add("$fileName", SqliteType.Text);
+        command.Parameters.Add("$capturedAtTicks", SqliteType.Integer);
+        command.Parameters.Add("$width", SqliteType.Integer);
+        command.Parameters.Add("$height", SqliteType.Integer);
+        command.Parameters.Add("$fileSizeBytes", SqliteType.Integer);
+        command.Parameters.Add("$kind", SqliteType.Integer);
+        command.Parameters.Add("$uploadUrl", SqliteType.Text);
+        command.Parameters.Add("$uploadProvider", SqliteType.Text);
+        command.Parameters.Add("$uploadError", SqliteType.Text);
+        return command;
+    }
+
+    private static void UpsertEntry(SqliteCommand command, HistoryEntry entry)
+    {
+        command.Parameters["$filePath"].Value = entry.FilePath;
+        command.Parameters["$fileName"].Value = entry.FileName;
+        command.Parameters["$capturedAtTicks"].Value = entry.CapturedAt.ToBinary();
+        command.Parameters["$width"].Value = entry.Width;
+        command.Parameters["$height"].Value = entry.Height;
+        command.Parameters["$fileSizeBytes"].Value = entry.FileSizeBytes;
+        command.Parameters["$kind"].Value = (int)entry.Kind;
+        command.Parameters["$uploadUrl"].Value = (object?)entry.UploadUrl ?? DBNull.Value;
+        command.Parameters["$uploadProvider"].Value = (object?)entry.UploadProvider ?? DBNull.Value;
+        command.Parameters["$uploadError"].Value = (object?)entry.UploadError ?? DBNull.Value;
         command.ExecuteNonQuery();
+    }
+
+    private static void EnsureColumn(SqliteConnection connection, string tableName, string columnName, string definition)
+    {
+        using var pragma = connection.CreateCommand();
+        pragma.CommandText = $"PRAGMA table_info({tableName});";
+        using var reader = pragma.ExecuteReader();
+        while (reader.Read())
+        {
+            if (reader.GetString(1).Equals(columnName, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
+        using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {definition};";
+        alter.ExecuteNonQuery();
     }
 
 }

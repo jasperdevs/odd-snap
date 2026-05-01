@@ -1,5 +1,6 @@
 using Bitmap = System.Drawing.Bitmap;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -38,6 +39,9 @@ public partial class ToastWindow : Window
     private System.Windows.Point _mouseDownPos;
     private System.Windows.Media.Brush? _dragBorderBrush;
     private Thickness _dragBorderThickness;
+    private System.Windows.Controls.ContextMenu? _officeMenu;
+    private readonly DispatcherTimer _officeMenuDismissTimer;
+    private bool _officeMenuMouseWasDown;
 
     private static System.Windows.Media.Effects.DropShadowEffect CreateToastShadow()
         => new()
@@ -89,6 +93,7 @@ public partial class ToastWindow : Window
         Opacity = 0;
         Theme.Refresh();
         LoadOverlayIcons();
+        UiScale.ApplyToWindow(this, OuterShell, scaleWindowBounds: false);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_durationSeconds) };
         _timer.Tick += (_, _) =>
@@ -97,6 +102,8 @@ public partial class ToastWindow : Window
             if (ToastPinPolicy.CanAutoDismiss(_isPinned, _isHovered))
                 DismissAnimated();
         };
+        _officeMenuDismissTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+        _officeMenuDismissTimer.Tick += OfficeMenuDismissTimer_Tick;
 
         ConfigureShell();
         ApplySpec(spec);
@@ -355,17 +362,20 @@ public partial class ToastWindow : Window
         CloseIcon.Source = FluentIcons.RenderWpf("close", IconWhite, 20);
         PinIcon.Source = FluentIcons.RenderWpf("pin", IconWhite, 20);
         SaveIcon.Source = FluentIcons.RenderWpf("download", IconWhite, 20);
+        OfficeIcon.Source = FluentIcons.RenderWpf("copy", IconWhite, 20);
         AiRedirectIcon.Source = ToolIcons.RenderAiRedirectWpf(System.Drawing.Color.FromArgb(230, 255, 255, 255), 20);
         DeleteIcon.Source = FluentIcons.RenderWpf("trash", IconWhite, 20);
         ApplyToastOverlayButtonVisual(CloseBtn, CloseIcon, "close", active: false);
         ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: false);
         ApplyToastOverlayButtonVisual(SaveBtn, SaveIcon, "download", active: false);
+        ApplyToastOverlayButtonVisual(OfficeBtn, OfficeIcon, "copy", active: false);
         ApplyAiRedirectOverlayButtonVisual(AiRedirectBtn, AiRedirectIcon, active: false);
         ApplyToastOverlayButtonVisual(DeleteBtn, DeleteIcon, "trash", active: false);
 
         HookOverlayHover(CloseBtn, CloseIcon, "close");
         HookOverlayHover(PinBtn, PinIcon, "pin");
         HookOverlayHover(SaveBtn, SaveIcon, "download");
+        HookOverlayHover(OfficeBtn, OfficeIcon, "copy");
         HookAiRedirectHover(AiRedirectBtn, AiRedirectIcon);
         HookOverlayHover(DeleteBtn, DeleteIcon, "trash");
     }
@@ -402,6 +412,7 @@ public partial class ToastWindow : Window
         CloseBtn.MouseLeftButtonDown -= CloseBtn_MouseLeftButtonDown;
         PinBtn.MouseLeftButtonDown -= PinBtn_MouseLeftButtonDown;
         SaveBtn.MouseLeftButtonDown -= SaveBtn_MouseLeftButtonDown;
+        OfficeBtn.MouseLeftButtonDown -= OfficeBtn_MouseLeftButtonDown;
         AiRedirectBtn.MouseLeftButtonDown -= AiRedirectBtn_MouseLeftButtonDown;
         DeleteBtn.MouseLeftButtonDown -= DeleteBtn_MouseLeftButtonDown;
 
@@ -411,6 +422,7 @@ public partial class ToastWindow : Window
         CloseBtn.MouseLeftButtonDown += CloseBtn_MouseLeftButtonDown;
         PinBtn.MouseLeftButtonDown += PinBtn_MouseLeftButtonDown;
         SaveBtn.MouseLeftButtonDown += SaveBtn_MouseLeftButtonDown;
+        OfficeBtn.MouseLeftButtonDown += OfficeBtn_MouseLeftButtonDown;
         AiRedirectBtn.MouseLeftButtonDown += AiRedirectBtn_MouseLeftButtonDown;
         DeleteBtn.MouseLeftButtonDown += DeleteBtn_MouseLeftButtonDown;
     }
@@ -420,6 +432,7 @@ public partial class ToastWindow : Window
         ApplyOverlayButton(CloseBtn, Helpers.ToastButtonKind.Close);
         ApplyOverlayButton(PinBtn, Helpers.ToastButtonKind.Pin);
         ApplyOverlayButton(SaveBtn, Helpers.ToastButtonKind.Save);
+        ApplyOverlayButton(OfficeBtn, Helpers.ToastButtonKind.Office);
         ApplyOverlayButton(AiRedirectBtn, Helpers.ToastButtonKind.AiRedirect);
         ApplyOverlayButton(DeleteBtn, Helpers.ToastButtonKind.Delete);
     }
@@ -487,6 +500,176 @@ public partial class ToastWindow : Window
         catch (Exception ex)
         {
             Show(ToastSpec.Error("Save failed", ex.Message));
+        }
+    }
+
+    private void OfficeBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_previewBitmap is null)
+            return;
+
+        if (_officeMenu?.IsOpen == true)
+        {
+            _officeMenu.IsOpen = false;
+            return;
+        }
+
+        var wasPinnedBeforeMenu = _isPinned;
+        var menuActionSelected = false;
+        _timer.Stop();
+        ApplyPinnedState(true);
+        RegionOverlayForm.CloseTransientUi();
+
+        var menu = new System.Windows.Controls.ContextMenu
+        {
+            PlacementTarget = OfficeBtn,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+            StaysOpen = false,
+            Focusable = true
+        };
+        _officeMenu = menu;
+        menu.Closed += (_, _) =>
+        {
+            _officeMenuDismissTimer.Stop();
+            _officeMenuMouseWasDown = false;
+            if (ReferenceEquals(_officeMenu, menu))
+                _officeMenu = null;
+            if (!wasPinnedBeforeMenu && !menuActionSelected)
+                ApplyPinnedState(false);
+        };
+        menu.PreviewKeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Escape)
+                return;
+
+            args.Handled = true;
+            menu.IsOpen = false;
+        };
+
+        AddOpenWithMenuItem(menu, () => menuActionSelected = true);
+        var installedOfficeTargets = Services.OfficeExportService.GetInstalledTargets().ToList();
+        if (installedOfficeTargets.Count > 0)
+        {
+            menu.Items.Add(new System.Windows.Controls.Separator());
+            foreach (var target in installedOfficeTargets)
+                AddOfficeMenuItem(menu, target, () => menuActionSelected = true);
+        }
+
+        menu.IsOpen = true;
+        _officeMenuMouseWasDown = true;
+        _officeMenuDismissTimer.Start();
+    }
+
+    private void OfficeMenuDismissTimer_Tick(object? sender, EventArgs e)
+    {
+        var menu = _officeMenu;
+        if (menu is null || !menu.IsOpen)
+        {
+            _officeMenuDismissTimer.Stop();
+            _officeMenuMouseWasDown = false;
+            return;
+        }
+
+        bool mouseDown = IsMouseDown();
+        if (!mouseDown)
+        {
+            _officeMenuMouseWasDown = false;
+            return;
+        }
+
+        if (_officeMenuMouseWasDown)
+            return;
+
+        _officeMenuMouseWasDown = true;
+        if (!GetCursorPos(out var cursor))
+            return;
+
+        if (IsScreenPointOver(menu, cursor) || IsScreenPointOver(OfficeBtn, cursor))
+            return;
+
+        menu.IsOpen = false;
+    }
+
+    private static bool IsMouseDown()
+        => (GetAsyncKeyState(0x01) & 0x8000) != 0 ||
+           (GetAsyncKeyState(0x02) & 0x8000) != 0;
+
+    private static bool IsScreenPointOver(FrameworkElement element, NativePoint point)
+    {
+        if (!element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
+            return false;
+
+        var topLeft = element.PointToScreen(new System.Windows.Point(0, 0));
+        return point.X >= topLeft.X &&
+               point.X <= topLeft.X + element.ActualWidth &&
+               point.Y >= topLeft.Y &&
+               point.Y <= topLeft.Y + element.ActualHeight;
+    }
+
+    private void AddOpenWithMenuItem(System.Windows.Controls.ContextMenu menu, Action onInvoked)
+    {
+        var item = new System.Windows.Controls.MenuItem { Header = "Open with..." };
+        item.Click += (_, _) =>
+        {
+            onInvoked();
+            OpenPreviewWithWindowsPicker();
+        };
+        menu.Items.Add(item);
+    }
+
+    private void OpenPreviewWithWindowsPicker()
+    {
+        if (_previewBitmap is null)
+            return;
+
+        bool isTemporary = false;
+        string? openPath = null;
+        try
+        {
+            openPath = Services.OfficeExportService.EnsureOpenableFile(_previewBitmap, _savedFilePath, out isTemporary);
+            Services.OfficeExportService.ShowOpenWithDialog(openPath);
+            Show(ToastSpec.Standard("Open with", "Choose an app from Windows.", _savedFilePath) with { SuppressSound = true });
+        }
+        catch (Exception ex)
+        {
+            if (isTemporary && !string.IsNullOrWhiteSpace(openPath) && File.Exists(openPath))
+            {
+                try { File.Delete(openPath); } catch { }
+            }
+            Show(ToastSpec.Error("Open with failed", ex.Message, _savedFilePath));
+        }
+    }
+
+    private void AddOfficeMenuItem(System.Windows.Controls.ContextMenu menu, Services.OfficeExportTarget target, Action onInvoked)
+    {
+        var targetName = Services.OfficeExportService.GetTargetName(target);
+        var item = new System.Windows.Controls.MenuItem
+        {
+            Header = $"Insert into {targetName}"
+        };
+
+        item.Click += (_, _) =>
+        {
+            onInvoked();
+            SendPreviewToOffice(target);
+        };
+        menu.Items.Add(item);
+    }
+
+    private void SendPreviewToOffice(Services.OfficeExportTarget target)
+    {
+        if (_previewBitmap is null)
+            return;
+
+        try
+        {
+            Services.OfficeExportService.SendBitmap(_previewBitmap, _savedFilePath, target);
+            Show(ToastSpec.Standard("Sent to Office", Services.OfficeExportService.GetTargetName(target), _savedFilePath) with { SuppressSound = true });
+        }
+        catch (Exception ex)
+        {
+            Show(ToastSpec.Error("Office send failed", ex.Message, _savedFilePath));
         }
     }
 
@@ -622,6 +805,7 @@ public partial class ToastWindow : Window
     {
         CloseBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         SaveBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
+        OfficeBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         AiRedirectBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         DeleteBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         PinBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity == 0 ? pinnedOpacity : targetOpacity, 150, Motion.SmoothOut));
@@ -644,6 +828,8 @@ public partial class ToastWindow : Window
         if (IsChildOf(e.OriginalSource as DependencyObject, CloseBtn) ||
             IsChildOf(e.OriginalSource as DependencyObject, PinBtn) ||
             IsChildOf(e.OriginalSource as DependencyObject, SaveBtn) ||
+            IsChildOf(e.OriginalSource as DependencyObject, OfficeBtn) ||
+            IsChildOf(e.OriginalSource as DependencyObject, AiRedirectBtn) ||
             IsChildOf(e.OriginalSource as DependencyObject, DeleteBtn))
         {
             return;
@@ -1088,6 +1274,9 @@ public partial class ToastWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _timer.Stop();
+        _officeMenuDismissTimer.Stop();
+        if (_officeMenu?.IsOpen == true)
+            _officeMenu.IsOpen = false;
         StopDismissAnimationTimer();
         if (_current == this) _current = null;
         _previewBitmap?.Dispose();
@@ -1104,4 +1293,17 @@ public partial class ToastWindow : Window
         OddSnap.Models.ToastPosition.TopRight => (0, -32),
         _ => (56, 0)
     };
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
 }

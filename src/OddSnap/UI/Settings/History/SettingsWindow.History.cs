@@ -25,8 +25,12 @@ public partial class SettingsWindow
     private Dictionary<string, HistoryItemVM> _allHistoryItemsByPath = new(StringComparer.OrdinalIgnoreCase);
     private List<HistoryItemVM> _allGifItems = new();
     private List<HistoryItemVM> _allStickerItems = new();
+    private List<HistoryItemVM> _filteredGifItems = new();
+    private List<HistoryItemVM> _filteredStickerItems = new();
     private bool _mediaHistoryCacheReady;
     private string? _mediaHistoryCacheKey;
+    private bool _stickerHistoryCacheReady;
+    private string? _stickerHistoryCacheKey;
     private string _imageSearchQuery = "";
     private bool _suppressImageSearchSourceEvents;
     private CancellationTokenSource? _searchFilterCts;
@@ -39,6 +43,7 @@ public partial class SettingsWindow
     private int _gifRenderCount;
     private int _stickerRenderCount;
     private bool _imageSearchRowAutoHidden;
+    private bool _suppressHistorySearchBoxTextEvents;
     private const int HistoryPageSize = 60;
     private const int HistoryInitialPageSize = 18;
     private const int ImageHistoryPageSize = HistoryInitialPageSize;
@@ -194,6 +199,8 @@ public partial class SettingsWindow
     {
         _mediaHistoryCacheReady = false;
         _mediaHistoryCacheKey = null;
+        _stickerHistoryCacheReady = false;
+        _stickerHistoryCacheKey = null;
     }
 
     private void EnsureMaterializedImageHistoryItems(int count, HashSet<string>? selectedPaths = null)
@@ -265,6 +272,7 @@ public partial class SettingsWindow
             ResetMaterializedImageHistory();
             _historyRenderCount = Math.Min(ImageHistoryPageSize, entries.Count);
             EnsureMaterializedImageHistoryItems(_historyRenderCount, selectedPaths);
+            RefreshHistoryUploadProviderFilterItems(entries);
 
             ApplyImageSearchFilter();
             _historyImageCacheReady = true;
@@ -526,6 +534,7 @@ public partial class SettingsWindow
             Opacity = 0.3,
             TextTrimming = TextTrimming.CharacterEllipsis
         });
+        AddUploadInfo(shell.InfoPanel, vm.Entry);
         if (_settingsService.Settings.ShowImageSearchDiagnostics)
         {
             if (!string.IsNullOrWhiteSpace(vm.ImageSearchMatchText))
@@ -783,6 +792,7 @@ public partial class SettingsWindow
 
     private void LoadStickerHistory()
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         StickerStack.Children.Clear();
 
         var entries = _historyService.StickerEntries;
@@ -794,23 +804,56 @@ public partial class SettingsWindow
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HistoryEmptyLabel.Text = "No stickers yet";
 
-        _allStickerItems = entries.Select(e => new HistoryItemVM
+        var cacheKey = BuildStickerHistoryCacheKey(entries);
+        var cacheHit = _stickerHistoryCacheReady && string.Equals(_stickerHistoryCacheKey, cacheKey, StringComparison.Ordinal);
+        if (!cacheHit)
         {
-            Entry = e,
-            ThumbPath = e.FilePath,
-            Dimensions = e.Width > 0 ? $"{e.Width} x {e.Height}" : "",
-            TimeAgo = FormatTimeAgo(e.CapturedAt)
-        }).ToList();
+            _allStickerItems = entries.Select(e => new HistoryItemVM
+            {
+                Entry = e,
+                ThumbPath = e.FilePath,
+                Dimensions = e.Width > 0 ? $"{e.Width} x {e.Height}" : "",
+                TimeAgo = FormatTimeAgo(e.CapturedAt)
+            }).ToList();
+            _stickerHistoryCacheReady = true;
+            _stickerHistoryCacheKey = cacheKey;
+        }
 
-        _stickerRenderCount = Math.Min(HistoryInitialPageSize, _allStickerItems.Count);
+        RefreshHistoryUploadProviderFilterItems(_allStickerItems);
+        _filteredStickerItems = ApplyHistoryUploadFilter(_allStickerItems).ToList();
+        _stickerRenderCount = Math.Min(HistoryInitialPageSize, _filteredStickerItems.Count);
+        HistoryCountText.Text = $"{_filteredStickerItems.Count} of {entries.Count} sticker{(entries.Count == 1 ? "" : "s")} · {sizeStr}";
+        HistoryEmptyText.Visibility = _filteredStickerItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        HistoryEmptyLabel.Text = entries.Count == 0 ? "No stickers yet" : "No stickers match this filter";
         RenderStickerItems();
         DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+        sw.Stop();
+        AppDiagnostics.LogInfo(
+            "history.load-stickers",
+            $"items={_allStickerItems.Count} rendered={_stickerRenderCount} cacheHit={cacheHit} elapsedMs={sw.ElapsedMilliseconds}");
+    }
+
+    private static string BuildStickerHistoryCacheKey(IEnumerable<HistoryEntry> entries)
+    {
+        var hash = new HashCode();
+        foreach (var entry in entries)
+        {
+            hash.Add(entry.FilePath, StringComparer.OrdinalIgnoreCase);
+            hash.Add(entry.FileSizeBytes);
+            hash.Add(entry.CapturedAt);
+            hash.Add(entry.Kind);
+            hash.Add(entry.UploadUrl, StringComparer.OrdinalIgnoreCase);
+            hash.Add(entry.UploadProvider, StringComparer.OrdinalIgnoreCase);
+            hash.Add(entry.UploadError, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return hash.ToHashCode().ToString("X8");
     }
 
     private void RenderStickerItems()
     {
         StickerStack.Children.Clear();
-        _stickerItems = _allStickerItems.Take(_stickerRenderCount).ToList();
+        _stickerItems = _filteredStickerItems.Take(_stickerRenderCount).ToList();
         AppendGroupedHistoryItems(StickerStack, _stickerItems, CreateHistoryCard);
         PrimeHistoryThumbnailLoads(_stickerItems);
     }
@@ -825,19 +868,19 @@ public partial class SettingsWindow
 
     private void AppendNextStickerHistoryPage()
     {
-        if (_stickerRenderCount >= _allStickerItems.Count)
+        if (_stickerRenderCount >= _filteredStickerItems.Count)
             return;
 
         var previousOffset = StickersPanel.VerticalOffset;
         var previousCount = _stickerRenderCount;
-        _stickerRenderCount = Math.Min(_stickerRenderCount + HistoryAppendPageSize, _allStickerItems.Count);
-        var appended = _allStickerItems.Skip(previousCount).Take(_stickerRenderCount - previousCount).ToList();
+        _stickerRenderCount = Math.Min(_stickerRenderCount + HistoryAppendPageSize, _filteredStickerItems.Count);
+        var appended = _filteredStickerItems.Skip(previousCount).Take(_stickerRenderCount - previousCount).ToList();
         if (appended.Count == 0)
             return;
 
         _stickerItems.AddRange(appended);
         AppendGroupedHistoryItems(StickerStack, appended, CreateHistoryCard);
-        PrimeHistoryThumbnailLoads(appended.Concat(_allStickerItems.Skip(_stickerRenderCount).Take(HistoryLookaheadCount)));
+        PrimeHistoryThumbnailLoads(appended.Concat(_filteredStickerItems.Skip(_stickerRenderCount).Take(HistoryLookaheadCount)));
 
         _ = Dispatcher.BeginInvoke(() =>
         {

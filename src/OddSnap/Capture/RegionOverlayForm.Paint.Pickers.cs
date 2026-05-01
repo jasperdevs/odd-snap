@@ -175,7 +175,7 @@ public sealed partial class RegionOverlayForm
         int maxScroll = Math.Max(0, fonts.Length - visibleCount);
         var listClipRect = new Rectangle(px, listY, pw, _fontPickerRect.Bottom - listY);
         var clipState = g.Save();
-        using (var clipPath = RRect(_fontPickerRect, UiChrome.PopupRadius))
+        using (var clipPath = RRect(_fontPickerRect, UiChrome.ScaledPopupRadius))
         {
             g.SetClip(clipPath);
         }

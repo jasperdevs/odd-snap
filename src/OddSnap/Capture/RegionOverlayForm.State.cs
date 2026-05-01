@@ -31,6 +31,17 @@ public sealed partial class RegionOverlayForm
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public CaptureDockSide CaptureDockSide { get; set; } = CaptureDockSide.Top;
 
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public double UiScale
+    {
+        get => Helpers.UiChrome.UiScale;
+        set
+        {
+            Helpers.UiChrome.SetUiScale(value);
+            RefreshToolbar();
+        }
+    }
+
     private bool IsVerticalDock => CaptureDockSide is CaptureDockSide.Left or CaptureDockSide.Right;
     private bool IsBottomDock => CaptureDockSide == CaptureDockSide.Bottom;
     private bool IsTopDock => CaptureDockSide == CaptureDockSide.Top;
@@ -105,12 +116,12 @@ public sealed partial class RegionOverlayForm
             bounds = bounds.IsEmpty ? r : Rectangle.Union(bounds, r);
         }
 
-        Add(InflateIfNeeded(_toolbarRect, 12));
+        Add(InflateIfNeeded(_toolbarRect, Helpers.UiChrome.ScaleInt(12)));
         Add(InflateForRepaint(Rectangle.Round(GetTextToolbarBounds())));
         Add(InflateForRepaint(Rectangle.Round(GetActiveTextRect())));
-        Add(InflateIfNeeded(GetColorPickerBounds(), 12));
-        Add(InflateIfNeeded(GetFontPickerBounds(), 12));
-        Add(InflateIfNeeded(GetEmojiPickerBounds(), 12));
+        Add(InflateIfNeeded(GetColorPickerBounds(), Helpers.UiChrome.ScaleInt(12)));
+        Add(InflateIfNeeded(GetFontPickerBounds(), Helpers.UiChrome.ScaleInt(12)));
+        Add(InflateIfNeeded(GetEmojiPickerBounds(), Helpers.UiChrome.ScaleInt(12)));
         return bounds;
     }
 
@@ -129,16 +140,18 @@ public sealed partial class RegionOverlayForm
             return false;
 
         var tbBounds = _toolbarRect;
-        tbBounds.Inflate(8, 8);
+        tbBounds.Inflate(Helpers.UiChrome.ScaleInt(8), Helpers.UiChrome.ScaleInt(8));
         if (IsVerticalDock)
-            tbBounds.Width += 10;
+            tbBounds.Width += Helpers.UiChrome.ScaleInt(10);
         else
-            tbBounds.Height += 10;
+            tbBounds.Height += Helpers.UiChrome.ScaleInt(10);
         return tbBounds.Contains(p);
     }
 
-    private Rectangle PositionPopupFromAnchor(Rectangle anchor, int width, int height, int gap = 8)
+    private Rectangle PositionPopupFromAnchor(Rectangle anchor, int width, int height, int gap = -1)
     {
+        if (gap < 0)
+            gap = Helpers.UiChrome.ScaledPopupGap;
         int x;
         int y;
 
@@ -146,22 +159,26 @@ public sealed partial class RegionOverlayForm
         {
             x = IsRightDock ? anchor.X - width - gap : anchor.Right + gap;
             y = anchor.Y + (anchor.Height / 2) - (height / 2);
-            y = Math.Clamp(y, 8, Math.Max(8, ClientSize.Height - height - 8));
-            x = Math.Clamp(x, 8, Math.Max(8, ClientSize.Width - width - 8));
+            var margin = Helpers.UiChrome.ScaleInt(8);
+            y = Math.Clamp(y, margin, Math.Max(margin, ClientSize.Height - height - margin));
+            x = Math.Clamp(x, margin, Math.Max(margin, ClientSize.Width - width - margin));
         }
         else
         {
             x = anchor.X + (anchor.Width / 2) - (width / 2);
             y = IsBottomDock ? anchor.Y - height - gap : anchor.Bottom + gap;
-            x = Math.Clamp(x, 8, Math.Max(8, ClientSize.Width - width - 8));
-            y = Math.Clamp(y, 8, Math.Max(8, ClientSize.Height - height - 8));
+            var margin = Helpers.UiChrome.ScaleInt(8);
+            x = Math.Clamp(x, margin, Math.Max(margin, ClientSize.Width - width - margin));
+            y = Math.Clamp(y, margin, Math.Max(margin, ClientSize.Height - height - margin));
         }
 
         return new Rectangle(x, y, width, height);
     }
 
-    private PointF GetTooltipOrigin(Rectangle anchor, SizeF size, float gap = 6f)
+    private PointF GetTooltipOrigin(Rectangle anchor, SizeF size, float gap = -1f)
     {
+        if (gap < 0)
+            gap = Helpers.UiChrome.ScaleFloat(6f);
         float x;
         float y;
 

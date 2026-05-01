@@ -20,6 +20,8 @@ public partial class SettingsWindow
     private List<ColorHistoryEntry> _filteredColorEntries = new();
     private int _colorRenderCount;
     private DateTime? _colorLastRenderedDate;
+    private readonly Dictionary<OcrHistoryEntry, Border> _ocrHistoryCardCache = new();
+    private readonly Dictionary<ColorHistoryEntry, Border> _colorHistoryCardCache = new();
     private readonly System.Windows.Threading.DispatcherTimer _ocrSearchDebounceTimer = new()
     {
         Interval = TimeSpan.FromMilliseconds(180)
@@ -32,8 +34,7 @@ public partial class SettingsWindow
     private void LoadOcrHistory()
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        EnsureOcrSearchSurface();
-        ClearHistoryListPreservingSearch(OcrStack, _ocrSearchSurface);
+        OcrStack.Children.Clear();
 
         var allEntries = _historyService.OcrEntries;
         PruneOcrSearchCache(allEntries);
@@ -66,15 +67,15 @@ public partial class SettingsWindow
     private void LoadColorHistory()
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        EnsureColorSearchSurface();
-        ClearHistoryListPreservingSearch(ColorStack, _colorSearchSurface);
+        ColorStack.Children.Clear();
 
         var allEntries = _historyService.ColorEntries;
         PruneColorSearchCache(allEntries);
         var query = _colorSearchQuery.Trim();
+        var queryTerms = SplitHistorySearchTerms(query);
         var entries = string.IsNullOrWhiteSpace(query)
             ? allEntries
-            : allEntries.Where(entry => ColorMatchesCachedQuery(entry, query)).ToList();
+            : allEntries.Where(entry => ColorMatchesCachedTerms(entry, queryTerms)).ToList();
 
         HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HistoryEmptyLabel.Text = allEntries.Count == 0 ? "No colors yet"
@@ -286,8 +287,24 @@ public partial class SettingsWindow
         foreach (var entry in entries)
         {
             AppendSectionHeaderIfNeeded(OcrStack, entry.CapturedAt.Date, ref _ocrLastRenderedDate);
-            OcrStack.Children.Add(CreateOcrHistoryCard(entry));
+            OcrStack.Children.Add(GetOrCreateOcrHistoryCard(entry));
         }
+    }
+
+    private Border GetOrCreateOcrHistoryCard(OcrHistoryEntry entry)
+    {
+        if (_ocrHistoryCardCache.TryGetValue(entry, out var existing))
+        {
+            DetachElementFromParent(existing);
+            if (!_selectMode)
+                existing.Tag = false;
+            RefreshSelectableCardSelection(existing);
+            return existing;
+        }
+
+        var card = CreateOcrHistoryCard(entry);
+        _ocrHistoryCardCache[entry] = card;
+        return card;
     }
 
     private Border CreateOcrHistoryCard(OcrHistoryEntry entry)
@@ -414,8 +431,24 @@ public partial class SettingsWindow
         foreach (var entry in entries)
         {
             AppendSectionHeaderIfNeeded(ColorStack, entry.CapturedAt.Date, ref _colorLastRenderedDate);
-            ColorStack.Children.Add(CreateColorHistoryCard(entry));
+            ColorStack.Children.Add(GetOrCreateColorHistoryCard(entry));
         }
+    }
+
+    private Border GetOrCreateColorHistoryCard(ColorHistoryEntry entry)
+    {
+        if (_colorHistoryCardCache.TryGetValue(entry, out var existing))
+        {
+            DetachElementFromParent(existing);
+            if (!_selectMode)
+                existing.Tag = null;
+            RefreshSelectableCardSelection(existing);
+            return existing;
+        }
+
+        var card = CreateColorHistoryCard(entry);
+        _colorHistoryCardCache[entry] = card;
+        return card;
     }
 
     private Border CreateColorHistoryCard(ColorHistoryEntry entry)
@@ -560,12 +593,14 @@ public partial class SettingsWindow
         return terms.All(term => searchable.Contains(term, StringComparison.OrdinalIgnoreCase));
     }
 
-    private bool ColorMatchesCachedQuery(ColorHistoryEntry entry, string query)
+    private bool ColorMatchesCachedTerms(ColorHistoryEntry entry, IReadOnlyList<string> terms)
     {
         var searchable = GetColorSearchText(entry);
-        var terms = query.Split(new[] { ' ', '\t', ',', '/', '-', '_' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return terms.All(term => searchable.Contains(term, StringComparison.OrdinalIgnoreCase));
     }
+
+    private static string[] SplitHistorySearchTerms(string query)
+        => query.Split(new[] { ' ', '\t', ',', '/', '-', '_' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private string GetOcrSearchText(OcrHistoryEntry entry)
     {
@@ -588,22 +623,28 @@ public partial class SettingsWindow
 
     private void PruneOcrSearchCache(IReadOnlyCollection<OcrHistoryEntry> currentEntries)
     {
-        if (_ocrSearchTextCache.Count <= currentEntries.Count + 64)
+        if (_ocrSearchTextCache.Count <= currentEntries.Count + 64 &&
+            _ocrHistoryCardCache.Count <= currentEntries.Count + 64)
             return;
 
         var current = currentEntries.ToHashSet();
         foreach (var entry in _ocrSearchTextCache.Keys.Where(entry => !current.Contains(entry)).ToList())
             _ocrSearchTextCache.Remove(entry);
+        foreach (var entry in _ocrHistoryCardCache.Keys.Where(entry => !current.Contains(entry)).ToList())
+            _ocrHistoryCardCache.Remove(entry);
     }
 
     private void PruneColorSearchCache(IReadOnlyCollection<ColorHistoryEntry> currentEntries)
     {
-        if (_colorSearchTextCache.Count <= currentEntries.Count + 64)
+        if (_colorSearchTextCache.Count <= currentEntries.Count + 64 &&
+            _colorHistoryCardCache.Count <= currentEntries.Count + 64)
             return;
 
         var current = currentEntries.ToHashSet();
         foreach (var entry in _colorSearchTextCache.Keys.Where(entry => !current.Contains(entry)).ToList())
             _colorSearchTextCache.Remove(entry);
+        foreach (var entry in _colorHistoryCardCache.Keys.Where(entry => !current.Contains(entry)).ToList())
+            _colorHistoryCardCache.Remove(entry);
     }
 
     private static string BuildColorSearchText(ColorHistoryEntry entry)

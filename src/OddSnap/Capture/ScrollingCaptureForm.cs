@@ -675,10 +675,10 @@ public sealed partial class ScrollingCaptureForm : Form
         public event Action? CancelClicked;
         public event Action? ManualFrameClicked;
 
-        private const int AutoBarWidth = 320;
-        private const int ManualBarWidth = 370;
-        private const int BarHeight = WindowsDockRenderer.SurfaceHeight;
-        private const int CornerR = WindowsDockRenderer.SurfaceRadius;
+        private static int AutoBarWidth => UiChrome.ScaleInt(320);
+        private static int ManualBarWidth => UiChrome.ScaleInt(370);
+        private static int BarHeight => WindowsDockRenderer.SurfaceHeight;
+        private static int CornerR => WindowsDockRenderer.SurfaceRadius;
 
         private readonly ScrollingCaptureMode _mode;
         private int _frameCount;
@@ -712,9 +712,11 @@ public sealed partial class ScrollingCaptureForm : Form
             Cursor = Cursors.Default;
 
             int x = captureRegion.X + (captureRegion.Width - barWidth) / 2;
-            int y = captureRegion.Y - BarHeight - 12;
-            if (y < 0) y = captureRegion.Bottom + 12;
-            Location = new Point(Math.Max(4, x), Math.Max(4, y));
+            var offset = UiChrome.ScaleInt(12);
+            int y = captureRegion.Y - BarHeight - offset;
+            if (y < 0) y = captureRegion.Bottom + offset;
+            var margin = UiChrome.ScaleInt(4);
+            Location = new Point(Math.Max(margin, x), Math.Max(margin, y));
 
             Region = CreateRoundedRegion(barWidth, BarHeight, CornerR);
 
@@ -725,7 +727,7 @@ public sealed partial class ScrollingCaptureForm : Form
                 ? new Rectangle(_actionBtnRect.X - WindowsDockRenderer.ButtonSpacing - WindowsDockRenderer.IconButtonSize, btnY, WindowsDockRenderer.IconButtonSize, WindowsDockRenderer.IconButtonSize)
                 : Rectangle.Empty;
             int firstButtonX = _manualFrameBtnRect.IsEmpty ? _actionBtnRect.X : _manualFrameBtnRect.X;
-            _statusRect = new Rectangle(16, 0, firstButtonX - 24, BarHeight);
+            _statusRect = new Rectangle(UiChrome.ScaleInt(16), 0, firstButtonX - UiChrome.ScaleInt(24), BarHeight);
         }
 
         public void SetFrameCount(int count)
@@ -753,7 +755,7 @@ public sealed partial class ScrollingCaptureForm : Form
             WindowsDockRenderer.PaintSurface(g, barRect, CornerR);
 
             using var statusBrush = new SolidBrush(UiChrome.SurfaceTextPrimary);
-            var statusRect = new RectangleF(16, 0, _statusRect.Width, Height);
+            var statusRect = new RectangleF(UiChrome.ScaleInt(16), 0, _statusRect.Width, Height);
             var statusFmt = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
             g.DrawString(_status, _statusFont, statusBrush, statusRect, statusFmt);
 

@@ -4,7 +4,7 @@ namespace OddSnap.Services;
 
 internal static partial class PythonLauncherSelector
 {
-    private static readonly string[] PreferredOnnxRuntimeVersions = ["3.12", "3.11", "3.10"];
+    private static readonly string[] PreferredOnnxRuntimeVersions = ["3.14", "3.13", "3.12", "3.11"];
 
     internal sealed record LauncherEntry(string LauncherArgument, string Version, string Path, bool IsDefault);
 
@@ -68,8 +68,8 @@ internal static partial class PythonLauncherSelector
             .ToList();
 
         return discovered.Count == 0
-            ? "OddSnap needs Python 3.10, 3.11, or 3.12 installed to set up the local sticker and upscale runtimes."
-            : $"OddSnap needs Python 3.10, 3.11, or 3.12 to set up the local sticker and upscale runtimes. Found: {string.Join(", ", discovered)}.";
+            ? "OddSnap needs Python 3.11, 3.12, 3.13, or 3.14 installed to set up the local sticker and upscale runtimes."
+            : $"OddSnap needs Python 3.11, 3.12, 3.13, or 3.14 to set up the local sticker and upscale runtimes. Found: {string.Join(", ", discovered)}.";
     }
 
     private static bool IsSupportedVersionFormat(string version)

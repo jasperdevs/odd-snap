@@ -66,6 +66,7 @@ public partial class App
         SoundService.Muted = _settingsService.Settings.MuteSounds;
         SoundService.SetPack(_settingsService.Settings.SoundPack);
         UI.Motion.Disabled = _settingsService.Settings.DisableAnimations;
+        UiScale.Set(_settingsService.Settings.UiScale);
         Theme.Refresh();
         Theme.ApplyTo(Resources);
         Helpers.UiChrome.DetectRefreshRate();

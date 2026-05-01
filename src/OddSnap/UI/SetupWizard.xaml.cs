@@ -33,6 +33,8 @@ public partial class SetupWizard : Window
         _settingsService = settingsService;
         Theme.Refresh();
         InitializeComponent();
+        UiScale.Set(settingsService.Settings.UiScale);
+        UiScale.ApplyToWindow(this, WizardBorder, scaleWindowBounds: true);
         ApplyTheme();
 
         _dots = new[] { Dot1, Dot2, Dot3 };

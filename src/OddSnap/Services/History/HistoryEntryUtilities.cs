@@ -30,7 +30,8 @@ internal static class HistoryEntryUtilities
             FileSizeBytes = entry.FileSizeBytes,
             Kind = entry.Kind,
             UploadUrl = entry.UploadUrl,
-            UploadProvider = entry.UploadProvider
+            UploadProvider = entry.UploadProvider,
+            UploadError = entry.UploadError
         };
     }
 

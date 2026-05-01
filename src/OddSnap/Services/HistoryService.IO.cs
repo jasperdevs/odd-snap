@@ -93,6 +93,7 @@ public sealed partial class HistoryService
         if (changed)
         {
             _entries = _entries.OrderByDescending(e => e.CapturedAt).ToList();
+            RebuildEntryLookup_NoLock();
             InvalidateFilteredCache();
             MarkEntriesRewrite_NoLock();
             ScheduleFlush_NoLock();
@@ -196,6 +197,7 @@ public sealed partial class HistoryService
             if (changed)
             {
                 _entries = _entries.OrderByDescending(e => e.CapturedAt).ToList();
+                RebuildEntryLookup_NoLock();
                 InvalidateFilteredCache();
                 MarkEntriesRewrite_NoLock();
                 ScheduleFlush_NoLock();
@@ -264,6 +266,7 @@ public sealed partial class HistoryService
             foreach (var e in _entries.Where(e => e.CapturedAt < cutoff).ToList())
             {
                 _entries.Remove(e);
+                _entriesByPath.Remove(e.FilePath);
                 try { File.Delete(e.FilePath); } catch { }
                 TryDeleteManagedThumbnail_NoLock(e.FilePath);
             }
@@ -432,6 +435,7 @@ public sealed partial class HistoryService
     {
         var loadResult = HistoryStore.Load(DatabasePath);
         _entries = loadResult.Entries;
+        RebuildEntryLookup_NoLock();
         _ocrEntries = loadResult.OcrEntries;
         _colorEntries = loadResult.ColorEntries;
 
@@ -462,6 +466,7 @@ public sealed partial class HistoryService
                         .Where(entry => File.Exists(entry.FilePath) && HistoryEntryUtilities.IsSupportedHistoryFile(entry.FilePath))
                         .OrderByDescending(entry => entry.CapturedAt)
                         .ToList();
+                    RebuildEntryLookup_NoLock();
                     InvalidateFilteredCache();
                     MarkEntriesRewrite_NoLock();
                     changed = _entries.Count > 0;

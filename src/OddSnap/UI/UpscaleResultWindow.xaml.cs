@@ -34,6 +34,8 @@ public partial class UpscaleResultWindow : Window
         _acceptResult = acceptResult;
         InitializeComponent();
         OddSnapWindowChrome.Apply(this);
+        UiScale.Set(settingsService.Settings.UiScale);
+        UiScale.ApplyToWindow(this, RootBorder, scaleWindowBounds: true);
 
         Theme.Refresh();
         ApplyTheme();
@@ -54,7 +56,7 @@ public partial class UpscaleResultWindow : Window
 
     private void LoadIcons()
     {
-        UseResultIcon.Source = FluentIcons.RenderWpf("download", System.Drawing.Color.FromArgb(245, 255, 255, 255), 18);
+        UseResultIcon.Source = FluentIcons.RenderWpf("download", GetThemeIconColor(), 18);
     }
 
     private void PopulateDownloadedModels(UpscaleSettings settings)
@@ -110,8 +112,24 @@ public partial class UpscaleResultWindow : Window
         RootBorder.Background = Theme.Brush(Theme.BgPrimary);
         RootBorder.BorderBrush = Theme.Brush(Theme.WindowBorder);
         RootBorder.BorderThickness = new Thickness(1);
+        Resources["ThemeTextPrimaryBrush"] = Theme.Brush(Theme.TextPrimary);
+        Resources["ThemeTextSecondaryBrush"] = Theme.Brush(Theme.TextSecondary);
+        Resources["ThemeMutedBrush"] = Theme.Brush(Theme.TextMuted);
+        Resources["ThemeCardBrush"] = Theme.Brush(Theme.BgCard);
+        Resources["ThemeInputBackgroundBrush"] = Theme.Brush(Theme.BgSecondary);
+        Resources["ThemeInputBorderBrush"] = Theme.Brush(Theme.BorderSubtle);
+        Resources["ThemeWindowBorderBrush"] = Theme.Brush(Theme.WindowBorder);
+        Resources["UpscaleShimmerBrush"] = Theme.Brush(Theme.IsDark
+            ? System.Windows.Media.Color.FromArgb(20, 255, 255, 255)
+            : System.Windows.Media.Color.FromArgb(18, 0, 0, 0));
+        Resources["LoadingTextBrush"] = Theme.Brush(System.Windows.Media.Colors.White);
         Icon = ThemedLogo.Square(32);
     }
+
+    private static System.Drawing.Color GetThemeIconColor()
+        => Theme.IsDark
+            ? System.Drawing.Color.FromArgb(245, 255, 255, 255)
+            : System.Drawing.Color.FromArgb(230, 24, 24, 24);
 
     private void UpdateScaleText()
     {

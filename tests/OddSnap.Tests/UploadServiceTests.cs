@@ -2,6 +2,8 @@ using Xunit;
 using OddSnap.Services;
 using OddSnap.Models;
 using System.Reflection;
+using System.Net;
+using System.Net.Http;
 
 namespace OddSnap.Tests;
 
@@ -71,11 +73,28 @@ public sealed class UploadServiceTests
     [InlineData(UploadDestination.Imgur, ".png", 20L * 1024 * 1024)]
     [InlineData(UploadDestination.Imgur, ".gif", 200L * 1024 * 1024)]
     [InlineData(UploadDestination.TransferSh, ".png", 10L * 1024 * 1024 * 1024)]
+    [InlineData(UploadDestination.Dropbox, ".png", 150L * 1024 * 1024)]
     public void GetMaxSize_ReflectsDestinationRules(UploadDestination destination, string extension, long expected)
     {
         var path = "sample" + extension;
 
         Assert.Equal(expected, UploadService.GetMaxSize(destination, path));
+    }
+
+    [Fact]
+    public void TemporaryHostFallbacks_CoversNoSetupHostsThatStillHaveSupportedUploadPaths()
+    {
+        var field = typeof(UploadService).GetField("TemporaryHostFallbacks", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(field);
+
+        var fallbacks = Assert.IsType<UploadDestination[]>(field!.GetValue(null));
+
+        Assert.Contains(UploadDestination.Litterbox, fallbacks);
+        Assert.Contains(UploadDestination.TmpFiles, fallbacks);
+        Assert.Contains(UploadDestination.Uguu, fallbacks);
+        Assert.Contains(UploadDestination.Gofile, fallbacks);
+        Assert.Contains(UploadDestination.Catbox, fallbacks);
+        Assert.DoesNotContain(UploadDestination.TransferSh, fallbacks);
     }
 
     [Theory]
@@ -182,6 +201,25 @@ public sealed class UploadServiceTests
         {
             try { File.Delete(filePath); } catch { }
         }
+    }
+
+    [Fact]
+    public void BuildHttpError_ReportsHtmlOkResponseAsProviderError()
+    {
+        var method = typeof(UploadService).GetMethod("BuildHttpError", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        using var response = new HttpResponseMessage(HttpStatusCode.OK);
+        var message = Assert.IsType<string>(method!.Invoke(null, new object?[]
+        {
+            "file.io",
+            response,
+            "<html><title>Error</title></html>",
+            null
+        }));
+
+        Assert.Contains("HTML error page", message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("200", message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

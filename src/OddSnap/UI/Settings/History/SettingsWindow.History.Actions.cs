@@ -63,6 +63,18 @@ public partial class SettingsWindow
         if (!IsLoaded)
             return;
 
+        if (HistoryCategoryCombo.SelectedIndex == 1)
+        {
+            ImageSearchPlaceholder.Text = "Search text captures";
+            return;
+        }
+
+        if (HistoryCategoryCombo.SelectedIndex == 3)
+        {
+            ImageSearchPlaceholder.Text = "Search hex, RGB, or color names";
+            return;
+        }
+
         var isIndexing = _imageSearchIndexService.StatusText.StartsWith("Indexing screenshots", StringComparison.OrdinalIgnoreCase);
         ImageSearchPlaceholder.Text = isIndexing
             ? "Search screenshots (indexing...)"
@@ -158,17 +170,21 @@ public partial class SettingsWindow
     {
         try
         {
-            if (!IsLoaded)
+            if (!IsLoaded || _suppressHistorySearchBoxTextEvents)
                 return;
 
             SetImageSearchRowAutoHidden(false);
-            _imageSearchQuery = ImageSearchBox.Text ?? "";
-            ImageSearchPlaceholder.Visibility = string.IsNullOrWhiteSpace(_imageSearchQuery) && !ImageSearchBox.IsKeyboardFocused
+            var text = ImageSearchBox.Text ?? "";
+            ImageSearchPlaceholder.Visibility = string.IsNullOrWhiteSpace(text) && !ImageSearchBox.IsKeyboardFocused
                 ? Visibility.Visible
                 : Visibility.Collapsed;
 
             if (HistoryCategoryCombo.SelectedIndex == 0)
             {
+                _imageSearchQuery = text;
+                ImageSearchPlaceholder.Visibility = string.IsNullOrWhiteSpace(_imageSearchQuery) && !ImageSearchBox.IsKeyboardFocused
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
                 if (string.IsNullOrWhiteSpace(_imageSearchQuery))
                 {
                     CancelImageSearchWork();
@@ -178,6 +194,28 @@ public partial class SettingsWindow
 
                 SetImageSearchLoading(true);
                 QueueImageSearchRefresh();
+            }
+            else if (HistoryCategoryCombo.SelectedIndex == 1)
+            {
+                _ocrSearchQuery = text;
+                ImageSearchPlaceholder.Visibility = string.IsNullOrWhiteSpace(_ocrSearchQuery) && !ImageSearchBox.IsKeyboardFocused
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                _ocrSearchDebounceTimer.Stop();
+                _ocrSearchDebounceTimer.Tick -= FlushOcrSearchDebounce;
+                _ocrSearchDebounceTimer.Tick += FlushOcrSearchDebounce;
+                _ocrSearchDebounceTimer.Start();
+            }
+            else if (HistoryCategoryCombo.SelectedIndex == 3)
+            {
+                _colorSearchQuery = text;
+                ImageSearchPlaceholder.Visibility = string.IsNullOrWhiteSpace(_colorSearchQuery) && !ImageSearchBox.IsKeyboardFocused
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+                _colorSearchDebounceTimer.Stop();
+                _colorSearchDebounceTimer.Tick -= FlushColorSearchDebounce;
+                _colorSearchDebounceTimer.Tick += FlushColorSearchDebounce;
+                _colorSearchDebounceTimer.Start();
             }
         }
         catch (Exception ex)
@@ -208,7 +246,12 @@ public partial class SettingsWindow
             CancelImageSearchWork();
             ImageSearchBox.Clear();
             ImageSearchBox.Focus();
-            ApplyImageSearchFilter();
+            if (HistoryCategoryCombo.SelectedIndex == 0)
+                ApplyImageSearchFilter();
+            else if (HistoryCategoryCombo.SelectedIndex == 1)
+                LoadOcrHistory();
+            else if (HistoryCategoryCombo.SelectedIndex == 3)
+                LoadColorHistory();
             e.Handled = true;
         }
         catch (Exception ex)

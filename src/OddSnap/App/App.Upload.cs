@@ -143,6 +143,7 @@ public partial class App
                             ? currentName
                             : prefix + currentName;
                     }
+                    entry.UploadError = null;
                     EnsureHistoryService().SaveEntry(entry);
                 }
 
@@ -157,6 +158,7 @@ public partial class App
                 AppDiagnostics.LogWarning("upload.toast-failed", $"{UploadService.GetName(dest)} upload failed for {Path.GetFileName(filePath)}: {result.Error}");
                 var errTitle = result.IsRateLimit ? "Upload rate-limited" : "Upload failed";
                 var errMsg = CleanErrorMessage(result.Error);
+                SaveUploadFailure(filePath, historyEntry, UploadService.GetName(dest), errMsg);
                 var saved = filePath != null ? Path.GetFileName(filePath) : null;
                 var body = saved != null ? $"Saved to {saved}\n{errMsg}" : errMsg;
                 ToastWindow.ShowError(errTitle, body, filePath);
@@ -168,12 +170,36 @@ public partial class App
             var errMsg = CleanErrorMessage(ex.Message);
             var saved = filePath != null ? Path.GetFileName(filePath) : null;
             var body = saved != null ? $"Saved to {saved}\n{errMsg}" : errMsg;
+            SaveUploadFailure(filePath, historyEntry, "Upload", errMsg);
             ToastWindow.ShowError("Upload error", body, filePath);
         }
         finally
         {
             Interlocked.Decrement(ref _activeUploadCount);
             ScheduleIdleMemoryTrim();
+        }
+    }
+
+    private void SaveUploadFailure(string? filePath, Services.HistoryEntry? historyEntry, string providerName, string error)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                return;
+
+            var entry = historyEntry ?? _historyService?.Entries.FirstOrDefault(e =>
+                string.Equals(e.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+                return;
+
+            if (string.IsNullOrWhiteSpace(entry.UploadProvider))
+                entry.UploadProvider = providerName;
+            entry.UploadError = string.IsNullOrWhiteSpace(error) ? "Upload failed" : error;
+            EnsureHistoryService().SaveEntry(entry);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("upload.history-failure", ex);
         }
     }
 

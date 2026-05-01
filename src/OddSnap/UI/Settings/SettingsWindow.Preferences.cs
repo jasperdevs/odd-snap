@@ -141,6 +141,22 @@ public partial class SettingsWindow
         PreviewWindow.SetPosition(_settingsService.Settings.ToastPosition);
     }
 
+    private void UiScaleCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        if (UiScaleCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag)
+            return;
+
+        if (!double.TryParse(tag, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var scale))
+            return;
+
+        scale = UiScale.Normalize(scale);
+        _settingsService.Settings.UiScale = scale;
+        _settingsService.Save();
+        UiScale.Set(scale);
+        ApplyThemeColors();
+    }
+
     private void ToastDurationCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;

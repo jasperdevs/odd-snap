@@ -22,7 +22,7 @@ public sealed partial class RegionOverlayForm
         var r = new Rectangle(_toolbarRect.X, _toolbarRect.Y,
             _toolbarRect.Width, _toolbarRect.Height);
 
-        float cr = UiChrome.ToolbarCornerRadius;
+        float cr = UiChrome.ScaledToolbarCornerRadius;
 
         WindowsDockRenderer.PaintSurface(g, r, cr);
 
@@ -32,13 +32,15 @@ public sealed partial class RegionOverlayForm
             if (idx < 0 || idx >= _toolbarButtons.Length - 1) continue;
             if (IsVerticalDock)
             {
-                int sy = _toolbarButtons[idx].Bottom + (UiChrome.ToolbarButtonSpacing + GroupGap) / 2;
-                WindowsDockRenderer.PaintDivider(g, new Point(r.X + 10, sy), new Point(r.Right - 10, sy));
+                int sy = _toolbarButtons[idx].Bottom + (UiChrome.ScaledToolbarButtonSpacing + GroupGap) / 2;
+                var inset = UiChrome.ScaleInt(10);
+                WindowsDockRenderer.PaintDivider(g, new Point(r.X + inset, sy), new Point(r.Right - inset, sy));
             }
             else
             {
-                int sx = _toolbarButtons[idx].Right + (UiChrome.ToolbarButtonSpacing + GroupGap) / 2;
-                WindowsDockRenderer.PaintDivider(g, new Point(sx, r.Y + 12), new Point(sx, r.Bottom - 12));
+                int sx = _toolbarButtons[idx].Right + (UiChrome.ScaledToolbarButtonSpacing + GroupGap) / 2;
+                var inset = UiChrome.ScaleInt(12);
+                WindowsDockRenderer.PaintDivider(g, new Point(sx, r.Y + inset), new Point(sx, r.Bottom - inset));
             }
         }
 

@@ -36,6 +36,7 @@ public partial class SettingsWindow
         OuterBorder.BorderBrush = Theme.Brush(Theme.WindowBorder);
         Icon = ThemedLogo.Square(32);
         Foreground = Theme.Brush(Theme.TextPrimary);
+        UiScale.ApplyToWindow(this, OuterBorder, scaleWindowBounds: true);
 
         ApplyThemeToVisualTree(OuterBorder);
         UpdateSectionIcons();
@@ -149,6 +150,7 @@ public partial class SettingsWindow
         AutoIndexImagesCheck.IsChecked = s.AutoIndexImages;
         MuteSoundsCheck.IsChecked = s.MuteSounds;
         DisableAnimationsCheck.IsChecked = s.DisableAnimations;
+        SelectUiScale(s.UiScale);
         CrosshairGuidesCheck.IsChecked = s.ShowCrosshairGuides;
         ShowCaptureMagnifierCheck.IsChecked = s.ShowCaptureMagnifier;
         OverlayAllMonitorsCheck.IsChecked = s.OverlayCaptureAllMonitors;
@@ -302,6 +304,23 @@ public partial class SettingsWindow
         LocalizationService.ApplyTo(this, _settingsService.Settings.InterfaceLanguage);
     }
 
+    private void SelectUiScale(double scale)
+    {
+        var normalized = UiScale.Normalize(scale);
+        foreach (var item in UiScaleCombo.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is string tag &&
+                double.TryParse(tag, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var itemScale) &&
+                Math.Abs(itemScale - normalized) < 0.001)
+            {
+                UiScaleCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        UiScaleCombo.SelectedIndex = 2;
+    }
+
     private void TabChanged(object sender, RoutedEventArgs e)
     {
         ApplyMainTabSelection();
@@ -349,6 +368,7 @@ public partial class SettingsWindow
     {
         if (!IsLoaded) return;
         UpdateImageSearchUi();
+        UpdateHistoryUploadFilterUi();
         ScheduleHistoryTabLoad(preserveTransientState: true);
     }
 
@@ -392,6 +412,7 @@ public partial class SettingsWindow
         ColorsPanel.Visibility = Visibility.Collapsed;
         StickersPanel.Visibility = Visibility.Collapsed;
         UpdateImageSearchUi();
+        UpdateHistoryUploadFilterUi();
 
         if (HistoryCategoryCombo.SelectedIndex != 0)
             CancelImageSearchWork();

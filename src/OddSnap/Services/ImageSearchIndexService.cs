@@ -327,14 +327,15 @@ public sealed partial class ImageSearchIndexService : IDisposable
 
     public int CountReadyEntries(IReadOnlyList<HistoryEntry> entries, string? ocrLanguageTag)
     {
+        var existingEntries = entries
+            .Where(entry => entry.Kind == HistoryKind.Image && File.Exists(entry.FilePath))
+            .ToList();
+
         lock (_gate)
         {
             int count = 0;
-            foreach (var entry in entries)
+            foreach (var entry in existingEntries)
             {
-                if (entry.Kind != HistoryKind.Image || !File.Exists(entry.FilePath))
-                    continue;
-
                 if (!NeedsRefresh_NoLock(entry, ocrLanguageTag))
                     count++;
             }
@@ -345,8 +346,12 @@ public sealed partial class ImageSearchIndexService : IDisposable
 
     public int CountPendingEntries(IReadOnlyList<HistoryEntry> entries, string? ocrLanguageTag)
     {
+        var existingEntries = entries
+            .Where(entry => entry.Kind == HistoryKind.Image && File.Exists(entry.FilePath))
+            .ToList();
+
         lock (_gate)
-            return entries.Count(entry => entry.Kind == HistoryKind.Image && File.Exists(entry.FilePath) && NeedsRefresh_NoLock(entry, ocrLanguageTag));
+            return existingEntries.Count(entry => NeedsRefresh_NoLock(entry, ocrLanguageTag));
     }
 
     public void ReindexAll(IReadOnlyList<HistoryEntry> entries, string? ocrLanguageTag)
@@ -406,12 +411,15 @@ public sealed partial class ImageSearchIndexService : IDisposable
         if (_disposed)
             return;
 
+        var pendingEntries = entries
+            .Where(e => e.Kind == HistoryKind.Image && File.Exists(e.FilePath))
+            .OrderByDescending(e => e.CapturedAt)
+            .ThenBy(e => e.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         lock (_gate)
         {
-            _pendingEntries = entries.Where(e => e.Kind == HistoryKind.Image && File.Exists(e.FilePath))
-                .OrderByDescending(e => e.CapturedAt)
-                .ThenBy(e => e.FilePath, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            _pendingEntries = pendingEntries;
             _pendingOcrLanguageTag = ocrLanguageTag;
             _syncRequested = true;
         }

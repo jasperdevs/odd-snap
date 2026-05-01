@@ -1405,6 +1405,32 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE71E;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="UI scale" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Manually scale OddSnap windows, toasts, and capture controls." Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                                <ComboBox x:Name="UiScaleCombo" Grid.Column="2" FontSize="12.5" Padding="10,5" MinWidth="120"
+                                          VerticalAlignment="Center"
+                                          SelectionChanged="UiScaleCombo_SelectionChanged">
+                                    <ComboBoxItem Content="80%" Tag="0.8"/>
+                                    <ComboBoxItem Content="90%" Tag="0.9"/>
+                                    <ComboBoxItem Content="100%" Tag="1.0"/>
+                                    <ComboBoxItem Content="110%" Tag="1.1"/>
+                                    <ComboBoxItem Content="120%" Tag="1.2"/>
+                                    <ComboBoxItem Content="130%" Tag="1.3"/>
+                                    <ComboBoxItem Content="140%" Tag="1.4"/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
                                     <TextBlock Text="&#xE767;" Style="{StaticResource SettingIconGlyph}"/>
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -1796,6 +1822,21 @@
                                                                RenderOptions.BitmapScalingMode="HighQuality"
                                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     </Border>
+                                                    <Border x:Name="ToastLayoutOfficeBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastLayoutButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastLayoutButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastLayoutButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastLayoutButton_DragEnter"
+                                                            Drop="ToastLayoutButton_Drop"
+                                                            Tag="Office">
+                                                        <Image x:Name="ToastLayoutOfficeIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
                                                     <Border x:Name="ToastLayoutAiRedirectBtn"
                                                             Width="30" Height="30" CornerRadius="9"
                                                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
@@ -2117,6 +2158,15 @@
                                 <ComboBoxItem Content="Colors"/>
                                 <ComboBoxItem Content="Stickers"/>
                             </ComboBox>
+                            <ComboBox x:Name="HistoryUploadFilterCombo" FontSize="12" Padding="8,5" MinWidth="128" Margin="0,0,8,0"
+                                      VerticalAlignment="Center" SelectionChanged="HistoryUploadFilterCombo_Changed">
+                                <ComboBoxItem Content="All uploads" Tag="All" IsSelected="True"/>
+                                <ComboBoxItem Content="Uploaded" Tag="Uploaded"/>
+                                <ComboBoxItem Content="Not uploaded" Tag="NotUploaded"/>
+                                <ComboBoxItem Content="Failed" Tag="Failed"/>
+                            </ComboBox>
+                            <ComboBox x:Name="HistoryUploadProviderCombo" FontSize="12" Padding="8,5" MinWidth="138" Margin="0,0,8,0"
+                                      VerticalAlignment="Center" SelectionChanged="HistoryUploadProviderCombo_Changed"/>
                         </DockPanel>
 
                         <Grid x:Name="ImageSearchRow" Margin="0,8,0,0" Visibility="Visible">
@@ -2196,14 +2246,14 @@
 
                 <!-- Text history -->
                 <ScrollViewer x:Name="TextPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                              Padding="14,2,14,14" Visibility="Collapsed"
+                              Padding="10,2,10,14" Visibility="Collapsed"
                               ScrollChanged="OcrPanel_ScrollChanged">
                     <StackPanel x:Name="OcrStack"/>
                 </ScrollViewer>
 
                 <!-- Color history -->
                 <ScrollViewer x:Name="ColorsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                              Padding="14,2,14,14" Visibility="Collapsed"
+                              Padding="10,2,10,14" Visibility="Collapsed"
                               ScrollChanged="ColorsPanel_ScrollChanged">
                     <StackPanel x:Name="ColorStack"/>
                 </ScrollViewer>

@@ -111,8 +111,8 @@ public sealed partial class RegionOverlayForm
         if (uiBounds.IsEmpty)
             uiBounds = InflateForRepaint(_toolbarRect, 24);
 
-        int marginX = IsVerticalDock ? 120 : 260;
-        int marginY = IsVerticalDock ? 120 : 140;
+        int marginX = Helpers.UiChrome.ScaleInt(IsVerticalDock ? 120 : 260);
+        int marginY = Helpers.UiChrome.ScaleInt(IsVerticalDock ? 120 : 140);
         uiBounds.Inflate(marginX, marginY);
         uiBounds.Intersect(new Rectangle(0, 0, ClientSize.Width, ClientSize.Height));
 

@@ -26,6 +26,8 @@ public partial class OcrResultWindow : Window
         _settingsService = settingsService;
         InitializeComponent();
         OddSnapWindowChrome.Apply(this);
+        UiScale.Set(settingsService.Settings.UiScale);
+        UiScale.ApplyToWindow(this, RootBorder, scaleWindowBounds: true);
 
         Theme.Refresh();
         ApplyTheme();

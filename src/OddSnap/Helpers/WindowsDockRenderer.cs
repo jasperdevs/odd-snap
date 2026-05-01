@@ -5,11 +5,11 @@ namespace OddSnap.Helpers;
 
 public static class WindowsDockRenderer
 {
-    public const int SurfaceHeight = UiChrome.ToolbarHeight;
-    public const int IconButtonSize = UiChrome.ToolbarButtonSize;
-    public const int ButtonSpacing = UiChrome.ToolbarButtonSpacing;
-    public const int SurfacePadding = UiChrome.ToolbarInnerPadding;
-    public const int SurfaceRadius = 8;
+    public static int SurfaceHeight => UiChrome.ScaledToolbarHeight;
+    public static int IconButtonSize => UiChrome.ScaledToolbarButtonSize;
+    public static int ButtonSpacing => UiChrome.ScaledToolbarButtonSpacing;
+    public static int SurfacePadding => UiChrome.ScaledToolbarInnerPadding;
+    public static int SurfaceRadius => UiChrome.ScaledSurfaceRadius;
 
     public static GraphicsPath RoundedRect(RectangleF rect, float radius)
     {
@@ -23,8 +23,10 @@ public static class WindowsDockRenderer
         return path;
     }
 
-    public static void PaintSurface(Graphics g, RectangleF rect, float radius = SurfaceRadius)
+    public static void PaintSurface(Graphics g, RectangleF rect, float radius = -1f)
     {
+        if (radius < 0)
+            radius = SurfaceRadius;
         PaintShadow(g, rect, radius);
 
         using var path = RoundedRect(rect, radius);
@@ -49,7 +51,7 @@ public static class WindowsDockRenderer
             g.FillPath(brush, path);
     }
 
-    public static void PaintButton(Graphics g, RectangleF rect, bool active, bool hovered, float radius = 5f)
+    public static void PaintButton(Graphics g, RectangleF rect, bool active, bool hovered, float radius = -1f)
     {
         if (!active && !hovered)
             return;
@@ -57,6 +59,8 @@ public static class WindowsDockRenderer
         int alpha = active
             ? (UiChrome.IsDark ? 28 : 20)
             : (UiChrome.IsDark ? 18 : 14);
+        if (radius < 0)
+            radius = UiChrome.ScaleFloat(5f);
         using var path = RoundedRect(rect, radius);
         using var brush = new SolidBrush(Color.FromArgb(alpha, 255, 255, 255));
         g.FillPath(brush, path);
@@ -64,12 +68,12 @@ public static class WindowsDockRenderer
 
     public static void PaintDivider(Graphics g, Point a, Point b)
     {
-        using var pen = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
+        using var pen = new Pen(UiChrome.SurfaceBorderSubtle, Math.Max(1f, UiChrome.ScaleFloat(1f)));
         g.DrawLine(pen, a, b);
     }
 
     public static void PaintIcon(Graphics g, string iconId, Rectangle bounds, Color color, bool active = false)
     {
-        FluentIcons.DrawIcon(g, iconId, bounds, color, active ? 5.5f : 6.5f, active);
+        FluentIcons.DrawIcon(g, iconId, bounds, color, UiChrome.ScaleFloat(active ? 5.5f : 6.5f), active);
     }
 }

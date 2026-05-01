@@ -268,6 +268,7 @@ public sealed class SettingsService : IDisposable
         settings.ImageUploadSettings ??= new UploadSettings();
         settings.StickerUploadSettings ??= new StickerSettings();
         settings.UpscaleUploadSettings ??= new UpscaleSettings();
+        settings.OpenWithApps = NormalizeOpenWithApps(settings.OpenWithApps);
         SensitiveSettingsProtection.Unprotect(settings);
 
         if (settings.CompressHistory && settings.CaptureImageFormat == CaptureImageFormat.Png)
@@ -277,6 +278,7 @@ public sealed class SettingsService : IDisposable
             settings.FileNameTemplate = Helpers.FileNameTemplate.DefaultTemplate;
 
         settings.ImageSearchSources &= ImageSearchSourceOptions.All;
+        settings.UiScale = OddSnap.UI.UiScale.Normalize(settings.UiScale);
         settings.InterfaceLanguage = LocalizationService.NormalizeLanguageSetting(settings.InterfaceLanguage);
         if (!Enum.IsDefined(settings.ScrollingCaptureMode))
             settings.ScrollingCaptureMode = ScrollingCaptureMode.Automatic;
@@ -380,8 +382,27 @@ public sealed class SettingsService : IDisposable
         settings.CloseSlot = TakeSlot(settings.CloseSlot, ToastButtonSlot.TopRight, used);
         settings.PinSlot = TakeSlot(settings.PinSlot, ToastButtonSlot.TopLeft, used);
         settings.SaveSlot = TakeSlot(settings.SaveSlot, ToastButtonSlot.BottomRight, used);
+        settings.OfficeSlot = TakeSlot(settings.OfficeSlot, ToastButtonSlot.TopInnerLeft, used);
         settings.AiRedirectSlot = TakeSlot(settings.AiRedirectSlot, ToastButtonSlot.BottomLeft, used);
         settings.DeleteSlot = TakeSlot(settings.DeleteSlot, ToastButtonSlot.BottomInnerRight, used);
+    }
+
+    private static Dictionary<string, string> NormalizeOpenWithApps(Dictionary<string, string>? apps)
+    {
+        var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (apps is null)
+            return normalized;
+
+        foreach (var pair in apps)
+        {
+            var ext = OfficeExportService.NormalizeExtension(pair.Key);
+            if (ext is null || string.IsNullOrWhiteSpace(pair.Value))
+                continue;
+
+            normalized[ext] = pair.Value;
+        }
+
+        return normalized;
     }
 
     private static ToastButtonSlot TakeSlot(ToastButtonSlot requested, ToastButtonSlot fallback, HashSet<ToastButtonSlot> used)

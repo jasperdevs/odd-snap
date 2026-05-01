@@ -71,6 +71,7 @@ public partial class PreviewWindow : Window
         _savedFilePath = savedFilePath;
 
         InitializeComponent();
+        UiScale.ApplyToWindow(this, ImageBorder, scaleWindowBounds: false);
         ApplyTheme();
         SetThumbnail();
         FitToImage();
@@ -96,6 +97,7 @@ public partial class PreviewWindow : Window
         catch { }
 
         InitializeComponent();
+        UiScale.ApplyToWindow(this, ImageBorder, scaleWindowBounds: false);
         ApplyTheme();
         SetGifThumbnail(gifFilePath);
         FitToImage();

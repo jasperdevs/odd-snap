@@ -118,6 +118,8 @@ public sealed class AppSettings
         public ToastButtonSlot PinSlot { get; set; } = ToastButtonSlot.TopLeft;
         public bool ShowSave { get; set; } = true;
         public ToastButtonSlot SaveSlot { get; set; } = ToastButtonSlot.BottomRight;
+        public bool ShowOffice { get; set; }
+        public ToastButtonSlot OfficeSlot { get; set; } = ToastButtonSlot.TopInnerLeft;
         public bool ShowAiRedirect { get; set; } = true;
         public ToastButtonSlot AiRedirectSlot { get; set; } = ToastButtonSlot.BottomLeft;
         public bool ShowDelete { get; set; }
@@ -190,6 +192,7 @@ public sealed class AppSettings
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }
     public bool DisableAnimations { get; set; }
+    public double UiScale { get; set; } = 1.0;
     public string InterfaceLanguage { get; set; } = "auto";
     public bool ShowCrosshairGuides { get; set; } // off by default
     public bool ShowCursor { get; set; }
@@ -226,6 +229,7 @@ public sealed class AppSettings
     public double ToastFadeOutSeconds { get; set; } = 1.0;
     public bool AutoPinPreviews { get; set; }
     public ToastButtonLayoutSettings ToastButtons { get; set; } = new();
+    public Dictionary<string, string> OpenWithApps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public SoundPack SoundPack { get; set; } = SoundPack.Default;
 
     // Video recording

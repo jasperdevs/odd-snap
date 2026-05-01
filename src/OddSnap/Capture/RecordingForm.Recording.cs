@@ -55,9 +55,24 @@ public sealed partial class RecordingForm
 
         Current = this;
         _desktopAudioSoundSuppression = _recordDesktop ? SoundService.SuppressPlayback() : null;
-        SoundService.PlayRecordStartSound();
-        _recorder?.Start(RecordingWarmupDelayMs);
-        _videoRecorder?.Start(_savePath, RecordingWarmupDelayMs);
+        try
+        {
+            SoundService.PlayRecordStartSound();
+            _recorder?.Start(RecordingWarmupDelayMs);
+            _videoRecorder?.Start(_savePath, RecordingWarmupDelayMs);
+        }
+        catch (Exception ex)
+        {
+            _desktopAudioSoundSuppression?.Dispose();
+            _desktopAudioSoundSuppression = null;
+            _recorder?.Dispose();
+            _recorder = null;
+            _videoRecorder?.Dispose();
+            _videoRecorder = null;
+            RecordingFailed?.Invoke(ex);
+            Close();
+            return;
+        }
 
         _tickTimer = new System.Windows.Forms.Timer { Interval = 200 };
         _tickTimer.Tick += (_, _) =>
@@ -140,16 +155,17 @@ public sealed partial class RecordingForm
 
     private void CalcToolbarLayout()
     {
-        int tw = 320, th = WindowsDockRenderer.SurfaceHeight;
+        int tw = UiChrome.ScaleInt(320), th = WindowsDockRenderer.SurfaceHeight;
         // Try to place above the recording region
         int tx = _recordRegion.X + _recordRegion.Width / 2 - tw / 2;
-        int ty = _recordRegion.Y - th - 14;
+        int ty = _recordRegion.Y - th - UiChrome.ScaleInt(14);
 
         // If off-screen (fullscreen recording), place at bottom center of screen
-        if (ty < 4 || _recordRegion.Height > Height - 100)
-            ty = Height - th - 40; // 40px from bottom edge
-        if (tx < 4) tx = 4;
-        if (tx + tw > Width - 4) tx = Width - 4 - tw;
+        var edge = UiChrome.ScaleInt(4);
+        if (ty < edge || _recordRegion.Height > Height - UiChrome.ScaleInt(100))
+            ty = Height - th - UiChrome.ScaleInt(40); // from bottom edge
+        if (tx < edge) tx = edge;
+        if (tx + tw > Width - edge) tx = Width - edge - tw;
 
         _toolbarRect = new Rectangle(tx, ty, tw, th);
 
