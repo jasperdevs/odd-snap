@@ -5,14 +5,16 @@
 @custom-variant dark (&:is(.dark *));
 
 html, body {
-  background: #F6F6F6;
-  color: #000000;
-  font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  background: #F4F1EA;
+  color: #171512;
+  font-family: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   font-size: 15px;
   text-transform: lowercase;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "cv11", "ss01", "ss03";
+  font-feature-settings: "ss01", "ss03";
+  text-rendering: geometricPrecision;
+  overflow-x: hidden;
 }
 
 /* Preserve casing for code, kbd, and href-displaying content */
@@ -21,8 +23,8 @@ code, kbd, samp, pre {
 }
 
 @theme inline {
-  --font-heading: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -64,24 +66,24 @@ code, kbd, samp, pre {
 }
 
 :root {
-  --background: #F6F6F6;
-  --foreground: #000000;
-  --card: #FFFFFF;
-  --card-foreground: #000000;
-  --popover: #FFFFFF;
-  --popover-foreground: #000000;
-  --primary: #000000;
-  --primary-foreground: #FFFFFF;
-  --secondary: #EBEBEB;
-  --secondary-foreground: #000000;
-  --muted: #EBEBEB;
-  --muted-foreground: #000000;
-  --accent: #EBEBEB;
-  --accent-foreground: #000000;
-  --destructive: #000000;
-  --border: #EBEBEB;
-  --input: #EBEBEB;
-  --ring: #000000;
+  --background: #F4F1EA;
+  --foreground: #171512;
+  --card: #FFFDF8;
+  --card-foreground: #171512;
+  --popover: #FFFDF8;
+  --popover-foreground: #171512;
+  --primary: #171512;
+  --primary-foreground: #FFFDF8;
+  --secondary: #E6E0D3;
+  --secondary-foreground: #171512;
+  --muted: #E9E4D9;
+  --muted-foreground: #5B554B;
+  --accent: #E3DAC9;
+  --accent-foreground: #171512;
+  --destructive: #7A2C22;
+  --border: #DDD5C7;
+  --input: #DDD5C7;
+  --ring: #171512;
   --radius: 0.625rem;
 }
 
@@ -98,6 +100,16 @@ code, kbd, samp, pre {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 
+.brand-wordmark {
+  width: min(31rem, 100%);
+}
+
+@media (max-width: 639px) {
+  .brand-wordmark {
+    width: min(18rem, 100%);
+  }
+}
+
 .page-edge-fade {
   position: fixed;
   left: 0;
@@ -111,10 +123,10 @@ code, kbd, samp, pre {
   height: calc(4.75rem + env(safe-area-inset-top));
   background: linear-gradient(
     to bottom,
-    rgba(246, 246, 246, 0.92) 0%,
-    rgba(246, 246, 246, 0.74) 42%,
-    rgba(246, 246, 246, 0.26) 78%,
-    rgba(246, 246, 246, 0) 100%
+    rgba(244, 241, 234, 0.94) 0%,
+    rgba(244, 241, 234, 0.76) 42%,
+    rgba(244, 241, 234, 0.28) 78%,
+    rgba(244, 241, 234, 0) 100%
   );
 }
 
@@ -123,9 +135,9 @@ code, kbd, samp, pre {
   height: calc(2.75rem + env(safe-area-inset-bottom));
   background: linear-gradient(
     to top,
-    rgba(246, 246, 246, 0.88) 0%,
-    rgba(246, 246, 246, 0.32) 58%,
-    rgba(246, 246, 246, 0) 100%
+    rgba(244, 241, 234, 0.88) 0%,
+    rgba(244, 241, 234, 0.32) 58%,
+    rgba(244, 241, 234, 0) 100%
   );
 }
 
@@ -140,8 +152,24 @@ code, kbd, samp, pre {
 }
 
 /* Inverted selection — black bg, light text */
-::selection { background: #000000; color: #F6F6F6; }
-::-moz-selection { background: #000000; color: #F6F6F6; }
+::selection { background: #171512; color: #FFFDF8; }
+::-moz-selection { background: #171512; color: #FFFDF8; }
+
+html {
+  scroll-behavior: smooth;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(183, 144, 89, 0.18), transparent 30rem),
+    radial-gradient(circle at 84% 14%, rgba(48, 73, 92, 0.12), transparent 28rem),
+    linear-gradient(135deg, rgba(23, 21, 18, 0.035) 0 1px, transparent 1px 12px);
+}
 
 /* Interactive elements should have a pointer cursor */
 button:not(:disabled),

@@ -86,7 +86,7 @@ export default function Donate() {
         {options.map((option) => (
           <div
             key={option.title}
-            className="border-t border-[#EBEBEB] py-6 flex items-center gap-4 flex-wrap"
+            className="border-t border-[#DDD5C7] py-6 flex items-center gap-4 flex-wrap"
           >
             {option.logo}
             <div className="flex-1 min-w-0">

@@ -36,7 +36,7 @@ function renderMarkdown(body: string): string {
 
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 
-  html = html.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-[#EBEBEB] text-black text-[13px] font-mono">$1</code>');
+  html = html.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-[#E9E4D9] text-black text-[13px] font-mono">$1</code>');
 
   html = html.replace(/^[*-] (.+)$/gm, '<li class="ml-4 list-disc text-[14px] text-black/70">$1</li>');
 
@@ -267,7 +267,7 @@ function ReleaseCard({
   const hasExtras = zipAssets.length > 0 || !!release.zipball_url;
 
   return (
-    <div className="border-t border-[#EBEBEB] pt-12 pb-16">
+    <div className="border-t border-[#DDD5C7] pt-12 pb-16">
       <h2 className="text-[16px] text-black mb-4">
         {release.tag_name}
         <span className="text-black/40 mx-2">//</span>
@@ -335,9 +335,9 @@ function ReleaseCard({
             aria-expanded={extrasOpen}
             className="group flex items-center gap-3 w-full text-black/50 hover:text-black transition-colors"
           >
-            <span className="h-px flex-1 bg-[#EBEBEB] group-hover:bg-black/20 transition-colors" />
+            <span className="h-px flex-1 bg-[#DDD5C7] group-hover:bg-black/20 transition-colors" />
             <ChevronDown open={extrasOpen} />
-            <span className="h-px flex-1 bg-[#EBEBEB] group-hover:bg-black/20 transition-colors" />
+            <span className="h-px flex-1 bg-[#DDD5C7] group-hover:bg-black/20 transition-colors" />
           </button>
         </div>
       )}
@@ -348,7 +348,7 @@ function ReleaseCard({
         return (
           <div className="mt-5">
             <h3 className="text-[14px] text-black/70 mb-2">changelog</h3>
-            <div className="rounded-md border border-[#EBEBEB] bg-white overflow-hidden">
+            <div className="rounded-md border border-[#DDD5C7] bg-[#FFFDF8] overflow-hidden">
               <div className="relative">
                 <div
                   className="overflow-hidden transition-[max-height] duration-300 ease-out"
@@ -369,7 +369,7 @@ function ReleaseCard({
                     style={{
                       opacity: collapsed ? 1 : 0,
                       background:
-                        "linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 30%, rgba(255,255,255,0.85) 65%, rgba(255,255,255,1) 100%)",
+                        "linear-gradient(to bottom, rgba(255,253,248,0) 0%, rgba(255,253,248,0.4) 30%, rgba(255,253,248,0.85) 65%, rgba(255,253,248,1) 100%)",
                     }}
                   />
                 )}
@@ -382,9 +382,9 @@ function ReleaseCard({
                 aria-expanded={changelogExpanded}
                 className="group flex items-center gap-3 w-full text-black/50 hover:text-black transition-colors mt-3"
               >
-                <span className="h-px flex-1 bg-[#EBEBEB] group-hover:bg-black/20 transition-colors" />
+                <span className="h-px flex-1 bg-[#DDD5C7] group-hover:bg-black/20 transition-colors" />
                 <ChevronDown open={changelogExpanded} />
-                <span className="h-px flex-1 bg-[#EBEBEB] group-hover:bg-black/20 transition-colors" />
+                <span className="h-px flex-1 bg-[#DDD5C7] group-hover:bg-black/20 transition-colors" />
               </button>
             )}
           </div>
@@ -421,14 +421,14 @@ export default function Downloads() {
       {loading ? (
         <div className="space-y-4">
           {[1, 2].map((i) => (
-            <div key={i} className="border-t border-[#EBEBEB] py-6 animate-pulse">
+            <div key={i} className="border-t border-[#DDD5C7] py-6 animate-pulse">
               <div className="flex items-center gap-3 mb-4">
-                <div className="h-5 w-20 bg-[#EBEBEB] rounded" />
-                <div className="h-4 w-24 bg-[#EBEBEB] rounded ml-auto" />
+                <div className="h-5 w-20 bg-[#E9E4D9] rounded" />
+                <div className="h-4 w-24 bg-[#E9E4D9] rounded ml-auto" />
               </div>
               <div className="flex items-center gap-3">
-                <div className="h-4 w-40 bg-[#EBEBEB] rounded flex-1" />
-                <div className="h-8 w-24 bg-[#EBEBEB] rounded" />
+                <div className="h-4 w-40 bg-[#E9E4D9] rounded flex-1" />
+                <div className="h-8 w-24 bg-[#E9E4D9] rounded" />
               </div>
             </div>
           ))}
@@ -447,7 +447,7 @@ export default function Downloads() {
           </div>
 
           {pageCount > 1 && (
-            <div className="flex items-center justify-center gap-1 pt-6 mt-2 border-t border-[#EBEBEB]">
+            <div className="flex items-center justify-center gap-1 pt-6 mt-2 border-t border-[#DDD5C7]">
               <Button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={safePage === 0}

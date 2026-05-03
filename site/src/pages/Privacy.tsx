@@ -11,7 +11,7 @@ const thirdPartyServices = [
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-t border-[#EBEBEB] pt-8">
+    <section className="border-t border-[#DDD5C7] pt-8">
       <h2 className="text-[17px] text-black mb-3">{title}</h2>
       <div className="space-y-3 text-[14px] leading-relaxed text-black/70">
         {children}

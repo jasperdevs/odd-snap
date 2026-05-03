@@ -158,10 +158,10 @@ export default function StarChart() {
     ctx.clearRect(0, 0, w, h);
 
     // Grid lines and Y labels
-    ctx.strokeStyle = "rgba(0,0,0,0.06)";
+    ctx.strokeStyle = "rgba(23,21,18,0.08)";
     ctx.lineWidth = 1;
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.font = "11px 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif";
+    ctx.fillStyle = "rgba(23,21,18,0.48)";
+    ctx.font = "11px 'Geist Variable', 'Geist', ui-sans-serif, system-ui, sans-serif";
     ctx.textAlign = "right";
     const yTicks = 4;
     for (let i = 0; i <= yTicks; i++) {
@@ -196,8 +196,8 @@ export default function StarChart() {
 
     // Area fill (subtle vertical gradient)
     const gradient = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-    gradient.addColorStop(0, "rgba(0,0,0,0.08)");
-    gradient.addColorStop(1, "rgba(0,0,0,0)");
+    gradient.addColorStop(0, "rgba(138,106,61,0.16)");
+    gradient.addColorStop(1, "rgba(138,106,61,0)");
     ctx.beginPath();
     ctx.moveTo(points[0][0], padT + plotH);
     points.forEach(([x, y]) => ctx.lineTo(x, y));
@@ -210,7 +210,7 @@ export default function StarChart() {
     ctx.beginPath();
     ctx.moveTo(points[0][0], points[0][1]);
     for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
-    ctx.strokeStyle = "rgba(0,0,0,0.85)";
+    ctx.strokeStyle = "rgba(23,21,18,0.86)";
     ctx.lineWidth = 1.25;
     ctx.stroke();
 
@@ -218,7 +218,7 @@ export default function StarChart() {
     if (hoverIdx !== undefined && hoverIdx >= 0 && hoverIdx < points.length) {
       const [hx, hy] = points[hoverIdx];
 
-      ctx.strokeStyle = "rgba(0,0,0,0.25)";
+      ctx.strokeStyle = "rgba(23,21,18,0.25)";
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
@@ -229,11 +229,11 @@ export default function StarChart() {
 
       ctx.beginPath();
       ctx.arc(hx, hy, 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#000";
+      ctx.fillStyle = "#171512";
       ctx.fill();
       ctx.beginPath();
       ctx.arc(hx, hy, 2, 0, Math.PI * 2);
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = "#FFFDF8";
       ctx.fill();
     }
   }, [data]);
@@ -295,19 +295,19 @@ export default function StarChart() {
         />
         {hover && (
           <div
-            className="absolute pointer-events-none bg-[#F6F6F6] border border-[#EBEBEB] rounded-md px-2.5 py-1.5 text-[12px]"
+            className="absolute pointer-events-none rounded-md border border-[#DDD5C7] bg-[#FFFDF8] px-2.5 py-1.5 text-[12px] shadow-[0_10px_28px_rgba(72,57,34,0.12)]"
             style={{
               left: Math.min(hover.x, (layoutRef.current?.w ?? 600) - 140),
               top: Math.max(hover.y - 40, 4),
             }}
           >
-            <span className="text-black/60">{tooltipDate}</span>
-            <span className="text-black ml-2">{hover.stars} stars</span>
+            <span className="text-[#171512]/60">{tooltipDate}</span>
+            <span className="text-[#171512] ml-2">{hover.stars} stars</span>
           </div>
         )}
       </div>
-      <p className="text-[13px] text-black/60 mt-3">
-        <span className="text-black">{label}</span> github stars
+      <p className="text-[13px] text-[#171512]/60 mt-3">
+        <span className="text-[#171512]">{label}</span> github stars
       </p>
     </div>
   );

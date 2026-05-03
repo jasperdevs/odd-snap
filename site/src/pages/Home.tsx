@@ -130,7 +130,7 @@ function Showcase() {
     <div>
       <div className="mb-4 overflow-x-auto no-scrollbar">
         <Tabs selectedIndex={visible} onSelect={clickTab}>
-          <TabsList>
+          <TabsList className="bg-[#E7DFD1]/80">
             {showcase.map((s) => (
               <TabItem key={s.title} value={s.title} label={s.title} />
             ))}
@@ -141,8 +141,9 @@ function Showcase() {
         </Tabs>
       </div>
 
-      <div className="rounded-xl overflow-hidden border border-[#EBEBEB] bg-white">
+      <div className="overflow-hidden rounded-[1.35rem] border border-[#DDD5C7] bg-[#FFFDF8] shadow-[0_28px_90px_rgba(72,57,34,0.14)]">
         <div className="aspect-[16/10] w-full overflow-hidden relative">
+          <div className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.44),inset_0_-80px_90px_rgba(23,21,18,0.05)]" />
           <div
             className="absolute inset-0 flex"
             style={{
@@ -169,7 +170,7 @@ function Showcase() {
         </div>
       </div>
 
-      <p className="mt-4 text-[14px] text-black/70 leading-relaxed max-w-[70ch]">
+      <p className="mt-5 text-[15px] text-[#171512]/68 leading-relaxed max-w-[70ch]">
         {showcase[visible].desc}
       </p>
     </div>
@@ -178,8 +179,8 @@ function Showcase() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="pt-10 pb-4">
-      <h2 className="text-[18px] mb-3 text-black">{title}</h2>
+    <section className="pt-14 pb-5">
+      <h2 className="mb-5 text-[22px] font-semibold leading-tight tracking-[-0.01em] text-[#171512] text-balance">{title}</h2>
       {children}
     </section>
   );
@@ -199,24 +200,33 @@ export default function Home() {
 
   return (
     <div className="space-y-2">
-      <section className="pt-40 pb-44 flex flex-col items-center text-center">
-        <img
-          src={base + "oddsnap-square.png"}
-          alt=""
-          className="h-36 w-36 mb-10"
-        />
-        <img
-          src={base + "oddsnap.png"}
-          alt="OddSnap"
-          className="w-[30rem] max-w-full mb-12"
-          style={{ filter: "invert(1)" }}
-        />
-        <p className="text-black/70 leading-relaxed mb-14 max-w-[60ch] text-[19px]">
-          your new favorite, free, and open source screenshot tool.
-        </p>
+      <section className="relative pt-20 pb-24 sm:pt-24 sm:pb-28">
+        <div className="absolute left-1/2 top-8 -z-10 h-[34rem] w-[min(58rem,100vw)] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,253,248,0.94)_0%,rgba(231,220,200,0.58)_42%,rgba(244,241,234,0)_72%)] blur-sm" />
+        <div className="mx-auto flex max-w-[760px] flex-col items-center text-center">
+          <div className="mb-9 rounded-[2rem] border border-[#DDD5C7] bg-[#FFFDF8]/72 p-4 shadow-[0_24px_70px_rgba(72,57,34,0.13)] backdrop-blur">
+            <img
+              src={base + "oddsnap-square.png"}
+              alt=""
+              className="h-28 w-28 sm:h-32 sm:w-32"
+            />
+          </div>
+          <div className="brand-wordmark mb-9 px-3">
+            <img
+              src={base + "oddsnap.png"}
+              alt="OddSnap"
+              className="w-full"
+              style={{
+                filter: "brightness(0) saturate(100%) invert(8%) sepia(8%) saturate(879%) hue-rotate(353deg) brightness(91%) contrast(94%)",
+              }}
+            />
+          </div>
+          <p className="mb-10 max-w-[20rem] text-[19px] leading-[1.65] text-[#171512]/68 text-pretty sm:max-w-[54ch] sm:text-[22px]">
+            your new favorite, free, open source screenshot and recording tool for windows.
+          </p>
+        </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {downloadUrl ? (
-            <Button asChild size="lg" variant="primary" className="h-12 px-8 text-[17px] gap-2">
+            <Button asChild size="lg" variant="primary" className="h-12 px-8 text-[17px] gap-2 shadow-[0_16px_40px_rgba(23,21,18,0.2)] hover:-translate-y-0.5 active:translate-y-0">
               <a href={downloadUrl}>
                 <WindowsIcon />
                 download for windows
@@ -235,9 +245,9 @@ export default function Home() {
       </Section>
 
       <Section title="also included">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {features.map((f) => (
-            <span key={f} className="text-[14px] text-black/70 leading-snug">
+            <span key={f} className="rounded-lg border border-[#DDD5C7] bg-[#FFFDF8]/68 px-3 py-2 text-[14px] leading-snug text-[#171512]/70 shadow-[0_8px_24px_rgba(72,57,34,0.05)]">
               {f}
             </span>
           ))}
@@ -245,13 +255,13 @@ export default function Home() {
       </Section>
 
       <Section title="built for privacy">
-        <p className="text-black/70 leading-relaxed max-w-[70ch]">
+        <p className="max-w-[68ch] rounded-[1.15rem] border border-[#DDD5C7] bg-[#FFFDF8]/70 p-5 text-[15px] leading-relaxed text-[#171512]/70 shadow-[0_18px_55px_rgba(72,57,34,0.09)]">
           oddsnap runs entirely on your machine. no accounts, no telemetry, no cloud dependencies. your screenshots never leave your computer unless you choose to upload them.
         </p>
       </Section>
 
       <Section title="faq">
-        <AccordionGroup type="single" collapsible className="w-full max-w-full">
+        <AccordionGroup type="single" collapsible className="w-full max-w-full rounded-[1.15rem] border border-[#DDD5C7] bg-[#FFFDF8]/62 p-2 shadow-[0_18px_55px_rgba(72,57,34,0.08)]">
           {faq.map((item, i) => (
             <AccordionItem key={item.q} value={item.q} index={i}>
               <AccordionTrigger>{item.q}</AccordionTrigger>
@@ -262,10 +272,12 @@ export default function Home() {
       </Section>
 
       <Section title="open source">
-        <p className="text-black/70 leading-relaxed mb-5 max-w-[70ch]">
+        <p className="text-[#171512]/68 leading-relaxed mb-5 max-w-[70ch]">
           free and open source, licensed under gpl-3.0.
         </p>
-        <StarChart />
+        <div className="rounded-[1.15rem] border border-[#DDD5C7] bg-[#FFFDF8]/68 p-4 shadow-[0_18px_55px_rgba(72,57,34,0.08)]">
+          <StarChart />
+        </div>
       </Section>
     </div>
   );
