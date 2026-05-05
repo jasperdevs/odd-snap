@@ -27,6 +27,7 @@ public static class ToolListBuilder
     };
 
     private static readonly Dictionary<TextBox, bool> RecordingFlags = new();
+    private static readonly HashSet<StackPanel> RestoringEnabledToolPanels = new();
 
     public static void Build(StackPanel panel, SettingsService settingsService, FrameworkElement owner, Action? hotkeyChanged = null)
     {
@@ -139,10 +140,30 @@ public static class ToolListBuilder
                 var capturedId = toolId;
                 clearBtn.Click += (_, _) =>
                 {
-                    settingsService.Settings.SetToolHotkey(capturedId, 0, 0);
-                    settingsService.Save();
-                    capturedBox.Text = HotkeyFormatter.Format(settingsService.Settings.GetToolHotkey(capturedId).mod, settingsService.Settings.GetToolHotkey(capturedId).key);
-                    hotkeyChanged?.Invoke();
+                    var (previousMod, previousKey) = settingsService.Settings.GetToolHotkey(capturedId);
+                    try
+                    {
+                        settingsService.Settings.SetToolHotkey(capturedId, 0, 0);
+                        settingsService.Save();
+                        capturedBox.Text = HotkeyFormatter.Format(0, 0);
+                        hotkeyChanged?.Invoke();
+                    }
+                    catch (Exception ex)
+                    {
+                        AppDiagnostics.LogError("settings.tool-hotkey-clear", ex);
+                        settingsService.Settings.SetToolHotkey(capturedId, previousMod, previousKey);
+                        try
+                        {
+                            settingsService.Save();
+                        }
+                        catch (Exception rollbackEx)
+                        {
+                            AppDiagnostics.LogError("settings.tool-hotkey-clear-rollback", rollbackEx);
+                        }
+
+                        capturedBox.Text = HotkeyFormatter.Format(previousMod, previousKey);
+                        ShowToolHotkeySaveFailed("clear", restoredConflict: false, ex);
+                    }
                 };
 
                 right.Children.Add(hkBox);
@@ -173,6 +194,10 @@ public static class ToolListBuilder
 
     private static void SaveEnabledTools(StackPanel panel, SettingsService svc)
     {
+        if (RestoringEnabledToolPanels.Contains(panel))
+            return;
+
+        var previous = (svc.Settings.EnabledTools ?? ToolDef.DefaultEnabledIds()).ToList();
         var enabledIds = new System.Collections.Generic.List<string>();
         foreach (var card in panel.Children.OfType<Border>())
         {
@@ -185,9 +210,62 @@ public static class ToolListBuilder
             }
         }
         if (!enabledIds.Any(id => ToolDef.AllTools.Any(t => t.Id == id && t.Group == 0)))
-            return; // must keep at least one capture tool
-        svc.Settings.EnabledTools = enabledIds;
-        svc.Save();
+        {
+            RestoreEnabledToolChecks(panel, previous);
+            ToastWindow.ShowError("Tool required", "Keep at least one capture tool enabled.");
+            return;
+        }
+
+        try
+        {
+            svc.Settings.EnabledTools = enabledIds;
+            svc.Save();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.enabled-tools", ex);
+            svc.Settings.EnabledTools = previous;
+            try
+            {
+                svc.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.enabled-tools-rollback", rollbackEx);
+            }
+
+            RestoreEnabledToolChecks(panel, previous);
+            ShowEnabledToolsSaveFailed(ex);
+        }
+    }
+
+    private static void ShowEnabledToolsSaveFailed(Exception ex)
+    {
+        ToastWindow.ShowError(
+            "Tool setting failed",
+            $"The previous enabled tools were restored. Check Settings -> Tools and try again.\n{ex.Message}");
+    }
+
+    private static void RestoreEnabledToolChecks(StackPanel panel, IReadOnlyCollection<string> enabledIds)
+    {
+        RestoringEnabledToolPanels.Add(panel);
+        try
+        {
+            foreach (var card in panel.Children.OfType<Border>())
+            {
+                if (card.Child is not Grid g) continue;
+                foreach (var sp in g.Children.OfType<StackPanel>())
+                foreach (var cb in sp.Children.OfType<CheckBox>())
+                {
+                    if (cb.Tag is string id)
+                        cb.IsChecked = enabledIds.Contains(id);
+                }
+            }
+        }
+        finally
+        {
+            RestoringEnabledToolPanels.Remove(panel);
+        }
     }
 
     private sealed record HotkeyConflict(string ToolId, string Label, bool IsAiRedirect);
@@ -261,7 +339,9 @@ public static class ToolListBuilder
                 return;
             }
 
+            var previous = svc.Settings.GetToolHotkey(toolId);
             var conflict = FindHotkeyConflict(svc.Settings, toolId, mod, vk);
+            (uint Modifiers, uint Key)? clearedConflict = null;
             if (conflict != null)
             {
                 var combo = HotkeyFormatter.Format(mod, vk);
@@ -278,14 +358,37 @@ public static class ToolListBuilder
                     return;
                 }
 
-                ClearHotkeyConflict(svc.Settings, conflict);
+                clearedConflict = ClearHotkeyConflict(svc.Settings, conflict);
             }
 
-            svc.Settings.SetToolHotkey(toolId, mod, vk);
-            svc.Save();
-            box.Text = HotkeyFormatter.Format(mod, vk);
-            StopRecording();
-            hotkeyChanged?.Invoke();
+            try
+            {
+                svc.Settings.SetToolHotkey(toolId, mod, vk);
+                svc.Save();
+                box.Text = HotkeyFormatter.Format(mod, vk);
+                StopRecording();
+                hotkeyChanged?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError("settings.tool-hotkey", ex);
+                svc.Settings.SetToolHotkey(toolId, previous.mod, previous.key);
+                if (conflict != null)
+                    RestoreHotkeyConflict(svc.Settings, conflict, clearedConflict);
+
+                try
+                {
+                    svc.Save();
+                }
+                catch (Exception rollbackEx)
+                {
+                    AppDiagnostics.LogError("settings.tool-hotkey-rollback", rollbackEx);
+                }
+
+                RestoreHotkeyText();
+                StopRecording();
+                ShowToolHotkeySaveFailed("change", clearedConflict.HasValue, ex);
+            }
         }
 
         box.PreviewKeyDown += (_, e) =>
@@ -305,6 +408,16 @@ public static class ToolListBuilder
                 AcceptKey(key);
             }
         };
+    }
+
+    private static void ShowToolHotkeySaveFailed(string action, bool restoredConflict, Exception ex)
+    {
+        var conflictCopy = restoredConflict
+            ? " Any replaced hotkey was restored."
+            : string.Empty;
+        ToastWindow.ShowError(
+            "Hotkey failed",
+            $"The previous hotkey was restored after the failed {action}.{conflictCopy} Check Settings -> Tools and try again.\n{ex.Message}");
     }
 
     private static Key NormalizeHotkeyKey(System.Windows.Input.KeyEventArgs e)
@@ -352,15 +465,33 @@ public static class ToolListBuilder
         return null;
     }
 
-    private static void ClearHotkeyConflict(AppSettings settings, HotkeyConflict conflict)
+    private static (uint Modifiers, uint Key) ClearHotkeyConflict(AppSettings settings, HotkeyConflict conflict)
     {
         if (conflict.IsAiRedirect)
         {
+            var previous = (settings.AiRedirectHotkeyModifiers, settings.AiRedirectHotkeyKey);
             settings.AiRedirectHotkeyModifiers = 0;
             settings.AiRedirectHotkeyKey = 0;
+            return previous;
+        }
+
+        var old = settings.GetToolHotkey(conflict.ToolId);
+        settings.SetToolHotkey(conflict.ToolId, 0, 0);
+        return old;
+    }
+
+    private static void RestoreHotkeyConflict(AppSettings settings, HotkeyConflict conflict, (uint Modifiers, uint Key)? previous)
+    {
+        if (previous is null)
+            return;
+
+        if (conflict.IsAiRedirect)
+        {
+            settings.AiRedirectHotkeyModifiers = previous.Value.Modifiers;
+            settings.AiRedirectHotkeyKey = previous.Value.Key;
             return;
         }
 
-        settings.SetToolHotkey(conflict.ToolId, 0, 0);
+        settings.SetToolHotkey(conflict.ToolId, previous.Value.Modifiers, previous.Value.Key);
     }
 }

@@ -379,7 +379,7 @@ public sealed partial class HistoryService : IDisposable
             _entries.RemoveAll(existing => existing.FilePath.Equals(entry.FilePath, StringComparison.OrdinalIgnoreCase));
             _entriesByPath.Remove(entry.FilePath);
             InvalidateFilteredCache();
-            try { File.Delete(entry.FilePath); } catch { }
+            TryDeleteHistoryFile_NoLock(entry.FilePath, "delete entry");
             TryDeleteManagedThumbnail_NoLock(entry.FilePath);
             QueueEntryDelete_NoLock(entry.FilePath);
             ScheduleFlush_NoLock();
@@ -398,7 +398,7 @@ public sealed partial class HistoryService : IDisposable
             var paths = list.Select(entry => entry.FilePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in list)
             {
-                try { File.Delete(entry.FilePath); } catch { }
+                TryDeleteHistoryFile_NoLock(entry.FilePath, "delete entries");
                 TryDeleteManagedThumbnail_NoLock(entry.FilePath);
             }
             _entries.RemoveAll(entry => paths.Contains(entry.FilePath));
@@ -565,7 +565,7 @@ public sealed partial class HistoryService : IDisposable
         {
             foreach (var e in _entries)
             {
-                try { File.Delete(e.FilePath); } catch { }
+                TryDeleteHistoryFile_NoLock(e.FilePath, "clear all");
                 TryDeleteManagedThumbnail_NoLock(e.FilePath);
             }
             _entries.Clear();
@@ -592,7 +592,7 @@ public sealed partial class HistoryService : IDisposable
             if (e.Kind != kind)
                 return false;
 
-            try { File.Delete(e.FilePath); } catch { }
+            TryDeleteHistoryFile_NoLock(e.FilePath, $"clear {kind}");
             TryDeleteManagedThumbnail_NoLock(e.FilePath);
             _entriesByPath.Remove(e.FilePath);
             removedPaths.Add(e.FilePath);
@@ -605,6 +605,25 @@ public sealed partial class HistoryService : IDisposable
         InvalidateFilteredCache();
         QueueEntryDeletes_NoLock(removedPaths);
         ScheduleFlush_NoLock();
+    }
+
+    private static void TryDeleteHistoryFile_NoLock(string? filePath, string context)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return;
+
+        try
+        {
+            if (File.Exists(filePath))
+                File.Delete(filePath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "history.file-delete",
+                $"Failed to delete {context} file {Path.GetFileName(filePath)}: {ex.Message}",
+                ex);
+        }
     }
 
     public void SaveEntry(HistoryEntry entry)

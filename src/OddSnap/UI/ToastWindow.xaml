@@ -50,8 +50,12 @@
 
                     <Border x:Name="CloseBtn" Width="32" Height="32" CornerRadius="8"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
-                            ToolTipService.IsEnabled="False"
+                            ToolTip="Close preview"
+                            AutomationProperties.Name="Close preview"
+                            AutomationProperties.HelpText="Close this preview."
                             Cursor="Hand"
+                            Focusable="True"
+                            KeyDown="CloseBtn_KeyDown"
                             HorizontalAlignment="Right" VerticalAlignment="Top"
                             Margin="0,8,8,0" Opacity="0" Visibility="Collapsed">
                         <Image x:Name="CloseIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
@@ -60,8 +64,12 @@
                     </Border>
                     <Border x:Name="PinBtn" Width="32" Height="32" CornerRadius="8"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
-                            ToolTipService.IsEnabled="False"
+                            ToolTip="Pin preview"
+                            AutomationProperties.Name="Pin preview"
+                            AutomationProperties.HelpText="Keep this preview open."
                             Cursor="Hand"
+                            Focusable="True"
+                            KeyDown="PinBtn_KeyDown"
                             HorizontalAlignment="Left" VerticalAlignment="Top"
                             Margin="8,8,0,0" Opacity="0" Visibility="Collapsed">
                         <Image x:Name="PinIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
@@ -70,8 +78,12 @@
                     </Border>
                     <Border x:Name="SaveBtn" Width="32" Height="32" CornerRadius="8"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
-                            ToolTipService.IsEnabled="False"
+                            ToolTip="Save preview"
+                            AutomationProperties.Name="Save preview"
+                            AutomationProperties.HelpText="Save this preview image."
                             Cursor="Hand"
+                            Focusable="True"
+                            KeyDown="SaveBtn_KeyDown"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
                             Margin="0,0,8,8" Opacity="0" Visibility="Collapsed">
                         <Image x:Name="SaveIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
@@ -80,8 +92,12 @@
                     </Border>
                     <Border x:Name="OfficeBtn" Width="32" Height="32" CornerRadius="8"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
-                            ToolTipService.IsEnabled="False"
+                            ToolTip="Open with or send to Office"
+                            AutomationProperties.Name="Open with or send to Office"
+                            AutomationProperties.HelpText="Open this preview with another app or send it to Office."
                             Cursor="Hand"
+                            Focusable="True"
+                            KeyDown="OfficeBtn_KeyDown"
                             HorizontalAlignment="Left" VerticalAlignment="Top"
                             Margin="48,8,0,0" Opacity="0" Visibility="Collapsed">
                         <Image x:Name="OfficeIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
@@ -90,8 +106,12 @@
                     </Border>
                     <Border x:Name="AiRedirectBtn" Width="32" Height="32" CornerRadius="8"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
-                            ToolTipService.IsEnabled="False"
+                            ToolTip="Open in AI"
+                            AutomationProperties.Name="Open in AI"
+                            AutomationProperties.HelpText="Open this preview in the configured AI destination."
                             Cursor="Hand"
+                            Focusable="True"
+                            KeyDown="AiRedirectBtn_KeyDown"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
                             Margin="0,0,48,8" Opacity="0" Visibility="Collapsed">
                         <Image x:Name="AiRedirectIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
@@ -100,8 +120,12 @@
                     </Border>
                     <Border x:Name="DeleteBtn" Width="32" Height="32" CornerRadius="8"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
-                            ToolTipService.IsEnabled="False"
+                            ToolTip="Delete file"
+                            AutomationProperties.Name="Delete file"
+                            AutomationProperties.HelpText="Delete the saved file for this preview."
                             Cursor="Hand"
+                            Focusable="True"
+                            KeyDown="DeleteBtn_KeyDown"
                             HorizontalAlignment="Left" VerticalAlignment="Bottom"
                             Margin="8,0,0,8" Opacity="0" Visibility="Collapsed">
                         <Image x:Name="DeleteIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
@@ -127,14 +151,27 @@
                     </Border>
                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                         <TextBlock x:Name="TitleText" FontSize="12.75" FontWeight="SemiBold"
-                                   FontFamily="Segoe UI Variable Text" TextWrapping="Wrap"/>
+                                   FontFamily="Segoe UI Variable Text" TextWrapping="Wrap"
+                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                   AutomationProperties.Name="Toast title"
+                                   AutomationProperties.HelpText="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                   AutomationProperties.LiveSetting="Polite"/>
                         <TextBlock x:Name="BodyText" FontSize="11.5" Opacity="0.72" TextWrapping="Wrap"
                                    FontFamily="Segoe UI Variable Text"
-                                   MaxWidth="292" Margin="0,2,0,0"/>
+                                   MaxWidth="292" Margin="0,2,0,0"
+                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                   AutomationProperties.Name="Toast message"
+                                   AutomationProperties.HelpText="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                   AutomationProperties.LiveSetting="Polite"/>
                     </StackPanel>
                     <Border x:Name="TextCloseBtn" Grid.Column="3" Width="22" Height="22" CornerRadius="6"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                            ToolTip="Close notification"
+                            AutomationProperties.Name="Close notification"
+                            AutomationProperties.HelpText="Close this notification."
                             Cursor="Hand"
+                            Focusable="True"
+                            KeyDown="CloseBtn_KeyDown"
                             VerticalAlignment="Top" Margin="10,-2,-4,0"
                             Visibility="Collapsed">
                         <Image x:Name="TextCloseIcon" Width="11" Height="11" Stretch="Uniform" Opacity="0.78"

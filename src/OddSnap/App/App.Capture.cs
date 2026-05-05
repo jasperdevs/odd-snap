@@ -94,14 +94,12 @@ public partial class App
                             if (s.SaveHistory)
                                 historyEntry = EnsureHistoryService().SaveMediaEntry(path);
                         }
-                        catch { }
-
-                        try
+                        catch (Exception ex)
                         {
-                            var files = new System.Collections.Specialized.StringCollection { path };
-                            System.Windows.Clipboard.SetFileDropList(files);
+                            AppDiagnostics.LogError("capture.recording-history", ex, $"Failed to save recording history for {Path.GetFileName(path)}.");
                         }
-                        catch { }
+
+                        var copiedToClipboard = TryCopyRecordingFileToClipboard(path);
 
                         var settings = _settingsService!.Settings;
                         bool isGif = string.Equals(Path.GetExtension(path), ".gif", StringComparison.OrdinalIgnoreCase);
@@ -116,7 +114,12 @@ public partial class App
                         }
                         else if (firstFrame != null)
                         {
-                            ToastWindow.ShowImagePreview(firstFrame, path, false);
+                            ToastWindow.ShowImagePreview(
+                                firstFrame,
+                                isGif ? "GIF recorded" : "Video recorded",
+                                copiedToClipboard ? "File copied to clipboard" : "Saved; clipboard copy failed",
+                                path,
+                                false);
                         }
                         else
                         {
@@ -125,7 +128,8 @@ public partial class App
                             string size = fi.Length > 1024 * 1024
                                 ? $"{fi.Length / 1024.0 / 1024.0:F1} MB"
                                 : $"{fi.Length / 1024:N0} KB";
-                            ToastWindow.Show($"{label} recorded", $"{fi.Name} · {size}", path);
+                            var copyStatus = copiedToClipboard ? "File copied to clipboard" : "Saved; clipboard copy failed";
+                            ToastWindow.Show($"{label} recorded", $"{fi.Name} · {size} · {copyStatus}", path);
                         }
 
                         ScheduleIdleMemoryTrim();
@@ -138,7 +142,10 @@ public partial class App
                     {
                         _trayIcon?.UpdateRecordingState(false);
                         ResetCapturing();
-                        ToastWindow.ShowError("Recording error", ex.Message);
+                        ShowCaptureProcessingFailed(
+                            "Recording error",
+                            "OddSnap could not finish the recording. Try again, or check Settings -> Recording.",
+                            ex.Message);
                         ScheduleIdleMemoryTrim();
                     });
                 };
@@ -163,12 +170,15 @@ public partial class App
 
                 System.Windows.Forms.Application.Run(form);
             }
-            catch
+            catch (Exception ex)
             {
                 Dispatcher.BeginInvoke(() =>
                 {
                     ResetCapturing();
-                    ToastWindow.ShowError("Recording error", "Recording failed");
+                    ShowCaptureProcessingFailed(
+                        "Recording error",
+                        "OddSnap could not start recording. Try again, or check Settings -> Recording.",
+                        ex.Message);
                 });
             }
         });
@@ -204,7 +214,10 @@ public partial class App
                     Dispatcher.BeginInvoke(() =>
                     {
                         ResetCapturing();
-                        ToastWindow.ShowError("Scroll capture error", message);
+                        ShowCaptureProcessingFailed(
+                            "Scroll capture error",
+                            "OddSnap could not finish the scrolling capture. Try a smaller scroll area or a visible scrollable window.",
+                            message);
                         ScheduleIdleMemoryTrim();
                     });
                 };
@@ -220,7 +233,10 @@ public partial class App
                 Dispatcher.BeginInvoke(() =>
                 {
                     ResetCapturing();
-                    ToastWindow.ShowError("Scroll capture error", "Scrolling capture failed");
+                    ShowCaptureProcessingFailed(
+                        "Scroll capture error",
+                        "OddSnap could not start scrolling capture. Try again with a visible scrollable window.",
+                        "Scrolling capture failed.");
                 });
             }
         });
@@ -242,7 +258,10 @@ public partial class App
         {
             bmp?.Dispose();
             ResetCapturing();
-            ToastWindow.ShowError("Capture error", ex.Message);
+            ShowCaptureProcessingFailed(
+                "Capture error",
+                "OddSnap could not capture the screen. Try again, or choose another capture mode.",
+                ex.Message);
         }
     }
 
@@ -257,7 +276,7 @@ public partial class App
             {
                 bmp.Dispose();
                 ResetCapturing();
-                ToastWindow.ShowError("Capture error", "Couldn't find the active window.");
+                ToastWindow.ShowError("Capture error", "Couldn't find the active window. Focus a visible window and try again.");
                 return;
             }
 
@@ -269,7 +288,7 @@ public partial class App
             {
                 bmp.Dispose();
                 ResetCapturing();
-                ToastWindow.ShowError("Capture error", "Couldn't find the active window.");
+                ToastWindow.ShowError("Capture error", "Couldn't find the active window. Focus a visible window and try again.");
                 return;
             }
 
@@ -279,7 +298,7 @@ public partial class App
             {
                 bmp.Dispose();
                 ResetCapturing();
-                ToastWindow.ShowError("Capture error", "Active window is out of bounds.");
+                ToastWindow.ShowError("Capture error", "Active window is out of bounds. Use region capture or move the window onscreen.");
                 return;
             }
 
@@ -291,7 +310,10 @@ public partial class App
         {
             bmp?.Dispose();
             ResetCapturing();
-            ToastWindow.ShowError("Capture error", ex.Message);
+            ShowCaptureProcessingFailed(
+                "Capture error",
+                "OddSnap could not capture the active window. Try again, or use region capture.",
+                ex.Message);
         }
     }
 
@@ -374,11 +396,13 @@ public partial class App
                             var decoded = BarcodeService.DecodeDetailed(scanned);
                             if (decoded is not null)
                             {
-                                ClipboardService.CopyTextToClipboard(decoded.Text);
+                                var copySucceeded = TryCopyCaptureTextToClipboard(decoded.Text);
                                 _historyService?.SaveCodeEntry(decoded.Text, decoded.Format.ToString());
                                 var prev = decoded.Text.Length > 100 ? decoded.Text[..100] + "..." : decoded.Text;
                                 var preview = BarcodeService.RenderPreview(decoded.Text, decoded.Format);
-                                var title = decoded.Format == ZXing.BarcodeFormat.QR_CODE ? "QR Code copied" : "Barcode copied";
+                                var title = decoded.Format == ZXing.BarcodeFormat.QR_CODE
+                                    ? copySucceeded ? "QR Code copied" : "QR Code found"
+                                    : copySucceeded ? "Barcode copied" : "Barcode found";
                                 ToastWindow.ShowInlinePreview(preview, title, prev, suppressSound: true);
                             }
                             else
@@ -388,7 +412,10 @@ public partial class App
                         }
                         catch (Exception ex)
                         {
-                            ToastWindow.ShowError("Scan failed", ex.Message);
+                            ShowCaptureProcessingFailed(
+                                "Scan failed",
+                                "OddSnap could not scan this region. Try a clearer QR/barcode region.",
+                                ex.Message);
                         }
                         finally
                         {
@@ -417,12 +444,18 @@ public partial class App
                             }
                             else
                             {
-                                ToastWindow.ShowError("Sticker failed", processed.Error ?? "No sticker model configured");
+                                ShowCaptureProcessingFailed(
+                                    "Sticker failed",
+                                    "OddSnap could not create the sticker. Check Settings -> Stickers and try again.",
+                                    processed.Error ?? "No sticker model configured");
                             }
                         }
                         catch (Exception ex)
                         {
-                            ToastWindow.ShowError("Sticker failed", ex.Message);
+                            ShowCaptureProcessingFailed(
+                                "Sticker failed",
+                                "OddSnap could not create the sticker. Check Settings -> Stickers and try again.",
+                                ex.Message);
                         }
                         finally
                         {
@@ -462,14 +495,20 @@ public partial class App
                                 }
                                 else
                                 {
-                                    ToastWindow.ShowError("Upscale failed", processed.Error ?? "No upscale model configured");
+                                    ShowCaptureProcessingFailed(
+                                        "Upscale failed",
+                                        "OddSnap could not upscale this capture. Check Settings -> Upscale and try again.",
+                                        processed.Error ?? "No upscale model configured");
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
                             AppDiagnostics.LogError("capture.upscale", ex);
-                            ToastWindow.ShowError("Upscale failed", ex.Message);
+                            ShowCaptureProcessingFailed(
+                                "Upscale failed",
+                                "OddSnap could not upscale this capture. Check Settings -> Upscale and try again.",
+                                ex.Message);
                         }
                         finally
                         {
@@ -484,11 +523,11 @@ public partial class App
                     {
                         SoundService.PlayColorSound();
                         string bare = hex.TrimStart('#');
-                        ClipboardService.CopyTextToClipboard(bare);
+                        var copySucceeded = TryCopyCaptureTextToClipboard(bare);
                         byte r = Convert.ToByte(bare[..2], 16);
                         byte g = Convert.ToByte(bare[2..4], 16);
                         byte b = Convert.ToByte(bare[4..6], 16);
-                        ToastWindow.ShowWithColor("Color copied", bare,
+                        ToastWindow.ShowWithColor(copySucceeded ? "Color copied" : "Color picked", bare,
                             System.Windows.Media.Color.FromRgb(r, g, b), suppressSound: true);
 
                         if (_settingsService!.Settings.SaveHistory)
@@ -528,13 +567,46 @@ public partial class App
                 Dispatcher.BeginInvoke(() =>
                 {
                     ResetCapturing();
-                    ToastWindow.ShowError("Capture error", ex.Message);
+                    ShowCaptureProcessingFailed(
+                        "Capture error",
+                        "OddSnap could not start the capture overlay. Try again, or check capture settings.",
+                        ex.Message);
                 });
             }
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.IsBackground = true;
         thread.Start();
+    }
+
+    private static bool TryCopyCaptureTextToClipboard(string text)
+    {
+        try
+        {
+            ClipboardService.CopyTextToClipboard(text);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError(
+                "Copy failed",
+                $"OddSnap could not copy this capture result. The result will still be shown and saved when history is enabled.\n{ex.Message}");
+            return false;
+        }
+    }
+
+    private static bool TryCopyRecordingFileToClipboard(string path)
+    {
+        try
+        {
+            var files = new System.Collections.Specialized.StringCollection { path };
+            System.Windows.Clipboard.SetFileDropList(files);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
 }

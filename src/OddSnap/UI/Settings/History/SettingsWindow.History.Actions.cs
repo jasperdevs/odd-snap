@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using OddSnap.Helpers;
@@ -33,12 +34,14 @@ public partial class SettingsWindow
             ReindexAllProgressPanel.Visibility = Visibility.Visible;
             ReindexAllBtn.Content = status;
             ReindexAllBtn.IsEnabled = false;
+            UpdateReindexAllButtonLabel(status, "Image search indexing is already running.");
         }
         else if (total >= HistoryVirtualizationThreshold)
         {
             ReindexAllProgressPanel.Visibility = Visibility.Collapsed;
             ReindexAllBtn.Content = "Refresh index";
             ReindexAllBtn.IsEnabled = total > 0;
+            UpdateReindexAllButtonLabel("Refresh image search index", "Refresh the image search index for all screenshot history items.");
         }
         else
         {
@@ -48,14 +51,23 @@ public partial class SettingsWindow
                 ReindexAllProgressPanel.Visibility = Visibility.Visible;
                 ReindexAllBtn.Content = $"Index {total - indexed} remaining";
                 ReindexAllBtn.IsEnabled = true;
+                UpdateReindexAllButtonLabel("Index remaining screenshots", $"Index {total - indexed} screenshots for History search.");
             }
             else
             {
                 ReindexAllProgressPanel.Visibility = Visibility.Collapsed;
                 ReindexAllBtn.Content = $"{indexed}/{total} indexed";
                 ReindexAllBtn.IsEnabled = false;
+                UpdateReindexAllButtonLabel("Image search index complete", "All visible screenshot history items are indexed.");
             }
         }
+    }
+
+    private void UpdateReindexAllButtonLabel(string automationName, string helpText)
+    {
+        ReindexAllBtn.ToolTip = helpText;
+        AutomationProperties.SetName(ReindexAllBtn, automationName);
+        AutomationProperties.SetHelpText(ReindexAllBtn, helpText);
     }
 
     private void UpdateImageSearchPlaceholderText()
@@ -63,28 +75,44 @@ public partial class SettingsWindow
         if (!IsLoaded)
             return;
 
+        string placeholder;
+        string automationName;
+        string helpText;
+
         if (HistoryCategoryCombo.SelectedIndex == 1)
         {
-            ImageSearchPlaceholder.Text = "Search text captures";
-            return;
+            placeholder = "Search text captures";
+            automationName = "Text history search";
+            helpText = "Search saved OCR text captures.";
         }
-
-        if (HistoryCategoryCombo.SelectedIndex == 3)
+        else if (HistoryCategoryCombo.SelectedIndex == 3)
         {
-            ImageSearchPlaceholder.Text = "Search hex, RGB, or color names";
-            return;
+            placeholder = "Search hex, RGB, or color names";
+            automationName = "Color history search";
+            helpText = "Search saved colors by hex value, RGB values, or color names.";
         }
-
-        if (HistoryCategoryCombo.SelectedIndex == 5)
+        else if (HistoryCategoryCombo.SelectedIndex == 5)
         {
-            ImageSearchPlaceholder.Text = "Search QR/barcode text, links, or formats";
-            return;
+            placeholder = "Search QR/barcode text, links, or formats";
+            automationName = "Code history search";
+            helpText = "Search saved QR and barcode text, links, or code formats.";
+        }
+        else
+        {
+            var isIndexing = _imageSearchIndexService.StatusText.StartsWith("Indexing screenshots", StringComparison.OrdinalIgnoreCase);
+            placeholder = isIndexing
+                ? "Search screenshots (indexing...)"
+                : "Search screenshots";
+            automationName = "Screenshot history search";
+            helpText = isIndexing
+                ? "Search screenshots while the image search index continues updating."
+                : "Search screenshots by file name or indexed OCR text.";
         }
 
-        var isIndexing = _imageSearchIndexService.StatusText.StartsWith("Indexing screenshots", StringComparison.OrdinalIgnoreCase);
-        ImageSearchPlaceholder.Text = isIndexing
-            ? "Search screenshots (indexing...)"
-            : "Search screenshots";
+        ImageSearchPlaceholder.Text = placeholder;
+        ImageSearchBox.ToolTip = helpText;
+        AutomationProperties.SetName(ImageSearchBox, automationName);
+        AutomationProperties.SetHelpText(ImageSearchBox, helpText);
     }
 
     private void UpdateImageSearchSourceSummary()
@@ -130,14 +158,48 @@ public partial class SettingsWindow
 
     private void ImageSearchExactMatchCheck_Changed(object sender, RoutedEventArgs e)
     {
+        if (!IsLoaded || _suppressImageSearchSourceEvents)
+            return;
+
+        var previous = _settingsService.Settings.ImageSearchExactMatch;
+        var selected = ImageSearchExactMatchCheck.IsChecked == true;
+        UpdateImageSearchPreference(
+            "settings.image-search-exact-match",
+            "Search exact match",
+            previous,
+            selected,
+            value => _settingsService.Settings.ImageSearchExactMatch = value,
+            value => ImageSearchExactMatchCheck.IsChecked = value);
+    }
+
+    private void ImageSearchSourcesCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressImageSearchSourceEvents)
+            return;
+
+        var previous = _settingsService.Settings.ImageSearchSources;
+        var selected = GetImageSearchSourcesFromUi();
+        UpdateImageSearchPreference(
+            "settings.image-search-sources",
+            "Search sources",
+            previous,
+            selected,
+            value => _settingsService.Settings.ImageSearchSources = value,
+            RestoreImageSearchSourceChecks);
+    }
+
+    private void UpdateImageSearchPreference<T>(
+        string diagnosticKey,
+        string label,
+        T previous,
+        T current,
+        Action<T> setValue,
+        Action<T> restoreUi)
+    {
         try
         {
-            if (!IsLoaded)
-                return;
-
-            _settingsService.Settings.ImageSearchExactMatch = ImageSearchExactMatchCheck.IsChecked == true;
+            setValue(current);
             _settingsService.Save();
-
             UpdateImageSearchSourceSummary();
             CancelImageSearchWork();
 
@@ -146,30 +208,39 @@ public partial class SettingsWindow
         }
         catch (Exception ex)
         {
-            HistorySearchStatusText.Text = "Search failed";
-            ToastWindow.ShowError("Search failed", ex.Message);
+            AppDiagnostics.LogError(diagnosticKey, ex);
+            setValue(previous);
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError($"{diagnosticKey}-rollback", rollbackEx);
+            }
+
+            _suppressImageSearchSourceEvents = true;
+            try
+            {
+                restoreUi(previous);
+            }
+            finally
+            {
+                _suppressImageSearchSourceEvents = false;
+            }
+
+            UpdateImageSearchSourceSummary();
+            HistorySearchStatusText.Text = $"{label} change was not saved. Previous setting restored.";
+            ToastWindow.ShowError(
+                $"{label} failed",
+                $"The previous search setting was restored. Check Settings -> History and try again.\n{ex.Message}");
         }
     }
 
-    private void ImageSearchSourcesCheck_Changed(object sender, RoutedEventArgs e)
+    private void RestoreImageSearchSourceChecks(ImageSearchSourceOptions sources)
     {
-        try
-        {
-            if (!IsLoaded || _suppressImageSearchSourceEvents)
-                return;
-
-            _settingsService.Settings.ImageSearchSources = GetImageSearchSourcesFromUi();
-            _settingsService.Save();
-            UpdateImageSearchSourceSummary();
-
-        if (HistoryCategoryCombo.SelectedIndex == 0)
-            ApplyImageSearchFilter();
-        }
-        catch (Exception ex)
-        {
-            HistorySearchStatusText.Text = "Search failed";
-            ToastWindow.ShowError("Search failed", ex.Message);
-        }
+        ImageSearchFileNameCheck.IsChecked = (sources & ImageSearchSourceOptions.FileName) != 0;
+        ImageSearchOcrCheck.IsChecked = (sources & ImageSearchSourceOptions.Ocr) != 0;
     }
 
     private void ImageSearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -237,9 +308,11 @@ public partial class SettingsWindow
         }
         catch (Exception ex)
         {
-            HistorySearchStatusText.Text = "Search failed";
             SetImageSearchLoading(false, forceIndexed: true);
-            ToastWindow.ShowError("Search failed", ex.Message);
+            HistorySearchStatusText.Text = "Search failed. Edit the query or retry from History.";
+            ToastWindow.ShowError(
+                "Search failed",
+                $"OddSnap could not update history search. Edit the query or retry from History.\n{ex.Message}");
         }
     }
 
@@ -275,25 +348,54 @@ public partial class SettingsWindow
         }
         catch (Exception ex)
         {
-            HistorySearchStatusText.Text = "Search failed";
             SetImageSearchLoading(false, forceIndexed: true);
-            ToastWindow.ShowError("Search failed", ex.Message);
+            HistorySearchStatusText.Text = "Search failed. Edit the query or retry from History.";
+            ToastWindow.ShowError(
+                "Search failed",
+                $"OddSnap could not update history search. Edit the query or retry from History.\n{ex.Message}");
         }
     }
 
     private void ReindexAllBtn_Click(object sender, RoutedEventArgs e)
     {
-        _imageSearchIndexService.RequestSync(_historyService.ImageEntries, _settingsService.Settings.OcrLanguageTag);
-        UpdateImageSearchStatus();
-        UpdateImageSearchActionButtons();
-        UpdateImageSearchPlaceholderText();
-        QueueImageIndexRefresh();
+        if (!ReindexAllBtn.IsEnabled)
+            return;
+
+        ReindexAllBtn.IsEnabled = false;
+        ReindexAllBtn.Content = "Starting index...";
+        ReindexAllProgressPanel.Visibility = Visibility.Visible;
+        ReindexAllProgressBar.Visibility = Visibility.Visible;
+        HistorySearchStatusText.Text = "Starting image index refresh...";
+
+        try
+        {
+            _imageSearchIndexService.RequestSync(_historyService.ImageEntries, _settingsService.Settings.OcrLanguageTag);
+            UpdateImageSearchStatus();
+            UpdateImageSearchActionButtons();
+            UpdateImageSearchPlaceholderText();
+            QueueImageIndexRefresh();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.history-reindex-refresh", ex);
+            SetImageSearchLoading(false, forceIndexed: true);
+            HistorySearchStatusText.Text = "Index refresh failed. Existing search data is still available.";
+            UpdateImageSearchActionButtons();
+            ToastWindow.ShowError(
+                "Index refresh failed",
+                $"OddSnap could not refresh the image search index. Existing search data is still available; try again from History.\n{ex.Message}");
+        }
     }
 
     private void ImageSearchFiltersBtn_Click(object sender, RoutedEventArgs e)
     {
         ImageSearchFiltersMenu.PlacementTarget = ImageSearchFiltersBtn;
         ImageSearchFiltersMenu.IsOpen = true;
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            ImageSearchFileNameCheck.Focus();
+            Keyboard.Focus(ImageSearchFileNameCheck);
+        });
     }
 
     private void HistoryPanel_ScrollChanged(object sender, ScrollChangedEventArgs e)

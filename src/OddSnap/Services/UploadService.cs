@@ -325,34 +325,45 @@ public static partial class UploadService
         };
     }
 
-    /// <summary>Check if the destination has the required credentials configured.</summary>
-    public static bool HasCredentials(UploadDestination dest, UploadSettings settings) => dest switch
+    public static string? GetConfigurationError(UploadDestination dest, UploadSettings settings)
     {
-        UploadDestination.None => false,
-        UploadDestination.Imgur => !string.IsNullOrWhiteSpace(settings.ImgurClientId),
-        UploadDestination.ImgBB => !string.IsNullOrWhiteSpace(settings.ImgBBApiKey),
-        UploadDestination.ImgPile => !string.IsNullOrWhiteSpace(settings.ImgPileApiToken),
-        UploadDestination.Gyazo => !string.IsNullOrWhiteSpace(settings.GyazoAccessToken),
-        UploadDestination.Dropbox => !string.IsNullOrWhiteSpace(settings.DropboxAccessToken),
-        UploadDestination.GoogleDrive => !string.IsNullOrWhiteSpace(settings.GoogleDriveAccessToken),
-        UploadDestination.OneDrive => !string.IsNullOrWhiteSpace(settings.OneDriveAccessToken),
-        UploadDestination.AzureBlob => !string.IsNullOrWhiteSpace(settings.AzureBlobSasUrl),
-        UploadDestination.S3Compatible => !string.IsNullOrWhiteSpace(settings.S3AccessKey),
-        UploadDestination.GitHub => !string.IsNullOrWhiteSpace(settings.GitHubToken),
-        UploadDestination.Immich => !string.IsNullOrWhiteSpace(settings.ImmichApiKey),
-        UploadDestination.Sftp => !string.IsNullOrWhiteSpace(settings.SftpHost)
-            && !string.IsNullOrWhiteSpace(settings.SftpHostKeyFingerprint),
-        UploadDestination.Ftp => !string.IsNullOrWhiteSpace(settings.FtpUrl),
-        UploadDestination.CustomHttp => !string.IsNullOrWhiteSpace(settings.CustomUploadUrl),
-        UploadDestination.AiChat => true,
-        UploadDestination.TempHosts => true,
-        UploadDestination.TmpFiles => true,
-        UploadDestination.Gofile => true,
-        // These don't need credentials
-        UploadDestination.Catbox or UploadDestination.Litterbox or UploadDestination.FileIo
-            or UploadDestination.Uguu or UploadDestination.TransferSh => true,
-        _ => true,
-    };
+        return dest switch
+        {
+            UploadDestination.None => "Choose an upload destination in Settings -> Uploads.",
+            UploadDestination.Imgur when string.IsNullOrWhiteSpace(settings.ImgurClientId) => MissingUploadSetting("Imgur client ID"),
+            UploadDestination.ImgBB when string.IsNullOrWhiteSpace(settings.ImgBBApiKey) => MissingUploadSetting("ImgBB API key"),
+            UploadDestination.ImgPile when string.IsNullOrWhiteSpace(settings.ImgPileApiToken) => MissingUploadSetting("imgpile API token"),
+            UploadDestination.Gyazo when string.IsNullOrWhiteSpace(settings.GyazoAccessToken) => MissingUploadSetting("Gyazo access token"),
+            UploadDestination.Dropbox when string.IsNullOrWhiteSpace(settings.DropboxAccessToken) => MissingUploadSetting("Dropbox access token"),
+            UploadDestination.GoogleDrive when string.IsNullOrWhiteSpace(settings.GoogleDriveAccessToken) => MissingUploadSetting("Google Drive access token"),
+            UploadDestination.OneDrive when string.IsNullOrWhiteSpace(settings.OneDriveAccessToken) => MissingUploadSetting("OneDrive access token"),
+            UploadDestination.AzureBlob when string.IsNullOrWhiteSpace(settings.AzureBlobSasUrl) => MissingUploadSetting("Azure Blob SAS URL"),
+            UploadDestination.GitHub when string.IsNullOrWhiteSpace(settings.GitHubToken) => MissingUploadSetting("GitHub token"),
+            UploadDestination.GitHub when string.IsNullOrWhiteSpace(settings.GitHubRepo) => MissingUploadSetting("GitHub repo"),
+            UploadDestination.Immich when string.IsNullOrWhiteSpace(settings.ImmichBaseUrl) => MissingUploadSetting("Immich base URL"),
+            UploadDestination.Immich when string.IsNullOrWhiteSpace(settings.ImmichApiKey) => MissingUploadSetting("Immich API key"),
+            UploadDestination.Ftp when string.IsNullOrWhiteSpace(settings.FtpUrl) => MissingUploadSetting("FTP URL"),
+            UploadDestination.Ftp when string.IsNullOrWhiteSpace(settings.FtpUsername) => MissingUploadSetting("FTP username"),
+            UploadDestination.Sftp when string.IsNullOrWhiteSpace(settings.SftpHost) => MissingUploadSetting("SFTP host"),
+            UploadDestination.Sftp when string.IsNullOrWhiteSpace(settings.SftpUsername) => MissingUploadSetting("SFTP username"),
+            UploadDestination.Sftp when !TryNormalizeSftpFingerprint(settings.SftpHostKeyFingerprint, out _) => MissingUploadSetting("SFTP host key fingerprint"),
+            UploadDestination.WebDav when string.IsNullOrWhiteSpace(settings.WebDavUrl) => MissingUploadSetting("WebDAV URL"),
+            UploadDestination.WebDav when string.IsNullOrWhiteSpace(settings.WebDavUsername) => MissingUploadSetting("WebDAV username"),
+            UploadDestination.S3Compatible when string.IsNullOrWhiteSpace(settings.S3Endpoint) => MissingUploadSetting("S3 endpoint"),
+            UploadDestination.S3Compatible when string.IsNullOrWhiteSpace(settings.S3Bucket) => MissingUploadSetting("S3 bucket"),
+            UploadDestination.S3Compatible when string.IsNullOrWhiteSpace(settings.S3AccessKey) => MissingUploadSetting("S3 access key"),
+            UploadDestination.S3Compatible when string.IsNullOrWhiteSpace(settings.S3SecretKey) => MissingUploadSetting("S3 secret key"),
+            UploadDestination.CustomHttp when string.IsNullOrWhiteSpace(settings.CustomUploadUrl) => MissingUploadSetting("Custom upload URL"),
+            _ => null,
+        };
+    }
+
+    private static string MissingUploadSetting(string settingName)
+        => $"{settingName} not configured. Add or update it in Settings -> Uploads.";
+
+    /// <summary>Check if the destination has the required upload configuration.</summary>
+    public static bool HasCredentials(UploadDestination dest, UploadSettings settings)
+        => GetConfigurationError(dest, settings) is null;
 
     private static string? ValidateTransportSecurity(UploadDestination dest, UploadSettings settings)
     {

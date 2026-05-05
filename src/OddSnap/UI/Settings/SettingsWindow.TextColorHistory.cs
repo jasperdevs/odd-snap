@@ -1,10 +1,14 @@
 using System.Drawing;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using OddSnap.Models;
 using OddSnap.Services;
+using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
 namespace OddSnap.UI;
 
@@ -12,6 +16,7 @@ public partial class SettingsWindow
 {
     private static readonly System.Windows.Media.Brush HistoryCardIdleBrush = CreateFrozenHistoryBrush(System.Windows.Media.Color.FromArgb(12, 255, 255, 255));
     private static readonly System.Windows.Media.Brush HistoryCardHoverBrush = CreateFrozenHistoryBrush(System.Windows.Media.Color.FromArgb(24, 255, 255, 255));
+    private static readonly System.Windows.Media.Brush HistoryCardFocusBrush = CreateFrozenHistoryBrush(System.Windows.Media.Color.FromArgb(150, 255, 255, 255));
 
     private static System.Windows.Media.Brush CreateFrozenHistoryBrush(System.Windows.Media.Color color)
     {
@@ -52,20 +57,28 @@ public partial class SettingsWindow
             ? new List<OcrHistoryEntry>(allEntries)
             : allEntries.Where(e => GetOcrSearchText(e).Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
 
-        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyLabel.Text = allEntries.Count == 0 ? "No text captures yet"
-            : entries.Count == 0 ? "No text captures match your search" : "";
+        if (entries.Count == 0)
+        {
+            if (allEntries.Count == 0)
+                ShowHistoryEmptyState("No text captures yet", "OCR results will appear here after text capture.");
+            else
+                ShowHistoryEmptyState("No text captures match your search", "Search matched 0 text captures.");
+        }
+        else
+        {
+            HideHistoryEmptyState();
+        }
 
         if (string.IsNullOrWhiteSpace(query))
             HistoryCountText.Text = $"{entries.Count} text capture{(entries.Count == 1 ? "" : "s")}";
         else
             HistoryCountText.Text = $"{entries.Count} of {allEntries.Count} text capture{(allEntries.Count == 1 ? "" : "s")}";
 
-        DeleteSelectedBtn.Visibility = _selectMode && HistoryCategoryCombo.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
         _filteredOcrEntries = entries;
         _ocrRenderCount = Math.Min(HistoryInitialPageSize, _filteredOcrEntries.Count);
         _ocrLastRenderedDate = null;
         AppendOcrHistoryEntries(_filteredOcrEntries, 0, _ocrRenderCount);
+        UpdateHistoryActionButtons();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-text",
@@ -85,17 +98,25 @@ public partial class SettingsWindow
             ? new List<ColorHistoryEntry>(allEntries)
             : allEntries.Where(entry => ColorMatchesCachedTerms(entry, queryTerms)).ToList();
 
-        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyLabel.Text = allEntries.Count == 0 ? "No colors yet"
-            : entries.Count == 0 ? "No colors match your search" : "";
+        if (entries.Count == 0)
+        {
+            if (allEntries.Count == 0)
+                ShowHistoryEmptyState("No colors yet", "Picked colors will appear here.");
+            else
+                ShowHistoryEmptyState("No colors match your search", "Search matched 0 saved colors.");
+        }
+        else
+        {
+            HideHistoryEmptyState();
+        }
         HistoryCountText.Text = string.IsNullOrWhiteSpace(query)
             ? $"{entries.Count} color{(entries.Count == 1 ? "" : "s")}"
             : $"{entries.Count} of {allEntries.Count} color{(allEntries.Count == 1 ? "" : "s")}";
-        DeleteSelectedBtn.Visibility = _selectMode && HistoryCategoryCombo.SelectedIndex == 3 ? Visibility.Visible : Visibility.Collapsed;
         _filteredColorEntries = entries;
         _colorRenderCount = Math.Min(HistoryInitialPageSize, _filteredColorEntries.Count);
         _colorLastRenderedDate = null;
         AppendColorHistoryEntries(_filteredColorEntries, 0, _colorRenderCount);
+        UpdateHistoryActionButtons();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-colors",
@@ -195,11 +216,42 @@ public partial class SettingsWindow
             Padding = new Thickness(12),
             Margin = new Thickness(0, 0, 0, 6),
             Background = HistoryCardIdleBrush,
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(1),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Focusable = true,
+            ToolTip = "Copy this text history item",
             DataContext = entry
         };
+        AutomationProperties.SetName(card, "Text history item");
+        AutomationProperties.SetHelpText(card, "Press Enter or Space to copy this text item. In select mode, press Enter or Space to select it.");
 
-        card.MouseEnter += (_, _) => card.Background = HistoryCardHoverBrush;
-        card.MouseLeave += (_, _) => card.Background = HistoryCardIdleBrush;
+        card.MouseEnter += (_, _) =>
+        {
+            card.Background = HistoryCardHoverBrush;
+            card.BorderBrush = HistoryCardFocusBrush;
+        };
+        card.MouseLeave += (_, _) =>
+        {
+            if (!card.IsKeyboardFocusWithin)
+            {
+                card.Background = HistoryCardIdleBrush;
+                card.BorderBrush = Brushes.Transparent;
+            }
+        };
+        card.GotKeyboardFocus += (_, _) =>
+        {
+            card.Background = HistoryCardHoverBrush;
+            card.BorderBrush = HistoryCardFocusBrush;
+        };
+        card.LostKeyboardFocus += (_, _) =>
+        {
+            if (card.IsMouseOver)
+                return;
+
+            card.Background = HistoryCardIdleBrush;
+            card.BorderBrush = Brushes.Transparent;
+        };
 
         var capturedText = entry.Text;
         bool isLong = capturedText.Length > 220 || capturedText.Count(ch => ch == '\n') > 3;
@@ -216,17 +268,25 @@ public partial class SettingsWindow
             Foreground = Theme.Brush(Theme.TextPrimary),
             Opacity = 0.92
         };
+        textBlock.ToolTip = capturedText;
+        AutomationProperties.SetName(textBlock, "Recognized text");
+        AutomationProperties.SetHelpText(textBlock, capturedText);
 
         var footer = new Grid { Margin = new Thickness(0, 10, 0, 0) };
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        footer.Children.Add(new TextBlock
+        var capturedTimeText = FormatTimeAgo(entry.CapturedAt);
+        var capturedBlock = new TextBlock
         {
-            Text = FormatTimeAgo(entry.CapturedAt),
+            Text = capturedTimeText,
             FontSize = 10,
             Opacity = 0.3,
-            VerticalAlignment = VerticalAlignment.Center
-        });
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = $"Captured {capturedTimeText}"
+        };
+        AutomationProperties.SetName(capturedBlock, "Text capture time");
+        AutomationProperties.SetHelpText(capturedBlock, capturedTimeText);
+        footer.Children.Add(capturedBlock);
 
         var btnPanel = new StackPanel
         {
@@ -244,8 +304,10 @@ public partial class SettingsWindow
                 Padding = new Thickness(6, 2, 6, 2),
                 Margin = new Thickness(0, 0, 6, 0),
                 VerticalAlignment = VerticalAlignment.Center,
-                Cursor = System.Windows.Input.Cursors.Hand
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Expand this text history item"
             };
+            UpdateShowMoreTextButtonLabel(showMoreBtn, expanded);
             showMoreBtn.Click += (_, _) =>
             {
                 expanded = !expanded;
@@ -259,6 +321,8 @@ public partial class SettingsWindow
                     textBlock.MaxHeight = 74;
                     showMoreBtn.Content = "Show more";
                 }
+
+                UpdateShowMoreTextButtonLabel(showMoreBtn, expanded);
             };
             btnPanel.Children.Add(showMoreBtn);
         }
@@ -269,13 +333,27 @@ public partial class SettingsWindow
             FontSize = 10,
             Padding = new Thickness(6, 2, 6, 2),
             VerticalAlignment = VerticalAlignment.Center,
-            Cursor = System.Windows.Input.Cursors.Hand
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = "Copy all text"
         };
-        copyBtn.Click += (_, _) =>
+        AutomationProperties.SetName(copyBtn, "Copy text history item");
+        AutomationProperties.SetHelpText(copyBtn, "Copy all text from this history item.");
+        copyBtn.Click += (_, _) => CopyTextHistoryItem();
+
+        void CopyTextHistoryItem()
         {
-            ClipboardService.CopyTextToClipboard(capturedText);
-            ToastWindow.Show("Copied", "Text copied");
-        };
+            try
+            {
+                ClipboardService.CopyTextToClipboard(capturedText);
+                ToastWindow.Show("Copied", "Text copied");
+            }
+            catch (Exception ex)
+            {
+                ToastWindow.ShowError(
+                    "Copy failed",
+                    $"OddSnap could not copy this text history item. Try again from Settings -> History, or copy the visible text manually.\n{ex.Message}");
+            }
+        }
         btnPanel.Children.Add(copyBtn);
         footer.Children.Add(btnPanel);
 
@@ -290,16 +368,34 @@ public partial class SettingsWindow
         card.Child = root;
 
         card.Cursor = System.Windows.Input.Cursors.Hand;
+        void ToggleSelection()
+        {
+            var selected = card.Tag is true;
+            selected = !selected;
+            card.Tag = selected;
+            UpdateSelectableCardSelection(card, badge, selected);
+            UpdateHistoryActionButtons();
+        }
+
         card.MouseLeftButtonDown += (_, e) =>
         {
             if (!_selectMode)
                 return;
 
             e.Handled = true;
-            var selected = card.Tag is true;
-            selected = !selected;
-            card.Tag = selected;
-            UpdateSelectableCardSelection(card, badge, selected);
+            ToggleSelection();
+        };
+
+        card.KeyDown += (_, e) =>
+        {
+            if (!IsHistoryCardActivationKey(e))
+                return;
+
+            e.Handled = true;
+            if (_selectMode)
+                ToggleSelection();
+            else
+                CopyTextHistoryItem();
         };
 
         UpdateSelectableCardSelection(card, badge, selected: false);
@@ -335,28 +431,60 @@ public partial class SettingsWindow
 
     private Border CreateColorHistoryCard(ColorHistoryEntry entry)
     {
-        byte r = 0, g = 0, b = 0;
-        try
+        var hasValidColor = TryParseHexColor(entry.Hex, out var r, out var g, out var b);
+        var displayHex = FormatColorHexForDisplay(entry.Hex);
+        if (!hasValidColor)
         {
-            r = Convert.ToByte(entry.Hex[..2], 16);
-            g = Convert.ToByte(entry.Hex[2..4], 16);
-            b = Convert.ToByte(entry.Hex[4..6], 16);
+            AppDiagnostics.LogWarning(
+                "history.color.invalid",
+                $"Could not parse saved color value '{entry.Hex}'.");
         }
-        catch { }
 
-        var swatchColor = System.Windows.Media.Color.FromRgb(r, g, b);
+        var swatchColor = hasValidColor
+            ? System.Windows.Media.Color.FromRgb(r, g, b)
+            : System.Windows.Media.Color.FromArgb(0, 0, 0, 0);
         var card = new Border
         {
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(10, 8, 12, 8),
             Margin = new Thickness(0, 0, 0, 3),
             Background = HistoryCardIdleBrush,
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
+            Focusable = true,
+            ToolTip = "Copy this color value",
             DataContext = entry
         };
+        AutomationProperties.SetName(card, $"Color history item {displayHex}");
+        AutomationProperties.SetHelpText(card, "Press Enter or Space to copy this color. In select mode, press Enter or Space to select it.");
 
-        card.MouseEnter += (_, _) => card.Background = HistoryCardHoverBrush;
-        card.MouseLeave += (_, _) => card.Background = HistoryCardIdleBrush;
+        card.MouseEnter += (_, _) =>
+        {
+            card.Background = HistoryCardHoverBrush;
+            card.BorderBrush = HistoryCardFocusBrush;
+        };
+        card.MouseLeave += (_, _) =>
+        {
+            if (!card.IsKeyboardFocusWithin)
+            {
+                card.Background = HistoryCardIdleBrush;
+                card.BorderBrush = Brushes.Transparent;
+            }
+        };
+        card.GotKeyboardFocus += (_, _) =>
+        {
+            card.Background = HistoryCardHoverBrush;
+            card.BorderBrush = HistoryCardFocusBrush;
+        };
+        card.LostKeyboardFocus += (_, _) =>
+        {
+            if (card.IsMouseOver)
+                return;
+
+            card.Background = HistoryCardIdleBrush;
+            card.BorderBrush = Brushes.Transparent;
+        };
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -372,27 +500,44 @@ public partial class SettingsWindow
             BorderThickness = new Thickness(1),
             BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(30, 255, 255, 255)),
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 12, 0)
+            Margin = new Thickness(0, 0, 12, 0),
+            ToolTip = hasValidColor ? $"Color preview {displayHex}" : "Invalid color preview"
         };
+        var swatchHelpText = hasValidColor
+            ? $"Preview of saved color {displayHex}."
+            : $"Saved color value {entry.Hex} could not be parsed.";
+        AutomationProperties.SetName(swatch, $"Color swatch {displayHex}");
+        AutomationProperties.SetHelpText(swatch, swatchHelpText);
         Grid.SetColumn(swatch, 0);
         grid.Children.Add(swatch);
 
         var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        infoStack.Children.Add(new TextBlock
+        var hexBlock = new TextBlock
         {
-            Text = $"#{entry.Hex}",
+            Text = displayHex,
             FontSize = 13,
             FontWeight = FontWeights.Medium,
             Foreground = Theme.Brush(Theme.TextPrimary),
             FontFamily = new System.Windows.Media.FontFamily("Cascadia Code, Consolas, Segoe UI Variable Text"),
-        });
-        infoStack.Children.Add(new TextBlock
+            ToolTip = displayHex
+        };
+        AutomationProperties.SetName(hexBlock, "Color hex value");
+        AutomationProperties.SetHelpText(hexBlock, displayHex);
+        infoStack.Children.Add(hexBlock);
+        var colorMetadataText = hasValidColor
+            ? $"RGB({r}, {g}, {b}) · {FormatTimeAgo(entry.CapturedAt)}"
+            : $"Invalid color · {FormatTimeAgo(entry.CapturedAt)}";
+        var metadataBlock = new TextBlock
         {
-            Text = $"RGB({r}, {g}, {b}) · {FormatTimeAgo(entry.CapturedAt)}",
+            Text = colorMetadataText,
             FontSize = 10,
             Opacity = 0.35,
-            Margin = new Thickness(0, 1, 0, 0)
-        });
+            Margin = new Thickness(0, 1, 0, 0),
+            ToolTip = colorMetadataText
+        };
+        AutomationProperties.SetName(metadataBlock, "Color details");
+        AutomationProperties.SetHelpText(metadataBlock, colorMetadataText);
+        infoStack.Children.Add(metadataBlock);
         Grid.SetColumn(infoStack, 1);
         grid.Children.Add(infoStack);
 
@@ -402,18 +547,41 @@ public partial class SettingsWindow
             FontSize = 10,
             Padding = new Thickness(8, 3, 8, 3),
             VerticalAlignment = VerticalAlignment.Center,
-            Cursor = System.Windows.Input.Cursors.Hand
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = "Copy this color value"
         };
+        AutomationProperties.SetName(copyBtn, "Copy color value");
+        AutomationProperties.SetHelpText(copyBtn, "Copy this color value to the clipboard.");
         var capturedHex = entry.Hex;
-        copyBtn.Click += (_, _) =>
+        var badge = CreateSelectionBadge(false);
+        copyBtn.Click += (_, _) => CopyColorValue();
+
+        void ToggleSelection()
         {
-            ClipboardService.CopyTextToClipboard(capturedHex);
-            ToastWindow.Show("Copied", capturedHex);
-        };
+            var selected = card.Tag is ColorHistoryEntry;
+            selected = !selected;
+            card.Tag = selected ? entry : null;
+            UpdateSelectableCardSelection(card, badge, selected);
+            UpdateHistoryActionButtons();
+        }
+
+        void CopyColorValue()
+        {
+            try
+            {
+                ClipboardService.CopyTextToClipboard(capturedHex);
+                ToastWindow.Show("Copied", capturedHex);
+            }
+            catch (Exception ex)
+            {
+                ToastWindow.ShowError(
+                    "Copy failed",
+                    $"OddSnap could not copy this color history item. Try again from Settings -> History, or copy the visible color value manually.\n{ex.Message}");
+            }
+        }
         Grid.SetColumn(copyBtn, 2);
         grid.Children.Add(copyBtn);
 
-        var badge = CreateSelectionBadge(false);
         var root = new Grid();
         root.Children.Add(grid);
         root.Children.Add(badge);
@@ -424,15 +592,23 @@ public partial class SettingsWindow
             e.Handled = true;
             if (_selectMode)
             {
-                var selected = card.Tag is ColorHistoryEntry;
-                selected = !selected;
-                card.Tag = selected ? entry : null;
-                UpdateSelectableCardSelection(card, badge, selected);
+                ToggleSelection();
                 return;
             }
 
-            ClipboardService.CopyTextToClipboard(capturedHex);
-            ToastWindow.Show("Copied", capturedHex);
+            CopyColorValue();
+        };
+
+        card.KeyDown += (_, e) =>
+        {
+            if (!IsHistoryCardActivationKey(e))
+                return;
+
+            e.Handled = true;
+            if (_selectMode)
+                ToggleSelection();
+            else
+                CopyColorValue();
         };
 
         UpdateSelectableCardSelection(card, badge, selected: false);
@@ -531,13 +707,16 @@ public partial class SettingsWindow
 
     private static string BuildColorSearchText(ColorHistoryEntry entry)
     {
+        var displayHex = FormatColorHexForDisplay(entry.Hex);
         if (!TryParseHexColor(entry.Hex, out var r, out var g, out var b))
-            return entry.Hex;
+            return string.IsNullOrWhiteSpace(entry.Hex)
+                ? displayHex
+                : string.Join(' ', entry.Hex, displayHex);
 
         var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             entry.Hex,
-            $"#{entry.Hex}",
+            displayHex,
             $"{r}",
             $"{g}",
             $"{b}",
@@ -549,6 +728,31 @@ public partial class SettingsWindow
             tokens.Add(token);
 
         return string.Join(' ', tokens);
+    }
+
+    private static bool IsHistoryCardActivationKey(KeyEventArgs e)
+        => e.Key is Key.Enter or Key.Space;
+
+    private static void UpdateShowMoreTextButtonLabel(Button button, bool expanded)
+    {
+        var name = expanded ? "Show less text" : "Show more text";
+        var helpText = expanded
+            ? "Collapse this text history item."
+            : "Expand this text history item.";
+        button.ToolTip = helpText;
+        AutomationProperties.SetName(button, name);
+        AutomationProperties.SetHelpText(button, helpText);
+    }
+
+    private static string FormatColorHexForDisplay(string hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+            return "#";
+
+        var normalized = hex.Trim();
+        return normalized.StartsWith("#", StringComparison.Ordinal)
+            ? normalized
+            : "#" + normalized;
     }
 
     private static IEnumerable<string> GetColorSemanticTokens(byte r, byte g, byte b)
@@ -653,6 +857,7 @@ public partial class SettingsWindow
         card.BorderBrush = selected ? Theme.StrokeBrush() : System.Windows.Media.Brushes.Transparent;
         badge.Visibility = _selectMode || selected ? Visibility.Visible : Visibility.Collapsed;
         badge.Opacity = selected ? 1 : 0.45;
+        UpdateSelectionBadgeAccessibility(badge, selected);
         if (badge.Tag is UIElement check)
             check.Visibility = selected ? Visibility.Visible : Visibility.Hidden;
     }

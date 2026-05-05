@@ -16,6 +16,10 @@ public sealed record OpenWithAppSuggestion(string Name, string Path);
 
 public static class OfficeExportService
 {
+    internal const int OpenWithTemporaryFileCleanupDelayMilliseconds = 10 * 60 * 1000;
+    internal const int OpenWithTemporaryFileCleanupRetryDelayMilliseconds = 60 * 1000;
+    internal const int OpenWithTemporaryFileCleanupAttempts = 3;
+
     private static readonly Lazy<IReadOnlyList<OpenWithAppSuggestion>> AppSuggestions = new(LoadAppSuggestions);
 
     public static IReadOnlyList<string> SupportedOpenWithExtensions { get; } =
@@ -245,7 +249,7 @@ public static class OfficeExportService
         {
             if (!string.IsNullOrWhiteSpace(tempPath))
             {
-                try { File.Delete(tempPath); } catch { }
+                TryDeleteTemporaryOfficeFile(tempPath, "Office export");
             }
         }
     }
@@ -263,12 +267,13 @@ public static class OfficeExportService
         try
         {
             ShowOpenWithDialog(imagePath);
+            ScheduleTemporaryOpenWithCleanup(tempPath);
         }
         catch
         {
             if (!string.IsNullOrWhiteSpace(tempPath))
             {
-                try { File.Delete(tempPath); } catch { }
+                TryDeleteTemporaryOfficeFile(tempPath, "Open With launch");
             }
             throw;
         }
@@ -282,6 +287,72 @@ public static class OfficeExportService
 
         isTemporary = true;
         return CaptureOutputService.SaveBitmapToTempPng(bitmap, "oddsnap_openwith");
+    }
+
+    public static void ScheduleTemporaryOpenWithCleanup(string? tempPath)
+    {
+        if (string.IsNullOrWhiteSpace(tempPath))
+            return;
+
+        _ = DeleteTemporaryFileAfterDelayAsync(tempPath);
+    }
+
+    private static async Task DeleteTemporaryFileAfterDelayAsync(string tempPath)
+    {
+        try
+        {
+            await Task.Delay(OpenWithTemporaryFileCleanupDelayMilliseconds).ConfigureAwait(false);
+        }
+        catch
+        {
+            return;
+        }
+
+        for (var attempt = 0; attempt < OpenWithTemporaryFileCleanupAttempts; attempt++)
+        {
+            try
+            {
+                if (!File.Exists(tempPath))
+                    return;
+
+                File.Delete(tempPath);
+                return;
+            }
+            catch when (attempt < OpenWithTemporaryFileCleanupAttempts - 1)
+            {
+                try
+                {
+                    await Task.Delay(OpenWithTemporaryFileCleanupRetryDelayMilliseconds).ConfigureAwait(false);
+                }
+                catch
+                {
+                    return;
+                }
+            }
+            catch
+            {
+                AppDiagnostics.LogWarning(
+                    "office.temp-cleanup",
+                    $"Failed to delete delayed Open With temporary file {Path.GetFileName(tempPath)} after {OpenWithTemporaryFileCleanupAttempts} attempts.");
+                return;
+            }
+        }
+    }
+
+    private static void TryDeleteTemporaryOfficeFile(string tempPath, string context)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "office.temp-cleanup",
+                $"Failed to delete {context} temporary file {Path.GetFileName(tempPath)}: {ex.Message}",
+                ex);
+        }
     }
 
     public static void ShowOpenWithDialog(string imagePath)

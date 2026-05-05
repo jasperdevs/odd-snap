@@ -89,7 +89,8 @@ public static class InstallService
         var currentPid = Environment.ProcessId;
         foreach (var proc in Process.GetProcessesByName("OddSnap"))
         {
-            if (proc.Id == currentPid) continue;
+            var processId = proc.Id;
+            if (processId == currentPid) continue;
             try
             {
                 if (!proc.HasExited && proc.CloseMainWindow())
@@ -101,7 +102,13 @@ public static class InstallService
                     proc.WaitForExit(5000);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "install.close-running-instance",
+                    $"Failed to close running OddSnap process {processId}: {ex.Message}",
+                    ex);
+            }
         }
     }
 
@@ -213,7 +220,8 @@ public static class InstallService
         targetDir = NormalizeTargetDirectory(targetDir);
         var targetExe = Path.Combine(targetDir, "OddSnap.exe");
         var args = showOnboarding ? "--post-install" : "";
-        TryLaunch(targetExe, targetDir, args);
+        if (!TryLaunch(targetExe, targetDir, args))
+            throw new InvalidOperationException("OddSnap was installed, but the installed copy could not be launched.");
     }
 
     public static void ApplyUpdateFromZip(string packagePath, string targetDir, string? versionLabel = null, bool launchAfter = true, Action<string>? onProgress = null)
@@ -266,6 +274,7 @@ public static class InstallService
     private static bool TryLaunch(string exePath, string workingDir, string args)
     {
         const int attempts = 6;
+        Exception? lastError = null;
         for (int i = 0; i < attempts; i++)
         {
             try
@@ -287,12 +296,17 @@ public static class InstallService
                 if (proc != null)
                     return true;
             }
-            catch
+            catch (Exception ex)
             {
+                lastError = ex;
                 Thread.Sleep(150 * (i + 1));
             }
         }
 
+        AppDiagnostics.LogWarning(
+            "install.launch",
+            $"Failed to launch {Path.GetFileName(exePath)} from {Path.GetFileName(workingDir)}.",
+            lastError);
         return false;
     }
 
@@ -477,7 +491,13 @@ public static class InstallService
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "install.update-cleanup",
+                $"Failed to delete update package {Path.GetFileName(path)}: {ex.Message}",
+                ex);
+        }
     }
 
     private static void TryDeleteDirectory(string path)
@@ -487,7 +507,13 @@ public static class InstallService
             if (Directory.Exists(path))
                 Directory.Delete(path, true);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "install.update-cleanup",
+                $"Failed to delete update extraction directory {Path.GetFileName(path)}: {ex.Message}",
+                ex);
+        }
     }
 
     private static string GetRequiredParentDirectory(string path, string context)
@@ -504,31 +530,29 @@ public static class InstallService
 
     private static void CreateShortcut(string shortcutPath, string targetExe)
     {
+        if (string.IsNullOrWhiteSpace(shortcutPath) || string.IsNullOrWhiteSpace(targetExe))
+            return;
+
+        var shortcutDirectory = Path.GetDirectoryName(shortcutPath);
+        if (string.IsNullOrWhiteSpace(shortcutDirectory))
+            return;
+
+        Directory.CreateDirectory(shortcutDirectory);
+        var shellType = Type.GetTypeFromProgID("WScript.Shell");
+        if (shellType is null)
+            throw new InvalidOperationException("Windows shortcut service is unavailable.");
+
+        dynamic shell = Activator.CreateInstance(shellType)!;
         try
         {
-            if (string.IsNullOrWhiteSpace(shortcutPath) || string.IsNullOrWhiteSpace(targetExe))
-                return;
-
-            var shortcutDirectory = Path.GetDirectoryName(shortcutPath);
-            if (string.IsNullOrWhiteSpace(shortcutDirectory))
-                return;
-
-            Directory.CreateDirectory(shortcutDirectory);
-            var shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType is null) return;
-            dynamic shell = Activator.CreateInstance(shellType)!;
-            try
-            {
-                dynamic sc = shell.CreateShortcut(shortcutPath);
-                sc.TargetPath = targetExe;
-                sc.WorkingDirectory = Path.GetDirectoryName(targetExe) ?? "";
-                sc.IconLocation = targetExe + ",0";
-                sc.Description = "OddSnap screenshot tool";
-                sc.Save();
-            }
-            finally { try { System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell); } catch { } }
+            dynamic sc = shell.CreateShortcut(shortcutPath);
+            sc.TargetPath = targetExe;
+            sc.WorkingDirectory = Path.GetDirectoryName(targetExe) ?? "";
+            sc.IconLocation = targetExe + ",0";
+            sc.Description = "OddSnap screenshot tool";
+            sc.Save();
         }
-        catch { }
+        finally { try { System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell); } catch { } }
     }
 
     private static void RegisterApp(string installDir, string exePath, string? versionLabel = null)
@@ -567,12 +591,36 @@ public static class InstallService
             {
                 long totalBytes = 0;
                 foreach (var f in Directory.EnumerateFiles(installDir, "*", SearchOption.AllDirectories))
-                    try { totalBytes += new FileInfo(f).Length; } catch { }
+                {
+                    try
+                    {
+                        totalBytes += new FileInfo(f).Length;
+                    }
+                    catch (Exception ex)
+                    {
+                        AppDiagnostics.LogWarning(
+                            "install.register-app-size",
+                            $"Failed to read installed file size for {Path.GetFileName(f)}: {ex.Message}",
+                            ex);
+                    }
+                }
                 key.SetValue("EstimatedSize", (int)Math.Max(1, totalBytes / 1024), RegistryValueKind.DWord);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "install.register-app-size",
+                    $"Failed to estimate installed app size for {Path.GetFileName(exePath)}: {ex.Message}",
+                    ex);
+            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "install.register-app",
+                $"Failed to register installed app metadata for {Path.GetFileName(exePath)}: {ex.Message}",
+                ex);
+        }
     }
 
     internal static bool LooksLikeBuildOutputPath(string path)

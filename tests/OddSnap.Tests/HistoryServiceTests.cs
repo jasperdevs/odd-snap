@@ -71,4 +71,77 @@ public sealed class HistoryServiceTests
                 stickerDirs: [HistoryService.StickerDir]));
     }
 
+    [Fact]
+    public void HistoryFileDeleteFailuresAreLogged()
+    {
+        var serviceCode = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "HistoryService.cs"));
+        var ioCode = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "HistoryService.IO.cs"));
+
+        var deleteEntryBlock = GetMethodBlock(serviceCode, "public void DeleteEntry(HistoryEntry entry)");
+        Assert.Contains("TryDeleteHistoryFile_NoLock(entry.FilePath, \"delete entry\");", deleteEntryBlock);
+
+        var deleteEntriesBlock = GetMethodBlock(serviceCode, "public void DeleteEntries(IEnumerable<HistoryEntry> entries)");
+        Assert.Contains("TryDeleteHistoryFile_NoLock(entry.FilePath, \"delete entries\");", deleteEntriesBlock);
+
+        var clearAllBlock = GetMethodBlock(serviceCode, "public void ClearAll()");
+        Assert.Contains("TryDeleteHistoryFile_NoLock(e.FilePath, \"clear all\");", clearAllBlock);
+
+        var clearKindBlock = GetMethodBlock(serviceCode, "private void ClearEntriesByKind_NoLock(HistoryKind kind)");
+        Assert.Contains("TryDeleteHistoryFile_NoLock(e.FilePath, $\"clear {kind}\");", clearKindBlock);
+
+        var deleteHelperBlock = GetMethodBlock(serviceCode, "private static void TryDeleteHistoryFile_NoLock(string? filePath, string context)");
+        Assert.Contains("File.Delete(filePath);", deleteHelperBlock);
+        Assert.Contains("catch (Exception ex)", deleteHelperBlock);
+        Assert.Contains("AppDiagnostics.LogWarning(", deleteHelperBlock);
+        Assert.Contains("\"history.file-delete\"", deleteHelperBlock);
+
+        var retentionBlock = GetMethodBlock(ioCode, "public void PruneByRetention(HistoryRetentionPeriod retention)");
+        Assert.Contains("TryDeleteHistoryFile_NoLock(e.FilePath, \"retention cleanup\");", retentionBlock);
+
+        Assert.DoesNotContain("try { File.Delete(entry.FilePath); } catch { }", serviceCode);
+        Assert.DoesNotContain("try { File.Delete(e.FilePath); } catch { }", serviceCode);
+        Assert.DoesNotContain("try { File.Delete(e.FilePath); } catch { }", ioCode);
+    }
+
+    private static string RepoPath(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find repo file: {Path.Combine(parts)}");
+    }
+
+    private static string GetMethodBlock(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Could not find method: {signature}");
+
+        var bodyStart = source.IndexOf('{', start);
+        Assert.True(bodyStart > start, $"Could not find method body: {signature}");
+
+        var depth = 0;
+        for (var index = bodyStart; index < source.Length; index++)
+        {
+            if (source[index] == '{')
+            {
+                depth++;
+            }
+            else if (source[index] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return source[start..(index + 1)];
+            }
+        }
+
+        throw new InvalidOperationException($"Could not read method body: {signature}");
+    }
+
 }

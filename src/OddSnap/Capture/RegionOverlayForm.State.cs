@@ -152,6 +152,7 @@ public sealed partial class RegionOverlayForm
     {
         if (gap < 0)
             gap = Helpers.UiChrome.ScaledPopupGap;
+        var clampBounds = GetToolbarAnchorClientBounds();
         int x;
         int y;
 
@@ -160,16 +161,16 @@ public sealed partial class RegionOverlayForm
             x = IsRightDock ? anchor.X - width - gap : anchor.Right + gap;
             y = anchor.Y + (anchor.Height / 2) - (height / 2);
             var margin = Helpers.UiChrome.ScaleInt(8);
-            y = Math.Clamp(y, margin, Math.Max(margin, ClientSize.Height - height - margin));
-            x = Math.Clamp(x, margin, Math.Max(margin, ClientSize.Width - width - margin));
+            y = Math.Clamp(y, clampBounds.Top + margin, Math.Max(clampBounds.Top + margin, clampBounds.Bottom - height - margin));
+            x = Math.Clamp(x, clampBounds.Left + margin, Math.Max(clampBounds.Left + margin, clampBounds.Right - width - margin));
         }
         else
         {
             x = anchor.X + (anchor.Width / 2) - (width / 2);
             y = IsBottomDock ? anchor.Y - height - gap : anchor.Bottom + gap;
             var margin = Helpers.UiChrome.ScaleInt(8);
-            x = Math.Clamp(x, margin, Math.Max(margin, ClientSize.Width - width - margin));
-            y = Math.Clamp(y, margin, Math.Max(margin, ClientSize.Height - height - margin));
+            x = Math.Clamp(x, clampBounds.Left + margin, Math.Max(clampBounds.Left + margin, clampBounds.Right - width - margin));
+            y = Math.Clamp(y, clampBounds.Top + margin, Math.Max(clampBounds.Top + margin, clampBounds.Bottom - height - margin));
         }
 
         return new Rectangle(x, y, width, height);

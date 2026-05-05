@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using AnimatedGif;
 using OddSnap.Helpers;
+using OddSnap.Services;
 
 namespace OddSnap.Capture;
 
@@ -185,7 +186,7 @@ public sealed class GifRecorder : IDisposable
                 catch (Exception ex)
                 {
                     ffmpegError = ex;
-                    try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
+                    TryDeleteTempFile(outputPath, "failed GIF output");
                 }
             }
 
@@ -337,8 +338,7 @@ public sealed class GifRecorder : IDisposable
 
     private void Cleanup()
     {
-        try { if (Directory.Exists(_tempDir)) Directory.Delete(_tempDir, true); }
-        catch { }
+        TryDeleteTempDirectory(_tempDir);
     }
 
     public void Dispose()
@@ -357,6 +357,41 @@ public sealed class GifRecorder : IDisposable
     {
         try { return File.Exists(path) && new FileInfo(path).Length > 0; }
         catch { return false; }
+    }
+
+    private static void TryDeleteTempFile(string? path, string context)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "gif.temp-cleanup",
+                $"Failed to delete {context} temporary file {Path.GetFileName(path)}: {ex.Message}",
+                ex);
+        }
+    }
+
+    private static void TryDeleteTempDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, true);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "gif.temp-cleanup",
+                $"Failed to delete GIF temporary directory {Path.GetFileName(path)}: {ex.Message}",
+                ex);
+        }
     }
 
     private static byte[] WriteBitmapBgra(Bitmap bitmap, Stream stream, byte[]? buffer)

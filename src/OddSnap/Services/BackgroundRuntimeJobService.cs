@@ -29,6 +29,9 @@ public sealed record BackgroundRuntimeJobOptions(
 
 public static class BackgroundRuntimeJobService
 {
+    private const int MaxRuntimeJobStatusLength = 120;
+    private const int MaxRuntimeJobToastDetailLength = 260;
+
     private sealed class JobState
     {
         public string Key { get; init; } = "";
@@ -58,6 +61,7 @@ public static class BackgroundRuntimeJobService
         "OddSnap",
         "runtime-jobs.json");
     private static bool _initialized;
+    private static bool _persistFailureToastShown;
 
     public static event Action<string>? Changed;
 
@@ -99,7 +103,7 @@ public static class BackgroundRuntimeJobService
         {
             var progress = new Progress<string>(message =>
             {
-                UpdateStatus(options.Key, string.IsNullOrWhiteSpace(message) ? options.StartingStatus : message);
+                UpdateStatus(options.Key, BuildRuntimeJobProgressStatus(message, options.StartingStatus));
             });
 
             try
@@ -109,7 +113,7 @@ public static class BackgroundRuntimeJobService
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
-                Complete(options, success: false, error: new OperationCanceledException("Cancelled."));
+                CompleteCancelled(options);
             }
             catch (Exception ex)
             {
@@ -202,7 +206,7 @@ public static class BackgroundRuntimeJobService
             state.LastError = errorMessage;
             state.Status = success
                 ? (options.SuccessStatus ?? "Ready")
-                : $"Failed: {errorMessage}";
+                : "Failed. Retry from Settings.";
             state.Cancellation?.Dispose();
             state.Cancellation = null;
             Persist_NoLock();
@@ -214,6 +218,29 @@ public static class BackgroundRuntimeJobService
         else
             AppDiagnostics.LogWarning("runtime-jobs.complete", $"{options.Key}: {errorMessage ?? "Unknown error"}");
         DispatchToast(options, success, errorMessage);
+    }
+
+    private static void CompleteCancelled(BackgroundRuntimeJobOptions options)
+    {
+        var message = BuildCancelledRuntimeJobMessage(options.Label);
+
+        lock (Gate)
+        {
+            EnsureInitialized_NoLock();
+            if (!Jobs.TryGetValue(options.Key, out var state))
+                return;
+
+            state.IsRunning = false;
+            state.LastSucceeded = false;
+            state.LastError = message;
+            state.Status = "Cancelled. Retry from Settings.";
+            state.Cancellation?.Dispose();
+            state.Cancellation = null;
+            Persist_NoLock();
+        }
+
+        NotifyChanged(options.Key);
+        AppDiagnostics.LogInfo("runtime-jobs.cancelled", $"{options.Key}: {message}");
     }
 
     private static void DispatchToast(BackgroundRuntimeJobOptions options, bool success, string? errorMessage)
@@ -230,9 +257,45 @@ public static class BackgroundRuntimeJobService
             }
             else
             {
-                ToastWindow.ShowError(options.FailureTitle, string.IsNullOrWhiteSpace(errorMessage) ? "Unknown error." : errorMessage);
+                ToastWindow.ShowError(options.FailureTitle, BuildRuntimeJobFailureToastBody(options, errorMessage));
             }
         }));
+    }
+
+    private static string BuildRuntimeJobFailureToastBody(BackgroundRuntimeJobOptions options, string? errorMessage)
+    {
+        var details = BuildRuntimeJobToastDetail(errorMessage);
+        var recovery = options.FailureTitle.Contains("uninstall", StringComparison.OrdinalIgnoreCase)
+            ? $"Close anything using {options.Label}, then retry from Settings."
+            : $"Check Settings and retry {options.Label}.";
+
+        return $"{recovery}\n{details}";
+    }
+
+    private static string BuildRuntimeJobToastDetail(string? errorMessage)
+    {
+        var detail = NormalizeRuntimeJobText(errorMessage, "Unknown error.");
+
+        return detail.Length <= MaxRuntimeJobToastDetailLength
+            ? detail
+            : detail[..(MaxRuntimeJobToastDetailLength - 3)].TrimEnd() + "...\nDetails were shortened; check Settings or logs for the full output.";
+    }
+
+    private static string BuildRuntimeJobProgressStatus(string? message, string fallbackStatus)
+    {
+        var fallback = string.IsNullOrWhiteSpace(fallbackStatus) ? "Working..." : fallbackStatus;
+        var status = NormalizeRuntimeJobText(message, fallback);
+
+        return status.Length <= MaxRuntimeJobStatusLength
+            ? status
+            : status[..(MaxRuntimeJobStatusLength - 3)].TrimEnd() + "...";
+    }
+
+    private static string NormalizeRuntimeJobText(string? text, string fallback)
+    {
+        var source = string.IsNullOrWhiteSpace(text) ? fallback : text;
+        var normalized = string.Join(' ', source.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries));
+        return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
     }
 
     private static void EnsureInitialized_NoLock()
@@ -281,6 +344,30 @@ public static class BackgroundRuntimeJobService
         catch (Exception ex)
         {
             AppDiagnostics.LogError("runtime-jobs.load", ex);
+            Jobs.Clear();
+            TryQuarantinePersistedJobsFile();
+        }
+    }
+
+    private static void TryQuarantinePersistedJobsFile()
+    {
+        try
+        {
+            if (!File.Exists(PersistPath))
+                return;
+
+            var quarantinePath = PersistPath + ".bad";
+            File.Move(PersistPath, quarantinePath, overwrite: true);
+            AppDiagnostics.LogWarning(
+                "runtime-jobs.quarantine",
+                $"Moved unreadable runtime job state to {Path.GetFileName(quarantinePath)}.");
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "runtime-jobs.quarantine",
+                $"Failed to quarantine unreadable runtime job state file {Path.GetFileName(PersistPath)}: {ex.Message}",
+                ex);
         }
     }
 
@@ -294,8 +381,8 @@ public static class BackgroundRuntimeJobService
 
             state.IsRunning = false;
             state.LastSucceeded = false;
-            state.LastError = "Interrupted because OddSnap closed before setup finished.";
-            state.Status = "Interrupted - retry setup";
+            state.LastError = BuildInterruptedRuntimeJobMessage(state.Label);
+            state.Status = "Interrupted. Retry from Settings.";
             changed = true;
         }
 
@@ -303,8 +390,21 @@ public static class BackgroundRuntimeJobService
             Persist_NoLock();
     }
 
+    private static string BuildInterruptedRuntimeJobMessage(string label)
+    {
+        var jobLabel = string.IsNullOrWhiteSpace(label) ? "runtime setup" : label;
+        return $"{jobLabel} was interrupted because OddSnap closed before it finished. Retry from Settings.";
+    }
+
+    private static string BuildCancelledRuntimeJobMessage(string label)
+    {
+        var jobLabel = string.IsNullOrWhiteSpace(label) ? "runtime setup" : label;
+        return $"{jobLabel} was cancelled before it finished. Retry from Settings.";
+    }
+
     private static void Persist_NoLock()
     {
+        var tempPath = PersistPath + ".tmp";
         try
         {
             var directory = Path.GetDirectoryName(PersistPath);
@@ -324,13 +424,49 @@ public static class BackgroundRuntimeJobService
                 })
                 .ToList();
 
-            var tempPath = PersistPath + ".tmp";
             File.WriteAllText(tempPath, JsonSerializer.Serialize(persisted, JsonOptions));
             File.Move(tempPath, PersistPath, overwrite: true);
+            _persistFailureToastShown = false;
         }
         catch (Exception ex)
         {
             AppDiagnostics.LogError("runtime-jobs.persist", ex);
+            TryDeletePersistTempFile(tempPath);
+            DispatchRuntimeJobPersistenceWarningToast();
+        }
+    }
+
+    private static void DispatchRuntimeJobPersistenceWarningToast()
+    {
+        if (_persistFailureToastShown)
+            return;
+
+        _persistFailureToastShown = true;
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+            return;
+
+        _ = dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            ToastWindow.ShowError(
+                "Runtime status not saved",
+                "Runtime setup can continue, but its status may not survive restart. Check Settings and retry if needed.");
+        }));
+    }
+
+    private static void TryDeletePersistTempFile(string tempPath)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "runtime-jobs.temp-cleanup",
+                $"Failed to delete temporary runtime job state file {Path.GetFileName(tempPath)}: {ex.Message}",
+                ex);
         }
     }
 

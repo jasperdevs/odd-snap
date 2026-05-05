@@ -88,6 +88,20 @@ public sealed class CaptureOutputServiceTests
         }
     }
 
+    [Fact]
+    public void TemporaryFileCleanupFailuresAreLogged()
+    {
+        var source = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "CaptureOutputService.cs"));
+
+        Assert.Contains("private static void TryDeleteTemporaryFile(string path, string context)", source);
+        Assert.Contains("\"capture.output.cleanup\"", source);
+        Assert.Contains("Failed to delete {context} temporary file", source);
+        Assert.Contains("TryDeleteTemporaryFile(tempPath, \"failed temp PNG save\");", source);
+        Assert.Contains("TryDeleteTemporaryFile(tmpPath, \"atomic write\");", source);
+        Assert.DoesNotContain("try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }", source);
+        Assert.DoesNotContain("try { File.Delete(tmpPath); } catch { }", source);
+    }
+
     private static string CreateTempRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "oddsnap-tests", Guid.NewGuid().ToString("N"));
@@ -105,5 +119,20 @@ public sealed class CaptureOutputServiceTests
         catch
         {
         }
+    }
+
+    private static string RepoPath(params string[] parts)
+    {
+        var dir = AppContext.BaseDirectory;
+        while (!string.IsNullOrEmpty(dir))
+        {
+            var candidate = Path.Combine(new[] { dir }.Concat(parts).ToArray());
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = Directory.GetParent(dir)?.FullName ?? string.Empty;
+        }
+
+        throw new FileNotFoundException("Could not locate repository file.", Path.Combine(parts));
     }
 }

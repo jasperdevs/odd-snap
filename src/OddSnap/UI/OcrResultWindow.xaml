@@ -134,33 +134,45 @@
             </Border>
 
             <Border Grid.Row="2" Margin="14,8,14,0">
-                <WrapPanel VerticalAlignment="Center">
-                    <ComboBox x:Name="FromLanguageCombo" FontSize="11" Padding="6,4" MinWidth="110"
-                              IsEditable="True" IsTextSearchEnabled="False"
-                              PreviewTextInput="FilterCombo_PreviewTextInput" PreviewKeyDown="FilterCombo_PreviewKeyDown"
-                              SelectionChanged="FromLanguageCombo_Changed"/>
-                    <TextBlock Text="→" FontSize="14" Margin="6,0" VerticalAlignment="Center" Opacity="0.35"
-                               Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontWeight="Bold"/>
-                    <ComboBox x:Name="ToLanguageCombo" FontSize="11" Padding="6,4" MinWidth="110"
-                              IsEditable="True" IsTextSearchEnabled="False"
-                              PreviewTextInput="FilterCombo_PreviewTextInput" PreviewKeyDown="FilterCombo_PreviewKeyDown"
-                              SelectionChanged="ToLanguageCombo_Changed"/>
-                    <Border Width="1" Height="18" Background="{DynamicResource ThemeInputBorderBrush}" Margin="8,0"/>
-                    <ComboBox x:Name="ModelCombo" FontSize="10" Padding="5,4" MinWidth="115"
-                              SelectionChanged="ModelCombo_Changed">
-                        <ComboBoxItem Content="Local model" Tag="2"/>
-                        <ComboBoxItem Content="Argos (offline)" Tag="0"/>
-                        <ComboBoxItem Content="Google Translate" Tag="1"/>
-                    </ComboBox>
+                <StackPanel>
+                    <WrapPanel VerticalAlignment="Center">
+                        <ComboBox x:Name="FromLanguageCombo" FontSize="11" Padding="6,4" MinWidth="110"
+                                  Margin="0,0,6,6"
+                                  IsEditable="True" IsTextSearchEnabled="False"
+                                  PreviewTextInput="FilterCombo_PreviewTextInput" PreviewKeyDown="FilterCombo_PreviewKeyDown"
+                                  SelectionChanged="FromLanguageCombo_Changed"/>
+                        <TextBlock Text="→" FontSize="14" Margin="0,0,6,6" VerticalAlignment="Center" Opacity="0.35"
+                                   Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontWeight="Bold"/>
+                        <ComboBox x:Name="ToLanguageCombo" FontSize="11" Padding="6,4" MinWidth="110"
+                                  Margin="0,0,8,6"
+                                  IsEditable="True" IsTextSearchEnabled="False"
+                                  PreviewTextInput="FilterCombo_PreviewTextInput" PreviewKeyDown="FilterCombo_PreviewKeyDown"
+                                  SelectionChanged="ToLanguageCombo_Changed"/>
+                        <Border Width="1" Height="18" Background="{DynamicResource ThemeInputBorderBrush}" Margin="0,0,8,6"/>
+                        <ComboBox x:Name="ModelCombo" FontSize="10" Padding="5,4" MinWidth="115"
+                                  Margin="0,0,8,6"
+                                  SelectionChanged="ModelCombo_Changed">
+                            <ComboBoxItem Content="Local model" Tag="2"/>
+                            <ComboBoxItem Content="Argos (offline)" Tag="0"/>
+                            <ComboBoxItem Content="Google Translate" Tag="1"/>
+                        </ComboBox>
 
-                    <Button x:Name="TranslateBtn" Content="Translate"
-                            FontSize="12" Padding="16,6" Margin="8,0,0,0"
-                            Click="TranslateBtn_Click" Style="{StaticResource ChromeButtonBase}"
-                            Foreground="{DynamicResource ThemeTextPrimaryBrush}"
-                            Background="{DynamicResource ThemeInputBackgroundBrush}"
-                            BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
-                            Cursor="Hand" MinHeight="30" FontWeight="SemiBold"/>
-                </WrapPanel>
+                        <Button x:Name="TranslateBtn" Content="Translate"
+                                FontSize="12" Padding="16,6" Margin="0,0,0,6"
+                                Click="TranslateBtn_Click" Style="{StaticResource ChromeButtonBase}"
+                                Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                Background="{DynamicResource ThemeInputBackgroundBrush}"
+                                BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
+                                Cursor="Hand" MinHeight="30" FontWeight="SemiBold"/>
+                    </WrapPanel>
+                    <TextBlock x:Name="TranslationPreferenceStatusText"
+                               FontSize="11"
+                               Margin="2,6,0,0"
+                               Opacity="0.45"
+                               Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="Collapsed"/>
+                </StackPanel>
             </Border>
 
             <Border Grid.Row="3" Margin="14,8,14,0"
@@ -186,24 +198,27 @@
                             CornerRadius="6"
                             Margin="6"
                             Visibility="Collapsed"
+                            ClipToBounds="True"
                             IsHitTestVisible="False">
                         <Grid>
                             <Rectangle x:Name="TranslationShimmerRect" Fill="{StaticResource TranslationShimmerBrush}" RadiusX="6" RadiusY="6"/>
-                            <StackPanel Margin="12,12,12,10" VerticalAlignment="Center">
-                                <Border Height="11" Width="150" CornerRadius="5.5" Background="#12FFFFFF" HorizontalAlignment="Left"/>
-                                <Border Height="9" Margin="0,10,0,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
-                                <Border Height="9" Margin="0,8,42,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
-                                <Border Height="9" Margin="0,8,86,0" CornerRadius="4.5" Background="#0EFFFFFF"/>
+                            <StackPanel Margin="12,8,12,8" VerticalAlignment="Center">
+                                <Border Height="10" Width="150" CornerRadius="5" Background="#12FFFFFF" HorizontalAlignment="Left"/>
+                                <Border Height="8" Margin="0,8,0,0" CornerRadius="4" Background="#0EFFFFFF"/>
+                                <Border Height="8" Margin="0,6,42,0" CornerRadius="4" Background="#0EFFFFFF"/>
                                 <ProgressBar x:Name="TranslateProgressBar"
                                              Height="3"
-                                             Margin="0,14,0,0"
+                                             Margin="0,10,0,0"
                                              IsIndeterminate="True"
                                              Opacity="0.9"/>
                             </StackPanel>
                         </Grid>
                     </Border>
                     <TextBlock x:Name="TranslateStatus" FontSize="11"
-                               Opacity="0.25" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               Opacity="0.25" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                               Margin="16,0"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
                                Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                                IsHitTestVisible="False" Visibility="Collapsed"/>
                 </Grid>
@@ -211,21 +226,24 @@
 
             <Border Grid.Row="4" Padding="14,10,14,12">
                 <DockPanel>
-                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
-                        <Button x:Name="CopyTranslationBtn" Content="Copy result" FontSize="11" Padding="10,6" Margin="0,0,6,0"
+                    <WrapPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
+                        <Button x:Name="CopyTranslationBtn" Content="Copy result" FontSize="11" Padding="10,6" Margin="0,0,6,4"
                                 Click="CopyTranslationBtn_Click" Style="{StaticResource ChromeButtonBase}"
                                 Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                                 Background="{DynamicResource ThemeInputBackgroundBrush}"
                                 BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
                                 Cursor="Hand" MinHeight="30" Visibility="Collapsed"/>
-                        <Button x:Name="CopyBtn" Content="Copy text" FontSize="11" Padding="10,6"
+                        <Button x:Name="CopyBtn" Content="Copy text" FontSize="11" Padding="10,6" Margin="0,0,0,4"
                                 Click="CopyBtn_Click" Style="{StaticResource ChromeButtonBase}"
                                 Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                                 Background="{DynamicResource ThemeInputBackgroundBrush}"
                                 BorderBrush="{DynamicResource ThemeInputBorderBrush}" BorderThickness="1"
                                 Cursor="Hand" MinHeight="30"/>
-                    </StackPanel>
+                    </WrapPanel>
                     <TextBlock x:Name="CharCountText" FontSize="10.5" Opacity="0.3" VerticalAlignment="Center"
+                               Margin="0,0,12,4"
+                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="NoWrap"
                                Foreground="{DynamicResource ThemeTextPrimaryBrush}" FontFamily="Segoe UI Variable Text"/>
                 </DockPanel>
             </Border>

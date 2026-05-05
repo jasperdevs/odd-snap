@@ -62,11 +62,58 @@ public sealed class UploadServiceTests
         settings.ImgurClientId = "client-id";
         settings.ImgPileApiToken = "imgpile-token";
         settings.SftpHost = "sftp.example.com";
+        settings.SftpUsername = "user";
         settings.SftpHostKeyFingerprint = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         Assert.True(UploadService.HasCredentials(UploadDestination.Imgur, settings));
         Assert.True(UploadService.HasCredentials(UploadDestination.ImgPile, settings));
         Assert.True(UploadService.HasCredentials(UploadDestination.AiChat, settings));
         Assert.True(UploadService.HasCredentials(UploadDestination.Sftp, settings));
+    }
+
+    [Theory]
+    [InlineData(UploadDestination.S3Compatible, "S3 endpoint")]
+    [InlineData(UploadDestination.Ftp, "FTP URL")]
+    [InlineData(UploadDestination.Sftp, "SFTP host")]
+    [InlineData(UploadDestination.WebDav, "WebDAV URL")]
+    [InlineData(UploadDestination.GitHub, "GitHub token")]
+    [InlineData(UploadDestination.Immich, "Immich base URL")]
+    public void GetConfigurationError_ReportsMissingProviderRequirements(UploadDestination destination, string expectedText)
+    {
+        var error = UploadService.GetConfigurationError(destination, new UploadSettings());
+
+        Assert.NotNull(error);
+        Assert.Contains(expectedText, error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Settings -> Uploads", error, StringComparison.OrdinalIgnoreCase);
+        Assert.False(UploadService.HasCredentials(destination, new UploadSettings()));
+    }
+
+    [Fact]
+    public void GetConfigurationError_RequiresAllS3Fields()
+    {
+        var settings = new UploadSettings
+        {
+            S3Endpoint = "https://s3.example.test",
+            S3Bucket = "bucket",
+            S3AccessKey = "access"
+        };
+
+        Assert.Equal("S3 secret key not configured. Add or update it in Settings -> Uploads.", UploadService.GetConfigurationError(UploadDestination.S3Compatible, settings));
+
+        settings.S3SecretKey = "secret";
+        Assert.Null(UploadService.GetConfigurationError(UploadDestination.S3Compatible, settings));
+        Assert.True(UploadService.HasCredentials(UploadDestination.S3Compatible, settings));
+    }
+
+    [Fact]
+    public void GetConfigurationError_RequiresAllFtpFields()
+    {
+        var settings = new UploadSettings { FtpUrl = "ftp://example.test/uploads" };
+
+        Assert.Equal("FTP username not configured. Add or update it in Settings -> Uploads.", UploadService.GetConfigurationError(UploadDestination.Ftp, settings));
+
+        settings.FtpUsername = "user";
+        Assert.Null(UploadService.GetConfigurationError(UploadDestination.Ftp, settings));
+        Assert.True(UploadService.HasCredentials(UploadDestination.Ftp, settings));
     }
 
     [Theory]
@@ -331,6 +378,19 @@ public sealed class UploadServiceTests
         Assert.Contains("control", error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void CustomUploadResponsePathParseFailuresAreLogged()
+    {
+        var source = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "UploadService.CloudTargets.cs"));
+
+        var uploadCustomBlock = GetMethodBlock(source, "private static async Task<UploadResult> UploadCustom(string filePath, UploadSettings s)");
+        Assert.Contains("s.CustomResponseUrlPath.Split('.')", uploadCustomBlock);
+        Assert.Contains("catch (Exception ex)", uploadCustomBlock);
+        Assert.Contains("AppDiagnostics.LogWarning(", uploadCustomBlock);
+        Assert.Contains("\"upload.custom-response-path\"", uploadCustomBlock);
+        Assert.DoesNotContain("catch { }", uploadCustomBlock);
+    }
+
     [Theory]
     [InlineData("http://tmpfiles.org/123/name.png", "https://tmpfiles.org/dl/123/name.png")]
     [InlineData("https://tmpfiles.org/dl/123/name.png", "https://tmpfiles.org/dl/123/name.png")]
@@ -342,5 +402,46 @@ public sealed class UploadServiceTests
         var actual = Assert.IsType<string>(method!.Invoke(null, new object?[] { input }));
 
         Assert.Equal(expected, actual);
+    }
+
+    private static string RepoPath(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find repo file: {Path.Combine(parts)}");
+    }
+
+    private static string GetMethodBlock(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Could not find method: {signature}");
+
+        var bodyStart = source.IndexOf('{', start);
+        Assert.True(bodyStart > start, $"Could not find method body: {signature}");
+
+        var depth = 0;
+        for (var index = bodyStart; index < source.Length; index++)
+        {
+            if (source[index] == '{')
+            {
+                depth++;
+            }
+            else if (source[index] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return source[start..(index + 1)];
+            }
+        }
+
+        throw new InvalidOperationException($"Could not read method body: {signature}");
     }
 }

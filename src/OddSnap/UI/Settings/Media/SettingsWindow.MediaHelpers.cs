@@ -1,6 +1,7 @@
 using System.IO;
 using System.Drawing.Drawing2D;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -94,7 +95,8 @@ public partial class SettingsWindow
         image = LoadThumbSource(diskPath);
         if (image is null)
         {
-            try { File.Delete(diskPath); } catch { }
+            AppDiagnostics.LogWarning("history.thumb-cache.read", $"Discarding unreadable thumbnail cache file {Path.GetFileName(diskPath)}.");
+            TryDeleteThumbnailCacheFile(diskPath);
             return false;
         }
 
@@ -111,7 +113,8 @@ public partial class SettingsWindow
             if (cached is not null)
                 return cached;
 
-            try { File.Delete(persistentPath); } catch { }
+            AppDiagnostics.LogWarning("history.thumb-cache.read", $"Discarding unreadable thumbnail cache file {Path.GetFileName(persistentPath)}.");
+            TryDeleteThumbnailCacheFile(persistentPath);
         }
 
         var bitmap = LoadThumbSource(loadPath);
@@ -124,7 +127,16 @@ public partial class SettingsWindow
     private static string? GetExistingCachedThumbnailPath(string thumbPath, string sourcePath, HistoryKind kind)
     {
         if (kind == HistoryKind.Video)
-            return File.Exists(thumbPath) ? thumbPath : null;
+        {
+            if (!File.Exists(thumbPath))
+                return null;
+
+            if (IsUsableVideoThumbnail(thumbPath))
+                return thumbPath;
+
+            TryDeleteVideoThumbnailFile(thumbPath, "cached unusable video thumbnail");
+            return null;
+        }
 
         var persistentPath = GetPersistentThumbnailPath(sourcePath, kind);
         return !string.IsNullOrWhiteSpace(persistentPath) && File.Exists(persistentPath)
@@ -143,8 +155,9 @@ public partial class SettingsWindow
             var pathKey = HistoryEntryUtilities.GetStablePathKey(sourcePath);
             return Path.Combine(HistoryService.ImageThumbnailDir, $"{pathKey}-{info.Length:X16}-{info.LastWriteTimeUtc.Ticks:X16}.png");
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("history.thumb-cache.path", $"Failed to resolve thumbnail cache path for {Path.GetFileName(sourcePath)}: {ex.Message}", ex);
             return null;
         }
     }
@@ -163,8 +176,21 @@ public partial class SettingsWindow
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
             encoder.Save(stream);
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("history.thumb-cache.save", $"Failed to save thumbnail cache file {Path.GetFileName(thumbPath)}: {ex.Message}", ex);
+        }
+    }
+
+    private static void TryDeleteThumbnailCacheFile(string thumbPath)
+    {
+        try
+        {
+            File.Delete(thumbPath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("history.thumb-cache.delete", $"Failed to delete thumbnail cache file {Path.GetFileName(thumbPath)}: {ex.Message}", ex);
         }
     }
 
@@ -235,6 +261,12 @@ public partial class SettingsWindow
     private static FrameworkElement? CreateProviderBadge(string? providerOrPath, bool isPath = false)
     {
         string logoPath = isPath ? (providerOrPath ?? string.Empty) : UploadService.GetHistoryLogoPath(providerOrPath);
+        var providerName = string.IsNullOrWhiteSpace(providerOrPath)
+            ? "Unknown provider"
+            : isPath
+                ? Path.GetFileNameWithoutExtension(providerOrPath)
+                : providerOrPath.Trim();
+        var helpText = $"Uploaded with {providerName}.";
         var logoSource = LoadPackImage(logoPath);
         if (logoSource == null)
         {
@@ -252,7 +284,7 @@ public partial class SettingsWindow
                 };
             }
 
-            return new Border
+            var textBadge = new Border
             {
                 MinWidth = 24,
                 Height = 24,
@@ -263,6 +295,7 @@ public partial class SettingsWindow
                 Margin = new Thickness(6, 0, 0, 6),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Bottom,
+                ToolTip = helpText,
                 Child = new TextBlock
                 {
                     Text = text,
@@ -274,9 +307,12 @@ public partial class SettingsWindow
                     Margin = new Thickness(4, 0, 4, 0)
                 }
             };
+            AutomationProperties.SetName(textBadge, $"{providerName} upload provider badge");
+            AutomationProperties.SetHelpText(textBadge, helpText);
+            return textBadge;
         }
 
-        return new Border
+        var logoBadge = new Border
         {
             Width = 24,
             Height = 24,
@@ -287,6 +323,7 @@ public partial class SettingsWindow
             Margin = new Thickness(6, 0, 0, 6),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Bottom,
+            ToolTip = helpText,
             Child = new Image
             {
                 Source = logoSource,
@@ -297,6 +334,9 @@ public partial class SettingsWindow
                 VerticalAlignment = VerticalAlignment.Center
             }
         };
+        AutomationProperties.SetName(logoBadge, $"{providerName} upload provider badge");
+        AutomationProperties.SetHelpText(logoBadge, helpText);
+        return logoBadge;
     }
 
     private static string FormatStorageSize(long bytes)

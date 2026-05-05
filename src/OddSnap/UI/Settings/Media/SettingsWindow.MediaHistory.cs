@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -17,10 +18,11 @@ namespace OddSnap.UI;
 public partial class SettingsWindow
 {
     private const string VideoThumbnailSeekOffset = "0.40";
+    private const int VideoThumbnailDiagnosticMaxLength = 220;
     private static readonly string[] VideoThumbnailSeekOffsets = ["0.40", "1.00", "2.00"];
     private static readonly SemaphoreSlim VideoThumbnailGate = new(2, 2);
     private static readonly object FailedVideoThumbnailGate = new();
-    private static readonly HashSet<string> FailedVideoThumbnailPaths = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, (long Length, long LastWriteTicks)> FailedVideoThumbnailPaths = new(StringComparer.OrdinalIgnoreCase);
 
     private void LoadMediaHistory()
     {
@@ -44,14 +46,29 @@ public partial class SettingsWindow
             totalBytes += e.Entry.FileSizeBytes > 0 ? e.Entry.FileSizeBytes : TryGetFileLength(e.Entry.FilePath);
 
         var sizeStr = FormatStorageSize(totalBytes);
-        HistoryCountText.Text = $"{_filteredGifItems.Count} of {_allGifItems.Count} video/GIF{(_allGifItems.Count == 1 ? "" : "s")} · {sizeStr}";
-        HistoryEmptyText.Visibility = _filteredGifItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyLabel.Text = _allGifItems.Count == 0 ? "No videos or GIFs yet" : "No videos or GIFs match this filter";
+        HistoryCountText.Text = FormatFileBackedHistoryCountText(
+            _filteredGifItems.Count,
+            _allGifItems.Count,
+            "video/GIF",
+            "video/GIFs",
+            sizeStr,
+            IsHistoryUploadFilterActive());
+        if (_filteredGifItems.Count == 0)
+        {
+            if (_allGifItems.Count == 0)
+                ShowHistoryEmptyState("No videos or GIFs yet", "Recordings and GIF captures will appear here.");
+            else
+                ShowHistoryEmptyState("No videos or GIFs match the upload filter", "Upload filters matched 0 saved media items.");
+        }
+        else
+        {
+            HideHistoryEmptyState();
+        }
 
         _gifRenderCount = Math.Min(HistoryInitialPageSize, _filteredGifItems.Count);
         RenderMediaItems();
         QueueMissingVideoThumbnailWarmup(_filteredGifItems);
-        DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+        UpdateHistoryActionButtons();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-media",
@@ -102,7 +119,17 @@ public partial class SettingsWindow
     private void QueueOrphanVideoThumbnailCleanup(IEnumerable<HistoryItemVM> items)
     {
         var snapshot = items.ToList();
-        _ = Task.Run(() => CleanupOrphanVideoThumbnails(snapshot));
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                CleanupOrphanVideoThumbnails(snapshot);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning("history.video-thumb.cleanup", $"Failed to clean orphan video thumbnails: {ex.Message}", ex);
+            }
+        });
     }
 
     private void CleanupOrphanVideoThumbnails(IEnumerable<HistoryItemVM> items)
@@ -120,7 +147,14 @@ public partial class SettingsWindow
                 if (expectedThumbs.Contains(thumb))
                     continue;
 
-                try { File.Delete(thumb); } catch { }
+                try
+                {
+                    File.Delete(thumb);
+                }
+                catch (Exception ex)
+                {
+                    AppDiagnostics.LogWarning("history.video-thumb.cleanup", $"Failed to delete orphan video thumbnail {Path.GetFileName(thumb)}: {ex.Message}", ex);
+                }
             }
         }
     }
@@ -193,10 +227,16 @@ public partial class SettingsWindow
         {
             try
             {
-                if (!string.IsNullOrEmpty(vm.Entry.UploadUrl))
+                if (!string.IsNullOrWhiteSpace(vm.Entry.UploadUrl))
                 {
                     ClipboardService.CopyTextToClipboard(vm.Entry.UploadUrl);
-                    ToastWindow.Show("Copied", vm.Entry.UploadUrl);
+                    ToastWindow.Show("Upload link copied", vm.Entry.UploadUrl);
+                    return;
+                }
+
+                if (!File.Exists(filePath))
+                {
+                    ShowHistoryFileMissingError(filePath);
                     return;
                 }
 
@@ -205,7 +245,16 @@ public partial class SettingsWindow
                 System.Windows.Clipboard.SetFileDropList(files);
                 ToastWindow.Show("Copied", "GIF copied to clipboard");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                var recovery = !string.IsNullOrWhiteSpace(vm.Entry.UploadUrl)
+                    ? "Open History and copy the visible upload link manually."
+                    : "Try again from Settings -> History, or open the saved GIF manually.";
+                ToastWindow.ShowError(
+                    "Copy failed",
+                    $"OddSnap could not copy this GIF history item. {recovery}\n{ex.Message}",
+                    filePath);
+            }
         });
 
         if (!string.IsNullOrEmpty(vm.Entry.UploadProvider))
@@ -222,6 +271,7 @@ public partial class SettingsWindow
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(6, 0, 0, 6),
+            ToolTip = "GIF media type",
             Child = new TextBlock
             {
                 Text = "GIF",
@@ -230,6 +280,8 @@ public partial class SettingsWindow
                 Foreground = Theme.Brush(Theme.TextPrimary)
             }
         };
+        AutomationProperties.SetName(gifBadge, "GIF media type badge");
+        AutomationProperties.SetHelpText(gifBadge, "This history item is an animated GIF.");
         shell.ImageContainer.Children.Add(gifBadge);
         AddMediaInfo(shell.InfoPanel, vm.Entry.FileName, vm.TimeAgo, filePath);
         AddUploadInfo(shell.InfoPanel, vm.Entry);
@@ -243,12 +295,34 @@ public partial class SettingsWindow
         {
             try
             {
+                if (!string.IsNullOrWhiteSpace(vm.Entry.UploadUrl))
+                {
+                    ClipboardService.CopyTextToClipboard(vm.Entry.UploadUrl);
+                    ToastWindow.Show("Upload link copied", vm.Entry.UploadUrl);
+                    return;
+                }
+
+                if (!File.Exists(filePath))
+                {
+                    ShowHistoryFileMissingError(filePath);
+                    return;
+                }
+
                 var files = new System.Collections.Specialized.StringCollection();
                 files.Add(filePath);
                 System.Windows.Clipboard.SetFileDropList(files);
                 ToastWindow.Show("Copied", "Video copied to clipboard");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                var recovery = !string.IsNullOrWhiteSpace(vm.Entry.UploadUrl)
+                    ? "Open History and copy the visible upload link manually."
+                    : "Try again from Settings -> History, or open the saved video manually.";
+                ToastWindow.ShowError(
+                    "Copy failed",
+                    $"OddSnap could not copy this video history item. {recovery}\n{ex.Message}",
+                    filePath);
+            }
         });
 
         shell.Image.Stretch = Stretch.UniformToFill;
@@ -267,6 +341,7 @@ public partial class SettingsWindow
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false,
+            ToolTip = "Video media type",
             Child = new System.Windows.Shapes.Path
             {
                 Data = System.Windows.Media.Geometry.Parse("M8,5 L8,19 L19,12 Z"),
@@ -278,6 +353,8 @@ public partial class SettingsWindow
                 VerticalAlignment = VerticalAlignment.Center,
             }
         };
+        AutomationProperties.SetName(playIcon, "Video play overlay");
+        AutomationProperties.SetHelpText(playIcon, "This history item is a video. Press Enter or Space to open it.");
         shell.ImageContainer.Children.Add(playIcon);
 
         AddMediaInfo(shell.InfoPanel, vm.Entry.FileName, vm.TimeAgo, filePath);
@@ -289,7 +366,7 @@ public partial class SettingsWindow
     {
         foreach (var item in items)
         {
-            if (item.ThumbnailLoaded && item.ThumbnailSource != null)
+            if (item.ThumbnailLoaded && item.ThumbnailSource != null && !IsStaleHistoryPlaceholder(item.ThumbnailSource, item.Entry.Kind))
                 continue;
 
             if (item.Entry.Kind == HistoryKind.Video)
@@ -318,34 +395,48 @@ public partial class SettingsWindow
 
         _ = Task.Run(async () =>
         {
-            const int batchSize = 8;
-            for (var i = 0; i < snapshot.Count; i += batchSize)
+            try
             {
-                var batch = snapshot.Skip(i).Take(batchSize).Select(async item =>
+                const int batchSize = 8;
+                for (var i = 0; i < snapshot.Count; i += batchSize)
                 {
-                    if (File.Exists(item.ThumbPath) || HasFailedVideoThumbnail(item.Entry.FilePath))
-                        return;
+                    var batch = snapshot.Skip(i).Take(batchSize).Select(async item =>
+                    {
+                        if (File.Exists(item.ThumbPath) || HasFailedVideoThumbnail(item.Entry.FilePath))
+                            return;
 
-                    await EnsureVideoThumbnailAsync(item.Entry.FilePath, item.ThumbPath);
-                });
-                await Task.WhenAll(batch);
-                await Task.Delay(35);
+                        await EnsureVideoThumbnailAsync(item.Entry.FilePath, item.ThumbPath);
+                    });
+                    await Task.WhenAll(batch);
+                    await Task.Delay(35);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "history.video-thumb.warmup",
+                    $"Failed to warm video thumbnails: {ex.Message}");
             }
         });
     }
 
     private static void AddMediaInfo(StackPanel panel, string fileName, string timeAgo, string filePath)
     {
-        string sizeStr = "";
-        try { sizeStr = FormatStorageSize(new FileInfo(filePath).Length); } catch { }
+        var sizeStr = TryGetMediaSizeText(filePath);
 
         panel.Children.Add(new TextBlock
         {
             Text = fileName,
             FontSize = 11,
             FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
-            TextTrimming = TextTrimming.CharacterEllipsis
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = fileName
         });
+        if (panel.Children[^1] is TextBlock fileNameBlock)
+        {
+            AutomationProperties.SetName(fileNameBlock, "Media file name");
+            AutomationProperties.SetHelpText(fileNameBlock, fileName);
+        }
 
         if (!string.IsNullOrEmpty(sizeStr))
         {
@@ -354,8 +445,14 @@ public partial class SettingsWindow
                 Text = sizeStr,
                 FontSize = 10,
                 FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
-                Opacity = 0.35
+                Opacity = 0.35,
+                ToolTip = $"Media file size: {sizeStr}"
             });
+            if (panel.Children[^1] is TextBlock sizeBlock)
+            {
+                AutomationProperties.SetName(sizeBlock, "Media file size");
+                AutomationProperties.SetHelpText(sizeBlock, sizeStr);
+            }
         }
 
         panel.Children.Add(new TextBlock
@@ -363,8 +460,33 @@ public partial class SettingsWindow
             Text = timeAgo,
             FontSize = 10,
             FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
-            Opacity = 0.3
+            Opacity = 0.3,
+            ToolTip = $"Captured {timeAgo}"
         });
+        if (panel.Children[^1] is TextBlock capturedBlock)
+        {
+            AutomationProperties.SetName(capturedBlock, "Media capture time");
+            AutomationProperties.SetHelpText(capturedBlock, timeAgo);
+        }
+    }
+
+    private static string TryGetMediaSizeText(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            return "";
+
+        try
+        {
+            return FormatStorageSize(new FileInfo(filePath).Length);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "history.media-info.size",
+                $"Failed to read media size for {Path.GetFileName(filePath)}: {ex.Message}",
+                ex);
+            return "";
+        }
     }
 
     private static async Task EnsureVideoThumbThenRefreshAsync(HistoryItemVM vm)
@@ -388,9 +510,8 @@ public partial class SettingsWindow
 
     private void DeleteMediaItems(IEnumerable<HistoryItemVM> items)
     {
-        _historyService.DeleteEntries(items.Select(item => item.Entry));
-
-        LoadCurrentHistoryTab();
+        var entries = items.Select(item => item.Entry).ToList();
+        _historyService.DeleteEntries(entries);
     }
 
     private static string GetVideoThumbnailPath(string videoPath)
@@ -401,7 +522,7 @@ public partial class SettingsWindow
 
     private static async Task<string> EnsureVideoThumbnailAsync(string videoPath, string thumbPath)
     {
-        if (File.Exists(thumbPath) && !IsLikelyBlankVideoThumbnail(thumbPath))
+        if (IsUsableVideoThumbnail(thumbPath))
             return thumbPath;
 
         if (HasFailedVideoThumbnail(videoPath))
@@ -416,7 +537,7 @@ public partial class SettingsWindow
         await VideoThumbnailGate.WaitAsync();
         try
         {
-            if (File.Exists(thumbPath) && !IsLikelyBlankVideoThumbnail(thumbPath))
+            if (IsUsableVideoThumbnail(thumbPath))
                 return thumbPath;
 
             if (HasFailedVideoThumbnail(videoPath))
@@ -433,7 +554,7 @@ public partial class SettingsWindow
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(thumbPath)!);
-                try { if (File.Exists(thumbPath)) File.Delete(thumbPath); } catch { }
+                TryDeleteVideoThumbnailFile(thumbPath, "stale video thumbnail");
 
                 foreach (var seekOffset in VideoThumbnailSeekOffsets)
                 {
@@ -441,10 +562,14 @@ public partial class SettingsWindow
                         break;
                 }
 
-                if (!File.Exists(thumbPath) || IsLikelyBlankVideoThumbnail(thumbPath))
+                if (!IsUsableVideoThumbnail(thumbPath))
                     await TryCreateVideoThumbnailAsync(ffmpeg, videoPath, thumbPath, $"-y -i \"{videoPath}\" -vf \"thumbnail=24,scale=480:-1\" -frames:v 1 -q:v 3 \"{thumbPath}\"");
 
-                var result = File.Exists(thumbPath) ? thumbPath : videoPath;
+                var usableThumbnail = IsUsableVideoThumbnail(thumbPath);
+                if (!usableThumbnail)
+                    TryDeleteVideoThumbnailFile(thumbPath, "unusable video thumbnail");
+
+                var result = usableThumbnail ? thumbPath : videoPath;
                 if (string.Equals(result, videoPath, StringComparison.OrdinalIgnoreCase))
                     RememberFailedVideoThumbnail(videoPath);
 
@@ -454,12 +579,13 @@ public partial class SettingsWindow
                     $"file={Path.GetFileName(videoPath)} created={File.Exists(thumbPath)} elapsedMs={sw.ElapsedMilliseconds}");
                 return result;
             }
-            catch
+            catch (Exception ex)
             {
                 sw.Stop();
                 AppDiagnostics.LogWarning(
                     "history.video-thumb",
-                    $"Failed to generate thumbnail for {Path.GetFileName(videoPath)} after {sw.ElapsedMilliseconds}ms.");
+                    $"Failed to generate thumbnail for {Path.GetFileName(videoPath)} after {sw.ElapsedMilliseconds}ms: {ex.Message}",
+                    ex);
                 RememberFailedVideoThumbnail(videoPath);
                 return videoPath;
             }
@@ -472,21 +598,46 @@ public partial class SettingsWindow
 
     private static bool HasFailedVideoThumbnail(string videoPath)
     {
+        var signature = GetVideoThumbnailFailureSignature(videoPath);
         lock (FailedVideoThumbnailGate)
-            return FailedVideoThumbnailPaths.Contains(videoPath);
+            return FailedVideoThumbnailPaths.TryGetValue(videoPath, out var failedSignature) &&
+                   failedSignature == signature;
     }
 
     private static void RememberFailedVideoThumbnail(string videoPath)
     {
+        var signature = GetVideoThumbnailFailureSignature(videoPath);
         lock (FailedVideoThumbnailGate)
-            FailedVideoThumbnailPaths.Add(videoPath);
+            FailedVideoThumbnailPaths[videoPath] = signature;
+    }
+
+    private static (long Length, long LastWriteTicks) GetVideoThumbnailFailureSignature(string videoPath)
+    {
+        if (string.IsNullOrWhiteSpace(videoPath))
+            return (0, 0);
+
+        try
+        {
+            var info = new FileInfo(videoPath);
+            return info.Exists
+                ? (info.Length, info.LastWriteTimeUtc.Ticks)
+                : (0, 0);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "history.video-thumb.signature",
+                $"Failed to read video signature for {Path.GetFileName(videoPath)}: {ex.Message}",
+                ex);
+            return (0, 0);
+        }
     }
 
     private static async Task<bool> TryCreateVideoThumbnailAsync(string ffmpeg, string videoPath, string thumbPath, string arguments)
     {
         try
         {
-            try { if (File.Exists(thumbPath)) File.Delete(thumbPath); } catch { }
+            TryDeleteVideoThumbnailFile(thumbPath, "previous ffmpeg output");
             using var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = ffmpeg,
@@ -497,16 +648,60 @@ public partial class SettingsWindow
             });
 
             if (proc == null)
+            {
+                AppDiagnostics.LogWarning("history.video-thumb", $"ffmpeg did not start for {Path.GetFileName(videoPath)}.");
                 return false;
+            }
 
+            var stderrTask = proc.StandardError.ReadToEndAsync();
             await proc.WaitForExitAsync();
-            return proc.ExitCode == 0 && File.Exists(thumbPath) && !IsLikelyBlankVideoThumbnail(thumbPath);
+            var stderr = await stderrTask;
+            var created = proc.ExitCode == 0 && IsUsableVideoThumbnail(thumbPath);
+            if (!created)
+            {
+                AppDiagnostics.LogWarning(
+                    "history.video-thumb.ffmpeg",
+                    $"file={Path.GetFileName(videoPath)} exitCode={proc.ExitCode} stderr={TrimThumbnailDiagnostic(stderr)}");
+            }
+
+            return created;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("history.video-thumb.ffmpeg", $"Failed to run ffmpeg for {Path.GetFileName(videoPath)}: {ex.Message}");
             return false;
         }
     }
+
+    private static void TryDeleteVideoThumbnailFile(string thumbPath, string reason)
+    {
+        try
+        {
+            if (File.Exists(thumbPath))
+                File.Delete(thumbPath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "history.video-thumb.delete",
+                $"Failed to delete {reason} {Path.GetFileName(thumbPath)}: {ex.Message}",
+                ex);
+        }
+    }
+
+    private static string TrimThumbnailDiagnostic(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return "(empty)";
+
+        var normalized = message.ReplaceLineEndings(" ").Trim();
+        return normalized.Length <= VideoThumbnailDiagnosticMaxLength
+            ? normalized
+            : normalized[..VideoThumbnailDiagnosticMaxLength] + "...";
+    }
+
+    private static bool IsUsableVideoThumbnail(string thumbPath) =>
+        File.Exists(thumbPath) && !IsLikelyBlankVideoThumbnail(thumbPath);
 
     private static bool IsLikelyBlankVideoThumbnail(string thumbPath)
     {
@@ -531,9 +726,13 @@ public partial class SettingsWindow
 
             return samples > 0 && darkSamples >= samples * 0.92;
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            AppDiagnostics.LogWarning(
+                "history.video-thumb.read",
+                $"Rejecting unreadable video thumbnail {Path.GetFileName(thumbPath)}: {ex.Message}",
+                ex);
+            return true;
         }
     }
 
@@ -558,7 +757,7 @@ public partial class SettingsWindow
         var cacheKey = sourcePath ?? path;
         RegisterThumbWaiter(cacheKey, img);
 
-        if (TryGetThumbFromCache(cacheKey, out var cached) && cached is not null)
+        if (TryGetThumbFromCache(cacheKey, out var cached) && cached is not null && !IsStaleHistoryPlaceholder(cached, vm.Entry.Kind))
         {
             vm.ThumbnailSource = cached;
             vm.ThumbnailLoaded = true;
@@ -626,7 +825,12 @@ public partial class SettingsWindow
                     ThumbDecodeGate.Release();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "history.thumb-load",
+                    $"Failed to load thumbnail for {Path.GetFileName(cacheKey)}: {ex.Message}");
+            }
             finally
             {
                 SettingsMediaCache.EndInflight(cacheKey);
@@ -636,11 +840,11 @@ public partial class SettingsWindow
 
     private static void PrimeThumbLoad(string cacheKey, string thumbPath, HistoryKind kind, Action<BitmapSource>? onReady = null, Action? onLoaded = null)
     {
-        if (TryGetThumbFromCache(cacheKey, out var cached))
+        if (TryGetThumbFromCache(cacheKey, out var cached) && cached is not null && !IsStaleHistoryPlaceholder(cached, kind))
         {
             if (onReady is not null)
-                onReady(cached!);
-            ApplyThumbnailToWaiters(cacheKey, cached!, animate: false);
+                onReady(cached);
+            ApplyThumbnailToWaiters(cacheKey, cached, animate: false);
             onLoaded?.Invoke();
             return;
         }
@@ -687,8 +891,11 @@ public partial class SettingsWindow
                     ThumbDecodeGate.Release();
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AppDiagnostics.LogWarning(
+                    "history.thumb-prime",
+                    $"Failed to prime thumbnail for {Path.GetFileName(cacheKey)}: {ex.Message}");
             }
             finally
             {
@@ -699,7 +906,7 @@ public partial class SettingsWindow
 
     private static void PrimeThumbLoad(HistoryItemVM vm, Action? onLoaded = null)
     {
-        if (vm.ThumbnailLoaded && vm.ThumbnailSource != null)
+        if (vm.ThumbnailLoaded && vm.ThumbnailSource != null && !IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))
         {
             ApplyThumbnailToBoundImage(vm, vm.ThumbnailSource, animate: false);
             return;

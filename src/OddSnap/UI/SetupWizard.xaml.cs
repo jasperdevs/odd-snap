@@ -33,6 +33,7 @@ public partial class SetupWizard : Window
         _settingsService = settingsService;
         Theme.Refresh();
         InitializeComponent();
+        OddSnapWindowChrome.ApplyRoundedCorners(this, 12);
         UiScale.Set(settingsService.Settings.UiScale);
         UiScale.ApplyToWindow(this, WizardBorder, scaleWindowBounds: true);
         ApplyTheme();
@@ -124,10 +125,34 @@ public partial class SetupWizard : Window
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
             if (vk == 0) return;
 
-            _settingsService.Settings.SetToolHotkey(toolId, mod, vk);
-            box.Text = HotkeyFormatter.Format(mod, vk);
-            recording = false;
-            Keyboard.ClearFocus();
+            var previous = _settingsService.Settings.GetToolHotkey(toolId);
+            try
+            {
+                _settingsService.Settings.SetToolHotkey(toolId, mod, vk);
+                _settingsService.Save();
+                box.Text = HotkeyFormatter.Format(mod, vk);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError("setup.tool-hotkey", ex);
+                _settingsService.Settings.SetToolHotkey(toolId, previous.mod, previous.key);
+                try
+                {
+                    _settingsService.Save();
+                }
+                catch (Exception rollbackEx)
+                {
+                    AppDiagnostics.LogError("setup.tool-hotkey-rollback", rollbackEx);
+                }
+
+                box.Text = HotkeyFormatter.Format(previous.mod, previous.key);
+                ShowSetupHotkeySaveFailed(ex);
+            }
+            finally
+            {
+                recording = false;
+                Keyboard.ClearFocus();
+            }
         }
 
         box.PreviewKeyDown += (_, e) =>
@@ -148,6 +173,13 @@ public partial class SetupWizard : Window
                 HandleKey(key);
             }
         };
+    }
+
+    private static void ShowSetupHotkeySaveFailed(Exception ex)
+    {
+        ToastWindow.ShowError(
+            "Hotkey failed",
+            $"The previous hotkey was restored. Try this setup step again, or change it later in Settings -> Tools.\n{ex.Message}");
     }
 
     private void LoadDefaults()
@@ -182,14 +214,39 @@ public partial class SetupWizard : Window
         var owner = new WindowHandleWrapper(new System.Windows.Interop.WindowInteropHelper(this).Handle);
         if (dlg.ShowDialog(owner) == System.Windows.Forms.DialogResult.OK)
         {
-            _settingsService.Settings.SaveDirectory = dlg.SelectedPath;
-            WizSaveDirText.Text = dlg.SelectedPath;
+            var previous = _settingsService.Settings.SaveDirectory;
+            try
+            {
+                _settingsService.Settings.SaveDirectory = dlg.SelectedPath;
+                _settingsService.Save();
+                WizSaveDirText.Text = dlg.SelectedPath;
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError("setup.save-directory", ex);
+                _settingsService.Settings.SaveDirectory = previous;
+                try
+                {
+                    _settingsService.Save();
+                }
+                catch (Exception rollbackEx)
+                {
+                    AppDiagnostics.LogError("setup.save-directory-rollback", rollbackEx);
+                }
+
+                WizSaveDirText.Text = previous;
+                ToastWindow.ShowError(
+                    "Save directory failed",
+                    $"The previous save directory was restored. Stay on this setup step and try again.\n{ex.Message}");
+            }
         }
     }
 
     private void GoToPage(int page)
     {
-        SaveCurrentPage();
+        if (!SaveCurrentPage())
+            return;
+
         _page = page;
 
         for (int i = 0; i < _pages.Length; i++)
@@ -212,28 +269,68 @@ public partial class SetupWizard : Window
         NextBtn.Content = page == TotalPages ? "Get Started" : "Next";
     }
 
-    private void SaveCurrentPage()
+    private bool SaveCurrentPage()
     {
-        var s = _settingsService.Settings;
-        switch (_page)
+        try
         {
-            case 1:
-                _settingsService.Save();
-                break;
-            case 2:
-                s.ShowCrosshairGuides = WizCrosshairCheck.IsChecked == true;
-                s.ShowCaptureMagnifier = WizCaptureMagnifierCheck.IsChecked == true;
-                s.MuteSounds = WizMuteCheck.IsChecked == true;
-                s.SaveToFile = WizSaveToFileCheck.IsChecked == true;
-                s.CaptureImageFormat = (CaptureImageFormat)WizCaptureFormatCombo.SelectedIndex;
-                if (WizCaptureSizeCombo.SelectedItem is ComboBoxItem sizeItem && sizeItem.Tag is string sizeTag && int.TryParse(sizeTag, out int sizeVal))
-                    s.CaptureMaxLongEdge = sizeVal;
-                _settingsService.Save();
-                break;
-            case 3:
-                s.HasCompletedSetup = true;
-                _settingsService.Save();
-                break;
+            var s = _settingsService.Settings;
+            switch (_page)
+            {
+                case 1:
+                    _settingsService.Save();
+                    break;
+                case 2:
+                    var previousCapture = (
+                        s.ShowCrosshairGuides,
+                        s.ShowCaptureMagnifier,
+                        s.MuteSounds,
+                        s.SaveToFile,
+                        s.CaptureImageFormat,
+                        s.CaptureMaxLongEdge);
+                    try
+                    {
+                        s.ShowCrosshairGuides = WizCrosshairCheck.IsChecked == true;
+                        s.ShowCaptureMagnifier = WizCaptureMagnifierCheck.IsChecked == true;
+                        s.MuteSounds = WizMuteCheck.IsChecked == true;
+                        s.SaveToFile = WizSaveToFileCheck.IsChecked == true;
+                        s.CaptureImageFormat = (CaptureImageFormat)WizCaptureFormatCombo.SelectedIndex;
+                        if (WizCaptureSizeCombo.SelectedItem is ComboBoxItem sizeItem && sizeItem.Tag is string sizeTag && int.TryParse(sizeTag, out int sizeVal))
+                            s.CaptureMaxLongEdge = sizeVal;
+                        _settingsService.Save();
+                    }
+                    catch
+                    {
+                        s.ShowCrosshairGuides = previousCapture.ShowCrosshairGuides;
+                        s.ShowCaptureMagnifier = previousCapture.ShowCaptureMagnifier;
+                        s.MuteSounds = previousCapture.MuteSounds;
+                        s.SaveToFile = previousCapture.SaveToFile;
+                        s.CaptureImageFormat = previousCapture.CaptureImageFormat;
+                        s.CaptureMaxLongEdge = previousCapture.CaptureMaxLongEdge;
+                        LoadDefaults();
+                        throw;
+                    }
+                    break;
+                case 3:
+                    var previousCompleted = s.HasCompletedSetup;
+                    try
+                    {
+                        s.HasCompletedSetup = true;
+                        _settingsService.Save();
+                    }
+                    catch
+                    {
+                        s.HasCompletedSetup = previousCompleted;
+                        throw;
+                    }
+                    break;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ShowSetupSaveFailed("setup.save-page", ex);
+            return false;
         }
     }
 
@@ -243,7 +340,9 @@ public partial class SetupWizard : Window
             GoToPage(_page + 1);
         else
         {
-            SaveCurrentPage();
+            if (!SaveCurrentPage())
+                return;
+
             DialogResult = true;
             Close();
         }
@@ -285,9 +384,9 @@ public partial class SetupWizard : Window
 
     private void OpenSettings_Click(object sender, RoutedEventArgs e)
     {
-        SaveCurrentPage();
-        _settingsService.Settings.HasCompletedSetup = true;
-        _settingsService.Save();
+        if (!SaveCurrentPage() || !MarkSetupCompleted())
+            return;
+
         Tag = "OpenSettings";
         DialogResult = true;
         Close();
@@ -295,11 +394,46 @@ public partial class SetupWizard : Window
 
     private void Skip_Click(object sender, RoutedEventArgs e)
     {
-        SaveCurrentPage();
-        _settingsService.Settings.HasCompletedSetup = true;
-        _settingsService.Save();
+        if (!SaveCurrentPage() || !MarkSetupCompleted())
+            return;
+
         DialogResult = false;
         Close();
+    }
+
+    private bool MarkSetupCompleted()
+    {
+        var previous = _settingsService.Settings.HasCompletedSetup;
+        try
+        {
+            _settingsService.Settings.HasCompletedSetup = true;
+            _settingsService.Save();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _settingsService.Settings.HasCompletedSetup = previous;
+            ShowSetupSaveFailed("setup.complete", ex);
+            return false;
+        }
+    }
+
+    private static void ShowSetupSaveFailed(string diagnosticKey, Exception ex)
+    {
+        AppDiagnostics.LogError(diagnosticKey, ex);
+        var (title, message) = diagnosticKey switch
+        {
+            "setup.complete" => (
+                "Setup completion failed",
+                "Setup was not marked complete. The previous setup status was restored. Stay on this step and try again."),
+            _ => (
+                "Setup save failed",
+                "Your setup choices were not saved. Previous saved settings were restored. Stay on this step and try again, or finish setup later from Settings."),
+        };
+
+        ToastWindow.ShowError(
+            title,
+            $"{message}\n{ex.Message}");
     }
 
     private void Window_MouseDown(object sender, MouseButtonEventArgs e)

@@ -2,6 +2,7 @@ using Bitmap = System.Drawing.Bitmap;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -21,6 +22,13 @@ public partial class ToastWindow : Window
     private bool _isDismissing;
     private bool _isHovered;
     private bool _isFading;
+    private bool _isSavingPreview;
+    private bool _isOpeningAiRedirect;
+    private bool _isDeletingSavedFile;
+    private bool _isRunningOfficeAction;
+    private bool _restoreAutoDismissAfterOfficeAction;
+    private double _officeActionRemainingAutoDismissSeconds = 0.1;
+    private int _toastStateVersion;
     private bool _closeAfterOpacityAnimation;
     private int _dismissAnimationToken;
     private bool _resumeDismissOnMouseLeave;
@@ -90,6 +98,7 @@ public partial class ToastWindow : Window
     {
         _spec = spec;
         InitializeComponent();
+        OddSnapWindowChrome.ApplyRoundedCorners(this, 12);
         Opacity = 0;
         Theme.Refresh();
         LoadOverlayIcons();
@@ -190,7 +199,11 @@ public partial class ToastWindow : Window
         UpdateRootClip();
         ApplyPlacement(animateEntry: true, subtleEntry: false);
 
-        if (!_isPinned)
+        _isHovered = IsMouseOver;
+        if (_spec.ShowOverlayButtons && _isHovered)
+            AnimateOverlayButtons(1, _isPinned ? 1 : 1);
+
+        if (!_isPinned && !_isHovered)
             RestartVisibleTimer(_durationSeconds);
 
         return true;
@@ -212,6 +225,7 @@ public partial class ToastWindow : Window
         TextContentPanel.Visibility = (TitleText.Visibility == Visibility.Collapsed && BodyText.Visibility == Visibility.Collapsed)
             ? Visibility.Collapsed
             : Visibility.Visible;
+        RefreshToastContentAccessibility(spec);
 
         if (spec.SwatchColor.HasValue)
         {
@@ -459,6 +473,7 @@ public partial class ToastWindow : Window
         bool textCloseVisible = _previewBitmap is null &&
                                 Helpers.ToastButtonLayout.IsVisible(_buttonLayout, Helpers.ToastButtonKind.Close) &&
                                 TextContentPanel.Visibility == Visibility.Visible;
+        SetToastElementAccessibility(TextCloseBtn, "Close notification", "Close this notification.");
         TextCloseBtn.Visibility = textCloseVisible ? Visibility.Visible : Visibility.Collapsed;
         if (textCloseVisible)
             ApplyTextCloseVisual(active: false);
@@ -466,11 +481,12 @@ public partial class ToastWindow : Window
 
     private void ApplyOverlayButton(System.Windows.Controls.Border button, Helpers.ToastButtonKind kind)
     {
+        RefreshOverlayButtonAccessibility(button, kind);
         bool visible = _previewBitmap is not null &&
                        _spec.ShowOverlayButtons &&
                        Helpers.ToastButtonLayout.IsVisible(_buttonLayout, kind) &&
                        (kind != Helpers.ToastButtonKind.AiRedirect || CanShowAiRedirectButton()) &&
-                       (kind != Helpers.ToastButtonKind.Delete || !string.IsNullOrWhiteSpace(_savedFilePath));
+                       (kind != Helpers.ToastButtonKind.Delete || HasSavedFileOnDisk());
 
         button.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         if (!visible)
@@ -482,58 +498,248 @@ public partial class ToastWindow : Window
         button.Margin = placement.margin;
     }
 
+    private void RefreshToastContentAccessibility(ToastSpec spec)
+    {
+        var title = TitleText.Text ?? "";
+        TitleText.ToolTip = title;
+        AutomationProperties.SetName(TitleText, "Toast title");
+        AutomationProperties.SetHelpText(TitleText, title);
+
+        var body = BodyText.Text ?? "";
+        BodyText.ToolTip = body;
+        AutomationProperties.SetName(BodyText, "Toast message");
+        AutomationProperties.SetHelpText(BodyText, body);
+
+        if (spec.SwatchColor.HasValue)
+            SetToastElementAccessibility(ColorSwatch, "Toast color swatch", string.IsNullOrWhiteSpace(body) ? "Color preview." : body);
+
+        if (spec.InlinePreviewBitmap is not null)
+            SetToastElementAccessibility(InlinePreviewHost, "Inline toast preview", "Preview image shown inside this notification.");
+
+        if (spec.PreviewBitmap is not null)
+        {
+            var previewHelp = string.IsNullOrWhiteSpace(spec.FilePath)
+                ? "Toast preview image"
+                : Path.GetFileName(spec.FilePath);
+            SetToastElementAccessibility(PreviewImage, "Toast preview image", previewHelp);
+        }
+    }
+
+    private void RefreshOverlayButtonAccessibility(System.Windows.Controls.Border button, Helpers.ToastButtonKind kind)
+    {
+        var (name, helpText) = kind switch
+        {
+            Helpers.ToastButtonKind.Close => ("Close preview", "Close this preview."),
+            Helpers.ToastButtonKind.Pin => _isPinned
+                ? ("Unpin preview", "Allow this preview to dismiss automatically.")
+                : ("Pin preview", "Keep this preview open."),
+            Helpers.ToastButtonKind.Save => _isSavingPreview
+                ? ("Saving preview", "Save is already running.")
+                : ("Save preview", "Save this preview image."),
+            Helpers.ToastButtonKind.Office => _isRunningOfficeAction
+                ? ("Office action running", "Open with or Office export is already running.")
+                : ("Open with or send to Office", "Open this preview with another app or send it to Office."),
+            Helpers.ToastButtonKind.AiRedirect => _isOpeningAiRedirect
+                ? ("Opening in AI", "AI Redirect is already running.")
+                : ("Open in AI", "Open this preview in the configured AI destination."),
+            Helpers.ToastButtonKind.Delete => _isDeletingSavedFile
+                ? ("Deleting file", "Delete is already running.")
+                : ("Delete file", "Delete the saved file for this preview."),
+            _ => ("Toast action", "Run this toast action.")
+        };
+        SetToastElementAccessibility(button, name, helpText);
+    }
+
+    private static void SetToastElementAccessibility(FrameworkElement element, string name, string helpText)
+    {
+        element.ToolTip = helpText;
+        AutomationProperties.SetName(element, name);
+        AutomationProperties.SetHelpText(element, helpText);
+    }
+
     private void CloseBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
+            return;
+        }
+
         e.Handled = true;
-        DismissAnimated();
+        CloseToast();
+    }
+
+    private void CloseBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
+            return;
+
+        e.Handled = true;
+        CloseToast();
     }
 
     private void PinBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
+            return;
+        }
+
         e.Handled = true;
-        ApplyPinnedState(!_isPinned);
+        TogglePinned();
+    }
+
+    private void PinBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
+            return;
+
+        e.Handled = true;
+        TogglePinned();
     }
 
     private void SaveBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
+            return;
+        }
+
         e.Handled = true;
-        if (_previewBitmap is null)
+        SavePreview();
+    }
+
+    private void SaveBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
             return;
 
-        _timer.Stop();
-        ApplyPinnedState(true);
-        RegionOverlayForm.CloseTransientUi();
+        e.Handled = true;
+        SavePreview();
+    }
 
-        var dlg = new Microsoft.Win32.SaveFileDialog
-        {
-            FileName = _savedFilePath != null ? Path.GetFileName(_savedFilePath) : "screenshot.png",
-            Filter = "PNG|*.png|JPEG|*.jpg|BMP|*.bmp"
-        };
-        if (dlg.ShowDialog(this) != true)
+    private static bool IsKeyboardActivateKey(System.Windows.Input.KeyEventArgs e) =>
+        e.Key is Key.Enter or Key.Space;
+
+    private static bool CanActivateKeyboardControl(object sender, System.Windows.Input.KeyEventArgs e) =>
+        IsKeyboardActivateKey(e) && sender is not UIElement { IsEnabled: false };
+
+    private static bool CanActivateMouseControl(object sender) =>
+        sender is not UIElement { IsEnabled: false };
+
+    private void CloseToast() => DismissAnimated();
+
+    private void TogglePinned() => ApplyPinnedState(!_isPinned);
+
+    private void SavePreview()
+    {
+        if (_previewBitmap is null || _isSavingPreview)
             return;
 
-        var format = dlg.FilterIndex switch
-        {
-            2 => Models.CaptureImageFormat.Jpeg,
-            3 => Models.CaptureImageFormat.Bmp,
-            _ => Models.CaptureImageFormat.Png
-        };
-
+        _isSavingPreview = true;
+        SaveBtn.IsEnabled = false;
+        RefreshOverlayButtonAccessibility(SaveBtn, Helpers.ToastButtonKind.Save);
+        var wasPinnedBeforeSave = _isPinned;
+        var remainingAutoDismissSeconds = PauseToastAutoDismiss();
         try
         {
-            CaptureOutputService.SaveBitmap(_previewBitmap, dlg.FileName, format, jpegQuality: 92);
-            Show(ToastSpec.Standard("Saved", Path.GetFileName(dlg.FileName)));
+            ApplyPinnedState(true);
+            RegionOverlayForm.CloseTransientUi();
+
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = _savedFilePath != null ? Path.GetFileName(_savedFilePath) : "screenshot.png",
+                Filter = "PNG|*.png|JPEG|*.jpg|BMP|*.bmp"
+            };
+            if (dlg.ShowDialog(this) != true)
+            {
+                if (!wasPinnedBeforeSave)
+                    ResumeToastAutoDismiss(remainingAutoDismissSeconds);
+                return;
+            }
+
+            var format = dlg.FilterIndex switch
+            {
+                2 => Models.CaptureImageFormat.Jpeg,
+                3 => Models.CaptureImageFormat.Bmp,
+                _ => Models.CaptureImageFormat.Png
+            };
+
+            try
+            {
+                CaptureOutputService.SaveBitmap(_previewBitmap, dlg.FileName, format, jpegQuality: 92);
+                Show(ToastSpec.Standard("Saved", Path.GetFileName(dlg.FileName)));
+            }
+            catch (Exception ex)
+            {
+                Show(ToastSpec.Error(
+                    "Save failed",
+                    BuildToastActionFailureBody("OddSnap could not save the preview. Choose another folder or check write permissions.", ex.Message),
+                    GetExistingSavedFilePathOrNull()));
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            Show(ToastSpec.Error("Save failed", ex.Message));
+            _isSavingPreview = false;
+            SaveBtn.IsEnabled = true;
+            RefreshOverlayButtonAccessibility(SaveBtn, Helpers.ToastButtonKind.Save);
         }
     }
 
+    private double PauseToastAutoDismiss()
+    {
+        _timer.Stop();
+        var progress = Math.Clamp(ProgressScale.ScaleX, 0, 1);
+        var remaining = GetToastAutoDismissRemainingSeconds(progress, _durationSeconds);
+        ProgressScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        ProgressScale.ScaleX = progress;
+        return remaining;
+    }
+
+    private void ResumeToastAutoDismiss(double remainingSeconds)
+    {
+        _isPinned = false;
+        ProgressBar.Visibility = Visibility.Visible;
+        ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: false);
+        RefreshOverlayButtonAccessibility(PinBtn, Helpers.ToastButtonKind.Pin);
+        if (_isHovered)
+            return;
+
+        ProgressScale.BeginAnimation(ScaleTransform.ScaleXProperty,
+            new DoubleAnimation { To = 0, Duration = Motion.Sec(remainingSeconds) });
+        _timer.Interval = TimeSpan.FromSeconds(remainingSeconds);
+        _timer.Start();
+    }
+
+    private static double GetToastAutoDismissRemainingSeconds(double progressScale, double durationSeconds) =>
+        Math.Max(0.1, Math.Clamp(progressScale, 0, 1) * durationSeconds);
+
     private void OfficeBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
+            return;
+        }
+
         e.Handled = true;
-        if (_previewBitmap is null)
+        OpenOfficeMenu();
+    }
+
+    private void OfficeBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
+            return;
+
+        e.Handled = true;
+        OpenOfficeMenu();
+    }
+
+    private void OpenOfficeMenu()
+    {
+        if (_previewBitmap is null || _isRunningOfficeAction)
             return;
 
         if (_officeMenu?.IsOpen == true)
@@ -544,7 +750,8 @@ public partial class ToastWindow : Window
 
         var wasPinnedBeforeMenu = _isPinned;
         var menuActionSelected = false;
-        _timer.Stop();
+        _restoreAutoDismissAfterOfficeAction = !wasPinnedBeforeMenu;
+        _officeActionRemainingAutoDismissSeconds = PauseToastAutoDismiss();
         ApplyPinnedState(true);
         RegionOverlayForm.CloseTransientUi();
 
@@ -563,7 +770,10 @@ public partial class ToastWindow : Window
             if (ReferenceEquals(_officeMenu, menu))
                 _officeMenu = null;
             if (!wasPinnedBeforeMenu && !menuActionSelected)
-                ApplyPinnedState(false);
+            {
+                _restoreAutoDismissAfterOfficeAction = false;
+                ResumeToastAutoDismiss(_officeActionRemainingAutoDismissSeconds);
+            }
         };
         menu.PreviewKeyDown += (_, args) =>
         {
@@ -647,25 +857,68 @@ public partial class ToastWindow : Window
 
     private void OpenPreviewWithWindowsPicker()
     {
-        if (_previewBitmap is null)
+        if (_previewBitmap is null || !TryBeginOfficeAction())
             return;
 
+        var restoreAutoDismiss = _restoreAutoDismissAfterOfficeAction;
+        var remainingAutoDismissSeconds = _officeActionRemainingAutoDismissSeconds;
         bool isTemporary = false;
         string? openPath = null;
         try
         {
             openPath = Services.OfficeExportService.EnsureOpenableFile(_previewBitmap, _savedFilePath, out isTemporary);
+            if (TryOpenWithConfiguredApp(openPath, out var configuredAppName))
+            {
+                if (isTemporary)
+                    Services.OfficeExportService.ScheduleTemporaryOpenWithCleanup(openPath);
+                Show(ToastSpec.Standard("Open with", $"Opened {configuredAppName}.", GetExistingSavedFilePathOrNull()) with { SuppressSound = true });
+                return;
+            }
+
             Services.OfficeExportService.ShowOpenWithDialog(openPath);
-            Show(ToastSpec.Standard("Open with", "Choose an app from Windows.", _savedFilePath) with { SuppressSound = true });
+            if (isTemporary)
+                Services.OfficeExportService.ScheduleTemporaryOpenWithCleanup(openPath);
+            Show(ToastSpec.Standard("Open with", "Choose an app from Windows.", GetExistingSavedFilePathOrNull()) with { SuppressSound = true });
         }
         catch (Exception ex)
         {
             if (isTemporary && !string.IsNullOrWhiteSpace(openPath) && File.Exists(openPath))
             {
-                try { File.Delete(openPath); } catch { }
+                try
+                {
+                    File.Delete(openPath);
+                }
+                catch (Exception deleteEx)
+                {
+                    AppDiagnostics.LogWarning("toast.open-with-temp-delete", $"Failed to delete temporary Open With file {Path.GetFileName(openPath)}: {deleteEx.Message}", deleteEx);
+                }
             }
-            Show(ToastSpec.Error("Open with failed", ex.Message, _savedFilePath));
+            Show(ToastSpec.Error(
+                "Open with failed",
+                BuildToastActionFailureBody("OddSnap could not open the image with another app. Save the capture or open it from History, then try Windows Open with.", ex.Message),
+                GetExistingSavedFilePathOrNull()));
         }
+        finally
+        {
+            EndOfficeAction(restoreAutoDismiss, remainingAutoDismissSeconds);
+        }
+    }
+
+    private static bool TryOpenWithConfiguredApp(string imagePath, out string appName)
+    {
+        appName = "";
+        var settings = SettingsService.LoadStatic();
+        if (settings is null ||
+            !Services.OfficeExportService.TryGetConfiguredApp(settings, Path.GetExtension(imagePath), out var appPath))
+        {
+            return false;
+        }
+
+        Services.OfficeExportService.OpenFileWithApp(imagePath, appPath);
+        appName = Path.GetFileNameWithoutExtension(appPath);
+        if (string.IsNullOrWhiteSpace(appName))
+            appName = Services.OfficeExportService.GetOpenWithLabel(Path.GetExtension(imagePath));
+        return true;
     }
 
     private void AddOfficeMenuItem(System.Windows.Controls.ContextMenu menu, Services.OfficeExportTarget target, Action onInvoked)
@@ -686,30 +939,93 @@ public partial class ToastWindow : Window
 
     private void SendPreviewToOffice(Services.OfficeExportTarget target)
     {
-        if (_previewBitmap is null)
+        if (_previewBitmap is null || !TryBeginOfficeAction())
             return;
 
+        var restoreAutoDismiss = _restoreAutoDismissAfterOfficeAction;
+        var remainingAutoDismissSeconds = _officeActionRemainingAutoDismissSeconds;
         try
         {
             Services.OfficeExportService.SendBitmap(_previewBitmap, _savedFilePath, target);
-            Show(ToastSpec.Standard("Sent to Office", Services.OfficeExportService.GetTargetName(target), _savedFilePath) with { SuppressSound = true });
+            Show(ToastSpec.Standard("Sent to Office", Services.OfficeExportService.GetTargetName(target), GetExistingSavedFilePathOrNull()) with { SuppressSound = true });
         }
         catch (Exception ex)
         {
-            Show(ToastSpec.Error("Office send failed", ex.Message, _savedFilePath));
+            Show(ToastSpec.Error(
+                "Office send failed",
+                BuildToastActionFailureBody("OddSnap could not send the image to Office. Save the capture and insert it manually, or try another Office target.", ex.Message),
+                GetExistingSavedFilePathOrNull()));
+        }
+        finally
+        {
+            EndOfficeAction(restoreAutoDismiss, remainingAutoDismissSeconds);
+        }
+    }
+
+    private bool TryBeginOfficeAction()
+    {
+        if (_isRunningOfficeAction)
+            return false;
+
+        _isRunningOfficeAction = true;
+        OfficeBtn.IsEnabled = false;
+        RefreshOverlayButtonAccessibility(OfficeBtn, Helpers.ToastButtonKind.Office);
+        return true;
+    }
+
+    private void EndOfficeAction(bool restoreAutoDismiss, double remainingAutoDismissSeconds)
+    {
+        _isRunningOfficeAction = false;
+        OfficeBtn.IsEnabled = true;
+        RefreshOverlayButtonAccessibility(OfficeBtn, Helpers.ToastButtonKind.Office);
+        _restoreAutoDismissAfterOfficeAction = false;
+        if (restoreAutoDismiss)
+        {
+            ResumeToastAutoDismiss(remainingAutoDismissSeconds);
         }
     }
 
     private async void AiRedirectBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        e.Handled = true;
-        if (string.IsNullOrWhiteSpace(_savedFilePath) || !File.Exists(_savedFilePath))
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
             return;
+        }
+
+        e.Handled = true;
+        await OpenAiRedirectAsync();
+    }
+
+    private async void AiRedirectBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
+            return;
+
+        e.Handled = true;
+        await OpenAiRedirectAsync();
+    }
+
+    private async Task OpenAiRedirectAsync()
+    {
+        if (_isOpeningAiRedirect)
+            return;
+
+        if (!HasSavedFileOnDisk())
+        {
+            ShowSavedFileMissingError();
+            return;
+        }
+        var savedFilePath = _savedFilePath!;
 
         var settings = SettingsService.LoadStatic();
         if (settings is null)
             return;
 
+        _isOpeningAiRedirect = true;
+        AiRedirectBtn.IsEnabled = false;
+        RefreshOverlayButtonAccessibility(AiRedirectBtn, Helpers.ToastButtonKind.AiRedirect);
+        var actionStateVersion = _toastStateVersion;
         try
         {
             var uploadSettings = settings.ImageUploadSettings;
@@ -717,49 +1033,145 @@ public partial class ToastWindow : Window
             var providerName = UploadService.GetAiChatProviderName(provider);
             if (provider == AiChatProvider.GoogleLens)
             {
-                var hostDest = UploadService.NormalizeAiChatUploadDestination(uploadSettings.AiChatUploadDestination);
-                var result = await UploadService.UploadAsync(_savedFilePath, hostDest, uploadSettings);
-                if (!result.Success || string.IsNullOrWhiteSpace(result.Url))
+                if (!SavedFilePathStillExists(savedFilePath))
                 {
-                    Show(ToastSpec.Error("Google Lens upload failed", result.Error));
+                    ShowSavedFileMissingError(savedFilePath);
                     return;
                 }
 
-                OpenExternalUrl(UploadService.BuildGoogleLensUrl(result.Url));
-                Show(ToastSpec.Standard("AI Redirect Ready", $"Opened {providerName}.", _savedFilePath) with { SuppressSound = true });
+                var hostDest = UploadService.NormalizeAiChatUploadDestination(uploadSettings.AiChatUploadDestination);
+                var result = await UploadService.UploadAsync(savedFilePath, hostDest, uploadSettings);
+                if (!IsCurrentToastState(actionStateVersion))
+                    return;
+
+                if (!result.Success || string.IsNullOrWhiteSpace(result.Url))
+                {
+                    Show(ToastSpec.Error(
+                        "Google Lens upload failed",
+                        BuildGoogleLensUploadFailureBody(UploadService.GetName(hostDest), result.Error, result.IsRateLimit),
+                        GetExistingSavedFilePathOrNull()));
+                    return;
+                }
+
+                if (!OpenExternalUrl(UploadService.BuildGoogleLensUrl(result.Url), GetExistingSavedFilePathOrNull()))
+                    return;
+
+                Show(ToastSpec.Standard("AI Redirect Ready", $"Opened {providerName}.", GetExistingSavedFilePathOrNull()) with { SuppressSound = true });
                 return;
             }
 
-            if (_previewBitmap is not null)
-                ClipboardService.CopyToClipboard(_previewBitmap, _savedFilePath);
+            if (!SavedFilePathStillExists(savedFilePath))
+            {
+                ShowSavedFileMissingError(savedFilePath);
+                return;
+            }
+
+            var copySucceeded = _previewBitmap is null || TryCopyAiRedirectPreviewToClipboard(_previewBitmap, savedFilePath);
 
             var startUrl = UploadService.BuildAiChatStartUrl(provider);
-            OpenExternalUrl(startUrl);
+            if (!OpenExternalUrl(startUrl, GetExistingSavedFilePathOrNull()))
+                return;
+
             _spec = _spec with { ClickActionUrl = startUrl, ClickActionLabel = providerName };
             RefreshInteractiveTooltip(_spec);
             ApplyPinnedState(true);
+            if (!copySucceeded)
+                ToolTip = $"Opened {providerName}. Clipboard copy failed; drag the image from this toast.";
         }
         catch (Exception ex)
         {
-            Show(ToastSpec.Error("AI Redirect failed", ex.Message));
+            if (IsCurrentToastState(actionStateVersion))
+                Show(ToastSpec.Error(
+                    "AI Redirect failed",
+                    BuildToastActionFailureBody("OddSnap could not finish AI Redirect. Check Settings -> Uploads or open the saved file from History.", ex.Message),
+                    GetExistingSavedFilePathOrNull()));
+        }
+        finally
+        {
+            if (IsCurrentToastState(actionStateVersion))
+            {
+                _isOpeningAiRedirect = false;
+                AiRedirectBtn.IsEnabled = true;
+                RefreshOverlayButtonAccessibility(AiRedirectBtn, Helpers.ToastButtonKind.AiRedirect);
+            }
         }
     }
 
     private bool CanShowAiRedirectButton()
     {
-        return !string.IsNullOrWhiteSpace(_savedFilePath);
+        return HasSavedFileOnDisk();
     }
 
-    private static void OpenExternalUrl(string url)
+    private bool HasSavedFileOnDisk()
+        => !string.IsNullOrWhiteSpace(_savedFilePath) && File.Exists(_savedFilePath);
+
+    private string? GetExistingSavedFilePathOrNull()
+        => HasSavedFileOnDisk() ? _savedFilePath : null;
+
+    private static string BuildToastActionFailureBody(string recoveryMessage, string details)
+        => string.IsNullOrWhiteSpace(details) ? recoveryMessage : $"{recoveryMessage}\n{details}";
+
+    private static string BuildGoogleLensUploadFailureBody(string providerName, string? error, bool isRateLimit)
+    {
+        var providerLabel = string.IsNullOrWhiteSpace(providerName) ? "upload destination" : providerName;
+        var details = string.IsNullOrWhiteSpace(error) ? "Upload returned no link." : error;
+        var recovery = isRateLimit
+            ? "Try another upload destination or wait before retrying Google Lens."
+            : $"Check {providerLabel} settings or try another upload destination for Google Lens.";
+
+        return $"{providerLabel}: {details}\n{recovery}";
+    }
+
+    private static bool SavedFilePathStillExists(string filePath)
+        => !string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath);
+
+    private bool IsCurrentToastState(int stateVersion)
+        => _current == this && _toastStateVersion == stateVersion;
+
+    private void ShowSavedFileMissingError(string? filePath = null)
+    {
+        Show(ToastSpec.Error("File missing", "The saved file is no longer on disk.", filePath ?? _savedFilePath));
+    }
+
+    private static bool OpenExternalUrl(string url, string? filePath = null)
     {
         if (string.IsNullOrWhiteSpace(url))
-            return;
-
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
         {
-            FileName = url,
-            UseShellExecute = true
-        });
+            Show(ToastSpec.Error("Open failed", "No link is available.", filePath));
+            return false;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("toast.external-url-open", $"Failed to open external URL: {ex.Message}", ex);
+            Show(ToastSpec.Error(
+                "Open failed",
+                $"OddSnap could not open the link. Try again from the toast, or open the link manually if it is still visible.\n{ex.Message}",
+                filePath));
+            return false;
+        }
+    }
+
+    private static bool TryCopyAiRedirectPreviewToClipboard(Bitmap previewBitmap, string savedFilePath)
+    {
+        try
+        {
+            ClipboardService.CopyToClipboard(previewBitmap, savedFilePath);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void HookAiRedirectHover(System.Windows.Controls.Border btn, System.Windows.Controls.Image icon)
@@ -788,21 +1200,67 @@ public partial class ToastWindow : Window
 
     private void DeleteBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
+            return;
+        }
+
         e.Handled = true;
-        if (string.IsNullOrWhiteSpace(_savedFilePath))
+        DeleteSavedFile();
+    }
+
+    private void DeleteBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
             return;
 
-        var deletePath = _savedFilePath;
+        e.Handled = true;
+        DeleteSavedFile();
+    }
+
+    private void DeleteSavedFile()
+    {
+        if (_isDeletingSavedFile)
+            return;
+
+        if (!HasSavedFileOnDisk())
+        {
+            ShowSavedFileMissingError();
+            return;
+        }
+
+        _isDeletingSavedFile = true;
+        DeleteBtn.IsEnabled = false;
+        RefreshOverlayButtonAccessibility(DeleteBtn, Helpers.ToastButtonKind.Delete);
+        var deletePath = _savedFilePath!;
         try
         {
-            if (File.Exists(deletePath))
-                File.Delete(deletePath);
+            if (!SavedFilePathStillExists(deletePath))
+            {
+                _isDeletingSavedFile = false;
+                DeleteBtn.IsEnabled = true;
+                RefreshOverlayButtonAccessibility(DeleteBtn, Helpers.ToastButtonKind.Delete);
+                ShowSavedFileMissingError(deletePath);
+                return;
+            }
+
+            File.Delete(deletePath);
+            _isDeletingSavedFile = false;
+            DeleteBtn.IsEnabled = true;
+            RefreshOverlayButtonAccessibility(DeleteBtn, Helpers.ToastButtonKind.Delete);
             DismissAnimated();
-            Show(ToastSpec.Standard("Deleted", Path.GetFileName(deletePath)));
+            Show(ToastSpec.Standard("Deleted", Path.GetFileName(deletePath) ?? deletePath));
         }
         catch (Exception ex)
         {
-            Show(ToastSpec.Error("Delete failed", ex.Message));
+            _isDeletingSavedFile = false;
+            DeleteBtn.IsEnabled = true;
+            RefreshOverlayButtonAccessibility(DeleteBtn, Helpers.ToastButtonKind.Delete);
+            Show(ToastSpec.Error(
+                "Delete failed",
+                BuildToastActionFailureBody("OddSnap could not delete the saved file. Open it from History or delete it manually in File Explorer.", ex.Message),
+                GetExistingSavedFilePathOrNull()));
         }
     }
 
@@ -815,17 +1273,26 @@ public partial class ToastWindow : Window
             ProgressScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
             ProgressBar.Visibility = Visibility.Collapsed;
             ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: true);
+            RefreshOverlayButtonAccessibility(PinBtn, Helpers.ToastButtonKind.Pin);
             PinBtn.Opacity = 1;
             return;
         }
 
         ProgressBar.Visibility = Visibility.Visible;
         ProgressScale.ScaleX = 1;
+        if (_isHovered)
+        {
+            ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: false);
+            RefreshOverlayButtonAccessibility(PinBtn, Helpers.ToastButtonKind.Pin);
+            return;
+        }
+
         ProgressScale.BeginAnimation(ScaleTransform.ScaleXProperty,
             new DoubleAnimation { To = 0, Duration = Motion.Sec(_durationSeconds) });
         _timer.Interval = TimeSpan.FromSeconds(_durationSeconds);
         _timer.Start();
         ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: false);
+        RefreshOverlayButtonAccessibility(PinBtn, Helpers.ToastButtonKind.Pin);
     }
 
     private void AnimateOverlayButtons(double targetOpacity, double pinnedOpacity)
@@ -852,13 +1319,9 @@ public partial class ToastWindow : Window
 
     private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (IsChildOf(e.OriginalSource as DependencyObject, CloseBtn) ||
-            IsChildOf(e.OriginalSource as DependencyObject, PinBtn) ||
-            IsChildOf(e.OriginalSource as DependencyObject, SaveBtn) ||
-            IsChildOf(e.OriginalSource as DependencyObject, OfficeBtn) ||
-            IsChildOf(e.OriginalSource as DependencyObject, AiRedirectBtn) ||
-            IsChildOf(e.OriginalSource as DependencyObject, DeleteBtn))
+        if (IsToastOverlayButtonSource(e.OriginalSource as DependencyObject))
         {
+            e.Handled = true;
             return;
         }
 
@@ -869,6 +1332,12 @@ public partial class ToastWindow : Window
 
     private void OnMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
+        if (IsToastOverlayButtonSource(e.OriginalSource as DependencyObject))
+        {
+            CancelRootInteractionFromOverlaySource(e);
+            return;
+        }
+
         if (!IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed)
             return;
 
@@ -882,20 +1351,25 @@ public partial class ToastWindow : Window
             BeginDragFeedback();
         }
 
-        var dragFile = GetDragFilePath();
-        if (dragFile is null)
-        {
-            EndDragFeedback(cancelled: false);
-            ReleaseMouseCapture();
-            DismissAnimated();
-            return;
-        }
-
+        string? dragFile = null;
+        System.Windows.GiveFeedbackEventHandler? feedback = null;
         try
         {
+            dragFile = GetDragFilePath();
+            if (dragFile is null)
+            {
+                EndDragFeedback(cancelled: false);
+                ReleaseMouseCapture();
+                if (!string.IsNullOrWhiteSpace(_savedFilePath))
+                    ShowSavedFileMissingError();
+                else
+                    ShowToastDragError("No preview file is available to drag.");
+                return;
+            }
+
             var data = new System.Windows.DataObject();
             data.SetFileDropList(new System.Collections.Specialized.StringCollection { dragFile });
-            System.Windows.GiveFeedbackEventHandler feedback = (_, args) =>
+            feedback = (_, args) =>
             {
                 Mouse.SetCursor(System.Windows.Input.Cursors.Hand);
                 args.UseDefaultCursors = false;
@@ -903,19 +1377,34 @@ public partial class ToastWindow : Window
             };
             GiveFeedback += feedback;
             var result = System.Windows.DragDrop.DoDragDrop(this, data, System.Windows.DragDropEffects.Copy | System.Windows.DragDropEffects.Move);
-            GiveFeedback -= feedback;
             if (result == System.Windows.DragDropEffects.None)
+            {
                 EndDragFeedback(cancelled: true);
+                return;
+            }
 
-            // Many browser drop targets report inconsistent effects even when
-            // the file was accepted, so dismiss after the drag session ends.
             DismissAnimated();
+        }
+        catch (Exception ex)
+        {
+            EndDragFeedback(cancelled: true);
+            ShowToastDragError(ex.Message);
         }
         finally
         {
-            if (_savedFilePath is null && File.Exists(dragFile))
+            if (feedback is not null)
+                GiveFeedback -= feedback;
+
+            if (_savedFilePath is null && !string.IsNullOrWhiteSpace(dragFile) && File.Exists(dragFile))
             {
-                try { File.Delete(dragFile); } catch { }
+                try
+                {
+                    File.Delete(dragFile);
+                }
+                catch (Exception ex)
+                {
+                    AppDiagnostics.LogWarning("toast.drag-temp-delete", $"Failed to delete temporary drag file {Path.GetFileName(dragFile)}: {ex.Message}", ex);
+                }
             }
 
             _isDragging = false;
@@ -925,6 +1414,12 @@ public partial class ToastWindow : Window
 
     private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (IsToastOverlayButtonSource(e.OriginalSource as DependencyObject))
+        {
+            CancelRootInteractionFromOverlaySource(e);
+            return;
+        }
+
         if (!IsMouseCaptured)
             return;
 
@@ -942,17 +1437,34 @@ public partial class ToastWindow : Window
                     UseShellExecute = true
                 });
             }
-            catch
+            catch (Exception ex)
             {
-                if (_savedFilePath != null && File.Exists(_savedFilePath))
+                AppDiagnostics.LogWarning("toast.click-action-open", $"Failed to open click action URL: {ex.Message}", ex);
+                if (HasSavedFileOnDisk())
+                {
                     OpenFileLocation(_savedFilePath);
+                }
+                else if (!string.IsNullOrWhiteSpace(_savedFilePath))
+                {
+                    ShowSavedFileMissingError();
+                }
+                else
+                {
+                    ShowToastOpenError("Could not open the linked target.");
+                }
             }
             return;
         }
 
-        if (_savedFilePath != null && File.Exists(_savedFilePath))
+        if (HasSavedFileOnDisk())
         {
             OpenFileLocation(_savedFilePath);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_savedFilePath))
+        {
+            ShowSavedFileMissingError();
             return;
         }
 
@@ -986,6 +1498,41 @@ public partial class ToastWindow : Window
         DragScale.BeginAnimation(ScaleTransform.ScaleYProperty,
             Motion.To(1, 140, Motion.SmoothOut));
         Root.BeginAnimation(UIElement.OpacityProperty, Motion.To(1, 140, Motion.SoftOut));
+        if (cancelled)
+            ResumeDismissAfterAbortedInteractionIfNeeded();
+    }
+
+    private void CancelRootInteractionFromOverlaySource(System.Windows.Input.MouseEventArgs e)
+    {
+        if (_isDragging)
+            EndDragFeedback(cancelled: true);
+        else
+            ResumeDismissAfterAbortedInteractionIfNeeded();
+
+        _isDragging = false;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        e.Handled = true;
+    }
+
+    private void ResumeDismissAfterAbortedInteractionIfNeeded()
+    {
+        if (!_resumeDismissOnMouseLeave || _isPinned)
+            return;
+
+        _isHovered = IsCursorOverToast();
+        if (_isHovered)
+            return;
+
+        _resumeDismissOnMouseLeave = false;
+        DismissAnimated();
+    }
+
+    private bool IsCursorOverToast()
+    {
+        if (!GetCursorPos(out var cursor))
+            return IsMouseOver;
+
+        return IsScreenPointOver(OuterShell, cursor);
     }
 
     private static bool IsChildOf(DependencyObject? child, DependencyObject parent)
@@ -998,9 +1545,18 @@ public partial class ToastWindow : Window
         return false;
     }
 
+    private bool IsToastOverlayButtonSource(DependencyObject? source) =>
+        IsChildOf(source, CloseBtn) ||
+        IsChildOf(source, PinBtn) ||
+        IsChildOf(source, SaveBtn) ||
+        IsChildOf(source, OfficeBtn) ||
+        IsChildOf(source, AiRedirectBtn) ||
+        IsChildOf(source, DeleteBtn) ||
+        IsChildOf(source, TextCloseBtn);
+
     private string? GetDragFilePath()
     {
-        if (_savedFilePath != null && File.Exists(_savedFilePath))
+        if (HasSavedFileOnDisk())
             return _savedFilePath;
 
         if (_previewBitmap is null)
@@ -1009,6 +1565,16 @@ public partial class ToastWindow : Window
         var temp = Path.Combine(Path.GetTempPath(), $"oddsnap_toast_{Guid.NewGuid():N}.png");
         CaptureOutputService.SavePng(_previewBitmap, temp);
         return temp;
+    }
+
+    private void ShowToastOpenError(string message)
+    {
+        Show(ToastSpec.Error("Open failed", message, _savedFilePath));
+    }
+
+    private void ShowToastDragError(string message)
+    {
+        Show(ToastSpec.Error("Drag failed", message, _savedFilePath));
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -1026,6 +1592,7 @@ public partial class ToastWindow : Window
 
     private void CancelActiveToastState()
     {
+        _toastStateVersion++;
         _timer.Stop();
         _isHovered = false;
         _isDragging = false;
@@ -1033,6 +1600,23 @@ public partial class ToastWindow : Window
         _isFading = false;
         _closeAfterOpacityAnimation = false;
         _resumeDismissOnMouseLeave = false;
+        _isSavingPreview = false;
+        _isOpeningAiRedirect = false;
+        _isDeletingSavedFile = false;
+        _isRunningOfficeAction = false;
+        _restoreAutoDismissAfterOfficeAction = false;
+        _officeMenuDismissTimer.Stop();
+        _officeMenuMouseWasDown = false;
+        if (_officeMenu?.IsOpen == true)
+            _officeMenu.IsOpen = false;
+        _officeMenu = null;
+        if (IsMouseCaptured)
+            ReleaseMouseCapture();
+        SaveBtn.IsEnabled = true;
+        AiRedirectBtn.IsEnabled = true;
+        DeleteBtn.IsEnabled = true;
+        OfficeBtn.IsEnabled = true;
+        RefreshOverlayButtonLayout();
         StopDismissAnimationTimer();
         BeginAnimation(LeftProperty, null);
         BeginAnimation(TopProperty, null);
@@ -1287,30 +1871,53 @@ public partial class ToastWindow : Window
 
     private bool TryForceClose(bool force = false)
     {
-        _timer.Stop();
-        StopDismissAnimationTimer();
+        RunOnClosedCleanup("toast.force-close.stop-timer", () => _timer.Stop());
+        RunOnClosedCleanup("toast.force-close.stop-dismiss-animation", StopDismissAnimationTimer);
         _resumeDismissOnMouseLeave = false;
         if (_isPinned && !force)
             return false;
 
         if (_current == this) _current = null;
-        try { Close(); } catch { }
+        try
+        {
+            Close();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("toast.force-close", ex.Message, ex);
+        }
+
         return true;
     }
 
     protected override void OnClosed(EventArgs e)
     {
-        _timer.Stop();
-        _officeMenuDismissTimer.Stop();
-        if (_officeMenu?.IsOpen == true)
-            _officeMenu.IsOpen = false;
-        StopDismissAnimationTimer();
+        RunOnClosedCleanup("toast.closed.stop-timer", () => _timer.Stop());
+        RunOnClosedCleanup("toast.closed.stop-office-menu-timer", () => _officeMenuDismissTimer.Stop());
+        RunOnClosedCleanup("toast.closed.close-office-menu", () =>
+        {
+            if (_officeMenu?.IsOpen == true)
+                _officeMenu.IsOpen = false;
+        });
+        RunOnClosedCleanup("toast.closed.stop-dismiss-animation", StopDismissAnimationTimer);
         if (_current == this) _current = null;
-        _previewBitmap?.Dispose();
+        RunOnClosedCleanup("toast.closed.dispose-preview", () => _previewBitmap?.Dispose());
         _previewBitmap = null;
-        PreviewImage.Source = null;
-        InlinePreviewImage.Source = null;
+        RunOnClosedCleanup("toast.closed.clear-preview-source", () => PreviewImage.Source = null);
+        RunOnClosedCleanup("toast.closed.clear-inline-source", () => InlinePreviewImage.Source = null);
         base.OnClosed(e);
+    }
+
+    private static void RunOnClosedCleanup(string diagnosticKey, Action cleanup)
+    {
+        try
+        {
+            cleanup();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(diagnosticKey, ex.Message, ex);
+        }
     }
 
     private static (double x, double y) GetDismissOffset() => _position switch

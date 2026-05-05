@@ -1,12 +1,15 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using OddSnap.Helpers;
 using OddSnap.Services;
 using ZXing;
+using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
 
 namespace OddSnap.UI;
@@ -38,17 +41,25 @@ public partial class SettingsWindow
             ? new List<CodeHistoryEntry>(allEntries)
             : allEntries.Where(entry => CodeMatchesCachedTerms(entry, queryTerms)).ToList();
 
-        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyLabel.Text = allEntries.Count == 0 ? "No QR/barcode scans yet"
-            : entries.Count == 0 ? "No QR/barcode scans match your search" : "";
+        if (entries.Count == 0)
+        {
+            if (allEntries.Count == 0)
+                ShowHistoryEmptyState("No QR/barcode scans yet", "Scanned codes will appear here.");
+            else
+                ShowHistoryEmptyState("No QR/barcode scans match your search", "Search matched 0 saved codes.");
+        }
+        else
+        {
+            HideHistoryEmptyState();
+        }
         HistoryCountText.Text = string.IsNullOrWhiteSpace(query)
             ? $"{entries.Count} code{(entries.Count == 1 ? "" : "s")}"
             : $"{entries.Count} of {allEntries.Count} code{(allEntries.Count == 1 ? "" : "s")}";
-        DeleteSelectedBtn.Visibility = _selectMode && HistoryCategoryCombo.SelectedIndex == 5 ? Visibility.Visible : Visibility.Collapsed;
         _filteredCodeEntries = entries;
         _codeRenderCount = Math.Min(HistoryInitialPageSize, _filteredCodeEntries.Count);
         _codeLastRenderedDate = null;
         AppendCodeHistoryEntries(_filteredCodeEntries, 0, _codeRenderCount);
+        UpdateHistoryActionButtons();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-codes",
@@ -119,12 +130,40 @@ public partial class SettingsWindow
             Padding = new Thickness(12),
             Margin = new Thickness(0, 0, 0, 6),
             Background = HistoryCardIdleBrush,
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
+            Focusable = true,
+            ToolTip = "Copy this QR/barcode text",
             DataContext = entry
         };
 
-        card.MouseEnter += (_, _) => card.Background = HistoryCardHoverBrush;
-        card.MouseLeave += (_, _) => card.Background = HistoryCardIdleBrush;
+        card.MouseEnter += (_, _) =>
+        {
+            card.Background = HistoryCardHoverBrush;
+            card.BorderBrush = HistoryCardFocusBrush;
+        };
+        card.MouseLeave += (_, _) =>
+        {
+            if (!card.IsKeyboardFocusWithin)
+            {
+                card.Background = HistoryCardIdleBrush;
+                card.BorderBrush = Brushes.Transparent;
+            }
+        };
+        card.GotKeyboardFocus += (_, _) =>
+        {
+            card.Background = HistoryCardHoverBrush;
+            card.BorderBrush = HistoryCardFocusBrush;
+        };
+        card.LostKeyboardFocus += (_, _) =>
+        {
+            if (card.IsMouseOver)
+                return;
+
+            card.Background = HistoryCardIdleBrush;
+            card.BorderBrush = Brushes.Transparent;
+        };
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -155,6 +194,11 @@ public partial class SettingsWindow
 
         var formatLabel = HumanizeBarcodeFormat(entry.Format);
         var isUrl = TryNormalizeUrl(entry.Text, out var url);
+        AutomationProperties.SetName(card, $"{formatLabel} history item");
+        AutomationProperties.SetHelpText(card, "Press Enter or Space to copy this QR/barcode text. In select mode, press Enter or Space to select it.");
+        preview.ToolTip = $"{formatLabel} preview";
+        AutomationProperties.SetName(preview, $"{formatLabel} preview");
+        AutomationProperties.SetHelpText(preview, $"Preview image for this {formatLabel} history item.");
 
         var primary = new TextBlock
         {
@@ -167,15 +211,23 @@ public partial class SettingsWindow
             Foreground = Theme.Brush(Theme.TextPrimary),
             Opacity = 0.92
         };
+        primary.ToolTip = entry.Text;
+        AutomationProperties.SetName(primary, $"{formatLabel} text");
+        AutomationProperties.SetHelpText(primary, entry.Text);
         infoStack.Children.Add(primary);
 
-        infoStack.Children.Add(new TextBlock
+        var metadataText = $"{formatLabel} · {FormatTimeAgo(entry.CapturedAt)}";
+        var metadata = new TextBlock
         {
-            Text = $"{formatLabel} · {FormatTimeAgo(entry.CapturedAt)}",
+            Text = metadataText,
             FontSize = 10,
             Opacity = 0.35,
-            Margin = new Thickness(0, 4, 0, 0)
-        });
+            Margin = new Thickness(0, 4, 0, 0),
+            ToolTip = metadataText
+        };
+        AutomationProperties.SetName(metadata, "Code metadata");
+        AutomationProperties.SetHelpText(metadata, metadataText);
+        infoStack.Children.Add(metadata);
 
         Grid.SetColumn(infoStack, 1);
         grid.Children.Add(infoStack);
@@ -196,8 +248,11 @@ public partial class SettingsWindow
                 Padding = new Thickness(8, 3, 8, 3),
                 Margin = new Thickness(0, 0, 6, 0),
                 VerticalAlignment = VerticalAlignment.Center,
-                Cursor = System.Windows.Input.Cursors.Hand
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Open this code URL"
             };
+            AutomationProperties.SetName(openBtn, "Open code URL");
+            AutomationProperties.SetHelpText(openBtn, "Open this QR/barcode URL in your default browser.");
             openBtn.Click += (_, _) => TryOpenExternalUrl(url);
             btnPanel.Children.Add(openBtn);
         }
@@ -208,14 +263,13 @@ public partial class SettingsWindow
             FontSize = 10,
             Padding = new Thickness(8, 3, 8, 3),
             VerticalAlignment = VerticalAlignment.Center,
-            Cursor = System.Windows.Input.Cursors.Hand
+            Cursor = System.Windows.Input.Cursors.Hand,
+            ToolTip = "Copy this QR/barcode text"
         };
+        AutomationProperties.SetName(copyBtn, "Copy code text");
+        AutomationProperties.SetHelpText(copyBtn, "Copy this QR/barcode text to the clipboard.");
         var capturedText = entry.Text;
-        copyBtn.Click += (_, _) =>
-        {
-            ClipboardService.CopyTextToClipboard(capturedText);
-            ToastWindow.Show("Copied", "Text copied");
-        };
+        copyBtn.Click += (_, _) => CopyCodeText();
         btnPanel.Children.Add(copyBtn);
         grid.Children.Add(btnPanel);
 
@@ -225,20 +279,52 @@ public partial class SettingsWindow
         root.Children.Add(badge);
         card.Child = root;
 
+        void ToggleSelection()
+        {
+            var selected = card.Tag is CodeHistoryEntry;
+            selected = !selected;
+            card.Tag = selected ? entry : null;
+            UpdateSelectableCardSelection(card, badge, selected);
+            UpdateHistoryActionButtons();
+        }
+
+        void CopyCodeText()
+        {
+            try
+            {
+                ClipboardService.CopyTextToClipboard(capturedText);
+                ToastWindow.Show("Copied", "Text copied");
+            }
+            catch (Exception ex)
+            {
+                ToastWindow.ShowError(
+                    "Copy failed",
+                    $"OddSnap could not copy this QR/barcode history item. Try again from Settings -> History, or copy the visible decoded value manually.\n{ex.Message}");
+            }
+        }
+
         card.MouseLeftButtonDown += (_, e) =>
         {
             e.Handled = true;
             if (_selectMode)
             {
-                var selected = card.Tag is CodeHistoryEntry;
-                selected = !selected;
-                card.Tag = selected ? entry : null;
-                UpdateSelectableCardSelection(card, badge, selected);
+                ToggleSelection();
                 return;
             }
 
-            ClipboardService.CopyTextToClipboard(capturedText);
-            ToastWindow.Show("Copied", "Text copied");
+            CopyCodeText();
+        };
+
+        card.KeyDown += (_, e) =>
+        {
+            if (!IsHistoryCardActivationKey(e))
+                return;
+
+            e.Handled = true;
+            if (_selectMode)
+                ToggleSelection();
+            else
+                CopyCodeText();
         };
 
         UpdateSelectableCardSelection(card, badge, selected: false);
@@ -403,19 +489,42 @@ public partial class SettingsWindow
         return false;
     }
 
-    private static void TryOpenExternalUrl(string url)
+    private static bool TryOpenExternalUrl(string url)
     {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            ToastWindow.ShowError("Open failed", "No code URL is available.");
+            return false;
+        }
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            ToastWindow.ShowError("Open failed", "The code URL is not a valid web link.");
+            return false;
+        }
+
         try
         {
-            Process.Start(new ProcessStartInfo
+            using var process = Process.Start(new ProcessStartInfo
             {
-                FileName = url,
+                FileName = uri.AbsoluteUri,
                 UseShellExecute = true
             });
+            if (process is null)
+            {
+                ToastWindow.ShowError("Open failed", "Windows did not open the code URL. Copy it from Settings -> History and open it manually.");
+                return false;
+            }
+
+            return true;
         }
         catch (Exception ex)
         {
-            ToastWindow.ShowError("Open failed", ex.Message);
+            ToastWindow.ShowError(
+                "Open failed",
+                $"OddSnap could not open the code URL. Copy it from Settings -> History and open it manually.\n{ex.Message}");
+            return false;
         }
     }
 }

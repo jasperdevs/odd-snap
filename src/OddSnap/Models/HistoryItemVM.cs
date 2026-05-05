@@ -27,6 +27,9 @@ internal sealed class HistoryItemVM : INotifyPropertyChanged
     internal Border? Card { get; set; }
     internal System.Windows.Controls.Image? ThumbnailImage { get; set; }
     internal FrameworkElement? SelectionBadge { get; set; }
+    internal TextBlock? FileNameTextBlock { get; set; }
+    internal TextBlock? TimeStatusTextBlock { get; set; }
+    internal TextBlock? ImageSearchMatchTextBlock { get; set; }
 
     private bool _isSelected;
     public bool IsSelected

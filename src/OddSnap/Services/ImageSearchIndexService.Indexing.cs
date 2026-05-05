@@ -21,7 +21,8 @@ public sealed partial class ImageSearchIndexService
         }
         catch (Exception ex)
         {
-            SetStatus($"Indexing failed: {ex.Message}");
+            AppDiagnostics.LogError("image-search.indexing", ex);
+            SetStatus("Indexing failed. Existing search data is still available.");
         }
         finally
         {

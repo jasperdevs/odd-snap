@@ -559,7 +559,13 @@ public static partial class UploadService
                     current = current?[part];
                 url = current?.GetValue<string>();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "upload.custom-response-path",
+                    $"Failed to read custom upload response path '{s.CustomResponseUrlPath}': {ex.Message}",
+                    ex);
+            }
         }
 
         url ??= body.Trim();

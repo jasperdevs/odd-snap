@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using OddSnap.Services;
@@ -22,10 +23,19 @@ public partial class SettingsWindow
         if (_ocrTabLoaded) return;
         _ocrTabLoaded = true;
 
-        LoadOcrLanguageOptions();
-        LoadTranslateLanguageCombos();
-        SelectTranslationModelCombo(TranslateModelCombo, _settingsService.Settings.TranslationModel);
-        GoogleApiKeyBox.Text = _settingsService.Settings.GoogleTranslateApiKey ?? "";
+        _suppressOcrPreferenceChange = true;
+        try
+        {
+            LoadOcrLanguageOptions();
+            LoadTranslateLanguageCombos();
+            SelectTranslationModelCombo(TranslateModelCombo, _settingsService.Settings.TranslationModel);
+            GoogleApiKeyBox.Password = _settingsService.Settings.GoogleTranslateApiKey ?? "";
+        }
+        finally
+        {
+            _suppressOcrPreferenceChange = false;
+        }
+
         UpdateTranslationModelUi();
         PrimeTranslationRuntimeStatusUi();
         _ = CheckModelStatusAsync();
@@ -44,7 +54,7 @@ public partial class SettingsWindow
         else if (OpenSourceTranslationRuntimeService.TryGetCachedStatus(out var openSourceReady, out var openSourceStatus))
         {
             _openSourceLocalInstalled = openSourceReady;
-            OpenSourceLocalStatusText.Text = openSourceReady ? openSourceStatus : "Not installed";
+            OpenSourceLocalStatusText.Text = FormatRuntimeReadinessStatus(openSourceReady, openSourceStatus, openSourceJob, "Open-source local");
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = true;
             OpenSourceLocalInstallBtn.Content = openSourceReady ? "Uninstall" : "Install";
@@ -52,7 +62,7 @@ public partial class SettingsWindow
         }
         else if (hasOpenSourceJob && openSourceJob is { LastSucceeded: false })
         {
-            OpenSourceLocalStatusText.Text = $"Failed: {FormatRuntimeStatus(openSourceJob.LastError)}";
+            OpenSourceLocalStatusText.Text = FormatRuntimeActionFailedStatus(openSourceJob.LastError, "Open-source local");
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = true;
             OpenSourceLocalInstallBtn.Content = "Install";
@@ -77,7 +87,7 @@ public partial class SettingsWindow
         else if (TranslationService.TryGetArgosCachedStatus(out var argosReady, out var argosStatus))
         {
             _argosInstalled = argosReady;
-            ArgosStatusText.Text = argosReady ? argosStatus : "Not installed";
+            ArgosStatusText.Text = FormatRuntimeReadinessStatus(argosReady, argosStatus, argosJob, "Argos Translate");
             ArgosProgressBar.Visibility = Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = true;
             ArgosInstallBtn.Content = argosReady ? "Uninstall" : "Install";
@@ -85,7 +95,7 @@ public partial class SettingsWindow
         }
         else if (hasArgosJob && argosJob is { LastSucceeded: false })
         {
-            ArgosStatusText.Text = $"Failed: {FormatRuntimeStatus(argosJob.LastError)}";
+            ArgosStatusText.Text = FormatRuntimeActionFailedStatus(argosJob.LastError, "Argos Translate");
             ArgosProgressBar.Visibility = Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = true;
             ArgosInstallBtn.Content = "Install";
@@ -106,7 +116,11 @@ public partial class SettingsWindow
         OcrLanguageCombo.Items.Clear();
 
         // Auto at top — uses Windows system language
-        var autoItem = new ComboBoxItem { Content = "Auto (system language)", Tag = "auto" };
+        var autoItem = CreateOcrLanguageItem(
+            "Auto (system language)",
+            "auto",
+            "Auto OCR language",
+            "Use the Windows system language for text recognition when available.");
         _ocrLanguageItems.Add(autoItem);
         OcrLanguageCombo.Items.Add(autoItem);
 
@@ -118,13 +132,21 @@ public partial class SettingsWindow
             {
                 var lang = new Windows.Globalization.Language(tag);
                 var label = $"{lang.DisplayName} ({tag})";
-                var item = new ComboBoxItem { Content = label, Tag = tag };
+                var item = CreateOcrLanguageItem(
+                    label,
+                    tag,
+                    $"{label} OCR language",
+                    $"Use {label} for text recognition.");
                 _ocrLanguageItems.Add(item);
                 OcrLanguageCombo.Items.Add(item);
             }
             catch
             {
-                var item = new ComboBoxItem { Content = tag, Tag = tag };
+                var item = CreateOcrLanguageItem(
+                    tag,
+                    tag,
+                    $"{tag} OCR language",
+                    $"Use {tag} for text recognition.");
                 _ocrLanguageItems.Add(item);
                 OcrLanguageCombo.Items.Add(item);
             }
@@ -142,12 +164,19 @@ public partial class SettingsWindow
 
     private void OcrLanguageCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressOcrPreferenceChange) return;
         if (OcrLanguageCombo.SelectedItem is not ComboBoxItem item) return;
 
+        var previous = _settingsService.Settings.OcrLanguageTag;
         var code = item.Tag as string ?? "auto";
-        _settingsService.Settings.OcrLanguageTag = code;
-        _settingsService.Save();
+        UpdateOcrPreference(
+            "settings.ocr-language",
+            "OCR language",
+            previous,
+            code,
+            value => _settingsService.Settings.OcrLanguageTag = value,
+            value => SelectComboByTag(OcrLanguageCombo, value),
+            SetOcrPreferenceStatus);
     }
 
     private static string GetLanguageLabel(string languageTag)
@@ -172,18 +201,42 @@ public partial class SettingsWindow
 
         foreach (var (code, name) in TranslationService.SupportedLanguages)
         {
-            var fromItem = new ComboBoxItem { Content = name, Tag = code };
+            var fromItem = CreateTranslationLanguageItem(
+                name,
+                code,
+                $"{name} source language",
+                $"Use {name} as the default translation source.");
             _translateFromItems.Add(fromItem);
             TranslateFromCombo.Items.Add(fromItem);
 
             var toName = code == "auto" ? "Auto (interface/system language)" : name;
-            var toItem = new ComboBoxItem { Content = toName, Tag = code };
+            var toItem = CreateTranslationLanguageItem(
+                toName,
+                code,
+                $"{toName} target language",
+                $"Use {toName} as the default translation target.");
             _translateToItems.Add(toItem);
             TranslateToCombo.Items.Add(toItem);
         }
 
         SelectComboByTag(TranslateFromCombo, _settingsService.Settings.OcrDefaultTranslateFrom);
         SelectComboByTag(TranslateToCombo, _settingsService.Settings.OcrDefaultTranslateTo);
+    }
+
+    private static ComboBoxItem CreateOcrLanguageItem(string text, string tag, string automationName, string helpText)
+    {
+        var item = new ComboBoxItem { Content = text, Tag = tag, ToolTip = helpText };
+        AutomationProperties.SetName(item, automationName);
+        AutomationProperties.SetHelpText(item, helpText);
+        return item;
+    }
+
+    private static ComboBoxItem CreateTranslationLanguageItem(string text, string tag, string automationName, string helpText)
+    {
+        var item = new ComboBoxItem { Content = text, Tag = tag, ToolTip = helpText };
+        AutomationProperties.SetName(item, automationName);
+        AutomationProperties.SetHelpText(item, helpText);
+        return item;
     }
 
     private static void SelectComboByTag(ComboBox combo, string tag)
@@ -196,39 +249,88 @@ public partial class SettingsWindow
 
     private void TranslateFromCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressOcrPreferenceChange) return;
         if (TranslateFromCombo.SelectedItem is not ComboBoxItem item) return;
-        _settingsService.Settings.OcrDefaultTranslateFrom = TranslationService.ResolveSourceLanguage(item.Tag as string);
-        _settingsService.Save();
-        UpdateTranslationModelUi();
+
+        var previous = _settingsService.Settings.OcrDefaultTranslateFrom;
+        var selected = TranslationService.ResolveSourceLanguage(item.Tag as string);
+        UpdateOcrPreference(
+            "settings.translation-source-language",
+            "Source language",
+            previous,
+            selected,
+            value => _settingsService.Settings.OcrDefaultTranslateFrom = value,
+            value => SelectComboByTag(TranslateFromCombo, value),
+            SetTranslationPreferenceStatus,
+            _ => UpdateTranslationModelUi());
     }
 
     private void TranslateToCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressOcrPreferenceChange) return;
         if (TranslateToCombo.SelectedItem is not ComboBoxItem item) return;
-        _settingsService.Settings.OcrDefaultTranslateTo = item.Tag as string ?? "auto";
-        _settingsService.Save();
+
+        var previous = _settingsService.Settings.OcrDefaultTranslateTo;
+        var selected = item.Tag as string ?? "auto";
+        UpdateOcrPreference(
+            "settings.translation-target-language",
+            "Target language",
+            previous,
+            selected,
+            value => _settingsService.Settings.OcrDefaultTranslateTo = value,
+            value => SelectComboByTag(TranslateToCombo, value),
+            SetTranslationPreferenceStatus);
     }
 
     private void TranslateModelCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.TranslationModel = (int)GetSelectedTranslationModel(TranslateModelCombo);
-        _settingsService.Save();
-        UpdateTranslationModelUi();
+        if (!IsLoaded || _suppressOcrPreferenceChange) return;
+
+        var previous = _settingsService.Settings.TranslationModel;
+        var selected = (int)GetSelectedTranslationModel(TranslateModelCombo);
+        UpdateOcrPreference(
+            "settings.translation-engine",
+            "Translation engine",
+            previous,
+            selected,
+            value => _settingsService.Settings.TranslationModel = value,
+            value => SelectTranslationModelCombo(TranslateModelCombo, value),
+            SetTranslationPreferenceStatus,
+            _ => UpdateTranslationModelUi());
     }
 
     private bool _argosInstalled;
     private void OpenSourceLocalInstallBtn_Click(object sender, RoutedEventArgs e)
     {
+        if (_openSourceTranslationRuntimeActionInProgress)
+            return;
+
         var isUninstall = _openSourceLocalInstalled;
+        var startingStatus = isUninstall
+            ? "Uninstalling open-source local translation..."
+            : "Installing open-source local translation...";
+
+        if (isUninstall && !ThemedConfirmDialog.Confirm(
+                this,
+                "Uninstall open-source local translation",
+                "Uninstall the open-source local translation runtime?\n\nIt will need to be installed again before open-source local translation can run.",
+                "Uninstall",
+                "Cancel",
+                danger: true))
+        {
+            OpenSourceLocalStatusText.Text = "Open-source local uninstall canceled. Runtime was left installed.";
+            OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
+            OpenSourceLocalInstallBtn.Content = "Uninstall";
+            OpenSourceLocalInstallBtn.IsEnabled = true;
+            SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
+            return;
+        }
 
         var started = BackgroundRuntimeJobService.Start(
             new BackgroundRuntimeJobOptions(
                 OpenSourceLocalTranslationJobKey,
                 "Open-source local translation",
-                isUninstall ? "Uninstalling open-source local translation..." : "Installing open-source local translation...",
+                startingStatus,
                 isUninstall ? "Open-source local removed" : "Open-source local ready",
                 isUninstall ? "Removed the local translator." : "Installed the local translator.",
                 isUninstall ? "Open-source local uninstall failed" : "Open-source local install failed")
@@ -249,11 +351,24 @@ public partial class SettingsWindow
 
         if (!started)
             ToastWindow.Show("Open-source local", "That setup is already running in the background.");
-        else if (!isUninstall)
+        else
         {
-            SelectTranslationModelCombo(TranslateModelCombo, (int)TranslationModel.OpenSourceLocal);
-            _settingsService.Settings.TranslationModel = (int)TranslationModel.OpenSourceLocal;
-            _settingsService.Save();
+            _openSourceTranslationRuntimeActionInProgress = true;
+            SetOpenSourceTranslationRuntimeBusy(startingStatus, isUninstall);
+
+            if (!isUninstall)
+            {
+                var previous = _settingsService.Settings.TranslationModel;
+                UpdateOcrPreference(
+                    "settings.open-source-local-translation-engine",
+                    "Translation engine",
+                    previous,
+                    (int)TranslationModel.OpenSourceLocal,
+                    value => _settingsService.Settings.TranslationModel = value,
+                    value => SelectTranslationModelCombo(TranslateModelCombo, value),
+                    SetTranslationPreferenceStatus,
+                    _ => UpdateTranslationModelUi());
+            }
         }
 
         _ = CheckModelStatusAsync();
@@ -261,13 +376,35 @@ public partial class SettingsWindow
 
     private void ArgosInstallBtn_Click(object sender, RoutedEventArgs e)
     {
+        if (_argosTranslationRuntimeActionInProgress)
+            return;
+
         var isUninstall = _argosInstalled;
+        var startingStatus = isUninstall
+            ? "Uninstalling Argos Translate..."
+            : "Installing Argos Translate...";
+
+        if (isUninstall && !ThemedConfirmDialog.Confirm(
+                this,
+                "Uninstall Argos Translate",
+                "Uninstall the Argos Translate runtime?\n\nIt will need to be installed again before Argos local translation can run.",
+                "Uninstall",
+                "Cancel",
+                danger: true))
+        {
+            ArgosStatusText.Text = "Argos uninstall canceled. Runtime was left installed.";
+            ArgosProgressBar.Visibility = Visibility.Collapsed;
+            ArgosInstallBtn.Content = "Uninstall";
+            ArgosInstallBtn.IsEnabled = true;
+            SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
+            return;
+        }
 
         var started = BackgroundRuntimeJobService.Start(
             new BackgroundRuntimeJobOptions(
                 ArgosTranslationJobKey,
                 "Argos Translate",
-                isUninstall ? "Uninstalling Argos Translate..." : "Installing Argos Translate...",
+                startingStatus,
                 isUninstall ? "Argos removed" : "Argos ready",
                 isUninstall ? "Removed Argos Translate." : "Installed Argos Translate.",
                 isUninstall ? "Argos uninstall failed" : "Argos install failed")
@@ -288,22 +425,61 @@ public partial class SettingsWindow
 
         if (!started)
             ToastWindow.Show("Argos Translate", "That setup is already running in the background.");
-        else if (!isUninstall)
+        else
         {
-            SelectTranslationModelCombo(TranslateModelCombo, (int)TranslationModel.Argos);
-            _settingsService.Settings.TranslationModel = (int)TranslationModel.Argos;
-            _settingsService.Save();
+            _argosTranslationRuntimeActionInProgress = true;
+            SetArgosTranslationRuntimeBusy(startingStatus, isUninstall);
+
+            if (!isUninstall)
+            {
+                var previous = _settingsService.Settings.TranslationModel;
+                UpdateOcrPreference(
+                    "settings.argos-translation-engine",
+                    "Translation engine",
+                    previous,
+                    (int)TranslationModel.Argos,
+                    value => _settingsService.Settings.TranslationModel = value,
+                    value => SelectTranslationModelCombo(TranslateModelCombo, value),
+                    SetTranslationPreferenceStatus,
+                    _ => UpdateTranslationModelUi());
+            }
         }
 
         _ = CheckModelStatusAsync();
     }
 
+    private void SetOpenSourceTranslationRuntimeBusy(string status, bool isUninstall)
+    {
+        OpenSourceLocalStatusText.Text = status;
+        OpenSourceLocalProgressBar.Visibility = Visibility.Visible;
+        OpenSourceLocalInstallBtn.Content = isUninstall ? "Uninstall" : "Install";
+        OpenSourceLocalInstallBtn.IsEnabled = false;
+        SetLoadingTextShimmer(OpenSourceLocalStatusText, true, 0.7, 0.45);
+    }
+
+    private void SetArgosTranslationRuntimeBusy(string status, bool isUninstall)
+    {
+        ArgosStatusText.Text = status;
+        ArgosProgressBar.Visibility = Visibility.Visible;
+        ArgosInstallBtn.Content = isUninstall ? "Uninstall" : "Install";
+        ArgosInstallBtn.IsEnabled = false;
+        SetLoadingTextShimmer(ArgosStatusText, true, 0.7, 0.45);
+    }
+
     private async Task CheckModelStatusAsync()
+    {
+        await RefreshOpenSourceTranslationRuntimeStatusAsync();
+        await RefreshArgosTranslationRuntimeStatusAsync();
+        UpdateTranslationModelUi();
+    }
+
+    private async Task RefreshOpenSourceTranslationRuntimeStatusAsync()
     {
         try
         {
             if (BackgroundRuntimeJobService.TryGetSnapshot(OpenSourceLocalTranslationJobKey, out var openSourceJob) && openSourceJob.IsRunning)
             {
+                _openSourceTranslationRuntimeActionInProgress = true;
                 OpenSourceLocalProgressBar.Visibility = Visibility.Visible;
                 OpenSourceLocalInstallBtn.IsEnabled = false;
                 OpenSourceLocalStatusText.Text = openSourceJob.Status;
@@ -312,20 +488,29 @@ public partial class SettingsWindow
             }
             else
             {
+                _openSourceTranslationRuntimeActionInProgress = false;
                 _openSourceLocalInstalled = await OpenSourceTranslationRuntimeService.IsRuntimeReadyAsync();
-                OpenSourceLocalStatusText.Text = _openSourceLocalInstalled
-                    ? "Installed"
-                    : openSourceJob is { LastSucceeded: false }
-                        ? $"Failed: {FormatRuntimeStatus(openSourceJob.LastError)}"
-                        : "Not installed";
+                OpenSourceLocalStatusText.Text = FormatRuntimeReadinessStatus(_openSourceLocalInstalled, "Installed", openSourceJob, "Open-source local");
                 OpenSourceLocalInstallBtn.Content = _openSourceLocalInstalled ? "Uninstall" : "Install";
                 OpenSourceLocalInstallBtn.IsEnabled = true;
                 OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
                 SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
             }
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.ocr.check-open-source-status", ex);
+            SetOpenSourceTranslationRuntimeStatusRefreshFailed(ex.Message);
+        }
+    }
 
+    private async Task RefreshArgosTranslationRuntimeStatusAsync()
+    {
+        try
+        {
             if (BackgroundRuntimeJobService.TryGetSnapshot(ArgosTranslationJobKey, out var argosJob) && argosJob.IsRunning)
             {
+                _argosTranslationRuntimeActionInProgress = true;
                 ArgosProgressBar.Visibility = Visibility.Visible;
                 ArgosInstallBtn.IsEnabled = false;
                 ArgosStatusText.Text = argosJob.Status;
@@ -334,33 +519,66 @@ public partial class SettingsWindow
             }
             else
             {
+                _argosTranslationRuntimeActionInProgress = false;
                 _argosInstalled = await TranslationService.IsArgosReadyAsync();
-                ArgosStatusText.Text = _argosInstalled
-                    ? "Installed"
-                    : argosJob is { LastSucceeded: false }
-                        ? $"Failed: {FormatRuntimeStatus(argosJob.LastError)}"
-                        : "Not installed";
+                ArgosStatusText.Text = FormatRuntimeReadinessStatus(_argosInstalled, "Installed", argosJob, "Argos Translate");
                 ArgosInstallBtn.Content = _argosInstalled ? "Uninstall" : "Install";
                 ArgosInstallBtn.IsEnabled = true;
                 ArgosProgressBar.Visibility = Visibility.Collapsed;
                 SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
             }
-
-            UpdateTranslationModelUi();
         }
         catch (Exception ex)
         {
-            AppDiagnostics.LogError("settings.ocr.check-model-status", ex);
-            OpenSourceLocalStatusText.Text = "Python not found";
-            ArgosStatusText.Text = "Python not found";
-            OpenSourceLocalInstallBtn.IsEnabled = true;
-            ArgosInstallBtn.IsEnabled = true;
-            OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
-            ArgosProgressBar.Visibility = Visibility.Collapsed;
-            SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
-            SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
-            UpdateTranslationModelUi();
+            AppDiagnostics.LogError("settings.ocr.check-argos-status", ex);
+            SetArgosTranslationRuntimeStatusRefreshFailed(ex.Message);
         }
+    }
+
+    private void SetTranslationRuntimeStatusRefreshFailed(string message)
+    {
+        SetOpenSourceTranslationRuntimeStatusRefreshFailed(message);
+        SetArgosTranslationRuntimeStatusRefreshFailed(message);
+    }
+
+    private void SetOpenSourceTranslationRuntimeStatusRefreshFailed(string message)
+    {
+        _openSourceTranslationRuntimeActionInProgress = false;
+        OpenSourceLocalStatusText.Text = FormatTranslationRuntimeRefreshFailureStatus(message);
+        OpenSourceLocalInstallBtn.IsEnabled = true;
+        OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
+        SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
+    }
+
+    private void SetArgosTranslationRuntimeStatusRefreshFailed(string message)
+    {
+        _argosTranslationRuntimeActionInProgress = false;
+        ArgosStatusText.Text = FormatTranslationRuntimeRefreshFailureStatus(message);
+        ArgosInstallBtn.IsEnabled = true;
+        ArgosProgressBar.Visibility = Visibility.Collapsed;
+        SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
+    }
+
+    private static string FormatTranslationRuntimeRefreshFailureStatus(string message)
+        => string.IsNullOrWhiteSpace(message)
+            ? "Status refresh failed. Check Settings -> OCR and try again."
+            : "Status refresh failed. Check Settings -> OCR and try again; details were logged.";
+
+    private static string FormatRuntimeReadinessStatus(bool isInstalled, string installedStatus, BackgroundRuntimeJobSnapshot? lastJob, string runtimeName)
+    {
+        if (isInstalled)
+            return installedStatus;
+
+        if (lastJob is { LastSucceeded: false })
+            return FormatRuntimeActionFailedStatus(lastJob.LastError, runtimeName);
+
+        return "Not installed";
+    }
+
+    private static string FormatRuntimeActionFailedStatus(string? message, string runtimeName)
+    {
+        var recovery = $"{runtimeName} action failed. Check Settings -> OCR and try again.";
+        return string.IsNullOrWhiteSpace(message) ? recovery : $"{recovery} Details were logged.";
     }
 
     private static string FormatRuntimeStatus(string? status)
@@ -408,14 +626,89 @@ public partial class SettingsWindow
             combo.SelectedIndex = 0;
     }
 
-    private void GoogleApiKeyBox_Changed(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void GoogleApiKeyBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        var key = GoogleApiKeyBox.Text?.Trim();
-        _settingsService.Settings.GoogleTranslateApiKey = string.IsNullOrWhiteSpace(key) ? null : key;
-        _settingsService.Save();
-        TranslationService.SetGoogleApiKey(_settingsService.Settings.GoogleTranslateApiKey);
-        UpdateTranslationModelUi();
+        if (!IsLoaded || _suppressOcrPreferenceChange) return;
+        var previous = _settingsService.Settings.GoogleTranslateApiKey;
+        var key = GoogleApiKeyBox.Password?.Trim();
+        var selected = string.IsNullOrWhiteSpace(key) ? null : key;
+        UpdateOcrPreference(
+            "settings.google-translate-api-key",
+            "Google Translate API key",
+            previous,
+            selected,
+            value => _settingsService.Settings.GoogleTranslateApiKey = value,
+            value => GoogleApiKeyBox.Password = value ?? "",
+            SetTranslationPreferenceStatus,
+            value =>
+            {
+                TranslationService.SetGoogleApiKey(value);
+                UpdateTranslationModelUi();
+            });
+    }
+
+    private void UpdateOcrPreference<T>(
+        string diagnosticKey,
+        string label,
+        T previous,
+        T current,
+        Action<T> setValue,
+        Action<T> restoreUi,
+        Action<string> setStatus,
+        Action<T>? applyRuntime = null)
+    {
+        try
+        {
+            setValue(current);
+            _settingsService.Save();
+            setStatus(string.Empty);
+            applyRuntime?.Invoke(current);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError(diagnosticKey, ex);
+            setValue(previous);
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError($"{diagnosticKey}-rollback", rollbackEx);
+            }
+
+            _suppressOcrPreferenceChange = true;
+            try
+            {
+                restoreUi(previous);
+            }
+            finally
+            {
+                _suppressOcrPreferenceChange = false;
+            }
+
+            applyRuntime?.Invoke(previous);
+            setStatus($"{label} change was not saved. Previous setting restored.");
+            ToastWindow.ShowError(
+                $"{label} failed",
+                $"The previous OCR setting was restored. Check Settings -> OCR and try again.\n{ex.Message}");
+        }
+    }
+
+    private void SetOcrPreferenceStatus(string message)
+    {
+        OcrPreferenceStatusText.Text = message;
+        OcrPreferenceStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private void SetTranslationPreferenceStatus(string message)
+    {
+        TranslationPreferenceStatusText.Text = message;
+        TranslationPreferenceStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void OcrCombo_PreviewTextInput(object sender, TextCompositionEventArgs e)

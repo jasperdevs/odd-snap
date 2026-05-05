@@ -21,42 +21,42 @@ public partial class SettingsWindow
         AiRedirectLensUploadSyncCheck.IsChecked = s.AiChatUploadDestinationSynced;
         AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(_settingsService.Settings.AiRedirectHotkeyModifiers, _settingsService.Settings.AiRedirectHotkeyKey);
         ImgurClientIdBox.Text = s.ImgurClientId;
-        ImgurTokenBox.Text = s.ImgurAccessToken;
-        ImgBBKeyBox.Text = s.ImgBBApiKey;
-        ImgPileTokenBox.Text = s.ImgPileApiToken;
-        GyazoTokenBox.Text = s.GyazoAccessToken;
-        DropboxTokenBox.Text = s.DropboxAccessToken;
+        ImgurTokenBox.Password = s.ImgurAccessToken ?? "";
+        ImgBBKeyBox.Password = s.ImgBBApiKey ?? "";
+        ImgPileTokenBox.Password = s.ImgPileApiToken ?? "";
+        GyazoTokenBox.Password = s.GyazoAccessToken ?? "";
+        DropboxTokenBox.Password = s.DropboxAccessToken ?? "";
         DropboxPathBox.Text = s.DropboxPathPrefix;
-        GoogleDriveTokenBox.Text = s.GoogleDriveAccessToken;
+        GoogleDriveTokenBox.Password = s.GoogleDriveAccessToken ?? "";
         GoogleDriveFolderBox.Text = s.GoogleDriveFolderId;
-        OneDriveTokenBox.Text = s.OneDriveAccessToken;
+        OneDriveTokenBox.Password = s.OneDriveAccessToken ?? "";
         OneDriveFolderBox.Text = s.OneDriveFolder;
-        AzureBlobSasBox.Text = s.AzureBlobSasUrl;
-        GitHubTokenBox.Text = s.GitHubToken;
+        AzureBlobSasBox.Password = s.AzureBlobSasUrl ?? "";
+        GitHubTokenBox.Password = s.GitHubToken ?? "";
         GitHubRepoBox.Text = s.GitHubRepo;
         GitHubBranchBox.Text = s.GitHubBranch;
         ImmichUrlBox.Text = s.ImmichBaseUrl;
-        ImmichApiKeyBox.Text = s.ImmichApiKey;
+        ImmichApiKeyBox.Password = s.ImmichApiKey ?? "";
         FtpUrlBox.Text = s.FtpUrl;
         FtpUsernameBox.Text = s.FtpUsername;
-        FtpPasswordBox.Text = s.FtpPassword;
+        FtpPasswordBox.Password = s.FtpPassword ?? "";
         FtpPublicUrlBox.Text = s.FtpPublicUrl;
         SftpHostBox.Text = s.SftpHost;
         SftpPortBox.Text = s.SftpPort.ToString();
         SftpUsernameBox.Text = s.SftpUsername;
-        SftpPasswordBox.Text = s.SftpPassword;
+        SftpPasswordBox.Password = s.SftpPassword ?? "";
         SftpRemotePathBox.Text = s.SftpRemotePath;
         SftpPublicUrlBox.Text = s.SftpPublicUrl;
         SftpHostKeyFingerprintBox.Text = s.SftpHostKeyFingerprint;
         WebDavUrlBox.Text = s.WebDavUrl;
         WebDavUsernameBox.Text = s.WebDavUsername;
-        WebDavPasswordBox.Text = s.WebDavPassword;
+        WebDavPasswordBox.Password = s.WebDavPassword ?? "";
         WebDavPublicUrlBox.Text = s.WebDavPublicUrl;
         S3EndpointBox.Text = s.S3Endpoint;
         S3BucketBox.Text = s.S3Bucket;
         S3RegionBox.Text = s.S3Region;
         S3AccessKeyBox.Text = s.S3AccessKey;
-        S3SecretKeyBox.Text = s.S3SecretKey;
+        S3SecretKeyBox.Password = s.S3SecretKey ?? "";
         S3PublicUrlBox.Text = s.S3PublicUrl;
         CustomUrlBox.Text = s.CustomUploadUrl;
         CustomFieldBox.Text = s.CustomFileFormName;
@@ -70,8 +70,8 @@ public partial class SettingsWindow
         StickerLocalExecutionCombo.SelectedIndex = (int)s.LocalExecutionProvider;
         SelectStickerEngine(StickerLocalCpuEngineCombo, s.LocalCpuEngine);
         SelectStickerEngine(StickerLocalGpuEngineCombo, s.LocalGpuEngine);
-        StickerRemoveBgKeyBox.Text = s.RemoveBgApiKey;
-        StickerPhotoroomKeyBox.Text = s.PhotoroomApiKey;
+        StickerRemoveBgKeyBox.Password = s.RemoveBgApiKey ?? "";
+        StickerPhotoroomKeyBox.Password = s.PhotoroomApiKey ?? "";
         StickerShadowCheck.IsChecked = s.AddShadow;
         StickerStrokeCheck.IsChecked = s.AddStroke;
         UpdateStickerProviderVisibility();
@@ -82,7 +82,7 @@ public partial class SettingsWindow
     private void LoadUpscaleSettingsIntoUi(UpscaleSettings s)
     {
         UpscaleProviderCombo.SelectedIndex = (int)s.Provider;
-        UpscaleDeepAiApiKeyBox.Text = s.DeepAiApiKey;
+        UpscaleDeepAiApiKeyBox.Password = s.DeepAiApiKey ?? "";
         UpscaleLocalExecutionCombo.SelectedIndex = (int)s.LocalExecutionProvider;
         SelectUpscaleEngine(UpscaleLocalCpuEngineCombo, s.LocalCpuEngine);
         SelectUpscaleEngine(UpscaleLocalGpuEngineCombo, s.LocalGpuEngine);
@@ -131,7 +131,7 @@ public partial class SettingsWindow
 
         if (BackgroundRuntimeJobService.TryGetSnapshot(GetStickerModelJobKey(engine), out var modelJob) && modelJob.IsRunning)
         {
-            StickerInstallDriversBtn.IsEnabled = true;
+            StickerInstallDriversBtn.IsEnabled = false;
             StickerLocalEngineStatusText.Text = modelJob.Status;
             StickerLocalEngineProgress.IsIndeterminate = true;
             SetStickerDownloadUi(true, null, modelJob.Status);
@@ -142,17 +142,23 @@ public partial class SettingsWindow
 
         StickerLocalEngineProgress.IsIndeterminate = false;
         bool downloaded = LocalStickerEngineService.IsModelDownloaded(engine);
+        var hasRuntimeStatus = RembgRuntimeService.TryGetCachedStatus(executionProvider, out var runtimeReady, out var runtimeStatus);
         var hasRuntimeFailure = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerRuntimeJobKey(executionProvider), out runtimeJob) &&
-                                runtimeJob is { LastSucceeded: false };
+                                runtimeJob is { LastSucceeded: false } &&
+                                !(hasRuntimeStatus && runtimeReady);
         BackgroundRuntimeJobSnapshot? modelFailureJob = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerModelJobKey(engine), out var stickerModelJob)
             ? stickerModelJob
             : null;
-        var stickerFailure = RuntimeJobFailureResolver.GetFailureMessage(modelFailureJob, runtimeJob);
-        var hasRuntimeStatus = RembgRuntimeService.TryGetCachedStatus(executionProvider, out var runtimeReady, out var runtimeStatus);
+        var hasModelFailure = !downloaded && modelFailureJob is { LastSucceeded: false };
+        var stickerFailure = RuntimeJobFailureResolver.GetFailureMessage(
+            hasModelFailure ? modelFailureJob : null,
+            hasRuntimeFailure ? runtimeJob : null);
 
         if (!string.IsNullOrWhiteSpace(stickerFailure))
         {
-            StickerLocalEngineStatusText.Text = $"Failed: {stickerFailure}";
+            StickerLocalEngineStatusText.Text = hasModelFailure
+                ? "Sticker model download failed. Retry the download, or copy details."
+                : "Sticker runtime setup failed. Retry setup, or copy details.";
             StickerInstallDriversBtn.Content = hasRuntimeFailure
                 ? RembgRuntimeService.GetSetupButtonText(executionProvider)
                 : (runtimeReady ? "Uninstall rembg" : RembgRuntimeService.GetSetupButtonText(executionProvider));
@@ -180,16 +186,59 @@ public partial class SettingsWindow
         SetLoadingTextShimmer(StickerLocalEngineStatusText, false, 1.0, 0.35);
         SetLoadingTextShimmer(StickerLocalEngineProgressText, false, 0.9, 0.25);
 
-        if (!IsLoaded)
+        if (!IsLoaded || _suppressStickerSettingChange)
             return;
 
-        ActiveStickerSettings.LocalExecutionProvider = executionProvider;
-        ActiveStickerSettings.LocalEngine = engine;
-        if (executionProvider == StickerExecutionProvider.Gpu)
-            ActiveStickerSettings.LocalGpuEngine = engine;
-        else
-            ActiveStickerSettings.LocalCpuEngine = engine;
-        _settingsService.Save();
+        var previousExecutionProvider = ActiveStickerSettings.LocalExecutionProvider;
+        var previousEngine = ActiveStickerSettings.LocalEngine;
+        var previousCpuEngine = ActiveStickerSettings.LocalCpuEngine;
+        var previousGpuEngine = ActiveStickerSettings.LocalGpuEngine;
+
+        try
+        {
+            ActiveStickerSettings.LocalExecutionProvider = executionProvider;
+            ActiveStickerSettings.LocalEngine = engine;
+            if (executionProvider == StickerExecutionProvider.Gpu)
+                ActiveStickerSettings.LocalGpuEngine = engine;
+            else
+                ActiveStickerSettings.LocalCpuEngine = engine;
+            _settingsService.Save();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.sticker-local-engine", ex);
+            ActiveStickerSettings.LocalExecutionProvider = previousExecutionProvider;
+            ActiveStickerSettings.LocalEngine = previousEngine;
+            ActiveStickerSettings.LocalCpuEngine = previousCpuEngine;
+            ActiveStickerSettings.LocalGpuEngine = previousGpuEngine;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.sticker-local-engine-rollback", rollbackEx);
+            }
+
+            _suppressStickerSettingChange = true;
+            try
+            {
+                StickerLocalExecutionCombo.SelectedIndex = (int)previousExecutionProvider;
+                SelectStickerEngine(StickerLocalCpuEngineCombo, previousCpuEngine);
+                SelectStickerEngine(StickerLocalGpuEngineCombo, previousGpuEngine);
+                UpdateStickerExecutionUi();
+                UpdateLocalEngineUi();
+            }
+            finally
+            {
+                _suppressStickerSettingChange = false;
+            }
+
+            SetStickerRemovalStatus("Sticker local engine change was not saved. Previous engine restored.");
+            ToastWindow.ShowError(
+                "Sticker engine failed",
+                $"The previous sticker engine was restored. Check Settings -> Stickers and try again.\n{ex.Message}");
+        }
     }
 
     private static LocalStickerEngine GetSelectedStickerEngine(System.Windows.Controls.ComboBox combo)
@@ -221,7 +270,7 @@ public partial class SettingsWindow
         StickerLocalGpuEnginePanel.Visibility = executionProvider == StickerExecutionProvider.Gpu ? Visibility.Visible : Visibility.Collapsed;
         StickerLocalEngineStatusText.Text = RembgRuntimeService.GetRuntimeSummary(executionProvider);
 
-        if (!IsLoaded)
+        if (!IsLoaded || _suppressStickerSettingChange)
             return;
 
         ActiveStickerSettings.LocalExecutionProvider = executionProvider;
@@ -283,7 +332,7 @@ public partial class SettingsWindow
 
         if (BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleModelJobKey(engine), out var modelJob) && modelJob.IsRunning)
         {
-            UpscaleInstallDriversBtn.IsEnabled = true;
+            UpscaleInstallDriversBtn.IsEnabled = false;
             UpscaleLocalEngineStatusText.Text = modelJob.Status;
             UpscaleLocalEngineProgress.IsIndeterminate = true;
             SetUpscaleDownloadUi(true, null, modelJob.Status);
@@ -294,17 +343,23 @@ public partial class SettingsWindow
 
         UpscaleLocalEngineProgress.IsIndeterminate = false;
         bool downloaded = LocalUpscaleEngineService.IsModelDownloaded(engine);
+        var hasRuntimeStatus = UpscaleRuntimeService.TryGetCachedStatus(executionProvider, out var runtimeReady, out var runtimeStatus);
         var hasRuntimeFailure = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleRuntimeJobKey(executionProvider), out runtimeJob) &&
-                                runtimeJob is { LastSucceeded: false };
+                                runtimeJob is { LastSucceeded: false } &&
+                                !(hasRuntimeStatus && runtimeReady);
         BackgroundRuntimeJobSnapshot? modelFailureJob = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleModelJobKey(engine), out var upscaleModelJob)
             ? upscaleModelJob
             : null;
-        var upscaleFailure = RuntimeJobFailureResolver.GetFailureMessage(modelFailureJob, runtimeJob);
-        var hasRuntimeStatus = UpscaleRuntimeService.TryGetCachedStatus(executionProvider, out var runtimeReady, out var runtimeStatus);
+        var hasModelFailure = !downloaded && modelFailureJob is { LastSucceeded: false };
+        var upscaleFailure = RuntimeJobFailureResolver.GetFailureMessage(
+            hasModelFailure ? modelFailureJob : null,
+            hasRuntimeFailure ? runtimeJob : null);
 
         if (!string.IsNullOrWhiteSpace(upscaleFailure))
         {
-            UpscaleLocalEngineStatusText.Text = $"Failed: {upscaleFailure}";
+            UpscaleLocalEngineStatusText.Text = hasModelFailure
+                ? "Upscale model download failed. Retry the download, or copy details."
+                : "Upscale runtime setup failed. Retry setup, or copy details.";
             UpscaleInstallDriversBtn.Content = hasRuntimeFailure
                 ? UpscaleRuntimeService.GetSetupButtonText(executionProvider)
                 : (runtimeReady ? "Uninstall runtime" : UpscaleRuntimeService.GetSetupButtonText(executionProvider));
@@ -332,18 +387,64 @@ public partial class SettingsWindow
         SetLoadingTextShimmer(UpscaleLocalEngineStatusText, false, 1.0, 0.35);
         SetLoadingTextShimmer(UpscaleLocalEngineProgressText, false, 0.9, 0.25);
 
-        if (!IsLoaded)
+        if (!IsLoaded || _suppressUpscaleSettingChange)
             return;
 
-        ActiveUpscaleSettings.LocalExecutionProvider = executionProvider;
-        ActiveUpscaleSettings.LocalEngine = engine;
-        if (executionProvider == UpscaleExecutionProvider.Gpu)
-            ActiveUpscaleSettings.LocalGpuEngine = engine;
-        else
-            ActiveUpscaleSettings.LocalCpuEngine = engine;
-        ClampUpscaleDefaultScaleToSelectedEngine(engine);
-        UpdateUpscaleDefaultScaleUi(engine);
-        _settingsService.Save();
+        var previousExecutionProvider = ActiveUpscaleSettings.LocalExecutionProvider;
+        var previousEngine = ActiveUpscaleSettings.LocalEngine;
+        var previousCpuEngine = ActiveUpscaleSettings.LocalCpuEngine;
+        var previousGpuEngine = ActiveUpscaleSettings.LocalGpuEngine;
+        var previousScaleFactor = ActiveUpscaleSettings.ScaleFactor;
+
+        try
+        {
+            ActiveUpscaleSettings.LocalExecutionProvider = executionProvider;
+            ActiveUpscaleSettings.LocalEngine = engine;
+            if (executionProvider == UpscaleExecutionProvider.Gpu)
+                ActiveUpscaleSettings.LocalGpuEngine = engine;
+            else
+                ActiveUpscaleSettings.LocalCpuEngine = engine;
+            ClampUpscaleDefaultScaleToSelectedEngine(engine);
+            UpdateUpscaleDefaultScaleUi(engine);
+            _settingsService.Save();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.upscale-local-engine", ex);
+            ActiveUpscaleSettings.LocalExecutionProvider = previousExecutionProvider;
+            ActiveUpscaleSettings.LocalEngine = previousEngine;
+            ActiveUpscaleSettings.LocalCpuEngine = previousCpuEngine;
+            ActiveUpscaleSettings.LocalGpuEngine = previousGpuEngine;
+            ActiveUpscaleSettings.ScaleFactor = previousScaleFactor;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.upscale-local-engine-rollback", rollbackEx);
+            }
+
+            _suppressUpscaleSettingChange = true;
+            try
+            {
+                UpscaleLocalExecutionCombo.SelectedIndex = (int)previousExecutionProvider;
+                SelectUpscaleEngine(UpscaleLocalCpuEngineCombo, previousCpuEngine);
+                SelectUpscaleEngine(UpscaleLocalGpuEngineCombo, previousGpuEngine);
+                UpdateUpscaleExecutionUi();
+                UpdateUpscaleLocalEngineUi();
+                UpdateUpscaleDefaultScaleUi(previousEngine);
+            }
+            finally
+            {
+                _suppressUpscaleSettingChange = false;
+            }
+
+            SetUpscaleRemovalStatus("Upscale local engine change was not saved. Previous engine restored.");
+            ToastWindow.ShowError(
+                "Upscale engine failed",
+                $"The previous upscale engine was restored. Check Settings -> Upscale and try again.\n{ex.Message}");
+        }
     }
 
     private static LocalUpscaleEngine GetSelectedUpscaleEngine(System.Windows.Controls.ComboBox combo)
@@ -375,7 +476,7 @@ public partial class SettingsWindow
         UpscaleLocalGpuEnginePanel.Visibility = executionProvider == UpscaleExecutionProvider.Gpu ? Visibility.Visible : Visibility.Collapsed;
         UpscaleLocalEngineStatusText.Text = UpscaleRuntimeService.GetRuntimeSummary(executionProvider);
 
-        if (!IsLoaded)
+        if (!IsLoaded || _suppressUpscaleSettingChange)
             return;
 
         ActiveUpscaleSettings.LocalExecutionProvider = executionProvider;
@@ -415,7 +516,11 @@ public partial class SettingsWindow
         var modelJob = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerModelJobKey(engine), out var modelSnapshot)
             ? modelSnapshot
             : null;
-        error = RuntimeJobFailureResolver.GetFailureMessage(modelJob, runtimeJob) ?? string.Empty;
+        var downloaded = LocalStickerEngineService.IsModelDownloaded(engine);
+        var runtimeReady = RembgRuntimeService.TryGetCachedStatus(executionProvider, out var ready, out _) && ready;
+        error = RuntimeJobFailureResolver.GetFailureDiagnosticMessage(
+            downloaded ? null : modelJob,
+            runtimeReady ? null : runtimeJob) ?? string.Empty;
         return !string.IsNullOrWhiteSpace(error);
     }
 
@@ -427,7 +532,11 @@ public partial class SettingsWindow
         var modelJob = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleModelJobKey(engine), out var modelSnapshot)
             ? modelSnapshot
             : null;
-        error = RuntimeJobFailureResolver.GetFailureMessage(modelJob, runtimeJob) ?? string.Empty;
+        var downloaded = LocalUpscaleEngineService.IsModelDownloaded(engine);
+        var runtimeReady = UpscaleRuntimeService.TryGetCachedStatus(executionProvider, out var ready, out _) && ready;
+        error = RuntimeJobFailureResolver.GetFailureDiagnosticMessage(
+            downloaded ? null : modelJob,
+            runtimeReady ? null : runtimeJob) ?? string.Empty;
         return !string.IsNullOrWhiteSpace(error);
     }
 

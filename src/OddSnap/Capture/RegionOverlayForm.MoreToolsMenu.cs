@@ -180,8 +180,14 @@ public sealed partial class RegionOverlayForm
     private Point GetMoreToolsMenuPoint()
     {
         var anchor = _toolbarButtons[_moreButtonIndex];
-        const int width = WindowsMenuRenderer.DefaultWidth;
-        const int estimatedHeight = WindowsMenuRenderer.RowHeight * 14 + 12;
+        var clampBounds = GetToolbarAnchorClientBounds();
+        int width = Math.Max(WindowsMenuRenderer.DefaultWidth, _moreToolsMenu?.Width ?? WindowsMenuRenderer.DefaultWidth);
+        int itemCount = Math.Max(1, _moreToolsMenu?.Items.Count ?? 14);
+        int estimatedHeight = WindowsMenuRenderer.RowHeight * itemCount + 12;
+        width = Math.Min(width, Math.Max(160, clampBounds.Width - 16));
+        if (_moreToolsMenu is not null)
+            WindowsMenuRenderer.SetMenuWidth(_moreToolsMenu, width);
+
         const int gap = 8;
         int x;
         int y;
@@ -197,9 +203,23 @@ public sealed partial class RegionOverlayForm
             y = IsBottomDock ? anchor.Y - estimatedHeight - gap : anchor.Bottom + gap;
         }
 
-        x = Math.Clamp(x, 8, Math.Max(8, ClientSize.Width - width - 8));
-        y = Math.Clamp(y, 8, Math.Max(8, ClientSize.Height - estimatedHeight - 8));
+        x = Math.Clamp(x, clampBounds.Left + 8, Math.Max(clampBounds.Left + 8, clampBounds.Right - width - 8));
+        y = Math.Clamp(y, clampBounds.Top + 8, Math.Max(clampBounds.Top + 8, clampBounds.Bottom - estimatedHeight - 8));
         return new Point(x, y);
+    }
+
+    private Rectangle GetToolbarAnchorClientBounds()
+    {
+        var bounds = _toolbarAnchorArea.IsEmpty
+            ? new Rectangle(0, 0, ClientSize.Width, ClientSize.Height)
+            : new Rectangle(
+                _toolbarAnchorArea.X - _virtualBounds.X,
+                _toolbarAnchorArea.Y - _virtualBounds.Y,
+                _toolbarAnchorArea.Width,
+                _toolbarAnchorArea.Height);
+
+        bounds.Intersect(new Rectangle(0, 0, ClientSize.Width, ClientSize.Height));
+        return bounds.IsEmpty ? new Rectangle(0, 0, ClientSize.Width, ClientSize.Height) : bounds;
     }
 
 }

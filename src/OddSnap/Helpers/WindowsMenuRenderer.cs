@@ -7,8 +7,8 @@ namespace OddSnap.Helpers;
 
 public static class WindowsMenuRenderer
 {
-    public const int DefaultWidth = 242;
-    public const int RowHeight = 31;
+    public const int DefaultWidth = 340;
+    public const int RowHeight = 29;
 
     public static ContextMenuStrip Create(bool showImages = true, int minWidth = DefaultWidth)
     {
@@ -37,12 +37,16 @@ public static class WindowsMenuRenderer
         {
             try
             {
-                var handle = ((ContextMenuStrip)s!).Handle;
+                var strip = (ContextMenuStrip)s!;
+                var handle = strip.Handle;
                 OddSnap.Native.Dwm.TrySetWindowCornerPreference(handle, OddSnap.Native.Dwm.DWMWCP_ROUND);
                 OddSnap.Native.Dwm.TrySetImmersiveDarkMode(handle, UiChrome.IsDark);
+                ApplyRoundedRegion(strip);
             }
             catch { }
         };
+        menu.SizeChanged += (_, _) => ApplyRoundedRegion(menu);
+        menu.Disposed += (_, _) => menu.Region?.Dispose();
 
         return menu;
     }
@@ -78,7 +82,7 @@ public static class WindowsMenuRenderer
         };
     }
 
-    public static void NormalizeItemWidths(ContextMenuStrip menu, int minWidth = DefaultWidth)
+    public static int NormalizeItemWidths(ContextMenuStrip menu, int minWidth = DefaultWidth)
     {
         int width = minWidth;
         using var g = Graphics.FromHwnd(IntPtr.Zero);
@@ -91,10 +95,18 @@ public static class WindowsMenuRenderer
             int shortcut = string.IsNullOrWhiteSpace(menuItem.ShortcutKeyDisplayString)
                 ? 0
                 : TextRenderer.MeasureText(g, menuItem.ShortcutKeyDisplayString, menuItem.Font).Width;
-            width = Math.Max(width, text + shortcut + (menu.ShowImageMargin ? 76 : 48));
+            width = Math.Max(width, text + shortcut + (menu.ShowImageMargin ? 124 : 76));
         }
 
+        SetMenuWidth(menu, width);
+        return width;
+    }
+
+    public static void SetMenuWidth(ContextMenuStrip menu, int width)
+    {
+        width = Math.Max(120, width);
         menu.MinimumSize = new Size(width, 0);
+        menu.Width = width;
         foreach (ToolStripItem item in menu.Items)
         {
             if (item is ToolStripMenuItem menuItem)
@@ -104,6 +116,17 @@ public static class WindowsMenuRenderer
                 menuItem.Height = RowHeight;
             }
         }
+    }
+
+    private static void ApplyRoundedRegion(ContextMenuStrip menu)
+    {
+        if (menu.Width <= 0 || menu.Height <= 0)
+            return;
+
+        using var path = Renderer.RoundedRect(new Rectangle(0, 0, menu.Width, menu.Height), 8);
+        var previous = menu.Region;
+        menu.Region = new Region(path);
+        previous?.Dispose();
     }
 
     private sealed class Renderer : ToolStripProfessionalRenderer
@@ -218,7 +241,7 @@ public static class WindowsMenuRenderer
             e.Graphics.DrawLine(pen, left, y, e.Item.Width - 10, y);
         }
 
-        private static GraphicsPath RoundedRect(Rectangle rect, int radius)
+        public static GraphicsPath RoundedRect(Rectangle rect, int radius)
         {
             var path = new GraphicsPath();
             int d = radius * 2;

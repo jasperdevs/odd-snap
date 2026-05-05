@@ -63,8 +63,12 @@ public static class RembgRuntimeService
 
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "stickers.runtime.model-cleanup",
+                $"Failed to delete sticker model {engine}: {ex.Message}",
+                ex);
             return false;
         }
     }
@@ -80,8 +84,12 @@ public static class RembgRuntimeService
             TryDeleteDirectoryIfEmpty(LegacyModelCacheDir);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "stickers.runtime.model-cleanup",
+                $"Failed to remove cached sticker models: {ex.Message}",
+                ex);
             return false;
         }
     }
@@ -90,13 +98,24 @@ public static class RembgRuntimeService
     {
         try
         {
-            PythonRuntimeEnvironment.TryDeleteDirectory(GetRuntimeEnvironmentDirectory(provider));
+            if (!PythonRuntimeEnvironment.TryDeleteDirectory(
+                    GetRuntimeEnvironmentDirectory(provider),
+                    "stickers.runtime.remove-cleanup",
+                    $"{provider} sticker runtime"))
+            {
+                return false;
+            }
+
             ClearProbeCache(provider);
             TryDeleteDirectoryIfEmpty(RuntimeDir);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "stickers.runtime.remove-cleanup",
+                $"Failed to remove {provider} sticker runtime: {ex.Message}",
+                ex);
             return false;
         }
     }
@@ -254,8 +273,24 @@ public static class RembgRuntimeService
         }
         finally
         {
-            try { if (File.Exists(tempInput)) File.Delete(tempInput); } catch { }
-            try { if (File.Exists(tempOutput)) File.Delete(tempOutput); } catch { }
+            TryDeleteRuntimeTempFile(tempInput, "rembg input");
+            TryDeleteRuntimeTempFile(tempOutput, "rembg output");
+        }
+    }
+
+    private static void TryDeleteRuntimeTempFile(string path, string context)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "stickers.runtime.temp-cleanup",
+                $"Failed to delete {context} temporary file {Path.GetFileName(path)}: {ex.Message}",
+                ex);
         }
     }
 
@@ -307,7 +342,10 @@ public static class RembgRuntimeService
 
         if (recreate)
         {
-            PythonRuntimeEnvironment.TryDeleteDirectory(envDir);
+            PythonRuntimeEnvironment.TryDeleteDirectory(
+                envDir,
+                "stickers.runtime.install-cleanup",
+                $"{provider} sticker runtime");
             progress?.Report("Creating isolated Python environment...");
             var create = await PythonRuntimeEnvironment.RunLauncherAsync(new[] { launcherArg, "-m", "venv", envDir }, cancellationToken).ConfigureAwait(false);
             if (create.ExitCode != 0)
@@ -450,8 +488,12 @@ with open(output_path, "wb") as f:
                 Directory.Delete(path, recursive: false);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "stickers.runtime.model-cleanup",
+                $"Failed to delete empty sticker model directory {Path.GetFileName(path)}: {ex.Message}",
+                ex);
         }
     }
 }

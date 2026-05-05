@@ -119,13 +119,7 @@ public sealed partial class RecordingForm
             catch (Exception ex)
             {
                 firstFrame?.Dispose();
-                try
-                {
-                    // Don't leave a zero-byte / partial file if encoding failed early.
-                    if (File.Exists(_savePath) && new FileInfo(_savePath).Length == 0)
-                        File.Delete(_savePath);
-                }
-                catch { }
+                TryDeleteZeroByteRecordingOutput(_savePath);
 
                 RecordingFailed?.Invoke(ex);
             }
@@ -248,12 +242,45 @@ public sealed partial class RecordingForm
             }
             finally
             {
-                try { File.Delete(tempPath); } catch { }
+                TryDeleteRecordingPreviewTempFile(tempPath);
             }
         }
         catch
         {
             return null;
+        }
+    }
+
+    private static void TryDeleteZeroByteRecordingOutput(string path)
+    {
+        try
+        {
+            // Don't leave a zero-byte / partial file if encoding failed early.
+            if (File.Exists(path) && new FileInfo(path).Length == 0)
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "recording.output-cleanup",
+                $"Failed to delete failed recording output {Path.GetFileName(path)}: {ex.Message}",
+                ex);
+        }
+    }
+
+    private static void TryDeleteRecordingPreviewTempFile(string tempPath)
+    {
+        try
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "recording.preview-temp-cleanup",
+                $"Failed to delete temporary recording preview file {Path.GetFileName(tempPath)}: {ex.Message}",
+                ex);
         }
     }
 }

@@ -167,7 +167,7 @@ public partial class UpscaleResultWindow : Window
             var result = await UpscaleService.ProcessAsync(_originalBitmap, upscaleSettings);
             if (!result.Success || result.Image is null)
             {
-                ToastWindow.ShowError("Upscale failed", result.Error);
+                ShowUpscalePreviewFailed(result.Error ?? "Upscale did not return an image.");
                 return;
             }
 
@@ -183,7 +183,7 @@ public partial class UpscaleResultWindow : Window
         catch (Exception ex)
         {
             AppDiagnostics.LogError("upscale.window", ex);
-            ToastWindow.ShowError("Upscale failed", ex.Message);
+            ShowUpscalePreviewFailed(ex.Message);
         }
         finally
         {
@@ -193,6 +193,14 @@ public partial class UpscaleResultWindow : Window
             UpscaleBtn.IsEnabled = true;
             _isProcessing = false;
         }
+    }
+
+    private void ShowUpscalePreviewFailed(string details)
+    {
+        StatusText.Text = "Upscale failed. Try again, or check Settings -> Upscale.";
+        ToastWindow.ShowError(
+            "Upscale failed",
+            $"OddSnap could not generate the upscale preview. Try again, or check Settings -> Upscale.\n{details}");
     }
 
     private void UseResultBtn_Click(object sender, RoutedEventArgs e)

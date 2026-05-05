@@ -500,7 +500,35 @@ public sealed partial class RegionOverlayForm : Form
 
     private void CalcToolbar()
     {
+        int pad = UiChrome.ScaledToolbarInnerPadding;
+        int buttonSize = UiChrome.ScaledToolbarButtonSize;
+        int buttonSpacing = UiChrome.ScaledToolbarButtonSpacing;
+        int toolbarHeight = UiChrome.ScaledToolbarHeight;
+        Point? cursorScreenPoint = null;
+        try
+        {
+            var cursorPos = System.Windows.Forms.Cursor.Position;
+            if (_virtualBounds.Contains(cursorPos))
+                cursorScreenPoint = cursorPos;
+        }
+        catch { }
+
+        Rectangle[] screenWorkingAreas = GetScreenWorkingAreas();
+        _toolbarAnchorArea = ToolbarLayout.ResolveToolbarAnchorArea(
+            _virtualBounds,
+            cursorScreenPoint,
+            _toolbarAnchorArea,
+            screenWorkingAreas);
+        Rectangle screenBounds = _toolbarAnchorArea.IsEmpty ? _virtualBounds : _toolbarAnchorArea;
+
+        BuildToolbarToolSplit(screenBounds, buttonSize, buttonSpacing, pad);
         bool hasMore = _flyoutTools.Length > 0;
+        _sepAfter = GetToolbarSeparatorIndices(_mainBarTools, hasMore);
+
+        int primarySpan = GetToolbarPrimarySpan(BtnCount, _sepAfter.Length, buttonSize, buttonSpacing, pad);
+        int w = IsVerticalDock ? toolbarHeight : primarySpan;
+        int h = IsVerticalDock ? primarySpan : toolbarHeight;
+
         _toolbarButtons = new Rectangle[BtnCount];
         _toolbarIcons = new string[BtnCount];
         _toolbarLabels = new string[BtnCount];
@@ -538,41 +566,6 @@ public sealed partial class RegionOverlayForm : Form
         _toolbarToolIds[idx] = "close";
         _toolbarModes[idx] = null;
 
-        // Compute group gaps: between tool groups
-        var gaps = new List<int>();
-        for (int i = 0; i < _mainBarTools.Length - 1; i++)
-            if (_mainBarTools[i].Group != _mainBarTools[i + 1].Group || _mainBarTools[i].Mode == CaptureMode.Freeform)
-                gaps.Add(i);
-        gaps.Add(_mainBarTools.Length - 1 + (hasMore ? 1 : 0)); // gap before color/gear/close
-        _sepAfter = gaps.ToArray();
-
-        int pad = UiChrome.ScaledToolbarInnerPadding;
-        int buttonSize = UiChrome.ScaledToolbarButtonSize;
-        int buttonSpacing = UiChrome.ScaledToolbarButtonSpacing;
-        int toolbarHeight = UiChrome.ScaledToolbarHeight;
-        int primarySpan = buttonSize * BtnCount
-                        + buttonSpacing * (BtnCount - 1)
-                        + pad * 2
-                        + _sepAfter.Length * GroupGap;
-        int w = IsVerticalDock ? toolbarHeight : primarySpan;
-        int h = IsVerticalDock ? primarySpan : toolbarHeight;
-        Point? cursorScreenPoint = null;
-        try
-        {
-            var cursorPos = System.Windows.Forms.Cursor.Position;
-            if (_virtualBounds.Contains(cursorPos))
-                cursorScreenPoint = cursorPos;
-        }
-        catch { }
-
-        Rectangle[] screenWorkingAreas = GetScreenWorkingAreas();
-        _toolbarAnchorArea = ToolbarLayout.ResolveToolbarAnchorArea(
-            _virtualBounds,
-            cursorScreenPoint,
-            _toolbarAnchorArea,
-            screenWorkingAreas);
-        Rectangle screenBounds = _toolbarAnchorArea.IsEmpty ? _virtualBounds : _toolbarAnchorArea;
-
         _toolbarRect = ToolbarLayout.GetToolbarRect(
             _virtualBounds,
             screenBounds,
@@ -607,6 +600,57 @@ public sealed partial class RegionOverlayForm : Form
                 if (Array.IndexOf(_sepAfter, i) >= 0) cx += GroupGap;
             }
         }
+    }
+
+    private void BuildToolbarToolSplit(Rectangle screenBounds, int buttonSize, int buttonSpacing, int pad)
+    {
+        var flyoutIds = ToolDef.FlyoutToolIds();
+        var mainBarTools = _visibleTools.Where(t => !flyoutIds.Contains(t.Id)).ToList();
+        var flyoutTools = _visibleTools.Where(t => flyoutIds.Contains(t.Id)).ToList();
+
+        int availablePrimarySpan = Math.Max(1, (IsVerticalDock ? screenBounds.Height : screenBounds.Width) - UiChrome.ScaleInt(16));
+        while (mainBarTools.Count > 1)
+        {
+            bool hasMore = flyoutTools.Count > 0;
+            int buttonCount = mainBarTools.Count + (hasMore ? 1 : 0) + 2;
+            var separators = GetToolbarSeparatorIndices(mainBarTools, hasMore);
+            int span = GetToolbarPrimarySpan(buttonCount, separators.Length, buttonSize, buttonSpacing, pad);
+            if (span <= availablePrimarySpan)
+                break;
+
+            var movedTool = mainBarTools[^1];
+            mainBarTools.RemoveAt(mainBarTools.Count - 1);
+            flyoutTools.Insert(0, movedTool);
+        }
+
+        _mainBarTools = mainBarTools.ToArray();
+        _flyoutTools = flyoutTools.ToArray();
+    }
+
+    private static int[] GetToolbarSeparatorIndices(IReadOnlyList<ToolDef> mainBarTools, bool hasMore)
+    {
+        var gaps = new List<int>();
+        for (int i = 0; i < mainBarTools.Count - 1; i++)
+        {
+            if (mainBarTools[i].Group != mainBarTools[i + 1].Group || mainBarTools[i].Mode == CaptureMode.Freeform)
+                gaps.Add(i);
+        }
+
+        if (mainBarTools.Count > 0)
+            gaps.Add(mainBarTools.Count - 1 + (hasMore ? 1 : 0));
+
+        return gaps.ToArray();
+    }
+
+    private static int GetToolbarPrimarySpan(int buttonCount, int separatorCount, int buttonSize, int buttonSpacing, int pad)
+    {
+        if (buttonCount <= 0)
+            return 0;
+
+        return buttonSize * buttonCount
+             + buttonSpacing * Math.Max(0, buttonCount - 1)
+             + pad * 2
+             + separatorCount * GroupGap;
     }
 
     private static Cursor CreateBlankCursor()

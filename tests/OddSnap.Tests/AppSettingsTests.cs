@@ -229,6 +229,73 @@ public sealed class AppSettingsTests
         Assert.Equal(ScrollingCaptureMode.Automatic, settings.ScrollingCaptureMode);
     }
 
+    [Fact]
+    public void TryDeserialize_NormalizesInvalidEnumsToSafeDefaults()
+    {
+        var json = """
+            {
+              "AfterCapture": 99,
+              "CaptureImageFormat": 99,
+              "LastCaptureMode": 999,
+              "DefaultCaptureMode": 999,
+              "WindowDetection": 99,
+              "CaptureDockSide": 99,
+              "HistoryRetention": 99,
+              "ToastPosition": 99,
+              "SoundPack": 99,
+              "RecordingFormat": 99,
+              "RecordingQuality": 99,
+              "CenterSelectionAspectRatio": 99,
+              "ImageUploadDestination": 99,
+              "ImageUploadSettings": {
+                "AiChatProvider": 99,
+                "AiChatUploadDestination": 99
+              },
+              "StickerUploadSettings": {
+                "Provider": 99,
+                "LocalEngine": 99,
+                "LocalCpuEngine": 99,
+                "LocalGpuEngine": 99,
+                "LocalExecutionProvider": 99
+              },
+              "UpscaleUploadSettings": {
+                "Provider": 99,
+                "LocalEngine": 99,
+                "LocalCpuEngine": 99,
+                "LocalGpuEngine": 99,
+                "LocalExecutionProvider": 99
+              }
+            }
+            """;
+
+        Assert.True(SettingsService.TryDeserialize(json, out var settings));
+        Assert.Equal(AfterCaptureAction.PreviewAndCopy, settings.AfterCapture);
+        Assert.Equal(CaptureImageFormat.Png, settings.CaptureImageFormat);
+        Assert.Equal(CaptureMode.Rectangle, settings.LastCaptureMode);
+        Assert.Equal(CaptureMode.Rectangle, settings.DefaultCaptureMode);
+        Assert.Equal(WindowDetectionMode.WindowOnly, settings.WindowDetection);
+        Assert.Equal(CaptureDockSide.Top, settings.CaptureDockSide);
+        Assert.Equal(HistoryRetentionPeriod.Never, settings.HistoryRetention);
+        Assert.Equal(ToastPosition.Right, settings.ToastPosition);
+        Assert.Equal(SoundPack.Default, settings.SoundPack);
+        Assert.Equal(RecordingFormat.MP4, settings.RecordingFormat);
+        Assert.Equal(RecordingQuality.Original, settings.RecordingQuality);
+        Assert.Equal(CenterSelectionAspectRatio.Free, settings.CenterSelectionAspectRatio);
+        Assert.Equal(UploadDestination.None, settings.ImageUploadDestination);
+        Assert.Equal(AiChatProvider.GoogleLens, settings.ImageUploadSettings.AiChatProvider);
+        Assert.Equal(UploadDestination.TempHosts, settings.ImageUploadSettings.AiChatUploadDestination);
+        Assert.Equal(StickerProvider.LocalCpu, settings.StickerUploadSettings.Provider);
+        Assert.Equal(LocalStickerEngine.U2Netp, settings.StickerUploadSettings.LocalEngine);
+        Assert.Equal(LocalStickerEngine.U2Netp, settings.StickerUploadSettings.LocalCpuEngine);
+        Assert.Equal(LocalStickerEngine.BiRefNetLite, settings.StickerUploadSettings.LocalGpuEngine);
+        Assert.Equal(StickerExecutionProvider.Cpu, settings.StickerUploadSettings.LocalExecutionProvider);
+        Assert.Equal(UpscaleProvider.Local, settings.UpscaleUploadSettings.Provider);
+        Assert.Equal(LocalUpscaleEngine.SwinIrRealWorld, settings.UpscaleUploadSettings.LocalEngine);
+        Assert.Equal(LocalUpscaleEngine.SwinIrRealWorld, settings.UpscaleUploadSettings.LocalCpuEngine);
+        Assert.Equal(LocalUpscaleEngine.RealEsrganX4Plus, settings.UpscaleUploadSettings.LocalGpuEngine);
+        Assert.Equal(UpscaleExecutionProvider.Cpu, settings.UpscaleUploadSettings.LocalExecutionProvider);
+    }
+
     [Theory]
     [InlineData(0.25, 0.8)]
     [InlineData(1.2, 1.2)]

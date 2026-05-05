@@ -14,15 +14,7 @@ public partial class App
 
     private static void SyncStartupRegistry(bool enabled)
     {
-        const string rk = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(rk, true);
-        if (key is null) return;
-        if (enabled)
-        {
-            var exe = Environment.ProcessPath;
-            if (exe != null) key.SetValue("OddSnap", $"\"{exe}\"");
-        }
-        else key.DeleteValue("OddSnap", false);
+        UninstallService.SetStartupEntry(enabled);
     }
 
     private void ShowSettings(bool openHistory = false)
@@ -63,8 +55,7 @@ public partial class App
                     catch (Exception ex)
                     {
                         _settingsWindow = null;
-                        AppDiagnostics.LogError("lifecycle.show-settings", ex);
-                        try { ToastWindow.ShowError("Settings failed to open", ex.Message); } catch (Exception toastEx) { AppDiagnostics.LogError("lifecycle.show-settings.toast", toastEx); }
+                        ShowSettingsOpenFailed(ex, "lifecycle.show-settings", "lifecycle.show-settings.toast");
                     }
                     finally
                     {
@@ -77,12 +68,26 @@ public partial class App
                 _ = Dispatcher.BeginInvoke(() =>
                 {
                     _settingsWindow = null;
-                    AppDiagnostics.LogError("lifecycle.show-settings.init", ex);
-                    try { ToastWindow.ShowError("Settings failed to open", ex.Message); } catch (Exception toastEx) { AppDiagnostics.LogError("lifecycle.show-settings.init.toast", toastEx); }
+                    ShowSettingsOpenFailed(ex, "lifecycle.show-settings.init", "lifecycle.show-settings.init.toast");
                     Interlocked.Exchange(ref _settingsWindowOpening, 0);
                 }, DispatcherPriority.Background);
             }
         });
+    }
+
+    private static void ShowSettingsOpenFailed(Exception ex, string diagnosticKey, string toastDiagnosticKey)
+    {
+        AppDiagnostics.LogError(diagnosticKey, ex);
+        try
+        {
+            ToastWindow.ShowError(
+                "Settings failed to open",
+                $"OddSnap could not open Settings. Try again from the tray menu, or restart OddSnap if it keeps failing.\n{ex.Message}");
+        }
+        catch (Exception toastEx)
+        {
+            AppDiagnostics.LogError(toastDiagnosticKey, toastEx);
+        }
     }
 
     private void ShowSettingsWindow(HistoryService historyService, ImageSearchIndexService imageSearchIndexService, bool openHistory = false)
@@ -123,7 +128,11 @@ public partial class App
                     "Uninstall OddSnap? This will remove the app data and try to remove the app folder.",
                     "Uninstall",
                     "Cancel"))
+            {
+                _settingsWindow?.ShowUninstallCanceledStatus();
+                ToastWindow.Show("Uninstall canceled", "OddSnap was left installed.");
                 return;
+            }
 
             try { UninstallService.RemoveStartupEntry(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.uninstall.remove-startup-entry", ex); }
             try { UninstallService.RemoveInstalledAppEntry(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.uninstall.remove-installed-entry", ex); }

@@ -2,6 +2,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -62,6 +63,7 @@ public partial class SettingsWindow
     private const int HistoryPrefetchRowBuffer = 2;
     private const int HistoryPrefetchLimit = 48;
     private bool _useVirtualizedImageHistory;
+    private bool _imageHistoryLoadFailed;
     private int _virtualizedHistoryColumns = 1;
     private int _virtualizedHistoryStartIndex = -1;
     private int _virtualizedHistoryEndIndex = -1;
@@ -74,6 +76,32 @@ public partial class SettingsWindow
 
     private bool ShouldUseVirtualizedImageHistory(IReadOnlyCollection<HistoryItemVM> items)
         => items.Count >= HistoryVirtualizationThreshold;
+
+    private void ShowHistoryEmptyState(string title, string detail, bool showRetry = false)
+    {
+        HistoryEmptyTitle.Text = title;
+        HistoryEmptyTitle.ToolTip = title;
+        AutomationProperties.SetHelpText(HistoryEmptyTitle, title);
+        HistoryEmptyLabel.Text = detail;
+        HistoryEmptyLabel.ToolTip = detail;
+        AutomationProperties.SetHelpText(HistoryEmptyLabel, detail);
+        HistoryEmptyRetryButton.Visibility = showRetry ? Visibility.Visible : Visibility.Collapsed;
+        HistoryEmptyText.Visibility = Visibility.Visible;
+    }
+
+    private void HideHistoryEmptyState()
+    {
+        HistoryEmptyRetryButton.Visibility = Visibility.Collapsed;
+        HistoryEmptyText.Visibility = Visibility.Collapsed;
+    }
+
+    private void HistoryEmptyRetryButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_historyLoadInProgress)
+            return;
+
+        _ = LoadHistoryAsync();
+    }
 
     private sealed record PreparedHistoryItemData(
         HistoryEntry Entry,
@@ -249,10 +277,10 @@ public partial class SettingsWindow
         var cancellationToken = _historyLoadCts.Token;
         var version = ++_historyLoadVersion;
         _historyLoadInProgress = true;
+        _imageHistoryLoadFailed = false;
         _deferHistoryMonitor = true;
         HistoryStack.Children.Clear();
-        HistoryEmptyText.Visibility = Visibility.Collapsed;
-        HistoryEmptyLabel.Text = "Loading captures...";
+        HideHistoryEmptyState();
         HistoryCountText.Text = "Loading captures...";
         _imageSearchRowAutoHidden = false;
         _lastImmediateSearchQuery = "";
@@ -273,12 +301,14 @@ public partial class SettingsWindow
             ResetMaterializedImageHistory();
             _historyRenderCount = Math.Min(ImageHistoryPageSize, entries.Count);
             EnsureMaterializedImageHistoryItems(_historyRenderCount, selectedPaths);
-            RefreshHistoryUploadProviderFilterItems(entries);
+            var providerFilterReset = RefreshHistoryUploadProviderFilterItems(entries);
+            if (providerFilterReset)
+                EnsureAllImageHistoryItemsMaterialized();
 
             ApplyImageSearchFilter();
             _historyImageCacheReady = true;
             PrimeHistoryFingerprint();
-            DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+            UpdateHistoryActionButtons();
             if (_settingsService.Settings.AutoIndexImages)
             {
                 _ = Dispatcher.BeginInvoke(() =>
@@ -288,7 +318,10 @@ public partial class SettingsWindow
                         if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
                             _imageSearchIndexService.RequestSync(entries, _settingsService.Settings.OcrLanguageTag);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppDiagnostics.LogError("settings.image-search-request", ex);
+                    }
                 }, System.Windows.Threading.DispatcherPriority.Background);
             }
         }
@@ -298,10 +331,16 @@ public partial class SettingsWindow
         catch (Exception ex)
         {
             AppDiagnostics.LogError("settings.history-load", ex);
+            _imageHistoryLoadFailed = true;
             HistoryStack.Children.Clear();
-            HistoryEmptyText.Visibility = Visibility.Visible;
-            HistoryEmptyLabel.Text = "Failed to load captures";
+            _allImageHistoryEntries = Array.Empty<HistoryEntry>();
+            _allHistoryItems.Clear();
+            _allHistoryItemsByPath.Clear();
+            _filteredHistoryItems.Clear();
+            _historyItems.Clear();
+            ShowHistoryEmptyState("Couldn't load captures", "Retry loading history. If it still fails, check the app log.", showRetry: true);
             HistoryCountText.Text = "History unavailable";
+            UpdateHistoryActionButtons();
         }
         finally
         {
@@ -384,7 +423,7 @@ public partial class SettingsWindow
         var totalCount = _allImageHistoryEntries.Count;
         long visibleBytes = 0;
         foreach (var item in _filteredHistoryItems)
-            visibleBytes += item.Entry.FileSizeBytes;
+            visibleBytes += GetHistoryItemFileSize(item);
 
         var loadedPrefix = totalCount > loadedCount
             ? $"{loadedCount} of {totalCount} captures loaded"
@@ -438,6 +477,7 @@ public partial class SettingsWindow
             _historyTopSpacer.Height = 0;
             _historyBottomSpacer.Height = 0;
             _historyItems.Clear();
+            UpdateHistoryActionButtons();
             return;
         }
 
@@ -471,6 +511,7 @@ public partial class SettingsWindow
 
         var prefetchAfter = Math.Min(columns * HistoryPrefetchRowBuffer, _filteredHistoryItems.Count - endIndex);
         PrimeHistoryThumbnailLoads(visibleItems, _filteredHistoryItems, endIndex, Math.Max(0, prefetchAfter));
+        UpdateHistoryActionButtons();
     }
 
     private static void PrimeHistoryThumbnailLoads(IEnumerable<HistoryItemVM> items)
@@ -541,16 +582,34 @@ public partial class SettingsWindow
 
         var shell = BuildMediaCardShell(vm, () =>
         {
-            if (!string.IsNullOrEmpty(vm.Entry.UploadUrl))
+            try
             {
-                ClipboardService.CopyTextToClipboard(vm.Entry.UploadUrl);
-                ToastWindow.Show("Copied", vm.Entry.UploadUrl);
-                return;
+                if (!string.IsNullOrWhiteSpace(vm.Entry.UploadUrl))
+                {
+                    ClipboardService.CopyTextToClipboard(vm.Entry.UploadUrl);
+                    ToastWindow.Show("Upload link copied", vm.Entry.UploadUrl);
+                    return;
+                }
+                if (!File.Exists(vm.Entry.FilePath))
+                {
+                    ShowHistoryFileMissingError(vm.Entry.FilePath);
+                    return;
+                }
+
+                using var bmp = BitmapPerf.LoadDetached(vm.Entry.FilePath);
+                Services.ClipboardService.CopyToClipboard(bmp);
+                ToastWindow.Show("Copied", $"{vm.Dimensions} screenshot copied");
             }
-            if (!File.Exists(vm.Entry.FilePath)) return;
-            using var bmp = BitmapPerf.LoadDetached(vm.Entry.FilePath);
-            Services.ClipboardService.CopyToClipboard(bmp);
-            ToastWindow.Show("Copied", $"{vm.Dimensions} screenshot copied");
+            catch (Exception ex)
+            {
+                var recovery = !string.IsNullOrWhiteSpace(vm.Entry.UploadUrl)
+                    ? "Open History and copy the visible upload link manually."
+                    : "Try again from Settings -> History, or open the saved screenshot manually.";
+                ToastWindow.ShowError(
+                    "Copy failed",
+                    $"OddSnap could not copy this history item. {recovery}\n{ex.Message}",
+                    vm.Entry.FilePath);
+            }
         });
 
         if (!string.IsNullOrEmpty(vm.Entry.UploadProvider))
@@ -559,43 +618,57 @@ public partial class SettingsWindow
             if (badge != null) shell.ImageContainer.Children.Add(badge);
         }
 
-        shell.InfoPanel.Children.Add(new TextBlock
+        var fileNameBlock = new TextBlock
         {
             Text = vm.Entry.FileName,
             FontSize = 11,
             FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
             TextTrimming = TextTrimming.CharacterEllipsis
-        });
+        };
+        vm.FileNameTextBlock = fileNameBlock;
+        shell.InfoPanel.Children.Add(fileNameBlock);
+
         var visibleStatus = ShouldShowHistoryCardStatus(vm.ImageSearchStatusText) ? vm.ImageSearchStatusText : "";
         var timeAndStatus = string.IsNullOrWhiteSpace(visibleStatus)
             ? vm.TimeAgo
             : $"{vm.TimeAgo} · {visibleStatus}";
-        shell.InfoPanel.Children.Add(new TextBlock
+        var timeStatusBlock = new TextBlock
         {
             Text = timeAndStatus,
             FontSize = 10,
             FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
             Opacity = 0.3,
             TextTrimming = TextTrimming.CharacterEllipsis
-        });
+        };
+        vm.TimeStatusTextBlock = timeStatusBlock;
+        shell.InfoPanel.Children.Add(timeStatusBlock);
+
         AddUploadInfo(shell.InfoPanel, vm.Entry);
         if (_settingsService.Settings.ShowImageSearchDiagnostics)
         {
             if (!string.IsNullOrWhiteSpace(vm.ImageSearchMatchText))
             {
-                shell.InfoPanel.Children.Add(new TextBlock
+                var matchBlock = new TextBlock
                 {
                     Text = vm.ImageSearchMatchText,
                     FontSize = 9.5,
                     FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
                     Opacity = 0.38,
                     TextTrimming = TextTrimming.CharacterEllipsis
-                });
+                };
+                vm.ImageSearchMatchTextBlock = matchBlock;
+                shell.InfoPanel.Children.Add(matchBlock);
             }
 
             if (!string.IsNullOrWhiteSpace(vm.ImageSearchDiagnosticsText))
                 shell.Card.ToolTip = vm.ImageSearchDiagnosticsText;
         }
+        else
+        {
+            vm.ImageSearchMatchTextBlock = null;
+        }
+
+        RefreshHistoryCardTextMetadata(vm);
         return shell.Card;
     }
 
@@ -604,12 +677,55 @@ public partial class SettingsWindow
         if (vm.Card is Border existing)
         {
             DetachElementFromParent(existing);
+            if (_settingsService.Settings.ShowImageSearchDiagnostics || ShouldShowHistoryCardStatus(vm.ImageSearchStatusText))
+                HydrateHistoryItemSearchMetadataIfNeeded(vm);
+            RefreshHistoryCardTextMetadata(vm);
             UpdateCardSelection(vm);
             RefreshCardThumbnail(vm);
             return existing;
         }
 
         return CreateHistoryCard(vm);
+    }
+
+    private void RefreshHistoryCardTextMetadata(HistoryItemVM vm)
+    {
+        if (vm.FileNameTextBlock != null)
+        {
+            vm.FileNameTextBlock.Text = vm.Entry.FileName;
+            vm.FileNameTextBlock.ToolTip = vm.Entry.FileName;
+            AutomationProperties.SetName(vm.FileNameTextBlock, "History file name");
+            AutomationProperties.SetHelpText(vm.FileNameTextBlock, vm.Entry.FileName);
+        }
+
+        if (vm.TimeStatusTextBlock != null)
+        {
+            var visibleStatus = ShouldShowHistoryCardStatus(vm.ImageSearchStatusText) ? vm.ImageSearchStatusText : "";
+            var timeAndStatus = string.IsNullOrWhiteSpace(visibleStatus)
+                ? vm.TimeAgo
+                : $"{vm.TimeAgo} · {visibleStatus}";
+            vm.TimeStatusTextBlock.Text = timeAndStatus;
+            vm.TimeStatusTextBlock.ToolTip = timeAndStatus;
+            AutomationProperties.SetName(vm.TimeStatusTextBlock, string.IsNullOrWhiteSpace(visibleStatus)
+                ? "History capture time"
+                : "History capture time and search status");
+            AutomationProperties.SetHelpText(vm.TimeStatusTextBlock, timeAndStatus);
+        }
+
+        if (vm.ImageSearchMatchTextBlock != null)
+        {
+            vm.ImageSearchMatchTextBlock.Text = vm.ImageSearchMatchText;
+            vm.ImageSearchMatchTextBlock.ToolTip = vm.ImageSearchMatchText;
+            AutomationProperties.SetName(vm.ImageSearchMatchTextBlock, "Image search match");
+            AutomationProperties.SetHelpText(vm.ImageSearchMatchTextBlock, vm.ImageSearchMatchText);
+        }
+
+        if (vm.Card != null)
+        {
+            vm.Card.ToolTip = _settingsService.Settings.ShowImageSearchDiagnostics && !string.IsNullOrWhiteSpace(vm.ImageSearchDiagnosticsText)
+                ? vm.ImageSearchDiagnosticsText
+                : $"Open this {GetHistoryKindLabel(vm.Entry.Kind)} history item";
+        }
     }
 
     private static void RefreshCardThumbnail(HistoryItemVM vm)
@@ -658,6 +774,7 @@ public partial class SettingsWindow
         {
             vm.SelectionBadge.Visibility = _selectMode || vm.IsSelected ? Visibility.Visible : Visibility.Collapsed;
             vm.SelectionBadge.Opacity = vm.IsSelected ? 1 : 0.45;
+            UpdateSelectionBadgeAccessibility(vm.SelectionBadge, vm.IsSelected);
             if (vm.SelectionBadge is FrameworkElement { Tag: UIElement check })
                 check.Visibility = vm.IsSelected ? Visibility.Visible : Visibility.Hidden;
         }
@@ -677,7 +794,106 @@ public partial class SettingsWindow
     private void UpdateSelectModeControls()
     {
         SelectBtn.Content = _selectMode ? "Done" : "Select";
+        UpdateHistoryActionButtons();
+    }
+
+    private void UpdateHistoryActionButtons()
+    {
+        if (!IsLoaded)
+            return;
+
+        var visibleCount = GetCurrentVisibleHistoryItemCount();
+        var totalCount = GetCurrentTotalHistoryItemCount();
+        var selectedCount = GetCurrentSelectedHistoryItemCount();
+        var historyUnavailable = HistoryCategoryCombo.SelectedIndex == 0 && _imageHistoryLoadFailed;
+        var categoryLabel = GetCurrentHistoryCategoryLabel(2);
+        var totalCategoryLabel = GetCurrentHistoryCategoryLabel(totalCount);
+        var selectedCategoryLabel = GetCurrentHistoryCategoryLabel(selectedCount);
+
+        SelectBtn.IsEnabled = !historyUnavailable && (visibleCount > 0 || _selectMode);
+        DeleteAllBtn.IsEnabled = !historyUnavailable && totalCount > 0;
         DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+        DeleteSelectedBtn.IsEnabled = !historyUnavailable && _selectMode && selectedCount > 0;
+        DeleteSelectedBtn.Content = selectedCount > 0
+            ? $"Delete selected ({selectedCount})"
+            : "Delete selected";
+
+        var selectHelp = _selectMode ? $"Finish selecting {categoryLabel}" : $"Select {categoryLabel}";
+        var selectName = _selectMode ? $"Finish selecting {categoryLabel}" : $"Select {categoryLabel}";
+        var deleteAllHelp = totalCount > 0
+            ? $"Delete all {totalCount} {totalCategoryLabel} in the current history category"
+            : $"No {categoryLabel} to delete in the current category";
+        var deleteAllName = totalCount > 0
+            ? $"Delete all {totalCount} {totalCategoryLabel}"
+            : $"Clear {categoryLabel}";
+        var deleteSelectedHelp = selectedCount > 0
+            ? $"Delete {selectedCount} selected {selectedCategoryLabel}"
+            : $"Select {categoryLabel} before deleting selected items";
+        var deleteSelectedName = selectedCount > 0
+            ? $"Delete {selectedCount} selected {selectedCategoryLabel}"
+            : $"Delete selected {categoryLabel}";
+
+        SelectBtn.ToolTip = selectHelp;
+        DeleteAllBtn.ToolTip = deleteAllHelp;
+        DeleteSelectedBtn.ToolTip = deleteSelectedHelp;
+        AutomationProperties.SetName(SelectBtn, selectName);
+        AutomationProperties.SetName(DeleteAllBtn, deleteAllName);
+        AutomationProperties.SetName(DeleteSelectedBtn, deleteSelectedName);
+        AutomationProperties.SetHelpText(SelectBtn, selectHelp);
+        AutomationProperties.SetHelpText(DeleteAllBtn, deleteAllHelp);
+        AutomationProperties.SetHelpText(DeleteSelectedBtn, deleteSelectedHelp);
+    }
+
+    private string GetCurrentHistoryCategoryLabel(int count)
+        => HistoryCategoryCombo.SelectedIndex switch
+        {
+            0 => count == 1 ? "screenshot" : "screenshots",
+            1 => count == 1 ? "text capture" : "text captures",
+            2 => count == 1 ? "video/GIF" : "videos/GIFs",
+            3 => count == 1 ? "color" : "colors",
+            4 => count == 1 ? "sticker" : "stickers",
+            5 => count == 1 ? "QR/barcode scan" : "QR/barcode scans",
+            _ => count == 1 ? "history item" : "history items"
+        };
+
+    private int GetCurrentVisibleHistoryItemCount()
+    {
+        return HistoryCategoryCombo.SelectedIndex switch
+        {
+            0 => _filteredHistoryItems.Count,
+            1 => _filteredOcrEntries.Count,
+            2 => _filteredGifItems.Count,
+            3 => _filteredColorEntries.Count,
+            4 => _filteredStickerItems.Count,
+            5 => _filteredCodeEntries.Count,
+            _ => 0
+        };
+    }
+
+    private int GetCurrentTotalHistoryItemCount()
+    {
+        return HistoryCategoryCombo.SelectedIndex switch
+        {
+            0 => _allImageHistoryEntries.Count > 0 ? _allImageHistoryEntries.Count : _historyService.ImageEntries.Count,
+            1 => _historyService.OcrEntries.Count,
+            2 => _allGifItems.Count > 0 ? _allGifItems.Count : _historyService.MediaEntries.Count,
+            3 => _historyService.ColorEntries.Count,
+            4 => _allStickerItems.Count > 0 ? _allStickerItems.Count : _historyService.StickerEntries.Count,
+            5 => _historyService.CodeEntries.Count,
+            _ => 0
+        };
+    }
+
+    private int GetCurrentSelectedHistoryItemCount()
+    {
+        return HistoryCategoryCombo.SelectedIndex switch
+        {
+            0 or 2 or 4 => GetCurrentHistorySelectionItems().Count(item => item.IsSelected),
+            1 => OcrStack.Children.OfType<Border>().Count(card => card.Tag is true),
+            3 => ColorStack.Children.OfType<Border>().Count(card => card.Tag is ColorHistoryEntry),
+            5 => CodeStack.Children.OfType<Border>().Count(card => card.Tag is CodeHistoryEntry),
+            _ => 0
+        };
     }
 
     private void ClearCurrentHistorySelections()
@@ -702,9 +918,9 @@ public partial class SettingsWindow
     {
         return HistoryCategoryCombo.SelectedIndex switch
         {
-            0 => _historyItems,
-            2 => _gifItems,
-            4 => _stickerItems,
+            0 => _filteredHistoryItems,
+            2 => _filteredGifItems,
+            4 => _filteredStickerItems,
             _ => Enumerable.Empty<HistoryItemVM>()
         };
     }
@@ -756,27 +972,27 @@ public partial class SettingsWindow
         };
 
         UpdateSelectableCardSelection(card, badge, selected);
+        UpdateHistoryActionButtons();
     }
 
     private void DeleteAllClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            CancelImageSearchWork();
-            string tab = HistoryCategoryCombo.SelectedIndex switch
+            var totalCount = GetCurrentTotalHistoryItemCount();
+            var tab = GetCurrentHistoryCategoryLabel(totalCount);
+            if (totalCount <= 0)
             {
-                0 => "images",
-                1 => "text history",
-                2 => "videos/GIFs",
-                3 => "colors",
-                4 => "stickers",
-                5 => "QR/barcode history",
-                _ => "items"
-            };
-            if (!ThemedConfirmDialog.Confirm(this, "Confirm 1/3", $"Delete all {tab}?", "Delete", "Cancel")) return;
-            if (!ThemedConfirmDialog.Confirm(this, "Confirm 2/3", $"Really delete all {tab}?", "Delete", "Cancel")) return;
-            if (!ThemedConfirmDialog.Confirm(this, "Confirm 3/3", $"This cannot be undone. Delete all {tab}?", "Delete", "Cancel")) return;
+                SetHistoryDeleteStatus($"No {tab} to delete.");
+                UpdateHistoryActionButtons();
+                return;
+            }
 
+            if (!ConfirmDeleteAllStep(1, totalCount, tab)) return;
+            if (!ConfirmDeleteAllStep(2, totalCount, tab)) return;
+            if (!ConfirmDeleteAllStep(3, totalCount, tab)) return;
+
+            CancelImageSearchWork();
             if (HistoryCategoryCombo.SelectedIndex == 0) _historyService.ClearImages();
             else if (HistoryCategoryCombo.SelectedIndex == 2) DeleteMediaItems(_allGifItems);
             else if (HistoryCategoryCombo.SelectedIndex == 1) _historyService.ClearOcr();
@@ -785,15 +1001,20 @@ public partial class SettingsWindow
             else _historyService.ClearStickers();
 
             _selectMode = false;
-            SelectBtn.Content = "Select";
-            DeleteSelectedBtn.Visibility = Visibility.Collapsed;
+            UpdateSelectModeControls();
 
             LoadCurrentHistoryTab();
             UpdateImageSearchActionButtons();
+            UpdateHistoryActionButtons();
+            SetHistoryDeleteStatus($"Deleted all {tab}.");
         }
         catch (Exception ex)
         {
-            ToastWindow.ShowError("Delete failed", ex.Message);
+            AppDiagnostics.LogError("settings.history-delete-all", ex);
+            SetHistoryDeleteStatus($"Delete failed for {GetCurrentHistoryCategoryLabel(2)}. Refresh History and try again.");
+            ToastWindow.ShowError(
+                "Delete failed",
+                $"OddSnap could not finish deleting {GetCurrentHistoryCategoryLabel(2)}. Refresh History and try again.\n{ex.Message}");
         }
     }
 
@@ -801,19 +1022,30 @@ public partial class SettingsWindow
     {
         try
         {
+            var selectedCount = GetCurrentSelectedHistoryItemCount();
+            var selectedLabel = GetCurrentHistoryCategoryLabel(selectedCount);
+            if (selectedCount <= 0)
+            {
+                SetHistoryDeleteStatus($"Select {GetCurrentHistoryCategoryLabel(2)} to delete.");
+                UpdateHistoryActionButtons();
+                return;
+            }
+
+            if (!ConfirmDeleteSelected(selectedCount, selectedLabel))
+                return;
+
             CancelImageSearchWork();
             _selectMode = false;
-            SelectBtn.Content = "Select";
-            DeleteSelectedBtn.Visibility = Visibility.Collapsed;
+            UpdateSelectModeControls();
 
             if (HistoryCategoryCombo.SelectedIndex == 0)
             {
-                var toDelete = _historyItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
+                var toDelete = _filteredHistoryItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
                 _historyService.DeleteEntries(toDelete);
             }
             else if (HistoryCategoryCombo.SelectedIndex == 2)
             {
-                DeleteMediaItems(_gifItems.Where(i => i.IsSelected).ToList());
+                DeleteMediaItems(_filteredGifItems.Where(i => i.IsSelected).ToList());
             }
             else if (HistoryCategoryCombo.SelectedIndex == 1)
             {
@@ -832,7 +1064,7 @@ public partial class SettingsWindow
             }
             else if (HistoryCategoryCombo.SelectedIndex == 4)
             {
-                var toDelete = _stickerItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
+                var toDelete = _filteredStickerItems.Where(i => i.IsSelected).Select(i => i.Entry).ToList();
                 _historyService.DeleteEntries(toDelete);
             }
             else if (HistoryCategoryCombo.SelectedIndex == 5)
@@ -844,12 +1076,62 @@ public partial class SettingsWindow
 
             LoadCurrentHistoryTab();
             UpdateImageSearchActionButtons();
+            UpdateHistoryActionButtons();
+            SetHistoryDeleteStatus($"Deleted {selectedCount} selected {selectedLabel}.");
         }
         catch (Exception ex)
         {
-            ToastWindow.ShowError("Delete failed", ex.Message);
+            AppDiagnostics.LogError("settings.history-delete-selected", ex);
+            SetHistoryDeleteStatus($"Delete failed for selected {GetCurrentHistoryCategoryLabel(2)}. Refresh History and try again.");
+            ToastWindow.ShowError(
+                "Delete failed",
+                $"OddSnap could not finish deleting the selected {GetCurrentHistoryCategoryLabel(2)}. Refresh History and try again.\n{ex.Message}");
         }
     }
+
+    private void SetHistoryDeleteStatus(string message)
+    {
+        HistorySearchStatusText.Text = message;
+    }
+
+    private bool ConfirmDeleteAllStep(int step, int totalCount, string categoryLabel)
+    {
+        if (ThemedConfirmDialog.Confirm(this, BuildDeleteAllConfirmationTitle(step, totalCount, categoryLabel), BuildDeleteAllConfirmationMessage(step, totalCount, categoryLabel), "Delete", "Cancel"))
+            return true;
+
+        SetHistoryDeleteStatus($"Delete canceled. Kept {totalCount} {categoryLabel}.");
+        UpdateHistoryActionButtons();
+        return false;
+    }
+
+    private bool ConfirmDeleteSelected(int selectedCount, string categoryLabel)
+    {
+        if (ThemedConfirmDialog.Confirm(
+                this,
+                $"Delete {selectedCount} selected {categoryLabel}",
+                $"Delete {selectedCount} selected {categoryLabel}? This cannot be undone.",
+                "Delete",
+                "Cancel"))
+            return true;
+
+        SetHistoryDeleteStatus($"Delete canceled. Kept {selectedCount} selected {categoryLabel}.");
+        UpdateHistoryActionButtons();
+        return false;
+    }
+
+    private static string BuildDeleteAllConfirmationTitle(int step, int totalCount, string categoryLabel)
+    {
+        return $"Delete {totalCount} {categoryLabel} ({step}/3)";
+    }
+
+    private static string BuildDeleteAllConfirmationMessage(int step, int totalCount, string categoryLabel)
+        => step switch
+        {
+            1 => $"Delete all {totalCount} {categoryLabel} in this history tab?",
+            2 => $"Really delete all {totalCount} {categoryLabel}?",
+            3 => $"This cannot be undone. Delete all {totalCount} {categoryLabel}?",
+            _ => $"Delete all {totalCount} {categoryLabel}?"
+        };
 
     private void LoadStickerHistory()
     {
@@ -857,14 +1139,6 @@ public partial class SettingsWindow
         StickerStack.Children.Clear();
 
         var entries = _historyService.StickerEntries;
-        long totalBytes = 0;
-        foreach (var e in entries)
-            totalBytes += e.FileSizeBytes > 0 ? e.FileSizeBytes : TryGetFileLength(e.FilePath);
-        var sizeStr = FormatStorageSize(totalBytes);
-        HistoryCountText.Text = $"{entries.Count} sticker{(entries.Count == 1 ? "" : "s")} · {sizeStr}";
-        HistoryEmptyText.Visibility = entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyLabel.Text = "No stickers yet";
-
         var cacheKey = BuildStickerHistoryCacheKey(entries);
         var cacheHit = _stickerHistoryCacheReady && string.Equals(_stickerHistoryCacheKey, cacheKey, StringComparison.Ordinal);
         if (!cacheHit)
@@ -883,11 +1157,30 @@ public partial class SettingsWindow
         RefreshHistoryUploadProviderFilterItems(_allStickerItems);
         _filteredStickerItems = ApplyHistoryUploadFilter(_allStickerItems).ToList();
         _stickerRenderCount = Math.Min(HistoryInitialPageSize, _filteredStickerItems.Count);
-        HistoryCountText.Text = $"{_filteredStickerItems.Count} of {entries.Count} sticker{(entries.Count == 1 ? "" : "s")} · {sizeStr}";
-        HistoryEmptyText.Visibility = _filteredStickerItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyLabel.Text = entries.Count == 0 ? "No stickers yet" : "No stickers match this filter";
+        long visibleBytes = 0;
+        foreach (var item in _filteredStickerItems)
+            visibleBytes += item.Entry.FileSizeBytes > 0 ? item.Entry.FileSizeBytes : TryGetFileLength(item.Entry.FilePath);
+        var sizeStr = FormatStorageSize(visibleBytes);
+        HistoryCountText.Text = FormatFileBackedHistoryCountText(
+            _filteredStickerItems.Count,
+            entries.Count,
+            "sticker",
+            "stickers",
+            sizeStr,
+            IsHistoryUploadFilterActive());
+        if (_filteredStickerItems.Count == 0)
+        {
+            if (entries.Count == 0)
+                ShowHistoryEmptyState("No stickers yet", "Sticker captures will appear here.");
+            else
+                ShowHistoryEmptyState("No stickers match the upload filter", "Upload filters matched 0 saved stickers.");
+        }
+        else
+        {
+            HideHistoryEmptyState();
+        }
         RenderStickerItems();
-        DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+        UpdateHistoryActionButtons();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-stickers",
@@ -1052,9 +1345,39 @@ public partial class SettingsWindow
         : date == DateTime.Today.AddDays(-1) ? "Yesterday"
         : date.ToString("MMMM d, yyyy");
 
+    private static void ShowHistoryFileMissingError(string? filePath = null)
+    {
+        var fileName = string.IsNullOrWhiteSpace(filePath) ? "" : Path.GetFileName(filePath);
+        var detail = string.IsNullOrWhiteSpace(fileName)
+            ? "The saved file is no longer on disk."
+            : $"The saved file is no longer on disk: {fileName}";
+        ToastWindow.ShowError("File missing", $"{detail}\nRestore the file or capture it again from History.", filePath);
+    }
+
     private static long TryGetFileLength(string filePath)
     {
         try { return new FileInfo(filePath).Length; }
         catch { return 0; }
+    }
+
+    private static long GetHistoryItemFileSize(HistoryItemVM item) =>
+        item.Entry.FileSizeBytes > 0 ? item.Entry.FileSizeBytes : TryGetFileLength(item.Entry.FilePath);
+
+    private static string FormatFileBackedHistoryCountText(
+        int visibleCount,
+        int totalCount,
+        string singularLabel,
+        string pluralLabel,
+        string sizeText,
+        bool filterActive)
+    {
+        if (filterActive)
+        {
+            var totalLabel = totalCount == 1 ? singularLabel : pluralLabel;
+            return $"{visibleCount} of {totalCount} {totalLabel} shown by filter · {sizeText}";
+        }
+
+        var visibleLabel = visibleCount == 1 ? singularLabel : pluralLabel;
+        return $"{visibleCount} {visibleLabel} · {sizeText}";
     }
 }

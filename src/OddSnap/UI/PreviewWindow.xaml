@@ -39,14 +39,21 @@
                 </Border.Clip>
                 <Grid>
                     <Image x:Name="ThumbnailImage" Stretch="Uniform"
+                           ToolTip="Screenshot preview"
+                           AutomationProperties.Name="Screenshot preview"
+                           AutomationProperties.HelpText="Screenshot preview."
                            RenderOptions.BitmapScalingMode="HighQuality"/>
 
                     <Border x:Name="CloseBtn" Width="30" Height="30" CornerRadius="9"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0" Cursor="Hand"
+                            Focusable="True"
                             MouseLeftButtonDown="CloseClick"
+                            KeyDown="CloseBtn_KeyDown"
                             HorizontalAlignment="Right" VerticalAlignment="Top"
                             Margin="0,6,6,0" Opacity="0"
-                            ToolTip="Close">
+                            ToolTip="Close preview"
+                            AutomationProperties.Name="Close preview"
+                            AutomationProperties.HelpText="Close this preview.">
                         <Image x:Name="CloseIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
                                RenderOptions.BitmapScalingMode="HighQuality"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -54,10 +61,14 @@
 
                     <Border x:Name="PinBtn" Width="30" Height="30" CornerRadius="9"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0" Cursor="Hand"
+                            Focusable="True"
                             MouseLeftButtonDown="PinClick"
+                            KeyDown="PinBtn_KeyDown"
                             HorizontalAlignment="Left" VerticalAlignment="Bottom"
                             Margin="6,0,0,6" Opacity="0"
-                            ToolTip="Pin to screen">
+                            ToolTip="Pin preview"
+                            AutomationProperties.Name="Pin preview"
+                            AutomationProperties.HelpText="Keep this preview open.">
                         <Image x:Name="PinIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
                                RenderOptions.BitmapScalingMode="HighQuality"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -65,10 +76,14 @@
 
                     <Border x:Name="SaveBtn" Width="30" Height="30" CornerRadius="9"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0" Cursor="Hand"
+                            Focusable="True"
                             MouseLeftButtonDown="SaveClick"
+                            KeyDown="SaveBtn_KeyDown"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom"
                             Margin="0,0,6,6" Opacity="0"
-                            ToolTip="Save to file">
+                            ToolTip="Save preview"
+                            AutomationProperties.Name="Save preview"
+                            AutomationProperties.HelpText="Save this preview image.">
                         <Image x:Name="SaveIcon" Width="16" Height="16" Stretch="Uniform" Opacity="1"
                                RenderOptions.BitmapScalingMode="HighQuality"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>

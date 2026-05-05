@@ -20,6 +20,7 @@ public partial class OcrResultWindow : Window
     // Store full item lists for filtering
     private readonly List<ComboBoxItem> _fromLanguageItems = new();
     private readonly List<ComboBoxItem> _toLanguageItems = new();
+    private bool _suppressTranslationPreferenceChange;
 
     public OcrResultWindow(string ocrText, SettingsService settingsService)
     {
@@ -34,7 +35,7 @@ public partial class OcrResultWindow : Window
         LocalizationService.ApplyCurrentCulture(settingsService.Settings.InterfaceLanguage);
 
         OcrTextBox.Text = ocrText;
-        OcrTextBox.TextChanged += (_, _) => UpdateCharCount();
+        OcrTextBox.TextChanged += OcrTextBox_TextChanged;
         UpdateCharCount();
 
         // Use a composite font family so CJK / Arabic / Cyrillic glyphs render correctly
@@ -91,7 +92,10 @@ public partial class OcrResultWindow : Window
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             Native.Dwm.DisableBackdrop(hwnd);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("ocr-result.backdrop", ex.Message, ex);
+        }
     }
 
     private void PopulateLanguageCombos()
@@ -132,28 +136,86 @@ public partial class OcrResultWindow : Window
         CharCountText.Text = $"{text.Length} characters";
     }
 
+    private void OcrTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateCharCount();
+
+        if (!IsLoaded)
+            return;
+
+        ResetTranslationForSourceEdit();
+    }
+
+    private void ResetTranslationForSourceEdit() => ResetTranslationForTranslationInputChange();
+
+    private void ResetTranslationForTranslationOptionChange() => ResetTranslationForTranslationInputChange();
+
+    private void ResetTranslationForTranslationInputChange()
+    {
+        if (_translateCts is not null)
+        {
+            _translateCts.Cancel();
+            _translateCts = null;
+        }
+
+        StopTranslationConfigurationCheck();
+        StopTranslationLoading(keepStatusVisible: false);
+        TranslatedTextBox.Text = string.Empty;
+        CopyTranslationBtn.Visibility = Visibility.Collapsed;
+    }
+
     private void TitleBar_CloseRequested(object? sender, EventArgs e) => CloseWindow();
 
     private void CopyBtn_Click(object sender, RoutedEventArgs e)
     {
         var text = OcrTextBox.Text;
-        if (!string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            ToastWindow.Show(ToastSpec.Standard("Nothing to copy", "OCR text is empty.") with { SuppressSound = true });
+            return;
+        }
+
+        try
         {
             ClipboardService.CopyTextToClipboard(text);
             SoundService.PlayTextSound();
-            ToastWindow.Show(ToastSpec.Standard("Copied", text.Length > 80 ? text[..80] + "..." : text) with { SuppressSound = true });
+            ToastWindow.Show(ToastSpec.Standard("Copied", FormatCopyToastPreview(text)) with { SuppressSound = true });
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError(
+                "Copy failed",
+                $"OddSnap could not copy the OCR text. Keep the result window open and try again.\n{ex.Message}");
         }
     }
 
     private void CopyTranslationBtn_Click(object sender, RoutedEventArgs e)
     {
         var text = TranslatedTextBox.Text;
-        if (!string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            ToastWindow.Show(ToastSpec.Standard("No translation to copy", "Translate text first.") with { SuppressSound = true });
+            return;
+        }
+
+        try
         {
             ClipboardService.CopyTextToClipboard(text);
             SoundService.PlayTextSound();
-            ToastWindow.Show(ToastSpec.Standard("Copied translation", text.Length > 80 ? text[..80] + "..." : text) with { SuppressSound = true });
+            ToastWindow.Show(ToastSpec.Standard("Copied translation", FormatCopyToastPreview(text)) with { SuppressSound = true });
         }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError(
+                "Copy failed",
+                $"OddSnap could not copy the translated text. Keep the result window open and try again.\n{ex.Message}");
+        }
+    }
+
+    private static string FormatCopyToastPreview(string text)
+    {
+        var preview = string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return preview.Length > 80 ? preview[..80] + "..." : preview;
     }
 
     private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -184,25 +246,130 @@ public partial class OcrResultWindow : Window
 
     private void FromLanguageCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressTranslationPreferenceChange) return;
         if (FromLanguageCombo.SelectedItem is not ComboBoxItem item) return;
-        _settingsService.Settings.OcrDefaultTranslateFrom = TranslationService.ResolveSourceLanguage(item.Tag as string);
-        _settingsService.Save();
+
+        var previous = _settingsService.Settings.OcrDefaultTranslateFrom;
+        var selected = TranslationService.ResolveSourceLanguage(item.Tag as string);
+        if (string.Equals(previous, selected, StringComparison.OrdinalIgnoreCase))
+        {
+            SetTranslationPreferenceStatus(string.Empty);
+            return;
+        }
+
+        if (UpdateTranslationPreference(
+            "ocr-result.translation-source-language",
+            "Source language",
+            previous,
+            selected,
+            value => _settingsService.Settings.OcrDefaultTranslateFrom = value,
+            value => SelectComboByTag(FromLanguageCombo, value)))
+        {
+            ResetTranslationForTranslationOptionChange();
+        }
     }
 
     private void ToLanguageCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressTranslationPreferenceChange) return;
         if (ToLanguageCombo.SelectedItem is not ComboBoxItem item) return;
-        _settingsService.Settings.OcrDefaultTranslateTo = item.Tag as string ?? "auto";
-        _settingsService.Save();
+
+        var previous = _settingsService.Settings.OcrDefaultTranslateTo;
+        var selected = item.Tag as string ?? "auto";
+        if (string.Equals(previous, selected, StringComparison.OrdinalIgnoreCase))
+        {
+            SetTranslationPreferenceStatus(string.Empty);
+            return;
+        }
+
+        if (UpdateTranslationPreference(
+            "ocr-result.translation-target-language",
+            "Target language",
+            previous,
+            selected,
+            value => _settingsService.Settings.OcrDefaultTranslateTo = value,
+            value => SelectComboByTag(ToLanguageCombo, value)))
+        {
+            ResetTranslationForTranslationOptionChange();
+        }
     }
 
     private void ModelCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.TranslationModel = (int)GetSelectedModel();
-        _settingsService.Save();
+        if (!IsLoaded || _suppressTranslationPreferenceChange) return;
+
+        var previous = _settingsService.Settings.TranslationModel;
+        var selected = (int)GetSelectedModel();
+        if (previous == selected)
+        {
+            SetTranslationPreferenceStatus(string.Empty);
+            return;
+        }
+
+        if (UpdateTranslationPreference(
+            "ocr-result.translation-model",
+            "Translation model",
+            previous,
+            selected,
+            value => _settingsService.Settings.TranslationModel = value,
+            SelectTranslationModelCombo))
+        {
+            ResetTranslationForTranslationOptionChange();
+        }
+    }
+
+    private bool UpdateTranslationPreference<T>(
+        string diagnosticKey,
+        string label,
+        T previous,
+        T current,
+        Action<T> setValue,
+        Action<T> restoreUi)
+    {
+        try
+        {
+            setValue(current);
+            _settingsService.Save();
+            SetTranslationPreferenceStatus(string.Empty);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError(diagnosticKey, ex);
+            setValue(previous);
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError($"{diagnosticKey}-rollback", rollbackEx);
+            }
+
+            _suppressTranslationPreferenceChange = true;
+            try
+            {
+                restoreUi(previous);
+            }
+            finally
+            {
+                _suppressTranslationPreferenceChange = false;
+            }
+
+            SetTranslationPreferenceStatus($"{label} failed. Previous option restored.");
+            ToastWindow.ShowError(
+                $"{label} failed",
+                $"The previous translation preference was restored. Keep the result window open and try again.\n{ex.Message}");
+            return false;
+        }
+    }
+
+    private void SetTranslationPreferenceStatus(string message)
+    {
+        TranslationPreferenceStatusText.Text = message;
+        TranslationPreferenceStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private TranslationModel GetSelectedModel()
@@ -253,29 +420,79 @@ public partial class OcrResultWindow : Window
         var editText = combo.Text?.Trim() ?? "";
         var allItems = combo == FromLanguageCombo ? _fromLanguageItems : _toLanguageItems;
 
-        // Remember current selection tag
-        var currentTag = (combo.SelectedItem as ComboBoxItem)?.Tag as string;
+        var currentTag = GetFilteredComboSelectionTag(combo);
+        var matchCount = 0;
+        var wasSuppressingPreferenceChange = _suppressTranslationPreferenceChange;
 
-        combo.Items.Clear();
+        _suppressTranslationPreferenceChange = true;
+        try
+        {
+            combo.Items.Clear();
 
-        if (string.IsNullOrEmpty(editText))
-        {
-            foreach (var item in allItems)
-                combo.Items.Add(item);
-        }
-        else
-        {
-            var lower = editText.ToLowerInvariant();
-            foreach (var item in allItems)
+            if (string.IsNullOrEmpty(editText))
             {
-                var content = (item.Content as string ?? "").ToLowerInvariant();
-                var tag = (item.Tag as string ?? "").ToLowerInvariant();
-                if (content.Contains(lower) || tag.Contains(lower))
+                foreach (var item in allItems)
+                {
                     combo.Items.Add(item);
+                    matchCount++;
+                }
             }
+            else
+            {
+                var lower = editText.ToLowerInvariant();
+                foreach (var item in allItems)
+                {
+                    var content = (item.Content as string ?? "").ToLowerInvariant();
+                    var tag = (item.Tag as string ?? "").ToLowerInvariant();
+                    if (content.Contains(lower) || tag.Contains(lower))
+                    {
+                        combo.Items.Add(item);
+                        matchCount++;
+                    }
+                }
+            }
+
+            RestoreFilteredComboSelection(combo, currentTag);
         }
+        finally
+        {
+            _suppressTranslationPreferenceChange = wasSuppressingPreferenceChange;
+        }
+
+        if (matchCount == 0)
+            SetTranslationPreferenceStatus("No languages match that filter.");
+        else if (TranslationPreferenceStatusText.Text == "No languages match that filter.")
+            SetTranslationPreferenceStatus(string.Empty);
 
         combo.IsDropDownOpen = true;
+    }
+
+    private static void RestoreFilteredComboSelection(ComboBox combo, string? selectedTag)
+    {
+        if (string.IsNullOrWhiteSpace(selectedTag))
+            return;
+
+        foreach (var item in combo.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Tag as string, selectedTag, StringComparison.OrdinalIgnoreCase))
+            {
+                combo.SelectedItem = item;
+                return;
+            }
+        }
+    }
+
+    private string? GetFilteredComboSelectionTag(ComboBox combo)
+    {
+        if ((combo.SelectedItem as ComboBoxItem)?.Tag is string selectedTag &&
+            !string.IsNullOrWhiteSpace(selectedTag))
+        {
+            return selectedTag;
+        }
+
+        return combo == FromLanguageCombo
+            ? _settingsService.Settings.OcrDefaultTranslateFrom
+            : _settingsService.Settings.OcrDefaultTranslateTo;
     }
 
     private System.Windows.Threading.DispatcherTimer? _translateTimer;
@@ -301,6 +518,22 @@ public partial class OcrResultWindow : Window
     {
         _translateTimer?.Stop();
         _translateTimer = null;
+    }
+
+    private void StartTranslationConfigurationCheck()
+    {
+        TranslatedTextBox.Text = string.Empty;
+        TranslateStatus.Visibility = Visibility.Visible;
+        TranslateStatus.Text = "Checking translation setup...";
+        CopyTranslationBtn.Visibility = Visibility.Collapsed;
+        TranslateBtn.IsEnabled = false;
+        TranslateBtn.Content = "Checking...";
+    }
+
+    private void StopTranslationConfigurationCheck()
+    {
+        TranslateBtn.IsEnabled = true;
+        TranslateBtn.Content = "Translate";
     }
 
     private void StartTranslationLoading(TranslationModel model)
@@ -335,10 +568,31 @@ public partial class OcrResultWindow : Window
             TranslateStatus.Visibility = Visibility.Collapsed;
     }
 
+    private void ShowTranslateError(string message)
+    {
+        StopTranslationLoading(keepStatusVisible: true);
+        TranslateStatus.Text = $"Error: {message}";
+    }
+
     private void UpdateTranslateStatusText(int elapsedSeconds)
     {
         var model = GetSelectedModel();
         TranslateStatus.Text = $"{GetTranslationStatusLabel(model, elapsedSeconds)} ({elapsedSeconds}s)";
+    }
+
+    private void SetTranslationIdleStatus(string message)
+    {
+        StopTranslateTimer();
+        TranslationLoadingOverlay.Visibility = Visibility.Collapsed;
+        TranslateProgressBar.IsIndeterminate = false;
+        LoadingTextShimmer.Stop(TranslateStatus, Theme.Brush(Theme.TextPrimary), 0.25);
+        TranslateStatus.Visibility = Visibility.Visible;
+        TranslateStatus.Text = message;
+    }
+
+    private bool IsActiveTranslationRequest(CancellationTokenSource requestCts)
+    {
+        return ReferenceEquals(_translateCts, requestCts);
     }
 
     private static string GetTranslationStatusLabel(TranslationModel model, int elapsedSeconds)
@@ -355,11 +609,19 @@ public partial class OcrResultWindow : Window
     private async void TranslateBtn_Click(object sender, RoutedEventArgs e)
     {
         var text = OcrTextBox.Text;
-        if (string.IsNullOrWhiteSpace(text)) return;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            SetTranslationIdleStatus("No text to translate.");
+            return;
+        }
 
         var fromItem = FromLanguageCombo.SelectedItem as ComboBoxItem;
         var toItem = ToLanguageCombo.SelectedItem as ComboBoxItem;
-        if (fromItem == null || toItem == null) return;
+        if (fromItem == null || toItem == null)
+        {
+            SetTranslationIdleStatus("Choose translation languages first.");
+            return;
+        }
 
         var fromCode = TranslationService.ResolveSourceLanguage(fromItem.Tag as string);
         var toCode = TranslationService.ResolveTargetLanguage(
@@ -367,23 +629,58 @@ public partial class OcrResultWindow : Window
             _settingsService.Settings.InterfaceLanguage);
 
         _translateCts?.Cancel();
-        _translateCts?.Dispose();
         _translateCts = new CancellationTokenSource();
-        var token = _translateCts.Token;
+        var requestCts = _translateCts;
+        var token = requestCts.Token;
         var model = GetSelectedModel();
 
-        StartTranslationLoading(model);
-        StartTranslateTimer();
+        StartTranslationConfigurationCheck();
 
         try
         {
-            await TranslationService.EnsureReadyAsync(fromCode, model, token);
-            if (token.IsCancellationRequested || _lifecycle.IsCloseRequested)
+            var configurationError = await TranslationService.GetConfigurationErrorAsync(fromCode, model, token);
+            if (_lifecycle.IsCloseRequested)
                 return;
+            if (!IsActiveTranslationRequest(requestCts))
+                return;
+            if (token.IsCancellationRequested)
+            {
+                StopTranslationConfigurationCheck();
+                TranslateStatus.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(configurationError))
+            {
+                ShowTranslateError(configurationError);
+                return;
+            }
+
+            StopTranslationConfigurationCheck();
+            StartTranslationLoading(model);
+            StartTranslateTimer();
+
+            await TranslationService.EnsureReadyAsync(fromCode, model, token);
+            if (_lifecycle.IsCloseRequested)
+                return;
+            if (!IsActiveTranslationRequest(requestCts))
+                return;
+            if (token.IsCancellationRequested)
+            {
+                StopTranslationLoading(keepStatusVisible: false);
+                return;
+            }
 
             var result = await TranslationService.TranslateAsync(text, fromCode, toCode, model, token);
-            if (token.IsCancellationRequested || _lifecycle.IsCloseRequested)
+            if (_lifecycle.IsCloseRequested)
                 return;
+            if (!IsActiveTranslationRequest(requestCts))
+                return;
+            if (token.IsCancellationRequested)
+            {
+                StopTranslationLoading(keepStatusVisible: false);
+                return;
+            }
 
             StopTranslationLoading(keepStatusVisible: false);
             TranslatedTextBox.Text = result;
@@ -394,15 +691,26 @@ public partial class OcrResultWindow : Window
             if (_lifecycle.IsCloseRequested)
                 return;
 
-            StopTranslationLoading(keepStatusVisible: false);
+            if (IsActiveTranslationRequest(requestCts))
+                StopTranslationLoading(keepStatusVisible: false);
         }
         catch (Exception ex)
         {
             if (_lifecycle.IsCloseRequested)
                 return;
+            if (!IsActiveTranslationRequest(requestCts))
+                return;
 
-            StopTranslationLoading(keepStatusVisible: true);
-            TranslateStatus.Text = $"Error: {ex.Message}";
+            ShowTranslateError(ex.Message);
+        }
+        finally
+        {
+            if (IsActiveTranslationRequest(requestCts))
+            {
+                _translateCts = null;
+            }
+
+            requestCts.Dispose();
         }
     }
 }

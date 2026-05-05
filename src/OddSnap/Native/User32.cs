@@ -289,6 +289,9 @@ internal static partial class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
 
+    [LibraryImport("user32.dll")]
+    public static partial int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, [MarshalAs(UnmanagedType.Bool)] bool bRedraw);
+
     [LibraryImport("gdi32.dll")]
     public static partial IntPtr CreateCompatibleDC(IntPtr hdc);
 

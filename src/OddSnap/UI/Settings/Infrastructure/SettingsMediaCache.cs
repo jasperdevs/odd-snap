@@ -199,6 +199,8 @@ internal static class SettingsMediaCache
     {
         lock (ThumbWaiters)
         {
+            RemoveWaiterFromOtherKeys_NoLock(cacheKey, image);
+
             if (!ThumbWaiters.TryGetValue(cacheKey, out var waiters))
             {
                 waiters = new List<WeakReference<Image>>();
@@ -208,6 +210,29 @@ internal static class SettingsMediaCache
             waiters.RemoveAll(waiter => !waiter.TryGetTarget(out var existing) || ReferenceEquals(existing, image));
             waiters.Add(new WeakReference<Image>(image));
         }
+    }
+
+    private static void RemoveWaiterFromOtherKeys_NoLock(string cacheKey, Image image)
+    {
+        List<string>? emptyKeys = null;
+        foreach (var pair in ThumbWaiters)
+        {
+            if (string.Equals(pair.Key, cacheKey, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            pair.Value.RemoveAll(waiter => !waiter.TryGetTarget(out var existing) || ReferenceEquals(existing, image));
+            if (pair.Value.Count == 0)
+            {
+                emptyKeys ??= [];
+                emptyKeys.Add(pair.Key);
+            }
+        }
+
+        if (emptyKeys is null)
+            return;
+
+        foreach (var key in emptyKeys)
+            ThumbWaiters.Remove(key);
     }
 
     public static List<Image> TakeWaiters(string cacheKey)

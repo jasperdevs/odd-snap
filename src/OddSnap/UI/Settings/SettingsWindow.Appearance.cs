@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using OddSnap.Helpers;
@@ -136,7 +137,7 @@ public partial class SettingsWindow
             480 => 5,
             _ => 0
         };
-        SaveDirBox.Text = s.SaveDirectory;
+        SetSaveDirectoryPath(s.SaveDirectory);
         SaveDirPanel.Visibility = s.SaveToFile ? Visibility.Visible : Visibility.Collapsed;
         StartWithWindowsCheck.IsChecked = s.StartWithWindows;
         AutoUpdateCheck.IsChecked = s.AutoCheckForUpdates;
@@ -232,12 +233,15 @@ public partial class SettingsWindow
     private void PopulateInterfaceLanguageOptions()
     {
         InterfaceLanguageCombo.Items.Clear();
-        InterfaceLanguageCombo.Items.Add(new ComboBoxItem
+        var autoLanguageItem = new ComboBoxItem
         {
             Content = "Auto (system language)",
             Tag = LocalizationService.AutoLanguageCode,
             ToolTip = "Uses Windows language when OddSnap has translations for it.",
-        });
+        };
+        AutomationProperties.SetName(autoLanguageItem, "Auto interface language");
+        AutomationProperties.SetHelpText(autoLanguageItem, "Use the Windows language when OddSnap has app translations for it.");
+        InterfaceLanguageCombo.Items.Add(autoLanguageItem);
 
         foreach (var language in LocalizationService.Languages)
         {
@@ -245,23 +249,36 @@ public partial class SettingsWindow
             var label = string.Equals(language.EnglishName, language.NativeName, StringComparison.OrdinalIgnoreCase)
                 ? language.EnglishName
                 : $"{language.EnglishName} - {language.NativeName}";
-            InterfaceLanguageCombo.Items.Add(new ComboBoxItem
+            var item = new ComboBoxItem
             {
                 Content = available ? label : $"{label} (not translated yet)",
                 Tag = language.Code,
                 IsEnabled = available,
                 ToolTip = available
-                    ? null
+                    ? $"Use {label} for the OddSnap interface."
                     : "This language is recognized, but OddSnap does not have app translations for it yet.",
-            });
+            };
+            AutomationProperties.SetName(item, $"{label} interface language");
+            AutomationProperties.SetHelpText(item, available
+                ? $"Use {label} for OddSnap menus, settings, and prompts."
+                : $"{label} is recognized, but OddSnap does not have app translations for it yet.");
+            InterfaceLanguageCombo.Items.Add(item);
         }
     }
 
     private void ShowToolNumberBadgesCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.ShowToolNumberBadges = ShowToolNumberBadgesCheck.IsChecked == true;
-        _settingsService.Save();
+        if (!IsLoaded || _suppressGeneralPreferenceChange) return;
+
+        var previous = _settingsService.Settings.ShowToolNumberBadges;
+        var selected = ShowToolNumberBadgesCheck.IsChecked == true;
+        UpdateGeneralPreference(
+            "settings.tool-number-badges",
+            "Tool number badges",
+            previous,
+            selected,
+            value => _settingsService.Settings.ShowToolNumberBadges = value,
+            value => ShowToolNumberBadgesCheck.IsChecked = value);
     }
 
     private void SelectInterfaceLanguage(string languageCode)
@@ -281,7 +298,7 @@ public partial class SettingsWindow
 
     private void InterfaceLanguageCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressGeneralPreferenceChange) return;
         var selected = InterfaceLanguageCombo.SelectedItem as ComboBoxItem;
         var languageCode = selected?.Tag?.ToString() ?? LocalizationService.AutoLanguageCode;
         if (!string.Equals(languageCode, LocalizationService.AutoLanguageCode, StringComparison.OrdinalIgnoreCase) &&
@@ -292,10 +309,20 @@ public partial class SettingsWindow
             return;
         }
 
-        _settingsService.Settings.InterfaceLanguage = LocalizationService.NormalizeLanguageSetting(languageCode);
-        _settingsService.Save();
-        ApplyLocalization();
-        LocalizationChanged?.Invoke();
+        var previous = _settingsService.Settings.InterfaceLanguage;
+        var normalized = LocalizationService.NormalizeLanguageSetting(languageCode);
+        UpdateGeneralPreference(
+            "settings.interface-language",
+            "Interface language",
+            previous,
+            normalized,
+            value => _settingsService.Settings.InterfaceLanguage = value,
+            SelectInterfaceLanguage,
+            _ =>
+            {
+                ApplyLocalization();
+                LocalizationChanged?.Invoke();
+            });
     }
 
     private void ApplyLocalization()
@@ -396,8 +423,7 @@ public partial class SettingsWindow
         if (!preserveTransientState)
         {
             _selectMode = false;
-            SelectBtn.Content = "Select";
-            DeleteSelectedBtn.Visibility = Visibility.Collapsed;
+            UpdateSelectModeControls();
             _ocrSearchQuery = "";
             _colorSearchQuery = "";
             _codeSearchQuery = "";
@@ -434,6 +460,7 @@ public partial class SettingsWindow
         }
 
         UpdateHistoryMonitorState();
+        UpdateHistoryActionButtons();
         loadSw.Stop();
         AppDiagnostics.LogInfo(
             "history.tab-load",

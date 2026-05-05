@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -19,9 +20,13 @@ namespace OddSnap.UI;
 public partial class PreviewWindow : Window
 {
     private const double PreviewCornerRadius = 12;
+    private const int PreviewTargetOpenCooldownMs = 900;
     private readonly Bitmap? _screenshot;
     private DispatcherTimer _fadeTimer = null!;
+    private DispatcherTimer? _previewTargetOpenCooldownTimer;
     private bool _isFading;
+    private bool _isSavingPreview;
+    private bool _isOpeningPreviewTarget;
     private bool _isHovered;
     private bool _isPinned;
     private System.Windows.Point _mouseDownPos;
@@ -40,69 +45,95 @@ public partial class PreviewWindow : Window
 
     public static void DismissCurrent()
     {
-        if (_current is null) return;
+        var current = _current;
+        if (current is null) return;
 
-        if (_current.Dispatcher.CheckAccess())
-            _current.ForceClose();
+        if (current.Dispatcher.CheckAccess())
+            current.ForceCloseIfStillCurrent();
         else
-            _current.Dispatcher.BeginInvoke(_current.ForceClose);
+            current.Dispatcher.BeginInvoke(current.ForceCloseIfStillCurrent);
     }
 
     public static void AttachUploadedLink(string localPath, string url, string provider)
     {
-        if (_current is null) return;
-        if (_current._savedFilePath is null) return;
-        if (!string.Equals(_current._savedFilePath, localPath, StringComparison.OrdinalIgnoreCase)) return;
+        var current = _current;
+        if (current is null) return;
 
-        if (_current.Dispatcher.CheckAccess())
-            _current.SetUploadedLink(url, provider);
+        if (current.Dispatcher.CheckAccess())
+            current.AttachUploadedLinkOnOwnerDispatcher(localPath, url, provider);
         else
-            _current.Dispatcher.BeginInvoke(() => _current.SetUploadedLink(url, provider));
+            current.Dispatcher.BeginInvoke(() => current.AttachUploadedLinkOnOwnerDispatcher(localPath, url, provider));
     }
 
     public static void SetPosition(OddSnap.Models.ToastPosition position) => _position = position;
 
     public PreviewWindow(Bitmap screenshot, string? savedFilePath = null)
     {
-        _current?.ForceClose();
-        _current = this;
+        CloseCurrentForReplacement();
 
         _screenshot = screenshot;
         _savedFilePath = savedFilePath;
 
         InitializeComponent();
+        OddSnapWindowChrome.ApplyRoundedCorners(this, 18);
         UiScale.ApplyToWindow(this, ImageBorder, scaleWindowBounds: false);
         ApplyTheme();
         SetThumbnail();
         FitToImage();
         SizeChanged += (_, _) => UpdatePreviewClip();
         InitCommon();
+        _current = this;
     }
 
     /// <summary>Constructor for GIF files — shows first frame as thumbnail, supports drag-drop of the file.</summary>
     public PreviewWindow(string gifFilePath)
     {
-        _current?.ForceClose();
-        _current = this;
+        CloseCurrentForReplacement();
 
         _isGif = true;
         _savedFilePath = gifFilePath;
 
-        // Copy file to clipboard
-        try
-        {
-            var files = new System.Collections.Specialized.StringCollection { gifFilePath };
-            System.Windows.Clipboard.SetFileDropList(files);
-        }
-        catch { }
+        TryCopyGifFileToClipboard(gifFilePath);
 
         InitializeComponent();
+        OddSnapWindowChrome.ApplyRoundedCorners(this, 18);
         UiScale.ApplyToWindow(this, ImageBorder, scaleWindowBounds: false);
         ApplyTheme();
         SetGifThumbnail(gifFilePath);
         FitToImage();
         SizeChanged += (_, _) => UpdatePreviewClip();
         InitCommon();
+        _current = this;
+    }
+
+    private static void CloseCurrentForReplacement()
+    {
+        var current = _current;
+        if (current is null)
+            return;
+
+        if (current.Dispatcher.CheckAccess())
+            current.ForceClose();
+        else
+            current.Dispatcher.BeginInvoke(current.ForceClose);
+    }
+
+    private static bool TryCopyGifFileToClipboard(string gifFilePath)
+    {
+        try
+        {
+            var files = new System.Collections.Specialized.StringCollection { gifFilePath };
+            System.Windows.Clipboard.SetFileDropList(files);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError(
+                "Copy failed",
+                $"OddSnap could not copy the GIF file. The preview will still open; save or drag the GIF manually.\n{ex.Message}",
+                gifFilePath);
+            return false;
+        }
     }
 
     private double _duration = ToastWindow.GetDuration() + 0.5; // slightly longer than toast
@@ -124,6 +155,7 @@ public partial class PreviewWindow : Window
         HookOverlayHover(CloseBtn, CloseIcon, "close");
         HookOverlayHover(PinBtn, PinIcon, "pin");
         HookOverlayHover(SaveBtn, SaveIcon, "download");
+        RefreshPreviewAccessibility();
 
         SourceInitialized += (_, _) => PopupWindowHelper.ApplyNoActivateChrome(this);
         Loaded += OnLoaded;
@@ -134,8 +166,23 @@ public partial class PreviewWindow : Window
         _uploadUrl = url;
         _uploadProvider = provider;
         _uploadDead = false;
-        if (!string.IsNullOrWhiteSpace(url))
-            ToolTip = $"Open {provider} link";
+        RefreshPreviewAccessibility();
+    }
+
+    private void AttachUploadedLinkOnOwnerDispatcher(string localPath, string url, string provider)
+    {
+        if (_current != this) return;
+        if (_savedFilePath is null) return;
+        if (!string.Equals(_savedFilePath, localPath, StringComparison.OrdinalIgnoreCase)) return;
+
+        SetUploadedLink(url, provider);
+    }
+
+    private void ForceCloseIfStillCurrent()
+    {
+        if (_current != this) return;
+
+        ForceClose();
     }
 
     private void ApplyTheme()
@@ -146,6 +193,73 @@ public partial class PreviewWindow : Window
         ApplyOverlayButtonVisual(CloseBtn, CloseIcon, "close", active: false);
         ApplyOverlayButtonVisual(PinBtn, PinIcon, "pin", active: _isPinned);
         ApplyOverlayButtonVisual(SaveBtn, SaveIcon, "download", active: false);
+        RefreshPreviewAccessibility();
+    }
+
+    private void RefreshPreviewAccessibility()
+    {
+        RefreshPreviewWindowTooltip();
+        var previewName = _isGif ? "GIF preview" : "Screenshot preview";
+        SetPreviewElementAccessibility(ThumbnailImage, previewName, BuildPreviewImageHelpText());
+        RefreshPreviewOverlayButtonAccessibility(CloseBtn, "Close preview", "Close this preview.");
+        RefreshPreviewOverlayButtonAccessibility(PinBtn,
+            _isPinned ? "Unpin preview" : "Pin preview",
+            _isPinned ? "Allow this preview to dismiss automatically." : "Keep this preview open.");
+        RefreshPreviewOverlayButtonAccessibility(SaveBtn, "Save preview", "Save this preview image.");
+    }
+
+    private void RefreshPreviewWindowTooltip()
+    {
+        SetPreviewWindowStatusTooltip(BuildPreviewWindowTooltip());
+    }
+
+    private string BuildPreviewWindowTooltip()
+    {
+        if (!string.IsNullOrWhiteSpace(_uploadUrl) && !_uploadDead)
+        {
+            var provider = string.IsNullOrWhiteSpace(_uploadProvider) ? "upload provider" : _uploadProvider;
+            return $"Open {provider} link";
+        }
+
+        return BuildPreviewImageHelpText();
+    }
+
+    private string BuildPreviewImageHelpText()
+    {
+        var fileName = string.IsNullOrWhiteSpace(_savedFilePath)
+            ? ""
+            : Path.GetFileName(_savedFilePath);
+        if (!string.IsNullOrWhiteSpace(_uploadUrl) && !_uploadDead)
+        {
+            var provider = string.IsNullOrWhiteSpace(_uploadProvider) ? "upload provider" : _uploadProvider;
+            return string.IsNullOrWhiteSpace(fileName)
+                ? $"Preview with {provider} upload link."
+                : $"Preview for {fileName} with {provider} upload link.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(fileName))
+            return _isGif ? $"GIF preview for {fileName}." : $"Screenshot preview for {fileName}.";
+
+        return _isGif ? "GIF preview." : "Screenshot preview.";
+    }
+
+    private static void RefreshPreviewOverlayButtonAccessibility(FrameworkElement button, string name, string helpText)
+    {
+        SetPreviewElementAccessibility(button, name, helpText);
+    }
+
+    private static void SetPreviewElementAccessibility(FrameworkElement element, string name, string helpText)
+    {
+        element.ToolTip = helpText;
+        AutomationProperties.SetName(element, name);
+        AutomationProperties.SetHelpText(element, helpText);
+    }
+
+    private void SetPreviewWindowStatusTooltip(string helpText)
+    {
+        ToolTip = helpText;
+        AutomationProperties.SetName(this, "Preview window");
+        AutomationProperties.SetHelpText(this, helpText);
     }
 
     private static void ApplyOverlayButtonVisual(System.Windows.Controls.Border button, System.Windows.Controls.Image icon, string iconId, bool active)
@@ -220,7 +334,10 @@ public partial class PreviewWindow : Window
             bitmapImage.Freeze();
             ThumbnailImage.Source = bitmapImage;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("preview.gif-thumbnail", $"Failed to load GIF preview thumbnail {Path.GetFileName(gifPath)}: {ex.Message}", ex);
+        }
     }
 
     private static BitmapSource BitmapToSource(Bitmap bitmap)
@@ -250,14 +367,17 @@ public partial class PreviewWindow : Window
                 BeginAnimation(TopProperty, Motion.To(targetTop, 300, Motion.SmoothOut));
             }
 
-            _fadeTimer.Start();
-
             // Progress bar animation
             if (!_isPinned)
             {
+                _fadeTimer.Start();
                 ProgressScale.ScaleX = 1;
                 ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
                     new DoubleAnimation { To = 0, Duration = Motion.Sec(_duration) });
+            }
+            else
+            {
+                _fadeTimer.Stop();
             }
         }, System.Windows.Threading.DispatcherPriority.Render);
     }
@@ -283,21 +403,22 @@ public partial class PreviewWindow : Window
         _isHovered = false;
         _mouseIsDown = false;
         AnimateButtons(0);
-        // Resume progress bar and timer from current position
-        if (!_isPinned)
+
+        if (_isPinned)
         {
-            var remaining = ProgressScale.ScaleX * _duration;
-            if (remaining > 0.1)
-            {
-                ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
-                    new DoubleAnimation { To = 0, Duration = Motion.Sec(remaining) });
-            }
-            _fadeTimer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, remaining));
-        }
-        else
-        {
+            _fadeTimer.Stop();
             _fadeTimer.Interval = TimeSpan.FromSeconds(_duration);
+            return;
         }
+
+        // Resume progress bar and timer from current position
+        var remaining = ProgressScale.ScaleX * _duration;
+        if (remaining > 0.1)
+        {
+            ProgressScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty,
+                new DoubleAnimation { To = 0, Duration = Motion.Sec(remaining) });
+        }
+        _fadeTimer.Interval = TimeSpan.FromSeconds(Math.Max(0.1, remaining));
         _fadeTimer.Start();
     }
 

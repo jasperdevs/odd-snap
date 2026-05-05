@@ -58,15 +58,21 @@ internal static class PythonRuntimeEnvironment
         }
     }
 
-    public static void TryDeleteDirectory(string path)
+    public static bool TryDeleteDirectory(string path, string diagnosticCategory, string context)
     {
         try
         {
             if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
+            return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                diagnosticCategory,
+                $"Failed to delete {context} directory {Path.GetFileName(path)}: {ex.Message}",
+                ex);
+            return false;
         }
     }
 }

@@ -265,7 +265,7 @@ public sealed partial class HistoryService
                     return false;
 
                 _entriesByPath.Remove(e.FilePath);
-                try { File.Delete(e.FilePath); } catch { }
+                TryDeleteHistoryFile_NoLock(e.FilePath, "retention cleanup");
                 TryDeleteManagedThumbnail_NoLock(e.FilePath);
                 return true;
             });

@@ -63,8 +63,12 @@ public static class UpscaleRuntimeService
                 File.Delete(modelPath);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "upscale.runtime.model-cleanup",
+                $"Failed to delete upscale model {engine}: {ex.Message}",
+                ex);
             return false;
         }
     }
@@ -77,8 +81,12 @@ public static class UpscaleRuntimeService
                 Directory.Delete(ModelCacheDir, recursive: true);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "upscale.runtime.model-cleanup",
+                $"Failed to remove cached upscale models: {ex.Message}",
+                ex);
             return false;
         }
     }
@@ -87,12 +95,23 @@ public static class UpscaleRuntimeService
     {
         try
         {
-            PythonRuntimeEnvironment.TryDeleteDirectory(GetRuntimeEnvironmentDirectory(provider));
+            if (!PythonRuntimeEnvironment.TryDeleteDirectory(
+                    GetRuntimeEnvironmentDirectory(provider),
+                    "upscale.runtime.remove-cleanup",
+                    $"{provider} upscale runtime"))
+            {
+                return false;
+            }
+
             ClearProbeCache(provider);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "upscale.runtime.remove-cleanup",
+                $"Failed to remove {provider} upscale runtime: {ex.Message}",
+                ex);
             return false;
         }
     }
@@ -231,7 +250,7 @@ public static class UpscaleRuntimeService
         }
         finally
         {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            TryDeleteRuntimeTempFile(tempPath, "model download");
         }
     }
 
@@ -267,8 +286,24 @@ public static class UpscaleRuntimeService
         }
         finally
         {
-            try { if (File.Exists(tempInput)) File.Delete(tempInput); } catch { }
-            try { if (File.Exists(tempOutput)) File.Delete(tempOutput); } catch { }
+            TryDeleteRuntimeTempFile(tempInput, "upscale input");
+            TryDeleteRuntimeTempFile(tempOutput, "upscale output");
+        }
+    }
+
+    private static void TryDeleteRuntimeTempFile(string path, string context)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "upscale.runtime.temp-cleanup",
+                $"Failed to delete {context} temporary file {Path.GetFileName(path)}: {ex.Message}",
+                ex);
         }
     }
 
@@ -310,7 +345,10 @@ public static class UpscaleRuntimeService
 
         if (recreate)
         {
-            PythonRuntimeEnvironment.TryDeleteDirectory(envDir);
+            PythonRuntimeEnvironment.TryDeleteDirectory(
+                envDir,
+                "upscale.runtime.install-cleanup",
+                $"{provider} upscale runtime");
             progress?.Report("Creating isolated Python environment...");
             var create = await PythonRuntimeEnvironment.RunLauncherAsync(new[] { launcherArg, "-m", "venv", envDir }, cancellationToken).ConfigureAwait(false);
             if (create.ExitCode != 0)

@@ -5,6 +5,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using OddSnap.Capture;
 using OddSnap.Helpers;
+using OddSnap.Services;
 using Color = System.Windows.Media.Color;
 
 namespace OddSnap.UI;
@@ -118,11 +119,25 @@ public partial class ToastWindow
             clickActionLabel));
     }
 
-    private static void OpenFileLocation(string? filePath)
+    private static bool OpenFileLocation(string? filePath)
     {
-        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return;
-        try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\""); }
-        catch { }
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+            return false;
+
+        try
+        {
+            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("toast.open-file-location", $"Failed to open file location: {ex.Message}", ex);
+            ShowError(
+                "Open failed",
+                $"OddSnap could not open the saved file location. Try again from the toast, or open the folder manually.\n{ex.Message}",
+                filePath);
+            return false;
+        }
     }
 
     public static void DismissCurrent()

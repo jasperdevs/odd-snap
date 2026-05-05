@@ -57,6 +57,9 @@ public static class ToolbarLayout
         if (toolbarWidth <= 0 || toolbarHeight <= 0)
             return Rectangle.Empty;
 
+        toolbarWidth = Math.Min(toolbarWidth, Math.Max(1, screenBounds.Width - horizontalPadding * 2));
+        toolbarHeight = Math.Min(toolbarHeight, Math.Max(1, screenBounds.Height - horizontalPadding * 2));
+
         int screenLeft = screenBounds.Left - virtualBounds.Left;
         int screenTop = screenBounds.Top - virtualBounds.Top;
 

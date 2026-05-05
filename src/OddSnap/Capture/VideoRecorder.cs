@@ -502,19 +502,19 @@ public sealed class VideoRecorder : IDisposable
             else
             {
                 // Mux failed — keep the original video without audio
-                try { File.Delete(tempOut); } catch { }
+                TryDeleteRecordingTempFile(tempOut, "failed mux output");
             }
         }
         catch
         {
             // Mux failed — keep the original video without audio
-            try { File.Delete(tempOut); } catch { }
+            TryDeleteRecordingTempFile(tempOut, "mux exception output");
         }
         finally
         {
             // Clean up temp WAV files
             foreach (var f in tempAudioFiles)
-                try { File.Delete(f); } catch { }
+                TryDeleteRecordingTempFile(f, "audio capture");
         }
 
         return false;
@@ -636,8 +636,8 @@ public sealed class VideoRecorder : IDisposable
         try { _ffmpegStdin?.Close(); } catch { }
         try { _ffmpeg?.Kill(); } catch { }
         // Clean up temp WAV files
-        if (_micWavPath != null) try { File.Delete(_micWavPath); } catch { }
-        if (_desktopWavPath != null) try { File.Delete(_desktopWavPath); } catch { }
+        TryDeleteRecordingTempFile(_micWavPath, "discarded mic audio");
+        TryDeleteRecordingTempFile(_desktopWavPath, "discarded desktop audio");
     }
 
     public void Dispose()
@@ -736,7 +736,7 @@ public sealed class VideoRecorder : IDisposable
                 AppDiagnostics.LogWarning(
                     "recording.duration-repair",
                     $"Repair failed for {Path.GetFileName(outputPath)}. FFmpeg exit={proc.ExitCode}. {stderr}");
-                try { File.Delete(tempOut); } catch { }
+                TryDeleteRecordingTempFile(tempOut, "failed repair output");
                 return;
             }
 
@@ -753,7 +753,26 @@ public sealed class VideoRecorder : IDisposable
         catch (Exception ex)
         {
             AppDiagnostics.LogError("recording.duration-repair", ex);
-            try { File.Delete(tempOut); } catch { }
+            TryDeleteRecordingTempFile(tempOut, "repair exception output");
+        }
+    }
+
+    private static void TryDeleteRecordingTempFile(string? path, string context)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "recording.temp-cleanup",
+                $"Failed to delete {context} temporary file {Path.GetFileName(path)}: {ex.Message}",
+                ex);
         }
     }
 

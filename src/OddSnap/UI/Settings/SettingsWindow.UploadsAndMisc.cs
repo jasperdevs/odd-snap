@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -26,15 +27,67 @@ public partial class SettingsWindow
 
     private void UploadDestCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.ImageUploadDestination = GetSelectedUploadDest();
-        if (UploadDestCombo.SelectedItem is ComboBoxItem selected)
-            UploadDestCombo.Text = GetUploadDestinationFilterText(selected);
-        if (ActiveUploadSettings.AiChatUploadDestinationSynced)
-            ActiveUploadSettings.AiChatUploadDestination = Services.UploadService.NormalizeAiChatUploadDestination(GetSelectedUploadDest());
-        _settingsService.Save();
-        UpdateUploadSettingsVisibility();
-        UpdateAiRedirectPanelVisibility();
+        if (!IsLoaded || _suppressUploadDestChange) return;
+
+        var previousDestination = _settingsService.Settings.ImageUploadDestination;
+        var previousAiChatUploadDestination = ActiveUploadSettings.AiChatUploadDestination;
+        var selectedDestination = GetSelectedUploadDest();
+
+        try
+        {
+            _settingsService.Settings.ImageUploadDestination = selectedDestination;
+            if (UploadDestCombo.SelectedItem is ComboBoxItem selected)
+                UploadDestCombo.Text = GetUploadDestinationFilterText(selected);
+            if (ActiveUploadSettings.AiChatUploadDestinationSynced)
+                ActiveUploadSettings.AiChatUploadDestination = Services.UploadService.NormalizeAiChatUploadDestination(selectedDestination);
+            _settingsService.Save();
+            UpdateUploadSettingsVisibility();
+            UpdateAiRedirectPanelVisibility();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.upload-destination", ex);
+            _settingsService.Settings.ImageUploadDestination = previousDestination;
+            ActiveUploadSettings.AiChatUploadDestination = previousAiChatUploadDestination;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.upload-destination-rollback", rollbackEx);
+            }
+
+            _suppressUploadDestChange = true;
+            try
+            {
+                SelectUploadDestByTag((int)previousDestination);
+            }
+            finally
+            {
+                _suppressUploadDestChange = false;
+            }
+
+            try
+            {
+                UpdateUploadSettingsVisibility();
+                UpdateAiRedirectPanelVisibility();
+            }
+            catch (Exception restoreEx)
+            {
+                AppDiagnostics.LogError("settings.upload-destination-restore", restoreEx);
+            }
+
+            ShowUploadDestinationSaveFailed(ex);
+        }
+    }
+
+    private void ShowUploadDestinationSaveFailed(Exception ex)
+    {
+        SetTestUploadStatus("Upload destination change was not saved. Previous destination restored.");
+        ToastWindow.ShowError(
+            "Upload destination failed",
+            $"The previous upload destination was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
     }
 
     private void UpdateUploadSettingsVisibility()
@@ -62,30 +115,116 @@ public partial class SettingsWindow
         WebDavSettings.Visibility = dest == Services.UploadDestination.WebDav ? Visibility.Visible : Visibility.Collapsed;
         S3Settings.Visibility = dest == Services.UploadDestination.S3Compatible ? Visibility.Visible : Visibility.Collapsed;
         CustomUploadSettings.Visibility = dest == Services.UploadDestination.CustomHttp ? Visibility.Visible : Visibility.Collapsed;
-        TestUploadCard.Visibility = dest != Services.UploadDestination.None ? Visibility.Visible : Visibility.Collapsed;
+        UpdateTestUploadAvailability(dest);
         AutoUploadHeader.Visibility = Visibility.Visible;
         AutoUploadCard.Visibility = Visibility.Visible;
     }
 
+    private void UpdateTestUploadAvailability(Services.UploadDestination? selectedDestination = null)
+    {
+        var dest = selectedDestination ?? GetSelectedUploadDest();
+        var available = CanTestUploadDestination(dest);
+        TestUploadCard.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
+        TestUploadBtn.IsEnabled = available && !_testUploadInProgress;
+
+        if (!available)
+            SetTestUploadStatus(string.Empty);
+    }
+
+    private bool CanTestUploadDestination(Services.UploadDestination dest)
+    {
+        return dest switch
+        {
+            Services.UploadDestination.None => false,
+            _ when Services.UploadService.IsAiChatDestination(dest) => GetSelectedAiRedirectPanelProvider() != Services.AiChatProvider.None,
+            _ => true
+        };
+    }
+
     private void AutoUploadScreenshotsCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.AutoUploadScreenshots = AutoUploadScreenshotsCheck.IsChecked == true;
-        _settingsService.Save();
+        UpdateAutoUploadSetting(
+            AutoUploadScreenshotsCheck,
+            "screenshots",
+            "screenshots",
+            () => _settingsService.Settings.AutoUploadScreenshots,
+            value => _settingsService.Settings.AutoUploadScreenshots = value);
     }
 
     private void AutoUploadGifsCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.AutoUploadGifs = AutoUploadGifsCheck.IsChecked == true;
-        _settingsService.Save();
+        UpdateAutoUploadSetting(
+            AutoUploadGifsCheck,
+            "GIFs",
+            "gifs",
+            () => _settingsService.Settings.AutoUploadGifs,
+            value => _settingsService.Settings.AutoUploadGifs = value);
     }
 
     private void AutoUploadVideosCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.AutoUploadVideos = AutoUploadVideosCheck.IsChecked == true;
-        _settingsService.Save();
+        UpdateAutoUploadSetting(
+            AutoUploadVideosCheck,
+            "videos",
+            "videos",
+            () => _settingsService.Settings.AutoUploadVideos,
+            value => _settingsService.Settings.AutoUploadVideos = value);
+    }
+
+    private void UpdateAutoUploadSetting(System.Windows.Controls.CheckBox checkBox, string label, string diagnosticSuffix, Func<bool> getValue, Action<bool> setValue)
+    {
+        if (!IsLoaded || _suppressAutoUploadChange) return;
+
+        var previous = getValue();
+        var enabled = checkBox.IsChecked == true;
+
+        try
+        {
+            setValue(enabled);
+            _settingsService.Save();
+            SetAutoUploadStatus($"Auto-upload {label} {(enabled ? "enabled" : "disabled")}.");
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError($"settings.auto-upload-{diagnosticSuffix}", ex);
+            setValue(previous);
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError($"settings.auto-upload-{diagnosticSuffix}-rollback", rollbackEx);
+            }
+
+            _suppressAutoUploadChange = true;
+            try
+            {
+                checkBox.IsChecked = previous;
+            }
+            finally
+            {
+                _suppressAutoUploadChange = false;
+            }
+
+            ShowAutoUploadSaveFailed(label, ex);
+        }
+    }
+
+    private void ShowAutoUploadSaveFailed(string label, Exception ex)
+    {
+        SetAutoUploadStatus($"Auto-upload {label} change was not saved. Previous setting restored.");
+        ToastWindow.ShowError(
+            "Auto-upload setting failed",
+            $"The {label} auto-upload setting was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
+    }
+
+    private void SetAutoUploadStatus(string message)
+    {
+        AutoUploadStatusText.Text = message;
+        AutoUploadStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private Services.AiChatProvider GetSelectedAiRedirectPanelProvider()
@@ -120,35 +259,291 @@ public partial class SettingsWindow
         AiRedirectLensUploadDestPanelCombo.IsEnabled = isLens && AiRedirectLensUploadSyncCheck.IsChecked != true;
         if (isLens && AiRedirectLensUploadSyncCheck.IsChecked == true)
             SelectAiRedirectPanelUploadDestByValue((int)GetSelectedUploadDest());
+        UpdateAiRedirectTestAvailability();
+    }
+
+    private void UpdateAiRedirectTestAvailability()
+    {
+        var available = GetSelectedAiRedirectPanelProvider() != Services.AiChatProvider.None;
+        AiRedirectTestCard.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
+        AiRedirectTestBtn.IsEnabled = available && !_aiRedirectTestInProgress;
+
+        if (!available)
+            SetAiRedirectTestStatus(string.Empty);
     }
 
     private void AiRedirectProviderCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.AiChatProvider = GetSelectedAiRedirectPanelProvider();
-        UpdateAiRedirectPanelVisibility();
-        _settingsService.Save();
+        if (!IsLoaded || _suppressAiRedirectProviderChange) return;
+
+        var previousProvider = ActiveUploadSettings.AiChatProvider;
+        var selectedProvider = GetSelectedAiRedirectPanelProvider();
+
+        try
+        {
+            ActiveUploadSettings.AiChatProvider = selectedProvider;
+            UpdateAiRedirectPanelVisibility();
+            UpdateTestUploadAvailability();
+            _settingsService.Save();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.ai-redirect-provider", ex);
+            ActiveUploadSettings.AiChatProvider = previousProvider;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.ai-redirect-provider-rollback", rollbackEx);
+            }
+
+            _suppressAiRedirectProviderChange = true;
+            try
+            {
+                SelectAiRedirectPanelProviderByValue((int)previousProvider);
+            }
+            catch (Exception restoreEx)
+            {
+                AppDiagnostics.LogError("settings.ai-redirect-provider-restore-selection", restoreEx);
+            }
+            finally
+            {
+                _suppressAiRedirectProviderChange = false;
+            }
+
+            try
+            {
+                UpdateAiRedirectPanelVisibility();
+                UpdateTestUploadAvailability();
+            }
+            catch (Exception restoreEx)
+            {
+                AppDiagnostics.LogError("settings.ai-redirect-provider-restore", restoreEx);
+            }
+
+            ShowAiRedirectProviderSaveFailed(ex);
+        }
+    }
+
+    private void ShowAiRedirectProviderSaveFailed(Exception ex)
+    {
+        SetAiRedirectTestStatus("AI redirect provider change was not saved. Previous provider restored.");
+        ToastWindow.ShowError(
+            "AI redirect provider failed",
+            $"The previous AI redirect provider was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
     }
 
     private void AiRedirectLensUploadDestPanelCombo_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressAiRedirectLensUploadDestChange) return;
         if (AiRedirectLensUploadSyncCheck.IsChecked == true)
             return;
-        ActiveUploadSettings.AiChatUploadDestination = GetSelectedAiRedirectPanelUploadDest();
-        _settingsService.Save();
+
+        var previousDestination = ActiveUploadSettings.AiChatUploadDestination;
+        var selectedDestination = GetSelectedAiRedirectPanelUploadDest();
+
+        try
+        {
+            ActiveUploadSettings.AiChatUploadDestination = selectedDestination;
+            _settingsService.Save();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.ai-redirect-lens-upload-destination", ex);
+            ActiveUploadSettings.AiChatUploadDestination = previousDestination;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.ai-redirect-lens-upload-destination-rollback", rollbackEx);
+            }
+
+            _suppressAiRedirectLensUploadDestChange = true;
+            try
+            {
+                SelectAiRedirectPanelUploadDestByValue((int)previousDestination);
+            }
+            finally
+            {
+                _suppressAiRedirectLensUploadDestChange = false;
+            }
+
+            ShowAiRedirectLensUploadServiceSaveFailed(ex);
+        }
+    }
+
+    private void ShowAiRedirectLensUploadServiceSaveFailed(Exception ex)
+    {
+        SetAiRedirectTestStatus("Lens upload service change was not saved. Previous upload service restored.");
+        ToastWindow.ShowError(
+            "Lens upload service failed",
+            $"The previous Lens upload service was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
     }
 
     private void AiRedirectLensUploadSyncCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.AiChatUploadDestinationSynced = AiRedirectLensUploadSyncCheck.IsChecked == true;
-        if (ActiveUploadSettings.AiChatUploadDestinationSynced)
-            ActiveUploadSettings.AiChatUploadDestination = Services.UploadService.NormalizeAiChatUploadDestination(GetSelectedUploadDest());
-        else
-            ActiveUploadSettings.AiChatUploadDestination = GetSelectedAiRedirectPanelUploadDest();
-        UpdateAiRedirectPanelVisibility();
-        _settingsService.Save();
+        if (!IsLoaded || _suppressAiRedirectLensUploadSyncChange) return;
+
+        var previousSynced = ActiveUploadSettings.AiChatUploadDestinationSynced;
+        var previousDestination = ActiveUploadSettings.AiChatUploadDestination;
+        var selectedSynced = AiRedirectLensUploadSyncCheck.IsChecked == true;
+
+        try
+        {
+            ActiveUploadSettings.AiChatUploadDestinationSynced = selectedSynced;
+            if (ActiveUploadSettings.AiChatUploadDestinationSynced)
+                ActiveUploadSettings.AiChatUploadDestination = Services.UploadService.NormalizeAiChatUploadDestination(GetSelectedUploadDest());
+            else
+                ActiveUploadSettings.AiChatUploadDestination = GetSelectedAiRedirectPanelUploadDest();
+            UpdateAiRedirectPanelVisibility();
+            _settingsService.Save();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.ai-redirect-lens-upload-sync", ex);
+            ActiveUploadSettings.AiChatUploadDestinationSynced = previousSynced;
+            ActiveUploadSettings.AiChatUploadDestination = previousDestination;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.ai-redirect-lens-upload-sync-rollback", rollbackEx);
+            }
+
+            _suppressAiRedirectLensUploadSyncChange = true;
+            _suppressAiRedirectLensUploadDestChange = true;
+            try
+            {
+                AiRedirectLensUploadSyncCheck.IsChecked = previousSynced;
+                SelectAiRedirectPanelUploadDestByValue((int)previousDestination);
+            }
+            finally
+            {
+                _suppressAiRedirectLensUploadDestChange = false;
+                _suppressAiRedirectLensUploadSyncChange = false;
+            }
+
+            try
+            {
+                UpdateAiRedirectPanelVisibility();
+            }
+            catch (Exception restoreEx)
+            {
+                AppDiagnostics.LogError("settings.ai-redirect-lens-upload-sync-restore", restoreEx);
+            }
+
+            ShowAiRedirectLensUploadSyncSaveFailed(ex);
+        }
+    }
+
+    private void ShowAiRedirectLensUploadSyncSaveFailed(Exception ex)
+    {
+        SetAiRedirectTestStatus("Lens upload sync change was not saved. Previous sync setting restored.");
+        ToastWindow.ShowError(
+            "Lens upload sync failed",
+            $"The previous Lens upload sync setting was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
+    }
+
+    private async void AiRedirectTestBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_aiRedirectTestInProgress)
+            return;
+
+        var provider = GetSelectedAiRedirectPanelProvider();
+        if (provider == Services.AiChatProvider.None)
+        {
+            UpdateAiRedirectTestAvailability();
+            SetAiRedirectTestStatus("Choose an AI tool first.");
+            return;
+        }
+
+        _aiRedirectTestInProgress = true;
+        AiRedirectTestBtn.Content = "Testing...";
+        AiRedirectTestBtn.IsEnabled = false;
+        SetAiRedirectTestStatus("Testing AI redirect...");
+
+        string? tempPath = null;
+        try
+        {
+            if (provider == Services.AiChatProvider.GoogleLens)
+            {
+                tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "oddsnap_ai_redirect_test.png");
+                using (var bmp = new Bitmap(1, 1))
+                    CaptureOutputService.SavePng(bmp, tempPath);
+
+                var hostDest = GetSelectedAiRedirectPanelUploadDest();
+                var uploadResult = await Services.UploadService.UploadAsync(tempPath, hostDest, ActiveUploadSettings);
+                if (uploadResult.Success && !string.IsNullOrWhiteSpace(uploadResult.Url))
+                {
+                    var lensUrl = Services.UploadService.BuildGoogleLensUrl(uploadResult.Url);
+                    var opened = TryOpenTestUploadExternalUrl(lensUrl);
+                    SetAiRedirectTestStatus(opened
+                        ? "Google Lens opened with the test upload."
+                        : "Test upload succeeded, but Google Lens did not open.");
+                    ToastWindow.Show(opened ? "Google Lens works" : "Google Lens upload works", uploadResult.Url);
+                }
+                else
+                {
+                    var providerName = Services.UploadService.GetName(hostDest);
+                    var error = GetUploadResultError(uploadResult);
+                    SetAiRedirectTestStatus($"Google Lens upload failed: {providerName}: {error}");
+                    ToastWindow.ShowError("Google Lens upload failed", BuildTestUploadFailureToastBody(providerName, error, uploadResult.IsRateLimit));
+                }
+            }
+            else
+            {
+                var startUrl = Services.UploadService.BuildAiChatStartUrl(provider);
+                var providerName = Services.UploadService.GetAiChatProviderName(provider);
+                if (TryOpenTestUploadExternalUrl(startUrl))
+                {
+                    SetAiRedirectTestStatus("AI redirect opened.");
+                    ToastWindow.Show("AI redirect works", providerName);
+                }
+                else
+                {
+                    SetAiRedirectTestStatus($"AI redirect test could not open {providerName}. Check your default browser and try again.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.ai-redirect-test", ex);
+            var providerName = Services.UploadService.GetAiChatProviderName(provider);
+            SetAiRedirectTestStatus($"{providerName} redirect test failed. Check Settings -> Uploads and try again.");
+            ToastWindow.ShowError($"{providerName} redirect test failed", BuildAiRedirectTestFailureToastBody(providerName, ex.Message));
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(tempPath))
+            {
+                try
+                {
+                    System.IO.File.Delete(tempPath);
+                }
+                catch (Exception ex)
+                {
+                    AppDiagnostics.LogWarning("settings.ai-redirect-test-temp-delete", $"Failed to delete AI redirect test file {System.IO.Path.GetFileName(tempPath)}: {ex.Message}", ex);
+                }
+            }
+
+            _aiRedirectTestInProgress = false;
+            AiRedirectTestBtn.Content = "Test Redirect";
+            UpdateAiRedirectTestAvailability();
+        }
+    }
+
+    private void SetAiRedirectTestStatus(string message)
+    {
+        AiRedirectTestStatusText.Text = message;
+        AiRedirectTestStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void AiRedirectPanelHotkeyBox_GotFocus(object sender, RoutedEventArgs e)
@@ -175,11 +570,35 @@ public partial class SettingsWindow
 
     private void AiRedirectPanelHotkeyClearBtn_Click(object sender, RoutedEventArgs e)
     {
-        _settingsService.Settings.AiRedirectHotkeyModifiers = 0;
-        _settingsService.Settings.AiRedirectHotkeyKey = 0;
-        _settingsService.Save();
-        AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
-        HotkeyChanged?.Invoke();
+        var previousModifiers = _settingsService.Settings.AiRedirectHotkeyModifiers;
+        var previousKey = _settingsService.Settings.AiRedirectHotkeyKey;
+
+        try
+        {
+            _settingsService.Settings.AiRedirectHotkeyModifiers = 0;
+            _settingsService.Settings.AiRedirectHotkeyKey = 0;
+            _settingsService.Save();
+            AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(0, 0);
+            SetAiRedirectTestStatus("AI redirect hotkey cleared.");
+            HotkeyChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.ai-redirect-hotkey-clear", ex);
+            _settingsService.Settings.AiRedirectHotkeyModifiers = previousModifiers;
+            _settingsService.Settings.AiRedirectHotkeyKey = previousKey;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.ai-redirect-hotkey-clear-rollback", rollbackEx);
+            }
+
+            AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(previousModifiers, previousKey);
+            ShowAiRedirectHotkeySaveFailed("clear", ex);
+        }
     }
 
     private void HandleAiRedirectHotkeyKeyInput(System.Windows.Input.KeyEventArgs e, Key key)
@@ -195,6 +614,10 @@ public partial class SettingsWindow
         uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
         if (vk == 0 || IsUnsafeModifierlessHotkey(modifiers, vk))
             return;
+
+        var previousModifiers = _settingsService.Settings.AiRedirectHotkeyModifiers;
+        var previousKey = _settingsService.Settings.AiRedirectHotkeyKey;
+        List<(string ToolId, uint Modifiers, uint Key)> clearedConflicts = new();
 
         var conflict = FindAiRedirectConflict(modifiers, vk);
         if (conflict != null)
@@ -213,15 +636,48 @@ public partial class SettingsWindow
                 return;
             }
 
-            ClearAiRedirectConflict(modifiers, vk);
+            clearedConflicts = ClearAiRedirectConflict(modifiers, vk);
         }
 
-        _settingsService.Settings.AiRedirectHotkeyModifiers = modifiers;
-        _settingsService.Settings.AiRedirectHotkeyKey = vk;
-        _settingsService.Save();
-        AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(modifiers, vk);
-        Keyboard.ClearFocus();
-        HotkeyChanged?.Invoke();
+        try
+        {
+            _settingsService.Settings.AiRedirectHotkeyModifiers = modifiers;
+            _settingsService.Settings.AiRedirectHotkeyKey = vk;
+            _settingsService.Save();
+            AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(modifiers, vk);
+            SetAiRedirectTestStatus("AI redirect hotkey saved.");
+            Keyboard.ClearFocus();
+            HotkeyChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.ai-redirect-hotkey", ex);
+            _settingsService.Settings.AiRedirectHotkeyModifiers = previousModifiers;
+            _settingsService.Settings.AiRedirectHotkeyKey = previousKey;
+            foreach (var (toolId, oldModifiers, oldKey) in clearedConflicts)
+                _settingsService.Settings.SetToolHotkey(toolId, oldModifiers, oldKey);
+
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.ai-redirect-hotkey-rollback", rollbackEx);
+            }
+
+            AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(previousModifiers, previousKey);
+            Keyboard.ClearFocus();
+            ShowAiRedirectHotkeySaveFailed("change", ex);
+        }
+    }
+
+    private void ShowAiRedirectHotkeySaveFailed(string action, Exception ex)
+    {
+        SetAiRedirectTestStatus($"AI redirect hotkey {action} was not saved. Previous hotkey restored.");
+        ToastWindow.ShowError(
+            "AI redirect hotkey failed",
+            $"The previous AI redirect hotkey was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
     }
 
     private static bool IsModifierOnly(Key key) =>
@@ -251,235 +707,410 @@ public partial class SettingsWindow
         return null;
     }
 
-    private void ClearAiRedirectConflict(uint modifiers, uint key)
+    private List<(string ToolId, uint Modifiers, uint Key)> ClearAiRedirectConflict(uint modifiers, uint key)
     {
         var settings = _settingsService.Settings;
+        var cleared = new List<(string ToolId, uint Modifiers, uint Key)>();
         foreach (var tool in ToolDef.AllTools.Where(t => t.Group == 0))
         {
             var (existingModifiers, existingKey) = settings.GetToolHotkey(tool.Id);
             if (existingModifiers == modifiers && existingKey == key)
+            {
+                cleared.Add((tool.Id, existingModifiers, existingKey));
                 settings.SetToolHotkey(tool.Id, 0, 0);
+            }
         }
 
         foreach (var (id, _, _) in ExtraTools)
         {
             var (existingModifiers, existingKey) = settings.GetToolHotkey(id);
             if (existingModifiers == modifiers && existingKey == key)
+            {
+                cleared.Add((id, existingModifiers, existingKey));
                 settings.SetToolHotkey(id, 0, 0);
+            }
         }
 
-        _settingsService.Save();
+        return cleared;
     }
 
     private void ImgurClientIdBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.ImgurClientId = ImgurClientIdBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            ImgurClientIdBox,
+            "imgur-client-id",
+            () => ActiveUploadSettings.ImgurClientId,
+            value => ActiveUploadSettings.ImgurClientId = value);
     }
 
-    private void ImgurTokenBox_Changed(object sender, TextChangedEventArgs e)
+    private void ImgurTokenBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.ImgurAccessToken = ImgurTokenBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            ImgurTokenBox,
+            "imgur-token",
+            () => ActiveUploadSettings.ImgurAccessToken,
+            value => ActiveUploadSettings.ImgurAccessToken = value);
     }
 
-    private void ImgBBKeyBox_Changed(object sender, TextChangedEventArgs e)
+    private void ImgBBKeyBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.ImgBBApiKey = ImgBBKeyBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            ImgBBKeyBox,
+            "imgbb-key",
+            () => ActiveUploadSettings.ImgBBApiKey,
+            value => ActiveUploadSettings.ImgBBApiKey = value);
     }
 
-    private void ImgPileTokenBox_Changed(object sender, TextChangedEventArgs e)
+    private void ImgPileTokenBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.ImgPileApiToken = ImgPileTokenBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            ImgPileTokenBox,
+            "imgpile-token",
+            () => ActiveUploadSettings.ImgPileApiToken,
+            value => ActiveUploadSettings.ImgPileApiToken = value);
     }
 
-    private void GyazoTokenBox_Changed(object sender, TextChangedEventArgs e)
+    private void GyazoTokenBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.GyazoAccessToken = GyazoTokenBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            GyazoTokenBox,
+            "gyazo-token",
+            () => ActiveUploadSettings.GyazoAccessToken,
+            value => ActiveUploadSettings.GyazoAccessToken = value);
     }
 
-    private void DropboxTokenBox_Changed(object sender, TextChangedEventArgs e)
+    private void DropboxTokenBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.DropboxAccessToken = DropboxTokenBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            DropboxTokenBox,
+            "dropbox-token",
+            () => ActiveUploadSettings.DropboxAccessToken,
+            value => ActiveUploadSettings.DropboxAccessToken = value);
     }
 
     private void DropboxPathBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.DropboxPathPrefix = DropboxPathBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            DropboxPathBox,
+            "dropbox-path",
+            () => ActiveUploadSettings.DropboxPathPrefix,
+            value => ActiveUploadSettings.DropboxPathPrefix = value);
     }
 
-    private void GoogleDriveTokenBox_Changed(object sender, TextChangedEventArgs e)
+    private void GoogleDriveTokenBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.GoogleDriveAccessToken = GoogleDriveTokenBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            GoogleDriveTokenBox,
+            "google-drive-token",
+            () => ActiveUploadSettings.GoogleDriveAccessToken,
+            value => ActiveUploadSettings.GoogleDriveAccessToken = value);
     }
 
     private void GoogleDriveFolderBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.GoogleDriveFolderId = GoogleDriveFolderBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            GoogleDriveFolderBox,
+            "google-drive-folder",
+            () => ActiveUploadSettings.GoogleDriveFolderId,
+            value => ActiveUploadSettings.GoogleDriveFolderId = value);
     }
 
-    private void OneDriveTokenBox_Changed(object sender, TextChangedEventArgs e)
+    private void OneDriveTokenBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.OneDriveAccessToken = OneDriveTokenBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            OneDriveTokenBox,
+            "onedrive-token",
+            () => ActiveUploadSettings.OneDriveAccessToken,
+            value => ActiveUploadSettings.OneDriveAccessToken = value);
     }
 
     private void OneDriveFolderBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.OneDriveFolder = OneDriveFolderBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            OneDriveFolderBox,
+            "onedrive-folder",
+            () => ActiveUploadSettings.OneDriveFolder,
+            value => ActiveUploadSettings.OneDriveFolder = value);
     }
 
-    private void AzureBlobSasBox_Changed(object sender, TextChangedEventArgs e)
+    private void AzureBlobSasBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.AzureBlobSasUrl = AzureBlobSasBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            AzureBlobSasBox,
+            "azure-sas",
+            () => ActiveUploadSettings.AzureBlobSasUrl,
+            value => ActiveUploadSettings.AzureBlobSasUrl = value);
     }
 
-    private void GitHubTokenBox_Changed(object sender, TextChangedEventArgs e)
+    private void GitHubTokenBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.GitHubToken = GitHubTokenBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            GitHubTokenBox,
+            "github-token",
+            () => ActiveUploadSettings.GitHubToken,
+            value => ActiveUploadSettings.GitHubToken = value);
     }
 
     private void GitHubRepoBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.GitHubRepo = GitHubRepoBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            GitHubRepoBox,
+            "github-repo",
+            () => ActiveUploadSettings.GitHubRepo,
+            value => ActiveUploadSettings.GitHubRepo = value);
     }
 
     private void GitHubBranchBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.GitHubBranch = GitHubBranchBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            GitHubBranchBox,
+            "github-branch",
+            () => ActiveUploadSettings.GitHubBranch,
+            value => ActiveUploadSettings.GitHubBranch = value);
     }
 
     private void ImmichUrlBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.ImmichBaseUrl = ImmichUrlBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            ImmichUrlBox,
+            "immich-url",
+            () => ActiveUploadSettings.ImmichBaseUrl,
+            value => ActiveUploadSettings.ImmichBaseUrl = value);
     }
 
-    private void ImmichApiKeyBox_Changed(object sender, TextChangedEventArgs e)
+    private void ImmichApiKeyBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.ImmichApiKey = ImmichApiKeyBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            ImmichApiKeyBox,
+            "immich-key",
+            () => ActiveUploadSettings.ImmichApiKey,
+            value => ActiveUploadSettings.ImmichApiKey = value);
     }
 
-    private void FtpUrlBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.FtpUrl = FtpUrlBox.Text; _settingsService.Save(); }
-    private void FtpUsernameBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.FtpUsername = FtpUsernameBox.Text; _settingsService.Save(); }
-    private void FtpPasswordBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.FtpPassword = FtpPasswordBox.Text; _settingsService.Save(); }
-    private void FtpPublicUrlBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.FtpPublicUrl = FtpPublicUrlBox.Text; _settingsService.Save(); }
-    private void SftpHostBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.SftpHost = SftpHostBox.Text; _settingsService.Save(); }
-    private void SftpPortBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; if (int.TryParse(SftpPortBox.Text, out var port)) ActiveUploadSettings.SftpPort = port; _settingsService.Save(); }
-    private void SftpUsernameBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.SftpUsername = SftpUsernameBox.Text; _settingsService.Save(); }
-    private void SftpPasswordBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.SftpPassword = SftpPasswordBox.Text; _settingsService.Save(); }
-    private void SftpRemotePathBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.SftpRemotePath = SftpRemotePathBox.Text; _settingsService.Save(); }
-    private void SftpPublicUrlBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.SftpPublicUrl = SftpPublicUrlBox.Text; _settingsService.Save(); }
-    private void SftpHostKeyFingerprintBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.SftpHostKeyFingerprint = SftpHostKeyFingerprintBox.Text; _settingsService.Save(); }
-    private void WebDavUrlBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.WebDavUrl = WebDavUrlBox.Text; _settingsService.Save(); }
-    private void WebDavUsernameBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.WebDavUsername = WebDavUsernameBox.Text; _settingsService.Save(); }
-    private void WebDavPasswordBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.WebDavPassword = WebDavPasswordBox.Text; _settingsService.Save(); }
-    private void WebDavPublicUrlBox_Changed(object sender, TextChangedEventArgs e) { if (!IsLoaded) return; ActiveUploadSettings.WebDavPublicUrl = WebDavPublicUrlBox.Text; _settingsService.Save(); }
+    private void FtpUrlBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(FtpUrlBox, "ftp-url", () => ActiveUploadSettings.FtpUrl, value => ActiveUploadSettings.FtpUrl = value);
+    private void FtpUsernameBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(FtpUsernameBox, "ftp-username", () => ActiveUploadSettings.FtpUsername, value => ActiveUploadSettings.FtpUsername = value);
+    private void FtpPasswordBox_Changed(object sender, RoutedEventArgs e) => UpdateUploadPasswordSetting(FtpPasswordBox, "ftp-password", () => ActiveUploadSettings.FtpPassword, value => ActiveUploadSettings.FtpPassword = value);
+    private void FtpPublicUrlBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(FtpPublicUrlBox, "ftp-public-url", () => ActiveUploadSettings.FtpPublicUrl, value => ActiveUploadSettings.FtpPublicUrl = value);
+    private void SftpHostBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(SftpHostBox, "sftp-host", () => ActiveUploadSettings.SftpHost, value => ActiveUploadSettings.SftpHost = value);
+    private void SftpUsernameBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(SftpUsernameBox, "sftp-username", () => ActiveUploadSettings.SftpUsername, value => ActiveUploadSettings.SftpUsername = value);
+    private void SftpPasswordBox_Changed(object sender, RoutedEventArgs e) => UpdateUploadPasswordSetting(SftpPasswordBox, "sftp-password", () => ActiveUploadSettings.SftpPassword, value => ActiveUploadSettings.SftpPassword = value);
+    private void SftpRemotePathBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(SftpRemotePathBox, "sftp-remote-path", () => ActiveUploadSettings.SftpRemotePath, value => ActiveUploadSettings.SftpRemotePath = value);
+    private void SftpPublicUrlBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(SftpPublicUrlBox, "sftp-public-url", () => ActiveUploadSettings.SftpPublicUrl, value => ActiveUploadSettings.SftpPublicUrl = value);
+    private void SftpHostKeyFingerprintBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(SftpHostKeyFingerprintBox, "sftp-host-key", () => ActiveUploadSettings.SftpHostKeyFingerprint, value => ActiveUploadSettings.SftpHostKeyFingerprint = value);
+    private void WebDavUrlBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(WebDavUrlBox, "webdav-url", () => ActiveUploadSettings.WebDavUrl, value => ActiveUploadSettings.WebDavUrl = value);
+    private void WebDavUsernameBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(WebDavUsernameBox, "webdav-username", () => ActiveUploadSettings.WebDavUsername, value => ActiveUploadSettings.WebDavUsername = value);
+    private void WebDavPasswordBox_Changed(object sender, RoutedEventArgs e) => UpdateUploadPasswordSetting(WebDavPasswordBox, "webdav-password", () => ActiveUploadSettings.WebDavPassword, value => ActiveUploadSettings.WebDavPassword = value);
+    private void WebDavPublicUrlBox_Changed(object sender, TextChangedEventArgs e) => UpdateUploadTextSetting(WebDavPublicUrlBox, "webdav-public-url", () => ActiveUploadSettings.WebDavPublicUrl, value => ActiveUploadSettings.WebDavPublicUrl = value);
+
+    private void SftpPortBox_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (!IsLoaded || _suppressUploadFieldChange) return;
+        if (!int.TryParse(SftpPortBox.Text, out var port)) return;
+
+        var previous = ActiveUploadSettings.SftpPort;
+        try
+        {
+            ActiveUploadSettings.SftpPort = port;
+            _settingsService.Save();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.upload-field-sftp-port", ex);
+            ActiveUploadSettings.SftpPort = previous;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.upload-field-sftp-port-rollback", rollbackEx);
+            }
+
+            _suppressUploadFieldChange = true;
+            try
+            {
+                SftpPortBox.Text = previous.ToString();
+            }
+            finally
+            {
+                _suppressUploadFieldChange = false;
+            }
+
+            ShowUploadSettingSaveFailed(ex);
+        }
+    }
 
     private void S3EndpointBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.S3Endpoint = S3EndpointBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            S3EndpointBox,
+            "s3-endpoint",
+            () => ActiveUploadSettings.S3Endpoint,
+            value => ActiveUploadSettings.S3Endpoint = value);
     }
 
     private void S3BucketBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.S3Bucket = S3BucketBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            S3BucketBox,
+            "s3-bucket",
+            () => ActiveUploadSettings.S3Bucket,
+            value => ActiveUploadSettings.S3Bucket = value);
     }
 
     private void S3RegionBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.S3Region = S3RegionBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            S3RegionBox,
+            "s3-region",
+            () => ActiveUploadSettings.S3Region,
+            value => ActiveUploadSettings.S3Region = value);
     }
 
     private void S3AccessKeyBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.S3AccessKey = S3AccessKeyBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            S3AccessKeyBox,
+            "s3-access-key",
+            () => ActiveUploadSettings.S3AccessKey,
+            value => ActiveUploadSettings.S3AccessKey = value);
     }
 
-    private void S3SecretKeyBox_Changed(object sender, TextChangedEventArgs e)
+    private void S3SecretKeyBox_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.S3SecretKey = S3SecretKeyBox.Text;
-        _settingsService.Save();
+        UpdateUploadPasswordSetting(
+            S3SecretKeyBox,
+            "s3-secret-key",
+            () => ActiveUploadSettings.S3SecretKey,
+            value => ActiveUploadSettings.S3SecretKey = value);
     }
 
     private void S3PublicUrlBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.S3PublicUrl = S3PublicUrlBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            S3PublicUrlBox,
+            "s3-public-url",
+            () => ActiveUploadSettings.S3PublicUrl,
+            value => ActiveUploadSettings.S3PublicUrl = value);
     }
 
     private void CustomUrlBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.CustomUploadUrl = CustomUrlBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            CustomUrlBox,
+            "custom-url",
+            () => ActiveUploadSettings.CustomUploadUrl,
+            value => ActiveUploadSettings.CustomUploadUrl = value);
     }
 
     private void CustomFieldBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.CustomFileFormName = CustomFieldBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            CustomFieldBox,
+            "custom-field",
+            () => ActiveUploadSettings.CustomFileFormName,
+            value => ActiveUploadSettings.CustomFileFormName = value);
     }
 
     private void CustomJsonPathBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.CustomResponseUrlPath = CustomJsonPathBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            CustomJsonPathBox,
+            "custom-json-path",
+            () => ActiveUploadSettings.CustomResponseUrlPath,
+            value => ActiveUploadSettings.CustomResponseUrlPath = value);
     }
 
     private void CustomHeadersBox_Changed(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        ActiveUploadSettings.CustomHeaders = CustomHeadersBox.Text;
-        _settingsService.Save();
+        UpdateUploadTextSetting(
+            CustomHeadersBox,
+            "custom-headers",
+            () => ActiveUploadSettings.CustomHeaders,
+            value => ActiveUploadSettings.CustomHeaders = value);
+    }
+
+    private void UpdateUploadTextSetting(System.Windows.Controls.TextBox textBox, string diagnosticSuffix, Func<string> getValue, Action<string> setValue)
+    {
+        UpdateUploadStringSetting(
+            textBox.Text,
+            value => textBox.Text = value,
+            diagnosticSuffix,
+            getValue,
+            setValue);
+    }
+
+    private void UpdateUploadPasswordSetting(System.Windows.Controls.PasswordBox passwordBox, string diagnosticSuffix, Func<string> getValue, Action<string> setValue)
+    {
+        UpdateUploadStringSetting(
+            passwordBox.Password,
+            value => passwordBox.Password = value,
+            diagnosticSuffix,
+            getValue,
+            setValue);
+    }
+
+    private void UpdateUploadStringSetting(string value, Action<string> restoreControlValue, string diagnosticSuffix, Func<string> getValue, Action<string> setValue)
+    {
+        if (!IsLoaded || _suppressUploadFieldChange) return;
+
+        var previous = getValue();
+
+        try
+        {
+            setValue(value);
+            _settingsService.Save();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError($"settings.upload-field-{diagnosticSuffix}", ex);
+            setValue(previous);
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError($"settings.upload-field-{diagnosticSuffix}-rollback", rollbackEx);
+            }
+
+            _suppressUploadFieldChange = true;
+            try
+            {
+                restoreControlValue(previous);
+            }
+            finally
+            {
+                _suppressUploadFieldChange = false;
+            }
+
+            ShowUploadSettingSaveFailed(ex);
+        }
+    }
+
+    private void ShowUploadSettingSaveFailed(Exception ex)
+    {
+        SetTestUploadStatus("Upload setting failed. Previous value restored; check Settings -> Uploads and try again.");
+        ToastWindow.ShowError(
+            "Upload setting failed",
+            $"The setting was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
     }
 
     private async void TestUpload_Click(object sender, RoutedEventArgs e)
     {
+        if (_testUploadInProgress)
+            return;
+
+        if (!CanTestUploadDestination(GetSelectedUploadDest()))
+        {
+            UpdateTestUploadAvailability();
+            return;
+        }
+
+        _testUploadInProgress = true;
         TestUploadBtn.Content = "Uploading...";
         TestUploadBtn.IsEnabled = false;
+        SetTestUploadStatus("Uploading test image...");
 
         string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "oddsnap_test.png");
         try
@@ -493,30 +1124,35 @@ public partial class SettingsWindow
                 {
                     var hostDest = Services.UploadService.NormalizeAiChatUploadDestination(ActiveUploadSettings.AiChatUploadDestination);
                     var uploadResult = await Services.UploadService.UploadAsync(tempPath, hostDest, ActiveUploadSettings);
-                    if (uploadResult.Success)
+                    if (uploadResult.Success && !string.IsNullOrWhiteSpace(uploadResult.Url))
                     {
                         var lensUrl = Services.UploadService.BuildGoogleLensUrl(uploadResult.Url);
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = lensUrl,
-                            UseShellExecute = true
-                        });
-                        ToastWindow.Show("Google Lens works", uploadResult.Url);
+                        var opened = TryOpenTestUploadExternalUrl(lensUrl);
+                        SetTestUploadStatus(opened
+                            ? "Google Lens opened with the test upload."
+                            : "Test upload succeeded, but Google Lens did not open.");
+                        ToastWindow.Show(opened ? "Google Lens works" : "Google Lens upload works", uploadResult.Url);
                     }
                     else
                     {
-                        ToastWindow.ShowError("Google Lens upload failed", uploadResult.Error);
+                        var providerName = Services.UploadService.GetName(hostDest);
+                        var error = GetUploadResultError(uploadResult);
+                        SetTestUploadStatus($"Google Lens upload failed: {providerName}: {error}");
+                        ToastWindow.ShowError("Google Lens upload failed", BuildTestUploadFailureToastBody(providerName, error, uploadResult.IsRateLimit));
                     }
                 }
                 else
                 {
                     var startUrl = Services.UploadService.BuildAiChatStartUrl(ActiveUploadSettings.AiChatProvider);
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    if (TryOpenTestUploadExternalUrl(startUrl))
                     {
-                        FileName = startUrl,
-                        UseShellExecute = true
-                    });
-                    ToastWindow.Show("AI redirect works", Services.UploadService.GetAiChatProviderName(ActiveUploadSettings.AiChatProvider));
+                        SetTestUploadStatus("AI redirect opened.");
+                        ToastWindow.Show("AI redirect works", Services.UploadService.GetAiChatProviderName(ActiveUploadSettings.AiChatProvider));
+                    }
+                    else
+                    {
+                        SetTestUploadStatus("AI redirect test could not open the provider. Check your default browser and try again.");
+                    }
                 }
             }
             else
@@ -526,21 +1162,113 @@ public partial class SettingsWindow
                     _settingsService.Settings.ImageUploadDestination,
                     ActiveUploadSettings);
 
-                if (result.Success)
+                if (result.Success && !string.IsNullOrWhiteSpace(result.Url))
+                {
+                    SetTestUploadStatus("Test upload succeeded.");
                     ToastWindow.Show("Upload works", result.Url);
+                }
                 else
-                    ToastWindow.ShowError("Upload failed", result.Error);
+                {
+                    var providerName = string.IsNullOrWhiteSpace(result.ProviderName)
+                        ? Services.UploadService.GetName(_settingsService.Settings.ImageUploadDestination)
+                        : result.ProviderName;
+                    var error = GetUploadResultError(result);
+                    SetTestUploadStatus($"Upload failed: {providerName}: {error}");
+                    ToastWindow.ShowError("Upload failed", BuildTestUploadFailureToastBody(providerName, error, result.IsRateLimit));
+                }
             }
         }
         catch (Exception ex)
         {
-            ToastWindow.ShowError("Upload error", ex.Message);
+            AppDiagnostics.LogError("settings.test-upload", ex);
+            SetTestUploadStatus("Test upload failed. Check upload settings and try another destination.");
+            ToastWindow.ShowError(
+                "Test upload failed",
+                $"OddSnap could not complete the test upload. Check Settings -> Uploads or try another destination.\n{ex.Message}");
         }
         finally
         {
-            try { System.IO.File.Delete(tempPath); } catch { }
+            try
+            {
+                System.IO.File.Delete(tempPath);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning("settings.test-upload-temp-delete", $"Failed to delete test upload file {System.IO.Path.GetFileName(tempPath)}: {ex.Message}", ex);
+            }
+            _testUploadInProgress = false;
             TestUploadBtn.Content = "Test Upload";
-            TestUploadBtn.IsEnabled = true;
+            UpdateTestUploadAvailability();
+        }
+    }
+
+    private void SetTestUploadStatus(string message)
+    {
+        TestUploadStatusText.Text = message;
+        TestUploadStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private static string GetUploadResultError(Services.UploadResult result)
+        => string.IsNullOrWhiteSpace(result.Error) ? "Upload returned no link." : result.Error;
+
+    private static string BuildTestUploadFailureToastBody(string providerName, string error, bool isRateLimit)
+    {
+        var providerLabel = string.IsNullOrWhiteSpace(providerName) ? "Upload" : providerName;
+        var recovery = isRateLimit
+            ? $"{providerLabel} may be rate-limiting requests. Try another upload destination or wait before retrying."
+            : $"Check Settings -> Uploads for {providerLabel}, then try another upload destination.";
+
+        return $"{providerLabel}: {error}\n{recovery}";
+    }
+
+    private static string BuildAiRedirectTestFailureToastBody(string providerName, string details)
+    {
+        var providerLabel = string.IsNullOrWhiteSpace(providerName) ? "AI redirect" : providerName;
+        var recovery = $"OddSnap could not complete the {providerLabel} redirect test. Check Settings -> Uploads and try again.";
+        return string.IsNullOrWhiteSpace(details) ? recovery : $"{recovery}\n{details}";
+    }
+
+    private static bool TryOpenTestUploadExternalUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            ToastWindow.ShowError("Open failed", "No test upload link is available.");
+            return false;
+        }
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            ToastWindow.ShowError("Open failed", "The test upload link is not a valid web link.");
+            return false;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = uri.AbsoluteUri,
+                UseShellExecute = true
+            });
+            if (process is null)
+            {
+                ToastWindow.ShowError(
+                    "Open failed",
+                    "Windows did not open the test upload link. Copy it from Settings -> Uploads and open it manually.");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("settings.test-upload-external-url-open", $"Failed to open test upload URL: {ex.Message}", ex);
+            ToastWindow.ShowError(
+                "Open failed",
+                $"OddSnap could not open the test upload link. Copy the link from Settings -> Uploads and open it manually.\n{ex.Message}");
+            return false;
         }
     }
 
@@ -622,14 +1350,16 @@ public partial class SettingsWindow
             if (destination is Services.UploadDestination.None or Services.UploadDestination.AiChat or Services.UploadDestination.TransferSh)
                 continue;
 
-            AiRedirectLensUploadDestPanelCombo.Items.Add(new ComboBoxItem
+            var item = new ComboBoxItem
             {
                 Content = CloneUploadDestinationContent(source.Content),
                 ContentTemplate = GetSettingsComboItemTemplate(),
                 Tag = source.Tag,
                 HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
                 Padding = new Thickness(8, 5, 8, 5)
-            });
+            };
+            SetUploadDestinationItemMetadata(item, destination, GetUploadDestinationFilterText(item), forLensUpload: true);
+            AiRedirectLensUploadDestPanelCombo.Items.Add(item);
         }
     }
 
@@ -675,6 +1405,7 @@ public partial class SettingsWindow
             item.Padding = new Thickness(8, 5, 8, 5);
             item.ContentTemplate = GetSettingsComboItemTemplate();
             item.Content = BuildProviderComboItem(text, assetSelector(raw));
+            SetSettingsComboItemMetadata(item, combo.Name, text, GetSettingsComboItemHelpText(combo.Name, text));
         }
     }
 
@@ -689,8 +1420,60 @@ public partial class SettingsWindow
             item.Padding = new Thickness(8, 5, 8, 5);
             item.ContentTemplate = GetSettingsComboItemTemplate();
             item.Content = BuildFallbackComboItem(text, iconSelector(text));
+            SetSettingsComboItemMetadata(item, combo.Name, text, GetSettingsComboItemHelpText(combo.Name, text));
         }
     }
+
+    private static void SetSettingsComboItemMetadata(ComboBoxItem item, string comboName, string text, string helpText)
+    {
+        item.ToolTip = helpText;
+        AutomationProperties.SetName(item, GetSettingsComboItemAutomationName(comboName, text));
+        AutomationProperties.SetHelpText(item, helpText);
+    }
+
+    private static string GetSettingsComboItemAutomationName(string comboName, string text)
+        => comboName switch
+        {
+            "AiRedirectProviderCombo" => string.Equals(text, "None", StringComparison.OrdinalIgnoreCase)
+                ? "No AI redirect provider"
+                : $"{text} AI redirect provider",
+            "StickerProviderCombo" => string.Equals(text, "None", StringComparison.OrdinalIgnoreCase)
+                ? "No sticker provider"
+                : $"{text} sticker provider",
+            "UpscaleProviderCombo" => string.Equals(text, "None", StringComparison.OrdinalIgnoreCase)
+                ? "No upscale provider"
+                : $"{text} upscale provider",
+            "StickerLocalExecutionCombo" => $"{text} sticker execution mode",
+            "UpscaleLocalExecutionCombo" => $"{text} upscale execution mode",
+            "StickerLocalCpuEngineCombo" or "StickerLocalGpuEngineCombo" => $"{text} sticker model",
+            "UpscaleLocalCpuEngineCombo" or "UpscaleLocalGpuEngineCombo" => $"{text} upscale model",
+            _ => text
+        };
+
+    private static string GetSettingsComboItemHelpText(string comboName, string text)
+        => comboName switch
+        {
+            "AiRedirectProviderCombo" => string.Equals(text, "None", StringComparison.OrdinalIgnoreCase)
+                ? "Do not open an AI tool after AI Redirect captures."
+                : $"Open {text} after an AI Redirect capture.",
+            "StickerProviderCombo" => text switch
+            {
+                "None" => "Do not run background removal for sticker captures.",
+                "Local (CPU/GPU)" => "Use the local sticker runtime configured below.",
+                _ => $"Use {text} for cloud background removal."
+            },
+            "UpscaleProviderCombo" => text switch
+            {
+                "None" => "Do not upscale captures.",
+                "Local (CPU/GPU)" => "Use the local upscale runtime configured below.",
+                _ => $"Use {text} for cloud upscaling."
+            },
+            "StickerLocalExecutionCombo" => $"Run local sticker processing on {text}.",
+            "UpscaleLocalExecutionCombo" => $"Run local upscaling on {text}.",
+            "StickerLocalCpuEngineCombo" or "StickerLocalGpuEngineCombo" => $"Use {text} for local sticker background removal.",
+            "UpscaleLocalCpuEngineCombo" or "UpscaleLocalGpuEngineCombo" => $"Use {text} for local upscaling.",
+            _ => $"Choose {text}."
+        };
 
     private object BuildProviderComboItem(string text, string? asset)
     {
@@ -726,6 +1509,7 @@ public partial class SettingsWindow
             item.Padding = new Thickness(8, 5, 8, 5);
             item.ContentTemplate = GetSettingsComboItemTemplate();
             item.Content = BuildUploadDestinationItem((Services.UploadDestination)raw, text);
+            SetUploadDestinationItemMetadata(item, (Services.UploadDestination)raw, text, forLensUpload: false);
         }
     }
 
@@ -741,6 +1525,57 @@ public partial class SettingsWindow
         var (source, isBrand) = GetUploadDestinationIcon(destination);
         return new SettingsComboOption(text, source, isBrand, destination, null);
     }
+
+    private static void SetUploadDestinationItemMetadata(
+        ComboBoxItem item,
+        Services.UploadDestination destination,
+        string text,
+        bool forLensUpload)
+    {
+        var helpText = forLensUpload
+            ? $"Use {text} as the hosted image service before opening Google Lens."
+            : GetUploadDestinationHelpText(destination, text);
+        item.ToolTip = helpText;
+        var automationName = (destination, forLensUpload) switch
+        {
+            (Services.UploadDestination.None, true) => "No Lens upload destination",
+            (Services.UploadDestination.None, false) => "No upload destination",
+            (_, true) => $"{text} Lens upload destination",
+            _ => $"{text} upload destination"
+        };
+        AutomationProperties.SetName(item, automationName);
+        AutomationProperties.SetHelpText(item, helpText);
+    }
+
+    private static string GetUploadDestinationHelpText(Services.UploadDestination destination, string text)
+        => destination switch
+        {
+            Services.UploadDestination.None => "Do not upload captures automatically.",
+            Services.UploadDestination.TempHosts => "Automatically try free, no-setup public hosts until one works.",
+            Services.UploadDestination.Litterbox or
+            Services.UploadDestination.TmpFiles or
+            Services.UploadDestination.Uguu or
+            Services.UploadDestination.FileIo => $"Upload to {text}. This is a temporary public host and needs no setup.",
+            Services.UploadDestination.Gofile or
+            Services.UploadDestination.Catbox => $"Upload to {text}. This is a free public host and needs no setup.",
+            Services.UploadDestination.Imgur or
+            Services.UploadDestination.ImgBB or
+            Services.UploadDestination.ImgPile or
+            Services.UploadDestination.Gyazo => $"Upload to {text}. Configure the required API key, token, or client ID below.",
+            Services.UploadDestination.Dropbox or
+            Services.UploadDestination.GoogleDrive or
+            Services.UploadDestination.OneDrive or
+            Services.UploadDestination.AzureBlob or
+            Services.UploadDestination.GitHub or
+            Services.UploadDestination.Immich => $"Upload to {text}. Configure the account or server settings below.",
+            Services.UploadDestination.Ftp or
+            Services.UploadDestination.Sftp or
+            Services.UploadDestination.WebDav or
+            Services.UploadDestination.S3Compatible or
+            Services.UploadDestination.CustomHttp => $"Upload to {text}. Configure the endpoint settings below.",
+            Services.UploadDestination.AiChat => "Open the selected AI tool after capture; hosted image upload is configured in AI Redirect settings.",
+            _ => $"Use {text} for uploads."
+        };
 
     private static DataTemplate GetSettingsComboItemTemplate()
     {

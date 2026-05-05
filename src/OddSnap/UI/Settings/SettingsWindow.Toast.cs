@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -7,6 +8,7 @@ using System.Windows.Shapes;
 using OddSnap.Helpers;
 using OddSnap.Models;
 using Color = System.Windows.Media.Color;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
 namespace OddSnap.UI;
 
@@ -49,9 +51,12 @@ public partial class SettingsWindow
 
     private void RefreshToastButtonLayoutDesigner()
     {
-        ToastLayoutSelectionText.Text = _toastButtonDragActive
+        var selectionText = _toastButtonDragActive
             ? $"Dragging {_selectedToastButton}. Drop on a slot, another button, or the shelf."
             : $"Selected: {_selectedToastButton}";
+        ToastLayoutSelectionText.Text = selectionText;
+        ToastLayoutSelectionText.ToolTip = selectionText;
+        AutomationProperties.SetHelpText(ToastLayoutSelectionText, selectionText);
         UpdateToastLayoutButton(ToastLayoutCloseBtn, ToastButtonKind.Close);
         UpdateToastLayoutButton(ToastLayoutPinBtn, ToastButtonKind.Pin);
         UpdateToastLayoutButton(ToastLayoutSaveBtn, ToastButtonKind.Save);
@@ -71,6 +76,14 @@ public partial class SettingsWindow
 
     private void UpdateToastLayoutButton(Border border, ToastButtonKind button)
     {
+        var label = FormatToastButtonLabel(button);
+        border.Focusable = true;
+        border.ToolTip = $"Move the {label} toast button";
+        AutomationProperties.SetName(border, $"{label} toast button");
+        AutomationProperties.SetHelpText(border, "Press Enter or Space to move the selected button here.");
+        border.KeyDown -= ToastLayoutButton_KeyDown;
+        border.KeyDown += ToastLayoutButton_KeyDown;
+
         border.Visibility = ToastButtonLayout.IsVisible(ToastButtons, button) ? Visibility.Visible : Visibility.Collapsed;
 
         var placement = ToastButtonLayout.ToPlacement(ToastButtonLayout.GetSlot(ToastButtons, button));
@@ -118,6 +131,14 @@ public partial class SettingsWindow
 
     private void UpdateToastLayoutSlot(Border slotBorder, ToastButtonSlot slot)
     {
+        var label = FormatToastSlotLabel(slot);
+        slotBorder.Focusable = true;
+        slotBorder.ToolTip = $"Move selected toast button to {label}";
+        AutomationProperties.SetName(slotBorder, $"{label} toast slot");
+        AutomationProperties.SetHelpText(slotBorder, "Press Enter or Space to place the selected toast button here.");
+        slotBorder.KeyDown -= ToastLayoutSlot_KeyDown;
+        slotBorder.KeyDown += ToastLayoutSlot_KeyDown;
+
         bool selectedTarget = _dragHoverSlot == slot || ToastButtonLayout.GetSlot(ToastButtons, _selectedToastButton) == slot;
 
         slotBorder.Visibility = Visibility.Visible;
@@ -230,6 +251,31 @@ public partial class SettingsWindow
         MoveSelectedButtonToSlot(ParseToastSlot(raw));
     }
 
+    private void ToastLayoutButton_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (!IsToastLayoutActivationKey(e) || sender is not Border border || border.Tag is not string raw)
+            return;
+
+        e.Handled = true;
+        var targetButton = ParseToastButton(raw);
+        if (targetButton != _selectedToastButton)
+        {
+            MoveSelectedButtonToButton(targetButton);
+            _selectedToastButton = targetButton;
+        }
+
+        RefreshToastButtonLayoutDesigner();
+    }
+
+    private void ToastLayoutSlot_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (!IsToastLayoutActivationKey(e) || sender is not Border border || border.Tag is not string raw)
+            return;
+
+        e.Handled = true;
+        MoveSelectedButtonToSlot(ParseToastSlot(raw));
+    }
+
     private void ToastLayoutButton_DragEnter(object sender, System.Windows.DragEventArgs e)
     {
         if (!e.Data.GetDataPresent(System.Windows.DataFormats.Text))
@@ -284,6 +330,15 @@ public partial class SettingsWindow
         RefreshToastButtonLayoutDesigner();
     }
 
+    private void ToastHiddenShelf_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (!IsToastLayoutActivationKey(e))
+            return;
+
+        e.Handled = true;
+        HideSelectedButton();
+    }
+
     private void ResetToastButtonsBtn_Click(object sender, RoutedEventArgs e)
     {
         _settingsService.Settings.ToastButtons = new AppSettings.ToastButtonLayoutSettings();
@@ -318,6 +373,13 @@ public partial class SettingsWindow
 
     private void RefreshToastHiddenShelf()
     {
+        ToastHiddenShelf.Focusable = true;
+        ToastHiddenShelf.ToolTip = "Hide the selected toast button";
+        AutomationProperties.SetName(ToastHiddenShelf, "Hidden toast button shelf");
+        AutomationProperties.SetHelpText(ToastHiddenShelf, "Press Enter or Space to hide the selected toast button.");
+        ToastHiddenShelf.KeyDown -= ToastHiddenShelf_KeyDown;
+        ToastHiddenShelf.KeyDown += ToastHiddenShelf_KeyDown;
+
         ToastHiddenShelf.BorderBrush = Theme.Brush(Theme.BorderSubtle);
         ToastHiddenShelfDropCue.Visibility = Visibility.Collapsed;
         ToastHiddenButtonsPanel.Children.Clear();
@@ -337,6 +399,7 @@ public partial class SettingsWindow
 
     private Border CreateHiddenToastButtonChip(ToastButtonKind button)
     {
+        var label = FormatToastButtonLabel(button);
         var chip = new Border
         {
             Width = 44,
@@ -347,8 +410,13 @@ public partial class SettingsWindow
             BorderBrush = Theme.Brush(Theme.BorderSubtle),
             BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
+            Focusable = true,
+            ToolTip = $"Select hidden {label} toast button",
             Tag = button.ToString()
         };
+
+        AutomationProperties.SetName(chip, $"Hidden {label} toast button");
+        AutomationProperties.SetHelpText(chip, "Press Enter or Space to select this hidden button, then choose a slot.");
 
         chip.Child = button switch
         {
@@ -363,7 +431,18 @@ public partial class SettingsWindow
         chip.MouseLeftButtonDown += ToastHiddenButton_MouseLeftButtonDown;
         chip.MouseMove += ToastHiddenButton_MouseMove;
         chip.MouseLeftButtonUp += ToastHiddenButton_MouseLeftButtonUp;
+        chip.KeyDown += ToastHiddenButton_KeyDown;
         return chip;
+    }
+
+    private void ToastHiddenButton_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (!IsToastLayoutActivationKey(e) || sender is not Border border || border.Tag is not string raw)
+            return;
+
+        e.Handled = true;
+        _selectedToastButton = ParseToastButton(raw);
+        RefreshToastButtonLayoutDesigner();
     }
 
     private void ToastHiddenButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -548,6 +627,33 @@ public partial class SettingsWindow
         ToastWindow.SetButtonLayout(ToastButtons);
         RefreshToastButtonLayoutDesigner();
     }
+
+    private static bool IsToastLayoutActivationKey(KeyEventArgs e)
+        => e.Key is Key.Enter or Key.Space;
+
+    private static string FormatToastButtonLabel(ToastButtonKind button) => button switch
+    {
+        ToastButtonKind.Close => "close",
+        ToastButtonKind.Pin => "pin",
+        ToastButtonKind.Save => "save",
+        ToastButtonKind.Office => "office export",
+        ToastButtonKind.AiRedirect => "AI redirect",
+        ToastButtonKind.Delete => "delete",
+        _ => "toast"
+    };
+
+    private static string FormatToastSlotLabel(ToastButtonSlot slot) => slot switch
+    {
+        ToastButtonSlot.TopLeft => "top-left",
+        ToastButtonSlot.TopInnerLeft => "top inner-left",
+        ToastButtonSlot.TopInnerRight => "top inner-right",
+        ToastButtonSlot.TopRight => "top-right",
+        ToastButtonSlot.BottomLeft => "bottom-left",
+        ToastButtonSlot.BottomInnerLeft => "bottom inner-left",
+        ToastButtonSlot.BottomInnerRight => "bottom inner-right",
+        ToastButtonSlot.BottomRight => "bottom-right",
+        _ => "selected"
+    };
 
     private static System.Windows.Controls.Image BuildFluentIcon(string id)
     {

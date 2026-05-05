@@ -50,7 +50,10 @@ public partial class App
                     Dispatcher.BeginInvoke(() =>
                     {
                         ResetCapturing();
-                        ToastWindow.ShowError("Capture error", task.Exception?.GetBaseException().Message ?? "Capture failed");
+                        ShowCaptureProcessingFailed(
+                            "Capture error",
+                            "OddSnap could not finish the capture result. Try again, or choose another save folder in Settings.",
+                            task.Exception?.GetBaseException().Message ?? "Capture failed");
                         ScheduleIdleMemoryTrim();
                     });
                     return;
@@ -61,7 +64,7 @@ public partial class App
                 {
                     var action = NormalizeAfterCaptureAction(settings.AfterCapture);
                     if (ShouldCopyAfterCapture(action))
-                        ClipboardService.CopyToClipboard(persisted.Output);
+                        TryCopyCaptureOutputToClipboard(persisted.Output);
                     ResetCapturing();
 
                     bool willAiRedirect = useAiRedirect && persisted.FilePath != null;
@@ -128,7 +131,10 @@ public partial class App
                     Dispatcher.BeginInvoke(() =>
                     {
                         ResetCapturing();
-                        ToastWindow.ShowError("Sticker error", task.Exception?.GetBaseException().Message ?? "Sticker processing failed");
+                        ShowCaptureProcessingFailed(
+                            "Sticker error",
+                            "OddSnap could not finish the sticker result. Try again, or check Settings -> Stickers.",
+                            task.Exception?.GetBaseException().Message ?? "Sticker processing failed");
                         ScheduleIdleMemoryTrim();
                     });
                     return;
@@ -138,8 +144,8 @@ public partial class App
                 Dispatcher.BeginInvoke(() =>
                 {
                     var action = NormalizeAfterCaptureAction(settings.AfterCapture);
-                    if (ShouldCopyAfterCapture(action))
-                        ClipboardService.CopyToClipboard(persisted.Output);
+                    var copyRequested = ShouldCopyAfterCapture(action);
+                    var copySucceeded = copyRequested && TryCopyCaptureOutputToClipboard(persisted.Output);
                     ResetCapturing();
 
                     if (ShouldPreviewAfterCapture(action))
@@ -149,7 +155,7 @@ public partial class App
                     else
                     {
                         persisted.Output.Dispose();
-                        ToastWindow.Show(ShouldCopyAfterCapture(action) ? "Sticker copied" : "Sticker ready");
+                        ToastWindow.Show(copySucceeded ? "Sticker copied" : "Sticker ready");
                     }
 
                     if (persisted.FilePath != null && settings.AutoUploadScreenshots
@@ -192,7 +198,10 @@ public partial class App
                     Dispatcher.BeginInvoke(() =>
                     {
                         ResetCapturing();
-                        ToastWindow.ShowError("Upscale error", task.Exception?.GetBaseException().Message ?? "Upscale processing failed");
+                        ShowCaptureProcessingFailed(
+                            "Upscale error",
+                            "OddSnap could not finish the upscale result. Try again, or check Settings -> Upscale.",
+                            task.Exception?.GetBaseException().Message ?? "Upscale processing failed");
                         ScheduleIdleMemoryTrim();
                     });
                     return;
@@ -202,8 +211,8 @@ public partial class App
                 Dispatcher.BeginInvoke(() =>
                 {
                     var action = NormalizeAfterCaptureAction(settings.AfterCapture);
-                    if (ShouldCopyAfterCapture(action))
-                        ClipboardService.CopyToClipboard(persisted.Output);
+                    var copyRequested = ShouldCopyAfterCapture(action);
+                    var copySucceeded = copyRequested && TryCopyCaptureOutputToClipboard(persisted.Output);
                     ResetCapturing();
 
                     if (ShouldPreviewAfterCapture(action))
@@ -213,7 +222,7 @@ public partial class App
                     else
                     {
                         persisted.Output.Dispose();
-                        ToastWindow.Show(ShouldCopyAfterCapture(action) ? "Upscale copied" : "Upscale ready");
+                        ToastWindow.Show(copySucceeded ? "Upscale copied" : "Upscale ready");
                     }
 
                     if (persisted.FilePath != null && settings.AutoUploadScreenshots
@@ -308,6 +317,27 @@ public partial class App
     private static bool ShouldPreviewAfterCapture(AfterCaptureAction action) =>
         action is AfterCaptureAction.PreviewAndCopy or AfterCaptureAction.PreviewOnly;
 
+    private static bool TryCopyCaptureOutputToClipboard(Bitmap output)
+    {
+        try
+        {
+            ClipboardService.CopyToClipboard(output);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError(
+                "Copy failed",
+                $"OddSnap could not copy the capture. The result flow will continue.\n{ex.Message}");
+            return false;
+        }
+    }
+
+    private static void ShowCaptureProcessingFailed(string title, string recoveryMessage, string details)
+    {
+        ToastWindow.ShowError(title, $"{recoveryMessage}\n{details}");
+    }
+
     private void HandleOcrResult(Bitmap result)
     {
         Dispatcher.BeginInvoke(async () =>
@@ -334,7 +364,10 @@ public partial class App
             }
             catch (Exception ex)
             {
-                ToastWindow.ShowError("OCR error", ex.Message);
+                ShowCaptureProcessingFailed(
+                    "OCR error",
+                    "OddSnap could not read text from this capture. Try a clearer region, or check Settings -> OCR.",
+                    ex.Message);
             }
             finally { result.Dispose(); }
             ScheduleIdleMemoryTrim();

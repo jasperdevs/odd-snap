@@ -104,7 +104,7 @@ public static class StickerService
         }
         finally
         {
-            try { File.Delete(temp); } catch { }
+            TryDeleteStickerTempFile(temp, "Remove.bg upload");
         }
     }
 
@@ -131,7 +131,23 @@ public static class StickerService
         }
         finally
         {
-            try { File.Delete(temp); } catch { }
+            TryDeleteStickerTempFile(temp, "Photoroom upload");
+        }
+    }
+
+    private static void TryDeleteStickerTempFile(string path, string context)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "stickers.api.temp-cleanup",
+                $"Failed to delete {context} temporary file {Path.GetFileName(path)}: {ex.Message}",
+                ex);
         }
     }
 

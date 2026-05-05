@@ -45,6 +45,29 @@ public partial class App
         return msg;
     }
 
+    private static string BuildUploadFailureToastBody(string? savedFileName, string providerName, string error, bool isRateLimit)
+    {
+        var providerLabel = string.IsNullOrWhiteSpace(providerName) ? "Upload" : providerName;
+        var detail = $"{providerLabel}: {error}";
+        var recovery = isRateLimit
+            ? "Try another upload destination or wait before retrying."
+            : $"Check {providerLabel} settings or try another upload destination.";
+
+        return string.IsNullOrWhiteSpace(savedFileName)
+            ? $"{detail}\n{recovery}"
+            : $"Saved to {savedFileName}\n{detail}\n{recovery}";
+    }
+
+    private static string BuildUploadUnexpectedErrorToastBody(string? savedFileName, string error)
+    {
+        var detail = string.IsNullOrWhiteSpace(error) ? "Upload failed." : error;
+        const string recovery = "The file is still saved. Check Settings -> Uploads, then retry from History or try another destination.";
+
+        return string.IsNullOrWhiteSpace(savedFileName)
+            ? $"{detail}\n{recovery}"
+            : $"Saved to {savedFileName}\n{detail}\n{recovery}";
+    }
+
     private async Task UploadFileAsync(string filePath, string label, Services.HistoryEntry? historyEntry = null)
     {
         Interlocked.Increment(ref _activeUploadCount);
@@ -66,12 +89,16 @@ public partial class App
                         {
                             var errMsg = CleanErrorMessage(lensUpload.Error);
                             var saved = Path.GetFileName(filePath);
+                            SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
                             ToastWindow.ShowError("Google Lens upload failed", $"Saved to {saved}\n{errMsg}", filePath);
                             return;
                         }
 
                         var lensUrl = UploadService.BuildGoogleLensUrl(lensUpload.Url);
-                        OpenExternalUrl(lensUrl);
+                        SaveUploadSuccess(filePath, historyEntry, lensUpload.Url, lensUpload.ProviderName);
+                        if (!OpenExternalUrl(lensUrl))
+                            return;
+
                         SoundService.PlayUploadDoneSound();
                         previewBitmap?.Dispose();
                         previewBitmap = null;
@@ -81,15 +108,28 @@ public partial class App
                     }
 
                     var startUrl = UploadService.BuildAiChatStartUrl(settings.AiChatProvider);
-                    OpenExternalUrl(startUrl);
+                    if (string.IsNullOrWhiteSpace(startUrl))
+                    {
+                        var errMsg = "Choose an AI Redirect provider in Settings -> Uploads.";
+                        var saved = Path.GetFileName(filePath);
+                        SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
+                        ToastWindow.ShowError("AI Redirect not configured", $"Saved to {saved}\n{errMsg}", filePath);
+                        return;
+                    }
+
+                    if (!OpenExternalUrl(startUrl))
+                        return;
+
                     SoundService.PlayUploadDoneSound();
                     if (previewBitmap is not null)
                     {
-                        ClipboardService.CopyToClipboard(previewBitmap, filePath);
+                        var copySucceeded = TryCopyAiRedirectImageToClipboard(previewBitmap, filePath);
                         ToastWindow.Show(ToastSpec.ImagePreview(
                             previewBitmap,
                             "AI Redirect Ready",
-                            $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V.",
+                            copySucceeded
+                                ? $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V."
+                                : $"Opened {providerName}. Clipboard copy failed; drag the image from this pinned toast.",
                             filePath,
                             autoPin: true,
                             transparentShell: false,
@@ -110,11 +150,13 @@ public partial class App
                 }
             }
 
-            // Validate credentials before attempting upload
-            if (!UploadService.HasCredentials(dest, settings))
+            // Validate destination setup before attempting upload.
+            var configurationError = UploadService.GetConfigurationError(dest, settings);
+            if (!string.IsNullOrWhiteSpace(configurationError))
             {
                 var saved = filePath != null ? Path.GetFileName(filePath) : null;
-                var body = saved != null ? $"Saved to {saved}\nNo API key configured" : "No API key configured";
+                var body = saved != null ? $"Saved to {saved}\n{configurationError}" : configurationError;
+                SaveUploadFailure(filePath, historyEntry, UploadService.GetName(dest), configurationError);
                 ToastWindow.ShowError("Upload not configured", body, filePath);
                 return;
             }
@@ -134,9 +176,10 @@ public partial class App
                     var providerName = string.IsNullOrWhiteSpace(result.ProviderName)
                         ? UploadService.GetName(dest)
                         : result.ProviderName;
-                    if (string.IsNullOrWhiteSpace(entry.UploadProvider))
+                    var previousProvider = entry.UploadProvider;
+                    entry.UploadProvider = providerName;
+                    if (string.IsNullOrWhiteSpace(previousProvider))
                     {
-                        entry.UploadProvider = providerName;
                         var currentName = Path.GetFileName(entry.FilePath);
                         var prefix = providerName.ToLowerInvariant() + "_";
                         entry.FileName = currentName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
@@ -150,17 +193,25 @@ public partial class App
                 var host = Uri.TryCreate(result.Url, UriKind.Absolute, out var uploadUri)
                     ? uploadUri.Host
                     : "link";
-                ClipboardService.CopyTextToClipboard(result.Url);
-                ToastWindow.Show(ToastSpec.Standard("Uploaded", $"Link copied · {host}", filePath) with { SuppressSound = true });
+                try
+                {
+                    ClipboardService.CopyTextToClipboard(result.Url);
+                    ToastWindow.Show(ToastSpec.Standard("Uploaded", $"Link copied · {host}", filePath) with { SuppressSound = true });
+                }
+                catch (Exception ex)
+                {
+                    ToastWindow.ShowError("Copy failed", BuildUploadCopyFailureToastBody(ex.Message), filePath);
+                }
             }
             else
             {
-                AppDiagnostics.LogWarning("upload.toast-failed", $"{UploadService.GetName(dest)} upload failed for {Path.GetFileName(filePath)}: {result.Error}");
+                var providerName = UploadService.GetName(dest);
+                AppDiagnostics.LogWarning("upload.toast-failed", $"{providerName} upload failed for {Path.GetFileName(filePath)}: {result.Error}");
                 var errTitle = result.IsRateLimit ? "Upload rate-limited" : "Upload failed";
                 var errMsg = CleanErrorMessage(result.Error);
-                SaveUploadFailure(filePath, historyEntry, UploadService.GetName(dest), errMsg);
+                SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
                 var saved = filePath != null ? Path.GetFileName(filePath) : null;
-                var body = saved != null ? $"Saved to {saved}\n{errMsg}" : errMsg;
+                var body = BuildUploadFailureToastBody(saved, providerName, errMsg, result.IsRateLimit);
                 ToastWindow.ShowError(errTitle, body, filePath);
             }
         }
@@ -169,7 +220,7 @@ public partial class App
             AppDiagnostics.LogError("upload.toast-error", ex, $"Unexpected upload error for {Path.GetFileName(filePath)}.");
             var errMsg = CleanErrorMessage(ex.Message);
             var saved = filePath != null ? Path.GetFileName(filePath) : null;
-            var body = saved != null ? $"Saved to {saved}\n{errMsg}" : errMsg;
+            var body = BuildUploadUnexpectedErrorToastBody(saved, errMsg);
             SaveUploadFailure(filePath, historyEntry, "Upload", errMsg);
             ToastWindow.ShowError("Upload error", body, filePath);
         }
@@ -192,14 +243,36 @@ public partial class App
             if (entry is null)
                 return;
 
-            if (string.IsNullOrWhiteSpace(entry.UploadProvider))
-                entry.UploadProvider = providerName;
+            entry.UploadProvider = string.IsNullOrWhiteSpace(providerName) ? "Upload" : providerName;
             entry.UploadError = string.IsNullOrWhiteSpace(error) ? "Upload failed" : error;
             EnsureHistoryService().SaveEntry(entry);
         }
         catch (Exception ex)
         {
             AppDiagnostics.LogError("upload.history-failure", ex);
+        }
+    }
+
+    private void SaveUploadSuccess(string? filePath, Services.HistoryEntry? historyEntry, string url, string providerName)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || string.IsNullOrWhiteSpace(url))
+                return;
+
+            var entry = historyEntry ?? _historyService?.Entries.FirstOrDefault(e =>
+                string.Equals(e.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+                return;
+
+            entry.UploadUrl = url;
+            entry.UploadProvider = string.IsNullOrWhiteSpace(providerName) ? "Upload" : providerName;
+            entry.UploadError = null;
+            EnsureHistoryService().SaveEntry(entry);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("upload.history-success", ex);
         }
     }
 
@@ -220,12 +293,16 @@ public partial class App
                     {
                         var errMsg = CleanErrorMessage(lensUpload.Error);
                         var saved = Path.GetFileName(filePath);
+                        SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
                         ToastWindow.ShowError("Google Lens upload failed", $"Saved to {saved}\n{errMsg}", filePath);
                         return;
                     }
 
                     var lensUrl = UploadService.BuildGoogleLensUrl(lensUpload.Url);
-                    OpenExternalUrl(lensUrl);
+                    SaveUploadSuccess(filePath, historyEntry, lensUpload.Url, lensUpload.ProviderName);
+                    if (!OpenExternalUrl(lensUrl))
+                        return;
+
                     SoundService.PlayUploadDoneSound();
                     previewBitmap?.Dispose();
                     previewBitmap = null;
@@ -234,15 +311,28 @@ public partial class App
                 }
 
                 var startUrl = UploadService.BuildAiChatStartUrl(settings.AiChatProvider);
-                OpenExternalUrl(startUrl);
+                if (string.IsNullOrWhiteSpace(startUrl))
+                {
+                    var errMsg = "Choose an AI Redirect provider in Settings -> Uploads.";
+                    var saved = Path.GetFileName(filePath);
+                    SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
+                    ToastWindow.ShowError("AI Redirect not configured", $"Saved to {saved}\n{errMsg}", filePath);
+                    return;
+                }
+
+                if (!OpenExternalUrl(startUrl))
+                    return;
+
                 SoundService.PlayUploadDoneSound();
                 if (previewBitmap is not null)
                 {
-                    ClipboardService.CopyToClipboard(previewBitmap, filePath);
+                    var copySucceeded = TryCopyAiRedirectImageToClipboard(previewBitmap, filePath);
                     ToastWindow.Show(ToastSpec.ImagePreview(
                         previewBitmap,
                         "AI Redirect Ready",
-                        $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V.",
+                        copySucceeded
+                            ? $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V."
+                            : $"Opened {providerName}. Clipboard copy failed; drag the image from this pinned toast.",
                         filePath,
                         autoPin: true,
                         transparentShell: false,
@@ -264,7 +354,10 @@ public partial class App
         catch (Exception ex)
         {
             AppDiagnostics.LogError("ai-redirect.error", ex, $"Unexpected AI redirect error for {Path.GetFileName(filePath)}.");
-            ToastWindow.ShowError("AI Redirect failed", CleanErrorMessage(ex.Message), filePath);
+            ToastWindow.ShowError(
+                "AI Redirect failed",
+                BuildAiRedirectFailureToastBody(CleanErrorMessage(ex.Message)),
+                filePath);
         }
         finally
         {
@@ -272,16 +365,63 @@ public partial class App
         }
     }
 
-    private static void OpenExternalUrl(string url)
+    private static bool OpenExternalUrl(string url)
     {
         if (string.IsNullOrWhiteSpace(url))
-            throw new InvalidOperationException("No browser URL was generated for the upload.");
-
-        Process.Start(new ProcessStartInfo
         {
-            FileName = url,
-            UseShellExecute = true
-        });
+            ToastWindow.ShowError("Open failed", "No browser URL was generated for the upload.");
+            return false;
+        }
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+            if (process is null)
+            {
+                ToastWindow.ShowError("Open failed", "Windows did not open the browser.");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("upload.external-url-open", $"Failed to open external URL: {ex.Message}", ex);
+            ToastWindow.ShowError(
+                "Open failed",
+                $"OddSnap could not open the browser for this upload. Copy the upload link from the toast or History and open it manually.\n{ex.Message}");
+            return false;
+        }
+    }
+
+    private static string BuildUploadCopyFailureToastBody(string details)
+    {
+        const string recovery = "Upload succeeded, but OddSnap could not copy the link. Open History and copy the upload link manually.";
+        return string.IsNullOrWhiteSpace(details) ? recovery : $"{recovery}\n{details}";
+    }
+
+    private static string BuildAiRedirectFailureToastBody(string details)
+    {
+        const string recovery = "OddSnap could not finish AI Redirect. Check Settings -> Uploads, then retry from the saved file.";
+        return string.IsNullOrWhiteSpace(details) ? recovery : $"{recovery}\n{details}";
+    }
+
+    private static bool TryCopyAiRedirectImageToClipboard(Bitmap previewBitmap, string filePath)
+    {
+        try
+        {
+            ClipboardService.CopyToClipboard(previewBitmap, filePath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("ai-redirect.copy-failed", $"Clipboard image copy failed for {Path.GetFileName(filePath)}: {ex.Message}");
+            return false;
+        }
     }
 
     private string? ResolveSavePath(string defaultPath, CaptureImageFormat format)
@@ -323,8 +463,9 @@ public partial class App
             using var source = new Bitmap(stream);
             return new Bitmap(source);
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("ai-redirect.preview-load", $"Failed to load AI Redirect preview image {Path.GetFileName(filePath)}: {ex.Message}", ex);
             return null;
         }
     }
@@ -345,9 +486,10 @@ public partial class App
         var errors = new List<string>();
         foreach (var candidate in candidates)
         {
-            if (!UploadService.HasCredentials(candidate, settings))
+            var configurationError = UploadService.GetConfigurationError(candidate, settings);
+            if (!string.IsNullOrWhiteSpace(configurationError))
             {
-                errors.Add($"{UploadService.GetName(candidate)} not configured");
+                errors.Add($"{UploadService.GetName(candidate)}: {configurationError}");
                 continue;
             }
 

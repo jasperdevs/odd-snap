@@ -234,6 +234,20 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public void FallbackSettingsTempCleanupFailuresAreLogged()
+    {
+        var source = File.ReadAllText(FindRepoFile("src/OddSnap/Services/SettingsService.cs"));
+        var fallback = GetMethodBlock(source, "TryWriteSettingsFallback_NoLock");
+        var cleanup = GetMethodBlock(source, "TryDeleteSettingsTempFile_NoLock");
+
+        Assert.Contains("TryDeleteSettingsTempFile_NoLock(tmpPath, \"fallback\")", fallback);
+        Assert.DoesNotContain("catch { }", fallback);
+        Assert.Contains("settings.temp-cleanup", cleanup);
+        Assert.Contains("AppDiagnostics.LogWarning", cleanup);
+        Assert.Contains("Path.GetFileName(tmpPath)", cleanup);
+    }
+
+    [Fact]
     public void PortableStorage_UsesOddSnapSubfolderBesideApp()
     {
         var appDir = Path.Combine(Path.GetTempPath(), "oddsnap-portable", Guid.NewGuid().ToString("N"));
@@ -261,6 +275,72 @@ public sealed class SettingsServiceTests
         var root = Path.Combine(Path.GetTempPath(), "oddsnap-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static string FindRepoFile(string relativePath)
+    {
+        var dir = AppContext.BaseDirectory;
+        while (!string.IsNullOrWhiteSpace(dir))
+        {
+            var candidate = Path.Combine(dir, relativePath);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+
+        throw new FileNotFoundException(relativePath);
+    }
+
+    private static string GetMethodBlock(string source, string methodName)
+    {
+        var methodIndex = FindMethodDeclaration(source, methodName);
+        Assert.True(methodIndex >= 0, $"Could not find method {methodName}.");
+
+        var openBrace = source.IndexOf('{', methodIndex);
+        Assert.True(openBrace >= 0, $"Could not find method body for {methodName}.");
+
+        var depth = 0;
+        for (var index = openBrace; index < source.Length; index++)
+        {
+            if (source[index] == '{')
+            {
+                depth++;
+            }
+            else if (source[index] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return source.Substring(openBrace, index - openBrace + 1);
+            }
+        }
+
+        throw new InvalidOperationException($"Could not parse method body for {methodName}.");
+    }
+
+    private static int FindMethodDeclaration(string source, string methodName)
+    {
+        var searchIndex = 0;
+        while (searchIndex < source.Length)
+        {
+            var candidate = source.IndexOf(methodName + "(", searchIndex, StringComparison.Ordinal);
+            if (candidate < 0)
+                return -1;
+
+            var lineStart = source.LastIndexOfAny(['\r', '\n'], candidate);
+            lineStart = lineStart < 0 ? 0 : lineStart + 1;
+            var signaturePrefix = source.Substring(lineStart, candidate - lineStart);
+            if (signaturePrefix.Contains("private ", StringComparison.Ordinal)
+                || signaturePrefix.Contains("internal ", StringComparison.Ordinal)
+                || signaturePrefix.Contains("public ", StringComparison.Ordinal))
+            {
+                return candidate;
+            }
+
+            searchIndex = candidate + methodName.Length;
+        }
+
+        return -1;
     }
 
     private static void TryDeleteRoot(string root)

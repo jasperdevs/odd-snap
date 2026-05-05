@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -22,6 +23,9 @@ public partial class SettingsWindow
     private static bool IsDraggableFile(string? path) =>
         !string.IsNullOrWhiteSpace(path) && File.Exists(path);
 
+    private static bool HasHistoryFilePath(string? path) =>
+        !string.IsNullOrWhiteSpace(path);
+
     private static void DetachElementFromParent(FrameworkElement element)
     {
         switch (element.Parent)
@@ -41,6 +45,7 @@ public partial class SettingsWindow
     private MediaCardShell BuildMediaCardShell(HistoryItemVM vm, Action copyAction)
     {
         bool suppressOpenAction = false;
+        var kindLabel = GetHistoryKindLabel(vm.Entry.Kind);
         if (vm.ThumbnailLoaded && IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))
         {
             vm.ThumbnailLoaded = false;
@@ -69,13 +74,16 @@ public partial class SettingsWindow
             Height = 40,
             CornerRadius = new CornerRadius(8),
             Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 0, 0, 0)),
+            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(210, 255, 255, 255)),
+            BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 8, 8, 0),
             Cursor = Cursors.Hand,
             Opacity = 0,
             IsHitTestVisible = true,
-            ToolTip = "Actions",
+            Focusable = true,
+            ToolTip = "Open history item actions",
             Child = new TextBlock
             {
                 Text = "⋯",
@@ -86,51 +94,94 @@ public partial class SettingsWindow
                 VerticalAlignment = VerticalAlignment.Center,
             }
         };
+        AutomationProperties.SetName(actionMenuBtn, $"{kindLabel} actions");
+        AutomationProperties.SetHelpText(actionMenuBtn, "Press Enter or Space to open this history item's actions.");
 
         var actionMenu = CreateCardActionMenu();
-        actionMenu.Items.Add(CreateCardActionMenuItem("Copy", () =>
+        var hasUploadUrl = !string.IsNullOrWhiteSpace(vm.Entry.UploadUrl);
+        actionMenu.Items.Add(CreateCardActionMenuItem(GetHistoryCopyMenuLabel(vm.Entry), () =>
         {
             suppressOpenAction = true;
             copyAction();
-        }));
-        if (!string.IsNullOrWhiteSpace(vm.Entry.UploadUrl))
+        }, GetHistoryCopyMenuHelpText(vm.Entry, kindLabel)));
+        if (hasUploadUrl)
         {
-            actionMenu.Items.Add(CreateCardActionMenuItem("Copy URL", () =>
-            {
-                suppressOpenAction = true;
-                ClipboardService.CopyTextToClipboard(vm.Entry.UploadUrl!);
-                ToastWindow.Show("Copied", vm.Entry.UploadUrl!);
-            }));
-            actionMenu.Items.Add(CreateCardActionMenuItem("Open URL", () =>
+            actionMenu.Items.Add(CreateCardActionMenuItem(GetHistoryOpenUrlMenuLabel(vm.Entry), () =>
             {
                 suppressOpenAction = true;
                 OpenExternal(vm.Entry.UploadUrl!);
-            }));
+            }, GetHistoryOpenUrlMenuHelpText(vm.Entry)));
         }
         if (IsDraggableFile(vm.Entry.FilePath))
         {
-            actionMenu.Items.Add(CreateCardActionMenuItem("Retry upload", () =>
+            var uploadInProgress = IsHistoryUploadInProgress(vm.Entry.FilePath);
+            var uploadHelpText = GetHistoryUploadMenuHelpText(vm.Entry, uploadInProgress);
+            MenuItem? uploadItem = null;
+            uploadItem = CreateCardActionMenuItem(GetHistoryUploadMenuLabel(vm.Entry, uploadInProgress), () =>
             {
                 suppressOpenAction = true;
+                if (uploadItem is not null)
+                {
+                    uploadItem.Header = "Uploading...";
+                    uploadItem.ToolTip = "This history item upload is already running.";
+                    AutomationProperties.SetName(uploadItem, "Uploading history item");
+                    AutomationProperties.SetHelpText(uploadItem, "This history item upload is already running.");
+                    uploadItem.IsEnabled = false;
+                }
                 _ = RetryHistoryUploadAsync(vm);
-            }));
+            }, uploadHelpText);
+            uploadItem.IsEnabled = !uploadInProgress;
+            if (uploadInProgress)
+            {
+                AutomationProperties.SetName(uploadItem, "Uploading history item");
+                AutomationProperties.SetHelpText(uploadItem, uploadHelpText);
+            }
+            actionMenu.Items.Add(uploadItem);
         }
-        if (IsDraggableFile(vm.Entry.FilePath))
+        if (HasHistoryFilePath(vm.Entry.FilePath))
         {
             actionMenu.Items.Add(CreateCardActionMenuItem("Show in folder", () =>
             {
                 suppressOpenAction = true;
                 ShowFileInFolder(vm.Entry.FilePath);
-            }));
+            }, "Show this file in File Explorer."));
         }
 
         actionMenuBtn.ContextMenu = actionMenu;
+        void OpenActionMenu()
+        {
+            suppressOpenAction = true;
+            actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(1, 100, Motion.SmoothOut));
+            actionMenu.PlacementTarget = actionMenuBtn;
+            actionMenu.IsOpen = true;
+        }
+
         actionMenuBtn.PreviewMouseLeftButtonUp += (_, e) =>
         {
             e.Handled = true;
-            suppressOpenAction = true;
-            actionMenu.PlacementTarget = actionMenuBtn;
-            actionMenu.IsOpen = true;
+            OpenActionMenu();
+        };
+        actionMenuBtn.KeyDown += (_, e) =>
+        {
+            if (!IsHistoryCardActivationKey(e))
+                return;
+
+            e.Handled = true;
+            OpenActionMenu();
+        };
+        actionMenuBtn.GotKeyboardFocus += (_, _) =>
+        {
+            actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(1, 100, Motion.SmoothOut));
+        };
+        actionMenuBtn.LostKeyboardFocus += (_, _) =>
+        {
+            if (!actionMenu.IsOpen)
+                actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(0, 120, Motion.SmoothOut));
+        };
+        actionMenu.Closed += (_, _) =>
+        {
+            if (!actionMenuBtn.IsKeyboardFocusWithin && !actionMenuBtn.IsMouseOver)
+                actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(0, 120, Motion.SmoothOut));
         };
 
         var selectionBadge = CreateSelectionBadge(vm.IsSelected);
@@ -151,6 +202,7 @@ public partial class SettingsWindow
         Grid.SetRow(info, 1);
         root.Children.Add(info);
 
+        var cardFocusBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(150, 255, 255, 255));
         var card = new Border
         {
             Width = HistoryCardPreferredWidth,
@@ -160,11 +212,15 @@ public partial class SettingsWindow
             CornerRadius = new CornerRadius(8),
             Background = Theme.Brush(Theme.BgCard),
             BorderBrush = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
+            BorderThickness = new Thickness(1),
             Cursor = Cursors.Hand,
+            Focusable = true,
+            ToolTip = $"Open this {kindLabel} history item",
             Child = root,
             Tag = vm,
         };
+        AutomationProperties.SetName(card, $"{kindLabel} history item");
+        AutomationProperties.SetHelpText(card, "Press Enter or Space to open this history item. Press Ctrl+C to copy it or its upload link. In select mode, press Enter or Space to select it.");
 
         card.SizeChanged += (s, _) =>
         {
@@ -176,16 +232,37 @@ public partial class SettingsWindow
 
         card.MouseEnter += (s, _) =>
         {
+            card.BorderBrush = cardFocusBrush;
             actionMenuBtn.BeginAnimation(OpacityProperty,
                 Motion.To(1, 150, Motion.SmoothOut));
         };
         card.MouseLeave += (s, _) =>
         {
-            actionMenuBtn.BeginAnimation(OpacityProperty,
-                Motion.To(0, 150, Motion.SmoothOut));
+            if (!card.IsKeyboardFocusWithin)
+                card.BorderBrush = Brushes.Transparent;
+
+            if (!card.IsKeyboardFocusWithin && !actionMenu.IsOpen)
+            {
+                actionMenuBtn.BeginAnimation(OpacityProperty,
+                    Motion.To(0, 150, Motion.SmoothOut));
+            }
+        };
+        card.GotKeyboardFocus += (_, _) =>
+        {
+            card.BorderBrush = cardFocusBrush;
+            actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(1, 100, Motion.SmoothOut));
+        };
+        card.LostKeyboardFocus += (_, _) =>
+        {
+            if (card.IsKeyboardFocusWithin || actionMenu.IsOpen)
+                return;
+
+            card.BorderBrush = Brushes.Transparent;
+            if (!card.IsMouseOver)
+                actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(0, 120, Motion.SmoothOut));
         };
 
-        card.MouseLeftButtonUp += (s, e) =>
+        void ActivateCard(RoutedEventArgs e)
         {
             if (suppressOpenAction)
             {
@@ -204,7 +281,24 @@ public partial class SettingsWindow
             vm.IsSelected = !vm.IsSelected;
             UpdateCardSelection(vm);
             UpdateImageSearchActionButtons();
+            UpdateHistoryActionButtons();
             e.Handled = true;
+        }
+
+        card.MouseLeftButtonUp += (_, e) => ActivateCard(e);
+        card.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.C && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                e.Handled = true;
+                copyAction();
+                return;
+            }
+
+            if (!IsHistoryCardActivationKey(e))
+                return;
+
+            ActivateCard(e);
         };
 
         // Drag-and-drop support: drag the file out of the history card
@@ -242,25 +336,87 @@ public partial class SettingsWindow
         return new MediaCardShell(card, imgContainer, info, actionMenuBtn, img, selectionBadge);
     }
 
-    private static void AddUploadInfo(StackPanel panel, HistoryEntry entry)
+    private static string GetHistoryUploadMenuLabel(HistoryEntry entry, bool isUploadInProgress)
+    {
+        if (isUploadInProgress)
+            return "Uploading...";
+
+        if (!string.IsNullOrWhiteSpace(entry.UploadError))
+            return "Retry upload";
+
+        if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
+            return "Re-upload";
+
+        return "Upload now";
+    }
+
+    private static string GetHistoryUploadMenuHelpText(HistoryEntry entry, bool isUploadInProgress)
+    {
+        if (isUploadInProgress)
+            return "This history item upload is already running.";
+
+        if (!string.IsNullOrWhiteSpace(entry.UploadError))
+            return "Retry uploading this file with the current Uploads settings.";
+
+        if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
+            return "Upload this file again with the current Uploads settings.";
+
+        return "Upload this file with the current Uploads settings.";
+    }
+
+    private static string GetHistoryKindLabel(HistoryKind kind) => kind switch
+    {
+        HistoryKind.Gif => "GIF",
+        HistoryKind.Video => "video",
+        HistoryKind.Sticker => "sticker",
+        _ => "screenshot"
+    };
+
+    private static string GetHistoryCopyMenuLabel(HistoryEntry entry)
     {
         if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
         {
-            panel.Children.Add(new TextBlock
-            {
-                Text = entry.UploadUrl,
-                FontSize = 9.5,
-                FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
-                Opacity = 0.45,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                ToolTip = entry.UploadUrl
-            });
-            return;
+            if (!string.IsNullOrWhiteSpace(entry.UploadError))
+                return "Copy previous link";
+
+            return "Copy link";
         }
 
+        return entry.Kind switch
+        {
+            HistoryKind.Gif => "Copy GIF",
+            HistoryKind.Video => "Copy video",
+            HistoryKind.Image or HistoryKind.Sticker => "Copy image",
+            _ => "Copy"
+        };
+    }
+
+    private static string GetHistoryCopyMenuHelpText(HistoryEntry entry, string kindLabel)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
+        {
+            if (!string.IsNullOrWhiteSpace(entry.UploadError))
+                return "Copy the previous upload link for this history item.";
+
+            return "Copy this history item's upload link.";
+        }
+
+        return $"Copy this {kindLabel} history item.";
+    }
+
+    private static string GetHistoryOpenUrlMenuLabel(HistoryEntry entry)
+        => !string.IsNullOrWhiteSpace(entry.UploadError) ? "Open previous link" : "Open URL";
+
+    private static string GetHistoryOpenUrlMenuHelpText(HistoryEntry entry)
+        => !string.IsNullOrWhiteSpace(entry.UploadError)
+            ? "Open the previous upload link for this history item."
+            : "Open this history item's upload URL.";
+
+    private static void AddUploadInfo(StackPanel panel, HistoryEntry entry)
+    {
         if (!string.IsNullOrWhiteSpace(entry.UploadError))
         {
-            panel.Children.Add(new TextBlock
+            var errorBlock = new TextBlock
             {
                 Text = entry.UploadError,
                 FontSize = 9.5,
@@ -269,7 +425,27 @@ public partial class SettingsWindow
                 Opacity = 0.9,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 ToolTip = entry.UploadError
-            });
+            };
+            AutomationProperties.SetName(errorBlock, "Upload error");
+            AutomationProperties.SetHelpText(errorBlock, entry.UploadError);
+            panel.Children.Add(errorBlock);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
+        {
+            var urlBlock = new TextBlock
+            {
+                Text = entry.UploadUrl,
+                FontSize = 9.5,
+                FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+                Opacity = 0.45,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                ToolTip = entry.UploadUrl
+            };
+            AutomationProperties.SetName(urlBlock, "Upload URL");
+            AutomationProperties.SetHelpText(urlBlock, entry.UploadUrl);
+            panel.Children.Add(urlBlock);
         }
     }
 
@@ -280,10 +456,17 @@ public partial class SettingsWindow
         return menu;
     }
 
-    private MenuItem CreateCardActionMenuItem(string label, Action action)
+    private MenuItem CreateCardActionMenuItem(string label, Action action, string? helpText = null)
     {
-        var item = new MenuItem { Header = label };
+        helpText ??= "Run this history action.";
+        var item = new MenuItem
+        {
+            Header = label,
+            ToolTip = helpText
+        };
         item.SetResourceReference(MenuItem.StyleProperty, "HistoryActionsMenuItem");
+        AutomationProperties.SetName(item, label);
+        AutomationProperties.SetHelpText(item, helpText);
         item.Click += (_, e) =>
         {
             e.Handled = true;
@@ -322,61 +505,125 @@ public partial class SettingsWindow
             Child = checkPath,
             Tag = checkPath
         };
+        UpdateSelectionBadgeAccessibility(badge, isSelected);
         Grid.SetRowSpan(badge, 2);
         System.Windows.Controls.Panel.SetZIndex(badge, 20);
         return badge;
     }
 
-    private static void ShowFileInFolder(string filePath)
+    private static void UpdateSelectionBadgeAccessibility(FrameworkElement badge, bool isSelected)
     {
-        if (File.Exists(filePath))
+        badge.ToolTip = isSelected ? "Selected history item" : "History item selection marker";
+        AutomationProperties.SetName(badge, isSelected ? "Selected history item" : "History item selection marker");
+        AutomationProperties.SetHelpText(badge, isSelected
+            ? "This history item is selected."
+            : "Shows whether this history item is selected in select mode.");
+    }
+
+    private static bool ShowFileInFolder(string filePath)
+    {
+        if (!File.Exists(filePath))
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            ShowHistoryFileMissingError(filePath);
+            return false;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "explorer.exe",
                 Arguments = $"/select,\"{filePath}\"",
                 UseShellExecute = true
             });
+            if (process is null)
+            {
+                ToastWindow.ShowError("Open failed", "Windows did not open the file location. Try again from Settings -> History, or open the folder manually.", filePath);
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError(
+                "Open failed",
+                $"OddSnap could not open the file location. Try again from Settings -> History, or open the folder manually.\n{ex.Message}",
+                filePath);
+            return false;
         }
     }
 
-    private static void OpenFileWithDefaultApp(string filePath)
+    private static bool OpenFileWithDefaultApp(string filePath)
     {
         if (!File.Exists(filePath))
-            return;
-
-        _ = Task.Run(() =>
         {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = filePath,
-                    UseShellExecute = true,
-                    Verb = "open"
-                });
-            }
-            catch
-            {
-            }
-        });
-    }
-
-    private static void OpenExternal(string target)
-    {
-        if (string.IsNullOrWhiteSpace(target))
-            return;
+            ShowHistoryFileMissingError(filePath);
+            return false;
+        }
 
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
-                FileName = target,
+                FileName = filePath,
+                UseShellExecute = true,
+                Verb = "open"
+            });
+            if (process is null)
+            {
+                ToastWindow.ShowError("Open failed", "Windows did not open the saved file. Try again from Settings -> History, or open it from disk manually.", filePath);
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ToastWindow.ShowError(
+                "Open failed",
+                $"OddSnap could not open the saved file. Try again from Settings -> History, or open it from disk manually.\n{ex.Message}",
+                filePath);
+            return false;
+        }
+    }
+
+    private static bool OpenExternal(string target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            ToastWindow.ShowError("Open failed", "No URL is available for this history item.");
+            return false;
+        }
+
+        if (!Uri.TryCreate(target.Trim(), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            ToastWindow.ShowError("Open failed", "The upload URL is not a valid web link.");
+            return false;
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = uri.AbsoluteUri,
                 UseShellExecute = true
             });
+            if (process is null)
+            {
+                ToastWindow.ShowError("Open failed", "Windows did not open the upload URL. Copy the link from Settings -> History and open it manually.");
+                return false;
+            }
+
+            return true;
         }
-        catch
+        catch (Exception ex)
         {
+            ToastWindow.ShowError(
+                "Open failed",
+                $"OddSnap could not open the upload URL. Copy the link from Settings -> History and open it manually.\n{ex.Message}");
+            return false;
         }
     }
 

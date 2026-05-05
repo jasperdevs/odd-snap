@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Imaging;
 using OddSnap.Helpers;
 using Xunit;
 
@@ -14,7 +15,7 @@ public sealed class BitmapPerfTests
         try
         {
             using (var source = new Bitmap(6, 4))
-                source.Save(path);
+                source.Save(path, ImageFormat.Png);
 
             using var loaded = BitmapPerf.LoadDetached(path);
 

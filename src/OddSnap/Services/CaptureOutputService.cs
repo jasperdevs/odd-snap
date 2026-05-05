@@ -88,7 +88,7 @@ public static class CaptureOutputService
         }
         catch
         {
-            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            TryDeleteTemporaryFile(tempPath, "failed temp PNG save");
             throw;
         }
     }
@@ -103,8 +103,24 @@ public static class CaptureOutputService
         }
         catch (Exception) when (File.Exists(tmpPath))
         {
-            try { File.Delete(tmpPath); } catch { }
+            TryDeleteTemporaryFile(tmpPath, "atomic write");
             saveAction(bitmap, filePath);
+        }
+    }
+
+    private static void TryDeleteTemporaryFile(string path, string context)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "capture.output.cleanup",
+                $"Failed to delete {context} temporary file {Path.GetFileName(path)}: {ex.Message}",
+                ex);
         }
     }
 

@@ -135,4 +135,28 @@ public sealed class ToolbarLayoutTests
         Assert.Equal(8, rect.Left);
         Assert.Equal((1080 - 420) / 2, rect.Top);
     }
+
+    [Fact]
+    public void GetToolbarRect_CapsOversizedHorizontalToolbarInsideScreen()
+    {
+        var virtualBounds = new Rectangle(0, 0, 360, 720);
+        var screen = new Rectangle(0, 0, 360, 720);
+
+        var rect = ToolbarLayout.GetToolbarRect(virtualBounds, screen, 640, 44, CaptureDockSide.Top);
+
+        Assert.Equal(8, rect.Left);
+        Assert.Equal(360 - 8, rect.Right);
+    }
+
+    [Fact]
+    public void GetToolbarRect_CapsOversizedVerticalToolbarInsideScreen()
+    {
+        var virtualBounds = new Rectangle(0, 0, 360, 420);
+        var screen = new Rectangle(0, 0, 360, 420);
+
+        var rect = ToolbarLayout.GetToolbarRect(virtualBounds, screen, 46, 620, CaptureDockSide.Right);
+
+        Assert.Equal(8, rect.Top);
+        Assert.Equal(420 - 8, rect.Bottom);
+    }
 }

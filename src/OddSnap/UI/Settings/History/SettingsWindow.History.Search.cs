@@ -21,6 +21,7 @@ public partial class SettingsWindow
         foreach (var item in items)
         {
             HydrateHistoryItemSearchMetadata(item);
+            RefreshHistoryCardTextMetadata(item);
         }
 
         UpdateImageSearchPlaceholderText();
@@ -73,16 +74,29 @@ public partial class SettingsWindow
 
         long visibleBytes = 0;
         foreach (var item in _filteredHistoryItems)
-            visibleBytes += item.Entry.FileSizeBytes;
+            visibleBytes += GetHistoryItemFileSize(item);
 
         var uploadFilterActive = IsHistoryUploadFilterActive();
         var searchEnabled = sources != ImageSearchSourceOptions.None;
         var usingSearch = searchEnabled && !string.IsNullOrWhiteSpace(query);
+        var usingSearchAndUploadFilter = usingSearch && uploadFilterActive;
+        var pendingThumbnailMatches = usingSearch && rankedItems.Count > 0 && filteredItems.Count == 0;
+        var pendingThumbnailMatchCount = usingSearch
+            ? Math.Max(0, rankedItems.Count - filteredItems.Count)
+            : 0;
         var sizeStr = FormatStorageSize(visibleBytes);
         var totalCount = _allImageHistoryEntries.Count;
-        if (usingSearch || uploadFilterActive)
+        if (usingSearch && pendingThumbnailMatchCount > 0)
         {
-            HistoryCountText.Text = $"{_filteredHistoryItems.Count} of {totalCount} capture{(totalCount == 1 ? "" : "s")} · {sizeStr}";
+            HistoryCountText.Text = FormatImageSearchVisibleCountText(_filteredHistoryItems.Count, rankedItems.Count, sizeStr);
+        }
+        else if (usingSearch)
+        {
+            HistoryCountText.Text = FormatImageSearchMatchCountText(_filteredHistoryItems.Count, uploadFilterActive, sizeStr);
+        }
+        else if (uploadFilterActive)
+        {
+            HistoryCountText.Text = FormatImageUploadFilterCountText(_filteredHistoryItems.Count, totalCount, sizeStr);
         }
         else
         {
@@ -93,14 +107,25 @@ public partial class SettingsWindow
             HistoryCountText.Text = $"{loadedPrefix} · {sizeStr}";
         }
 
-        HistoryEmptyText.Visibility = _filteredHistoryItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        HistoryEmptyLabel.Text = !searchEnabled && !string.IsNullOrWhiteSpace(query)
-            ? "Enable at least one search source"
-            : usingSearch
-                ? "No screenshots match your search"
-                : uploadFilterActive
-                    ? "No screenshots match this filter"
-                    : "No captures yet";
+        if (_filteredHistoryItems.Count == 0)
+        {
+            if (!searchEnabled && !string.IsNullOrWhiteSpace(query))
+                ShowHistoryEmptyState("Search sources are off", "Enable file name or OCR search to use this query.");
+            else if (pendingThumbnailMatches)
+                ShowHistoryEmptyState("Loading matching screenshots", "Thumbnail previews are loading. Results will appear shortly.");
+            else if (usingSearchAndUploadFilter)
+                ShowHistoryEmptyState("No screenshots match this search and filter", "Search and upload filters matched 0 saved screenshots.");
+            else if (usingSearch)
+                ShowHistoryEmptyState("No screenshots match your search", "Search matched 0 saved screenshots.");
+            else if (uploadFilterActive)
+                ShowHistoryEmptyState("No screenshots match this filter", "Filter matched 0 saved screenshots.");
+            else
+                ShowHistoryEmptyState("No captures yet", "Screenshots will appear here after capture.");
+        }
+        else
+        {
+            HideHistoryEmptyState();
+        }
 
         if (resultSetChanged || renderModeChanged)
             RenderHistoryItems();
@@ -108,6 +133,7 @@ public partial class SettingsWindow
             UpdateVirtualizedHistoryViewport();
         UpdateImageSearchStatus();
         UpdateImageSearchActionButtons();
+        UpdateHistoryActionButtons();
     }
 
     private List<HistoryItemVM> RankLocalImageItems(string query, ImageSearchSourceOptions sources, bool exactMatch)
@@ -197,7 +223,6 @@ public partial class SettingsWindow
 
             EnsureAllImageHistoryItemsMaterialized();
             var filtered = new List<HistoryItemVM>(rankedEntries.Count);
-            long visibleBytes = 0;
             foreach (var entry in rankedEntries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -205,13 +230,20 @@ public partial class SettingsWindow
                     continue;
 
                 filtered.Add(vm);
-                visibleBytes += entry.FileSizeBytes > 0 ? entry.FileSizeBytes : vm.Entry.FileSizeBytes;
             }
 
             if (!IsLoaded || version != _searchFilterVersion || cancellationToken.IsCancellationRequested)
                 return;
 
-            var filteredItems = FilterSearchResultsForLoadedThumbnails(ApplyHistoryUploadFilter(filtered).ToList(), query);
+            var uploadFilteredItems = ApplyHistoryUploadFilter(filtered).ToList();
+            var filteredItems = FilterSearchResultsForLoadedThumbnails(uploadFilteredItems, query);
+            var pendingThumbnailMatches = uploadFilteredItems.Count > 0 && filteredItems.Count == 0;
+            var pendingThumbnailMatchCount = Math.Max(0, uploadFilteredItems.Count - filteredItems.Count);
+            var uploadFilterActive = IsHistoryUploadFilterActive();
+            long visibleBytes = 0;
+            foreach (var item in filteredItems)
+                visibleBytes += GetHistoryItemFileSize(item);
+
             var shouldVirtualize = ShouldUseVirtualizedImageHistory(filteredItems);
             var renderModeChanged = _useVirtualizedImageHistory != shouldVirtualize;
             var resultSetChanged = !HasSameHistorySequence(_filteredHistoryItems, filteredItems);
@@ -219,13 +251,18 @@ public partial class SettingsWindow
             _historyRenderCount = Math.Min(HistoryAppendPageSize, _filteredHistoryItems.Count);
 
             var sizeStr = FormatStorageSize(visibleBytes);
-            var totalCount = _allHistoryItems.Count;
-            HistoryCountText.Text = $"{_filteredHistoryItems.Count} of {totalCount} capture{(totalCount == 1 ? "" : "s")} · {sizeStr}";
+            HistoryCountText.Text = pendingThumbnailMatchCount > 0
+                ? FormatImageSearchVisibleCountText(_filteredHistoryItems.Count, uploadFilteredItems.Count, sizeStr)
+                : FormatImageSearchMatchCountText(_filteredHistoryItems.Count, uploadFilterActive, sizeStr);
 
-            HistoryEmptyText.Visibility = _filteredHistoryItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            HistoryEmptyLabel.Text = _filteredHistoryItems.Count == 0
-                ? "No screenshots match your search"
-                : "";
+            if (_filteredHistoryItems.Count == 0 && pendingThumbnailMatches)
+                ShowHistoryEmptyState("Loading matching screenshots", "Thumbnail previews are loading. Results will appear shortly.");
+            else if (_filteredHistoryItems.Count == 0 && uploadFilterActive)
+                ShowHistoryEmptyState("No screenshots match this search and filter", "Search and upload filters matched 0 saved screenshots.");
+            else if (_filteredHistoryItems.Count == 0)
+                ShowHistoryEmptyState("No screenshots match your search", "Search matched 0 saved screenshots.");
+            else
+                HideHistoryEmptyState();
 
             if (resultSetChanged || renderModeChanged)
                 RenderHistoryItems();
@@ -234,13 +271,15 @@ public partial class SettingsWindow
             UpdateImageSearchStatus();
             SetImageSearchLoading(false, forceIndexed: true);
             UpdateImageSearchActionButtons();
+            UpdateHistoryActionButtons();
         }
         catch (OperationCanceledException)
         {
         }
-        catch
+        catch (Exception ex)
         {
             searchFailed = true;
+            AppDiagnostics.LogError("settings.image-search", ex);
         }
         finally
         {
@@ -250,6 +289,25 @@ public partial class SettingsWindow
             if (version == _searchFilterVersion && searchFailed)
                 HistorySearchStatusText.Text = "Search failed";
         }
+    }
+
+    private static string FormatImageSearchVisibleCountText(int visibleCount, int matchedCount, string sizeText)
+    {
+        var matchLabel = matchedCount == 1 ? "match" : "matches";
+        return $"{visibleCount} visible of {matchedCount} {matchLabel} · {sizeText}";
+    }
+
+    private static string FormatImageSearchMatchCountText(int matchedCount, bool uploadFilterActive, string sizeText)
+    {
+        var matchLabel = matchedCount == 1 ? "match" : "matches";
+        var sourceLabel = uploadFilterActive ? "search/filter" : "search";
+        return $"{matchedCount} {sourceLabel} {matchLabel} · {sizeText}";
+    }
+
+    private static string FormatImageUploadFilterCountText(int filteredCount, int totalCount, string sizeText)
+    {
+        var captureLabel = totalCount == 1 ? "capture" : "captures";
+        return $"{filteredCount} of {totalCount} {captureLabel} shown by filter · {sizeText}";
     }
 
     private List<HistoryItemVM> FilterSearchResultsForLoadedThumbnails(List<HistoryItemVM> rankedItems, string query)
@@ -428,6 +486,7 @@ public partial class SettingsWindow
 
         UpdateImageSearchActionButtons();
         UpdateImageSearchPlaceholderText();
+        UpdateHistoryActionButtons();
     }
 
     private void SetImageSearchRowAutoHidden(bool hidden)

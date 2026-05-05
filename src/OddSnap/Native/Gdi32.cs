@@ -26,4 +26,13 @@ internal static partial class Gdi32
     [LibraryImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool DeleteObject(IntPtr hObject);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial IntPtr CreateRoundRectRgn(
+        int nLeftRect,
+        int nTopRect,
+        int nRightRect,
+        int nBottomRect,
+        int nWidthEllipse,
+        int nHeightEllipse);
 }

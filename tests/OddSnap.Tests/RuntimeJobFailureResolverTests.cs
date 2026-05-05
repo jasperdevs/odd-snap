@@ -8,7 +8,7 @@ public sealed class RuntimeJobFailureResolverTests
     [Fact]
     public void GetFailureMessage_PrefersFirstFailedSnapshotWithError()
     {
-        var modelFailure = new BackgroundRuntimeJobSnapshot("model", "Model", false, "Failed", false, "Model failed");
+        var modelFailure = new BackgroundRuntimeJobSnapshot("model", "Model", false, "Failed", false, "  Model failed  ");
         var runtimeFailure = new BackgroundRuntimeJobSnapshot("runtime", "Runtime", false, "Failed", false, "Runtime failed");
 
         var result = RuntimeJobFailureResolver.GetFailureMessage(modelFailure, runtimeFailure);
@@ -36,5 +36,28 @@ public sealed class RuntimeJobFailureResolverTests
         var result = RuntimeJobFailureResolver.GetFailureMessage(incomplete, running);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public void GetFailureDiagnosticMessage_IncludesContextAndFullDetails()
+    {
+        var modelFailure = new BackgroundRuntimeJobSnapshot(
+            "model",
+            "Sticker model",
+            false,
+            "Failed. Retry from Settings.",
+            false,
+            "pip failed\nline two");
+
+        var result = RuntimeJobFailureResolver.GetFailureDiagnosticMessage(modelFailure);
+
+        Assert.Equal(
+            string.Join(
+                Environment.NewLine,
+                "Sticker model failed",
+                "Status: Failed. Retry from Settings.",
+                "Details:",
+                "pip failed\nline two"),
+            result);
     }
 }

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
@@ -13,6 +14,8 @@ public partial class SettingsWindow : Window
 {
     private const string OpenSourceLocalTranslationJobKey = "runtime:translation-open-source-local";
     private const string ArgosTranslationJobKey = "runtime:translation-argos";
+    private const int UpdateActionCooldownMs = 900;
+    private const int LocalEngineProjectOpenCooldownMs = 900;
     private static readonly (string Token, string Label)[] FileNameTokens =
     [
         ("{year}", "Year"),
@@ -67,6 +70,34 @@ public partial class SettingsWindow : Window
     private int _historyTabLoadVersion;
     private bool _historyTabLoadScheduled;
     private bool _historyTabLoadPreserveTransientState;
+    private bool _testUploadInProgress;
+    private bool _aiRedirectTestInProgress;
+    private bool _suppressUploadDestChange;
+    private bool _suppressUploadFieldChange;
+    private bool _suppressAutoUploadChange;
+    private bool _suppressAiRedirectProviderChange;
+    private bool _suppressAiRedirectLensUploadDestChange;
+    private bool _suppressAiRedirectLensUploadSyncChange;
+    private bool _suppressCaptureSavePreferenceChange;
+    private bool _suppressToastPreferenceChange;
+    private bool _suppressGeneralPreferenceChange;
+    private bool _suppressRecordingPreferenceChange;
+    private bool _suppressHistoryPreferenceChange;
+    private bool _suppressUpdatePreferenceChange;
+    private bool _suppressOcrPreferenceChange;
+    private bool _updateActionInProgress;
+    private bool ImageIndexResetInProgress { get; set; }
+    private bool _stickerProjectOpenInProgress;
+    private bool _upscaleProjectOpenInProgress;
+    private bool _stickerModelRemovalInProgress;
+    private bool _upscaleModelRemovalInProgress;
+    private bool _stickerRuntimeMutationInProgress;
+    private bool _upscaleRuntimeMutationInProgress;
+    private bool _suppressStickerSettingChange;
+    private bool _suppressUpscaleSettingChange;
+    private bool _openSourceTranslationRuntimeActionInProgress;
+    private bool _argosTranslationRuntimeActionInProgress;
+    private bool _suppressStartWithWindowsChange;
 
     public event Action? HotkeyChanged;
     public event Action? UninstallRequested;
@@ -85,6 +116,7 @@ public partial class SettingsWindow : Window
         LoadStaticFluentIcons();
         LoadFileNameTokenButtons();
         LoadSettings();
+        Loaded += (_, _) => EnsureSettingsWindowFitsWorkArea();
         Loaded += (_, _) => ApplyMicaBackdrop();
         Loaded += async (_, _) => await RefreshUpdateStatusAsync(false);
         ContentRendered += (_, _) => TryProcessPendingTrayHistoryOpen();
@@ -126,7 +158,31 @@ public partial class SettingsWindow : Window
         };
     }
 
-    private void BackgroundRuntimeJobService_Changed(string key)
+    private void EnsureSettingsWindowFitsWorkArea()
+    {
+        var workArea = SystemParameters.WorkArea;
+        const double screenMargin = 12d;
+        var maxWidth = Math.Max(360d, workArea.Width - screenMargin * 2d);
+        var maxHeight = Math.Max(360d, workArea.Height - screenMargin * 2d);
+
+        MinWidth = Math.Min(MinWidth, maxWidth);
+        MinHeight = Math.Min(MinHeight, maxHeight);
+
+        if (Width > maxWidth)
+            Width = maxWidth;
+        if (Height > maxHeight)
+            Height = maxHeight;
+
+        var minLeft = workArea.Left + screenMargin;
+        var minTop = workArea.Top + screenMargin;
+        var maxLeft = workArea.Right - Width - screenMargin;
+        var maxTop = workArea.Bottom - Height - screenMargin;
+
+        Left = Math.Min(Math.Max(Left, minLeft), Math.Max(minLeft, maxLeft));
+        Top = Math.Min(Math.Max(Top, minTop), Math.Max(minTop, maxTop));
+    }
+
+    private async void BackgroundRuntimeJobService_Changed(string key)
     {
         if (!Dispatcher.CheckAccess())
         {
@@ -140,14 +196,63 @@ public partial class SettingsWindow : Window
         try
         {
             if (_ocrTabLoaded)
-                _ = CheckModelStatusAsync();
+                await CheckModelStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.background-runtime-ocr-changed", ex);
+            SetTranslationRuntimeStatusRefreshFailed(ex.Message);
+        }
+
+        try
+        {
             UpdateLocalEngineUi();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.background-runtime-sticker-changed", ex);
+            SetStickerRuntimeStatusRefreshFailed(ex.Message);
+        }
+
+        try
+        {
             UpdateUpscaleLocalEngineUi();
         }
         catch (Exception ex)
         {
-            AppDiagnostics.LogError("settings.background-runtime-changed", ex);
+            AppDiagnostics.LogError("settings.background-runtime-upscale-changed", ex);
+            SetUpscaleRuntimeStatusRefreshFailed(ex.Message);
         }
+    }
+
+    private void SetStickerRuntimeStatusRefreshFailed(string message)
+    {
+        StickerLocalEngineStatusText.Text = "Runtime status refresh failed";
+        StickerLocalEngineProgress.Visibility = Visibility.Collapsed;
+        StickerLocalEngineProgress.IsIndeterminate = false;
+        StickerLocalEngineProgress.Value = 0;
+        StickerLocalEngineProgressText.Visibility = Visibility.Visible;
+        StickerLocalEngineProgressText.Text = BuildRuntimeRefreshFailureDetail("Settings -> Stickers", message);
+        SetLoadingTextShimmer(StickerLocalEngineStatusText, false, 1.0, 0.35);
+        SetLoadingTextShimmer(StickerLocalEngineProgressText, false, 0.9, 0.25);
+    }
+
+    private void SetUpscaleRuntimeStatusRefreshFailed(string message)
+    {
+        UpscaleLocalEngineStatusText.Text = "Runtime status refresh failed";
+        UpscaleLocalEngineProgress.Visibility = Visibility.Collapsed;
+        UpscaleLocalEngineProgress.IsIndeterminate = false;
+        UpscaleLocalEngineProgress.Value = 0;
+        UpscaleLocalEngineProgressText.Visibility = Visibility.Visible;
+        UpscaleLocalEngineProgressText.Text = BuildRuntimeRefreshFailureDetail("Settings -> Upscale", message);
+        SetLoadingTextShimmer(UpscaleLocalEngineStatusText, false, 1.0, 0.35);
+        SetLoadingTextShimmer(UpscaleLocalEngineProgressText, false, 0.9, 0.25);
+    }
+
+    private static string BuildRuntimeRefreshFailureDetail(string settingsPanel, string message)
+    {
+        var recovery = "Check " + settingsPanel + " and try again.";
+        return string.IsNullOrWhiteSpace(message) ? recovery : recovery + " Details were logged.";
     }
 
     private static string GetStickerRuntimeJobKey(StickerExecutionProvider provider)
@@ -206,11 +311,24 @@ public partial class SettingsWindow : Window
 
     private void HistoryService_Changed()
     {
-        Dispatcher.BeginInvoke(() =>
+        _ = Dispatcher.BeginInvoke(() =>
         {
-            InvalidateHistoryCategoryCaches();
-            _pendingHistoryDataRefresh = true;
-            QueueHistoryRefresh(reloadFromDisk: false);
+            try
+            {
+                InvalidateHistoryCategoryCaches();
+                _pendingHistoryDataRefresh = true;
+                QueueHistoryRefresh(reloadFromDisk: false);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError("settings.history-service-changed", ex);
+                _pendingHistoryDataRefresh = false;
+                _pendingHistoryUiRefresh = false;
+                _pendingHistoryDiskRefresh = false;
+                _historyRefreshTimer.Stop();
+                if (IsLoaded && HistoryTab.IsChecked == true)
+                    ShowHistoryEmptyState("Couldn't refresh history", "Retry loading history. If it still fails, check the app log.", showRetry: true);
+            }
         }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
@@ -229,6 +347,7 @@ public partial class SettingsWindow : Window
             {
                 AppDiagnostics.LogError("settings.image-search-index-changed", ex);
                 SetImageSearchLoading(false, forceIndexed: true);
+                HistorySearchStatusText.Text = "Search failed";
             }
         });
     }
@@ -250,6 +369,7 @@ public partial class SettingsWindow : Window
             {
                 AppDiagnostics.LogError("settings.image-search-status", ex);
                 SetImageSearchLoading(false, forceIndexed: true);
+                HistorySearchStatusText.Text = "Search failed";
             }
         });
     }
@@ -475,52 +595,108 @@ public partial class SettingsWindow : Window
 
     private void AfterCaptureCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.AfterCapture = AfterCaptureCombo.SelectedIndex switch
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.AfterCapture;
+        var selected = AfterCaptureCombo.SelectedIndex switch
         {
             0 => AfterCaptureAction.CopyToClipboard,
             2 => AfterCaptureAction.PreviewOnly,
             _ => AfterCaptureAction.PreviewAndCopy
         };
-        _settingsService.Save();
+
+        UpdateCaptureSavePreference(
+            "settings.after-capture",
+            "After capture",
+            previous,
+            selected,
+            value => _settingsService.Settings.AfterCapture = value,
+            value => AfterCaptureCombo.SelectedIndex = value switch
+            {
+                AfterCaptureAction.CopyToClipboard => 0,
+                AfterCaptureAction.PreviewOnly => 2,
+                _ => 1
+            });
     }
 
     private void DefaultCaptureModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.DefaultCaptureMode = DefaultCaptureModeCombo.SelectedIndex switch
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.DefaultCaptureMode;
+        var selected = DefaultCaptureModeCombo.SelectedIndex switch
         {
             1 => CaptureMode.Center,
             2 => CaptureMode.Freeform,
             _ => CaptureMode.Rectangle
         };
-        _settingsService.Save();
-        HotkeyChanged?.Invoke();
+
+        UpdateCaptureSavePreference(
+            "settings.default-capture-mode",
+            "Default capture tool",
+            previous,
+            selected,
+            value => _settingsService.Settings.DefaultCaptureMode = value,
+            value => DefaultCaptureModeCombo.SelectedIndex = value switch
+            {
+                CaptureMode.Center => 1,
+                CaptureMode.Freeform => 2,
+                _ => 0
+            },
+            notifyHotkeyChanged: true);
     }
 
     private void CenterAspectRatioCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.CenterSelectionAspectRatio;
         var selectedIndex = Math.Clamp(CenterAspectRatioCombo.SelectedIndex, 0, 5);
-        CenterAspectRatioCombo.SelectedIndex = selectedIndex;
-        _settingsService.Settings.CenterSelectionAspectRatio = (CenterSelectionAspectRatio)selectedIndex;
-        _settingsService.Save();
+        var selected = (CenterSelectionAspectRatio)selectedIndex;
+
+        UpdateCaptureSavePreference(
+            "settings.center-aspect-ratio",
+            "Center aspect ratio",
+            previous,
+            selected,
+            value => _settingsService.Settings.CenterSelectionAspectRatio = value,
+            value => CenterAspectRatioCombo.SelectedIndex = (int)value,
+            () => CenterAspectRatioCombo.SelectedIndex = selectedIndex);
     }
 
     private void SaveToFileCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        bool on = SaveToFileCheck.IsChecked == true;
-        _settingsService.Settings.SaveToFile = on;
-        SaveDirPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        _settingsService.Save();
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.SaveToFile;
+        var selected = SaveToFileCheck.IsChecked == true;
+        UpdateCaptureSavePreference(
+            "settings.save-to-file",
+            "Save screenshots",
+            previous,
+            selected,
+            value => _settingsService.Settings.SaveToFile = value,
+            value =>
+            {
+                SaveToFileCheck.IsChecked = value;
+                SaveDirPanel.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            },
+            () => SaveDirPanel.Visibility = selected ? Visibility.Visible : Visibility.Collapsed);
     }
 
     private void AskFileNameCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.AskForFileNameOnSave = AskFileNameCheck.IsChecked == true;
-        _settingsService.Save();
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.AskForFileNameOnSave;
+        var selected = AskFileNameCheck.IsChecked == true;
+        UpdateCaptureSavePreference(
+            "settings.ask-file-name",
+            "Ask for file name",
+            previous,
+            selected,
+            value => _settingsService.Settings.AskForFileNameOnSave = value,
+            value => AskFileNameCheck.IsChecked = value);
     }
 
     private void LoadFileNameTemplate(string currentTemplate)
@@ -529,13 +705,109 @@ public partial class SettingsWindow : Window
         UpdateFileNameTemplatePreview(currentTemplate);
     }
 
+    private void SetSaveDirectoryPath(string path)
+    {
+        var value = string.IsNullOrWhiteSpace(path) ? "" : path;
+        SaveDirBox.Text = value;
+        AutomationProperties.SetHelpText(
+            SaveDirBox,
+            string.IsNullOrWhiteSpace(value)
+                ? "No save folder selected."
+                : $"Current save folder: {value}");
+    }
+
     private void FileNameTemplateBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.FileNameTemplate;
         var template = FileNameTemplateBox.Text;
-        _settingsService.Settings.FileNameTemplate = template;
-        UpdateFileNameTemplatePreview(template);
-        _settingsService.Save();
+        UpdateCaptureSavePreference(
+            "settings.file-name-template",
+            "File name pattern",
+            previous,
+            template,
+            value => _settingsService.Settings.FileNameTemplate = value,
+            value =>
+            {
+                FileNameTemplateBox.Text = value;
+                UpdateFileNameTemplatePreview(value);
+            },
+            () => UpdateFileNameTemplatePreview(template));
+    }
+
+    private void UpdateCaptureSavePreference<T>(
+        string diagnosticKey,
+        string label,
+        T previous,
+        T current,
+        Action<T> setValue,
+        Action<T> restoreUi,
+        Action? applyCurrentUi = null,
+        bool notifyHotkeyChanged = false)
+    {
+        try
+        {
+            setValue(current);
+            if (applyCurrentUi != null)
+            {
+                _suppressCaptureSavePreferenceChange = true;
+                try
+                {
+                    applyCurrentUi();
+                }
+                finally
+                {
+                    _suppressCaptureSavePreferenceChange = false;
+                }
+            }
+
+            _settingsService.Save();
+            SetCaptureSavePreferenceStatus(string.Empty);
+            if (notifyHotkeyChanged)
+                HotkeyChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError(diagnosticKey, ex);
+            setValue(previous);
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError($"{diagnosticKey}-rollback", rollbackEx);
+            }
+
+            _suppressCaptureSavePreferenceChange = true;
+            try
+            {
+                restoreUi(previous);
+            }
+            finally
+            {
+                _suppressCaptureSavePreferenceChange = false;
+            }
+
+            ShowCaptureSavePreferenceFailed(label, ex);
+        }
+    }
+
+    private void ShowCaptureSavePreferenceFailed(string label, Exception ex)
+    {
+        SetCaptureSavePreferenceStatus($"{label} change was not saved. Previous setting restored.");
+        ToastWindow.ShowError(
+            $"{label} failed",
+            $"The previous capture setting was restored. Check Settings -> Capture and try again.\n{ex.Message}");
+    }
+
+    private void SetCaptureSavePreferenceStatus(string message)
+    {
+        CaptureSavePreferenceStatusText.Text = message;
+        CaptureSavePreferenceStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void UpdateFileNameTemplatePreview(string template)
@@ -554,12 +826,16 @@ public partial class SettingsWindow : Window
             var button = new System.Windows.Controls.Button
             {
                 Content = token,
-                ToolTip = label,
+                ToolTip = $"Insert {label} token",
                 FontSize = 11,
-                Padding = new Thickness(8, 3, 8, 3),
+                MinHeight = 28,
+                Padding = new Thickness(9, 4, 9, 4),
                 Margin = new Thickness(0, 0, 6, 6),
-                Tag = token
+                Tag = token,
+                Cursor = System.Windows.Input.Cursors.Hand
             };
+            AutomationProperties.SetName(button, $"Insert {label} token");
+            AutomationProperties.SetHelpText(button, token);
             button.Click += FileNameTokenButton_Click;
             FileNameTokenPanel.Children.Add(button);
         }
@@ -637,9 +913,17 @@ public partial class SettingsWindow : Window
 
     private void MonthlyFoldersCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.SaveInMonthlyFolders = MonthlyFoldersCheck.IsChecked == true;
-        _settingsService.Save();
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.SaveInMonthlyFolders;
+        var selected = MonthlyFoldersCheck.IsChecked == true;
+        UpdateCaptureSavePreference(
+            "settings.monthly-folders",
+            "Monthly folders",
+            previous,
+            selected,
+            value => _settingsService.Settings.SaveInMonthlyFolders = value,
+            value => MonthlyFoldersCheck.IsChecked = value);
     }
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
@@ -652,57 +936,237 @@ public partial class SettingsWindow : Window
         };
         if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
         {
-            _settingsService.Settings.SaveDirectory = dlg.SelectedPath;
-            SaveDirBox.Text = dlg.SelectedPath;
-            _settingsService.Save();
+            var previous = _settingsService.Settings.SaveDirectory;
+            var selectedPath = dlg.SelectedPath;
+            UpdateCaptureSavePreference(
+                "settings.save-directory",
+                "Save folder",
+                previous,
+                selectedPath,
+                value => _settingsService.Settings.SaveDirectory = value,
+                SetSaveDirectoryPath,
+                () => SetSaveDirectoryPath(selectedPath));
         }
     }
 
     private void StartWithWindowsCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressStartWithWindowsChange) return;
         bool on = StartWithWindowsCheck.IsChecked == true;
-        _settingsService.Settings.StartWithWindows = on;
-        _settingsService.Save();
-        const string rk = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(rk, true);
-        if (key is null) return;
-        if (on) { var exe = Environment.ProcessPath; if (exe != null) key.SetValue("OddSnap", $"\"{exe}\""); }
-        else key.DeleteValue("OddSnap", false);
+        bool previous = _settingsService.Settings.StartWithWindows;
+
+        try
+        {
+            UninstallService.SetStartupEntry(on);
+            _settingsService.Settings.StartWithWindows = on;
+            _settingsService.Save();
+            SetStartupPreferenceStatus(string.Empty);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.start-with-windows", ex);
+            try
+            {
+                UninstallService.SetStartupEntry(previous);
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.start-with-windows-rollback", rollbackEx);
+            }
+
+            _settingsService.Settings.StartWithWindows = previous;
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError("settings.start-with-windows-save-rollback", rollbackEx);
+            }
+
+            _suppressStartWithWindowsChange = true;
+            try
+            {
+                StartWithWindowsCheck.IsChecked = previous;
+            }
+            finally
+            {
+                _suppressStartWithWindowsChange = false;
+            }
+
+            ShowStartupPreferenceFailed(ex);
+        }
+    }
+
+    private void ShowStartupPreferenceFailed(Exception ex)
+    {
+        SetStartupPreferenceStatus("Startup setting change was not saved. Previous setting restored.");
+        ToastWindow.ShowError(
+            "Startup setting failed",
+            $"The previous startup setting was restored. Check Settings -> About and try again.\n{ex.Message}");
     }
 
     private void AutoUpdateCheck_Changed(object sender, RoutedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.AutoCheckForUpdates = AutoUpdateCheck.IsChecked == true;
-        _settingsService.Save();
+        if (!IsLoaded || _suppressUpdatePreferenceChange) return;
+
+        var previous = _settingsService.Settings.AutoCheckForUpdates;
+        var selected = AutoUpdateCheck.IsChecked == true;
+        UpdateUpdatePreference(
+            "settings.auto-update",
+            "Auto update checks",
+            previous,
+            selected,
+            value => _settingsService.Settings.AutoCheckForUpdates = value,
+            value => AutoUpdateCheck.IsChecked = value);
+    }
+
+    private void UpdateUpdatePreference<T>(
+        string diagnosticKey,
+        string label,
+        T previous,
+        T current,
+        Action<T> setValue,
+        Action<T> restoreUi)
+    {
+        try
+        {
+            setValue(current);
+            _settingsService.Save();
+            SetUpdatePreferenceStatus(string.Empty);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError(diagnosticKey, ex);
+            setValue(previous);
+            try
+            {
+                _settingsService.Save();
+            }
+            catch (Exception rollbackEx)
+            {
+                AppDiagnostics.LogError($"{diagnosticKey}-rollback", rollbackEx);
+            }
+
+            _suppressUpdatePreferenceChange = true;
+            try
+            {
+                restoreUi(previous);
+            }
+            finally
+            {
+                _suppressUpdatePreferenceChange = false;
+            }
+
+            ShowUpdatePreferenceFailed(label, ex);
+        }
+    }
+
+    private void ShowUpdatePreferenceFailed(string label, Exception ex)
+    {
+        SetUpdatePreferenceStatus($"{label} change was not saved. Previous setting restored.");
+        ToastWindow.ShowError(
+            $"{label} failed",
+            $"The previous update setting was restored. Check Settings -> About and try again.\n{ex.Message}");
+    }
+
+    private void SetUpdatePreferenceStatus(string message)
+    {
+        AboutPreferenceStatusText.Text = message;
+        AboutPreferenceStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private void SetStartupPreferenceStatus(string message)
+    {
+        StartupPreferenceStatusText.Text = message;
+        StartupPreferenceStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void CaptureFormatCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        _settingsService.Settings.CaptureImageFormat = (CaptureImageFormat)CaptureFormatCombo.SelectedIndex;
-        _settingsService.Save();
-        _historyService.CaptureImageFormat = _settingsService.Settings.CaptureImageFormat;
-        UpdateCaptureFormatControls();
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.CaptureImageFormat;
+        var selected = (CaptureImageFormat)CaptureFormatCombo.SelectedIndex;
+        UpdateCaptureSavePreference(
+            "settings.capture-format",
+            "Capture format",
+            previous,
+            selected,
+            value => _settingsService.Settings.CaptureImageFormat = value,
+            value =>
+            {
+                CaptureFormatCombo.SelectedIndex = (int)value;
+                _historyService.CaptureImageFormat = value;
+                UpdateCaptureFormatControls();
+            },
+            () =>
+            {
+                _historyService.CaptureImageFormat = selected;
+                UpdateCaptureFormatControls();
+            });
     }
 
     private void JpegQualityCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
         var selected = JpegQualityCombo.SelectedItem as ComboBoxItem;
         var tag = selected?.Tag?.ToString();
-        _settingsService.Settings.JpegQuality = int.TryParse(tag, out var value) ? value : 85;
-        _settingsService.Save();
-        _historyService.JpegQuality = _settingsService.Settings.JpegQuality;
+        var quality = int.TryParse(tag, out var value) ? value : 85;
+        var previous = _settingsService.Settings.JpegQuality;
+        var selectedIndex = JpegQualityCombo.SelectedIndex;
+        UpdateCaptureSavePreference(
+            "settings.jpeg-quality",
+            "JPG quality",
+            previous,
+            quality,
+            value => _settingsService.Settings.JpegQuality = value,
+            value =>
+            {
+                JpegQualityCombo.SelectedIndex = value switch
+                {
+                    >= 95 => 0,
+                    >= 90 => 1,
+                    >= 85 => 2,
+                    >= 75 => 3,
+                    _ => 4
+                };
+                _historyService.JpegQuality = value;
+            },
+            () =>
+            {
+                JpegQualityCombo.SelectedIndex = selectedIndex;
+                _historyService.JpegQuality = quality;
+            });
     }
 
     private void CaptureSizeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
         var selected = CaptureSizeCombo.SelectedItem as ComboBoxItem;
         var tag = selected?.Tag?.ToString();
-        _settingsService.Settings.CaptureMaxLongEdge = int.TryParse(tag, out var value) ? value : 0;
-        _settingsService.Save();
+        var maxLongEdge = int.TryParse(tag, out var value) ? value : 0;
+        var previous = _settingsService.Settings.CaptureMaxLongEdge;
+        var selectedIndex = CaptureSizeCombo.SelectedIndex;
+        UpdateCaptureSavePreference(
+            "settings.capture-size",
+            "Max image size",
+            previous,
+            maxLongEdge,
+            value => _settingsService.Settings.CaptureMaxLongEdge = value,
+            value => CaptureSizeCombo.SelectedIndex = value switch
+            {
+                2160 => 1,
+                1440 => 2,
+                1080 => 3,
+                720 => 4,
+                480 => 5,
+                _ => 0
+            },
+            () => CaptureSizeCombo.SelectedIndex = selectedIndex);
     }
 }

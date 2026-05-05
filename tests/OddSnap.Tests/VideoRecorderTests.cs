@@ -127,6 +127,26 @@ public sealed class VideoRecorderTests
         Assert.Equal(source.Size, second!.Size);
     }
 
+    [Fact]
+    public void TemporaryRecordingCleanupFailuresAreLogged()
+    {
+        var source = File.ReadAllText(RepoPath("src", "OddSnap", "Capture", "VideoRecorder.cs"));
+
+        Assert.Contains("private static void TryDeleteRecordingTempFile(string? path, string context)", source);
+        Assert.Contains("\"recording.temp-cleanup\"", source);
+        Assert.Contains("TryDeleteRecordingTempFile(tempOut, \"failed mux output\");", source);
+        Assert.Contains("TryDeleteRecordingTempFile(tempOut, \"mux exception output\");", source);
+        Assert.Contains("TryDeleteRecordingTempFile(f, \"audio capture\");", source);
+        Assert.Contains("TryDeleteRecordingTempFile(_micWavPath, \"discarded mic audio\");", source);
+        Assert.Contains("TryDeleteRecordingTempFile(_desktopWavPath, \"discarded desktop audio\");", source);
+        Assert.Contains("TryDeleteRecordingTempFile(tempOut, \"failed repair output\");", source);
+        Assert.Contains("TryDeleteRecordingTempFile(tempOut, \"repair exception output\");", source);
+        Assert.DoesNotContain("try { File.Delete(tempOut); } catch { }", source);
+        Assert.DoesNotContain("try { File.Delete(f); } catch { }", source);
+        Assert.DoesNotContain("if (_micWavPath != null) try { File.Delete(_micWavPath); } catch { }", source);
+        Assert.DoesNotContain("if (_desktopWavPath != null) try { File.Delete(_desktopWavPath); } catch { }", source);
+    }
+
     private static string InvokeBuildMuxArguments(
         string videoPath,
         IReadOnlyList<string> audioFiles,
@@ -153,5 +173,20 @@ public sealed class VideoRecorderTests
         var field = typeof(VideoRecorder).GetField("_firstFramePreview", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(field);
         field!.SetValue(recorder, new System.Drawing.Bitmap(bitmap));
+    }
+
+    private static string RepoPath(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find repo file: {Path.Combine(parts)}");
     }
 }

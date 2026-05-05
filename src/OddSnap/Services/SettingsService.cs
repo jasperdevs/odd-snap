@@ -179,7 +179,7 @@ public sealed class SettingsService : IDisposable
 
     private bool TryWriteSettingsFallback_NoLock(string tmpPath, string json, string initialError, string errorKind)
     {
-        try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+        TryDeleteSettingsTempFile_NoLock(tmpPath, "fallback");
         try
         {
             File.WriteAllText(_settingsPath, json);
@@ -191,6 +191,22 @@ public sealed class SettingsService : IDisposable
             AppDiagnostics.LogError("settings.save", fallbackEx, message);
             NotifySaveFailed(fallbackEx.Message);
             return false;
+        }
+    }
+
+    private static void TryDeleteSettingsTempFile_NoLock(string tmpPath, string context)
+    {
+        try
+        {
+            if (File.Exists(tmpPath))
+                File.Delete(tmpPath);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "settings.temp-cleanup",
+                $"Failed to delete {context} temporary settings file {Path.GetFileName(tmpPath)}: {ex.Message}",
+                ex);
         }
     }
 
@@ -280,8 +296,7 @@ public sealed class SettingsService : IDisposable
         settings.ImageSearchSources &= ImageSearchSourceOptions.All;
         settings.UiScale = OddSnap.UI.UiScale.Normalize(settings.UiScale);
         settings.InterfaceLanguage = LocalizationService.NormalizeLanguageSetting(settings.InterfaceLanguage);
-        if (!Enum.IsDefined(settings.ScrollingCaptureMode))
-            settings.ScrollingCaptureMode = ScrollingCaptureMode.Automatic;
+        NormalizeEnums(settings);
         settings.OcrDefaultTranslateFrom = TranslationService.ResolveSourceLanguage(settings.OcrDefaultTranslateFrom);
         settings.OcrDefaultTranslateTo = NormalizeTranslationTargetSetting(settings.OcrDefaultTranslateTo);
 
@@ -331,6 +346,43 @@ public sealed class SettingsService : IDisposable
 
         return settings;
     }
+
+    private static void NormalizeEnums(AppSettings settings)
+    {
+        settings.AfterCapture = NormalizeEnum(settings.AfterCapture, AfterCaptureAction.PreviewAndCopy);
+        settings.CaptureImageFormat = NormalizeEnum(settings.CaptureImageFormat, CaptureImageFormat.Png);
+        settings.LastCaptureMode = NormalizeEnum(settings.LastCaptureMode, CaptureMode.Rectangle);
+        settings.DefaultCaptureMode = NormalizeEnum(settings.DefaultCaptureMode, CaptureMode.Rectangle);
+        settings.WindowDetection = NormalizeEnum(settings.WindowDetection, WindowDetectionMode.WindowOnly);
+        settings.CaptureDockSide = NormalizeEnum(settings.CaptureDockSide, CaptureDockSide.Top);
+        settings.ScrollingCaptureMode = NormalizeEnum(settings.ScrollingCaptureMode, ScrollingCaptureMode.Automatic);
+        settings.HistoryRetention = NormalizeEnum(settings.HistoryRetention, HistoryRetentionPeriod.Never);
+        settings.ToastPosition = NormalizeEnum(settings.ToastPosition, ToastPosition.Right);
+        settings.SoundPack = NormalizeEnum(settings.SoundPack, SoundPack.Default);
+        settings.RecordingFormat = NormalizeEnum(settings.RecordingFormat, RecordingFormat.MP4);
+        settings.RecordingQuality = NormalizeEnum(settings.RecordingQuality, RecordingQuality.Original);
+        settings.CenterSelectionAspectRatio = NormalizeEnum(settings.CenterSelectionAspectRatio, CenterSelectionAspectRatio.Free);
+        settings.ImageUploadDestination = NormalizeEnum(settings.ImageUploadDestination, UploadDestination.None);
+
+        settings.ImageUploadSettings.AiChatProvider = NormalizeEnum(settings.ImageUploadSettings.AiChatProvider, AiChatProvider.GoogleLens);
+        settings.ImageUploadSettings.AiChatUploadDestination = NormalizeEnum(settings.ImageUploadSettings.AiChatUploadDestination, UploadDestination.TempHosts);
+
+        settings.StickerUploadSettings.Provider = NormalizeEnum(settings.StickerUploadSettings.Provider, StickerProvider.LocalCpu);
+        settings.StickerUploadSettings.LocalEngine = NormalizeEnum(settings.StickerUploadSettings.LocalEngine, LocalStickerEngine.U2Netp);
+        settings.StickerUploadSettings.LocalCpuEngine = NormalizeEnum(settings.StickerUploadSettings.LocalCpuEngine, LocalStickerEngine.U2Netp);
+        settings.StickerUploadSettings.LocalGpuEngine = NormalizeEnum(settings.StickerUploadSettings.LocalGpuEngine, LocalStickerEngine.BiRefNetLite);
+        settings.StickerUploadSettings.LocalExecutionProvider = NormalizeEnum(settings.StickerUploadSettings.LocalExecutionProvider, StickerExecutionProvider.Cpu);
+
+        settings.UpscaleUploadSettings.Provider = NormalizeEnum(settings.UpscaleUploadSettings.Provider, UpscaleProvider.Local);
+        settings.UpscaleUploadSettings.LocalEngine = NormalizeEnum(settings.UpscaleUploadSettings.LocalEngine, LocalUpscaleEngine.SwinIrRealWorld);
+        settings.UpscaleUploadSettings.LocalCpuEngine = NormalizeEnum(settings.UpscaleUploadSettings.LocalCpuEngine, LocalUpscaleEngine.SwinIrRealWorld);
+        settings.UpscaleUploadSettings.LocalGpuEngine = NormalizeEnum(settings.UpscaleUploadSettings.LocalGpuEngine, LocalUpscaleEngine.RealEsrganX4Plus);
+        settings.UpscaleUploadSettings.LocalExecutionProvider = NormalizeEnum(settings.UpscaleUploadSettings.LocalExecutionProvider, UpscaleExecutionProvider.Cpu);
+    }
+
+    private static TEnum NormalizeEnum<TEnum>(TEnum value, TEnum fallback)
+        where TEnum : struct, Enum =>
+        Enum.IsDefined(typeof(TEnum), value) ? value : fallback;
 
     private static void NormalizeUnsafeModifierlessHotkeys(AppSettings settings)
     {

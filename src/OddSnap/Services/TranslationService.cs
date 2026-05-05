@@ -158,11 +158,21 @@ public static class TranslationService
     public static async Task UninstallAsync(IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
         progress?.Report("Uninstalling Argos Translate...");
-        await RunPythonAsync(new[]
+        var result = await RunPythonAsync(new[]
         {
             PythonLauncherArg, "-m", "pip", "uninstall", "-y", "argostranslate"
         }, cancellationToken).ConfigureAwait(false);
-        TryDeleteArgosMarker();
+
+        if (result.ExitCode != 0)
+        {
+            var message = ProcessRunner.GetFailureMessage(result, "Couldn't uninstall Argos Translate.");
+            AppDiagnostics.LogWarning("translation.argos.uninstall", message);
+            throw new InvalidOperationException(message);
+        }
+
+        if (!TryDeleteArgosMarker())
+            throw new InvalidOperationException("Argos Translate was uninstalled, but OddSnap couldn't clear its local install marker.");
+
         UpdateArgosProbeCache(false, "Not installed");
     }
 
@@ -482,16 +492,18 @@ print(translated)
         }
     }
 
-    private static void TryDeleteArgosMarker()
+    private static bool TryDeleteArgosMarker()
     {
         try
         {
             if (File.Exists(ArgosMarkerPath))
                 File.Delete(ArgosMarkerPath);
+            return true;
         }
         catch (Exception ex)
         {
             AppDiagnostics.LogWarning("translation.argos.marker-delete", ex.Message, ex);
+            return false;
         }
     }
 }

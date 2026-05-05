@@ -185,7 +185,7 @@ public static class TessdataService
         // Clean up any stale temp files from previous failed downloads
         foreach (var tmp in Directory.GetFiles(dir, "*.tmp"))
         {
-            try { File.Delete(tmp); } catch { }
+            TryDeleteTessdataTempFile(tmp, "stale OCR language download");
         }
 
         if (File.Exists(targetPath))
@@ -217,8 +217,24 @@ public static class TessdataService
         }
         catch
         {
-            try { File.Delete(tempPath); } catch { }
+            TryDeleteTessdataTempFile(tempPath, "failed OCR language download");
             throw;
+        }
+    }
+
+    private static void TryDeleteTessdataTempFile(string path, string context)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "ocr.tessdata.temp-cleanup",
+                $"Failed to delete {context} temporary file {Path.GetFileName(path)}: {ex.Message}",
+                ex);
         }
     }
 
@@ -275,7 +291,13 @@ public static class TessdataService
                 progress?.Report($"Setting up OCR: downloading {code}...");
                 await DownloadLanguageAsync(code, progress).ConfigureAwait(false);
             }
-            catch { /* non-fatal — continue with other languages */ }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "ocr.tessdata.system-language",
+                    $"Failed to download detected OCR language {code}: {ex.Message}",
+                    ex);
+            }
         }
 
         OcrService.GetAvailableRecognizerLanguages(refresh: true);
@@ -290,6 +312,13 @@ public static class TessdataService
             if (File.Exists(path)) File.Delete(path);
             return true;
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "ocr.tessdata.language-remove",
+                $"Failed to remove OCR language {code}: {ex.Message}",
+                ex);
+            return false;
+        }
     }
 }

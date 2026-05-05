@@ -37,7 +37,11 @@ internal static class DxgiScreenCapture
                 using var graphics = Graphics.FromImage(result);
                 graphics.Clear(Color.Transparent);
 
-                foreach (var output in deviceBundle.GetOutputs())
+                var outputs = deviceBundle.GetOutputs();
+                if (!IsRegionFullyCoveredByOutputs(region, outputs.Select(output => ToRectangle(output.Description.DesktopCoordinates))))
+                    throw new InvalidOperationException("DXGI capture outputs do not cover the requested screen region.");
+
+                foreach (var output in outputs)
                 {
                     var outputBounds = ToRectangle(output.Description.DesktopCoordinates);
                     var overlap = Rectangle.Intersect(region, outputBounds);
@@ -219,6 +223,50 @@ internal static class DxgiScreenCapture
     }
 
     private static Rectangle ToRectangle(Vortice.RawRect rect) => rect;
+
+    internal static bool IsRegionFullyCoveredByOutputs(Rectangle region, IEnumerable<Rectangle> outputBounds)
+    {
+        if (region.Width <= 0 || region.Height <= 0)
+            return false;
+
+        var remaining = new List<Rectangle> { region };
+        foreach (var output in outputBounds)
+        {
+            if (output.Width <= 0 || output.Height <= 0)
+                continue;
+
+            for (int index = remaining.Count - 1; index >= 0; index--)
+            {
+                var uncovered = remaining[index];
+                var overlap = Rectangle.Intersect(uncovered, output);
+                if (overlap.Width <= 0 || overlap.Height <= 0)
+                    continue;
+
+                remaining.RemoveAt(index);
+                AddRemainderPieces(remaining, uncovered, overlap);
+            }
+
+            if (remaining.Count == 0)
+                return true;
+        }
+
+        return remaining.Count == 0;
+    }
+
+    private static void AddRemainderPieces(List<Rectangle> remaining, Rectangle source, Rectangle covered)
+    {
+        if (covered.Top > source.Top)
+            remaining.Add(new Rectangle(source.Left, source.Top, source.Width, covered.Top - source.Top));
+
+        if (covered.Bottom < source.Bottom)
+            remaining.Add(new Rectangle(source.Left, covered.Bottom, source.Width, source.Bottom - covered.Bottom));
+
+        if (covered.Left > source.Left)
+            remaining.Add(new Rectangle(source.Left, covered.Top, covered.Left - source.Left, covered.Height));
+
+        if (covered.Right < source.Right)
+            remaining.Add(new Rectangle(covered.Right, covered.Top, source.Right - covered.Right, covered.Height));
+    }
 
     private sealed class DeviceBundle : IDisposable
     {
