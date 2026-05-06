@@ -67,11 +67,14 @@ pub struct WindowsPlatform;
 #[cfg(target_os = "windows")]
 const CAPTURE_HOTKEY_ID: i32 = 0x0dd5;
 #[cfg(target_os = "windows")]
+const RECORDING_HOTKEY_ID: i32 = 0x0dd7;
+#[cfg(target_os = "windows")]
 const HOTKEY_STOP_MESSAGE: u32 = WM_APP + 0x0dd5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowsHotkeyEvent {
     Capture,
+    Recording,
 }
 
 #[cfg(target_os = "windows")]
@@ -450,10 +453,23 @@ pub fn start_capture_hotkey_listener(
     accelerator: &str,
     events: Sender<WindowsHotkeyEvent>,
 ) -> Result<WindowsHotkeyListener, PlatformError> {
-    let (modifiers, key) = parse_hotkey_accelerator(accelerator)?;
+    start_capture_and_recording_hotkey_listener(accelerator, None, events)
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_capture_and_recording_hotkey_listener(
+    capture_accelerator: &str,
+    recording_accelerator: Option<&str>,
+    events: Sender<WindowsHotkeyEvent>,
+) -> Result<WindowsHotkeyListener, PlatformError> {
+    let capture = parse_hotkey_accelerator(capture_accelerator)?;
+    let recording = recording_accelerator
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
     let (started_sender, started_receiver) = mpsc::sync_channel(1);
     let join_handle = thread::spawn(move || {
-        run_hotkey_message_loop(CAPTURE_HOTKEY_ID, modifiers, key, events, started_sender);
+        run_hotkey_message_loop(capture, recording, events, started_sender);
     });
 
     match started_receiver.recv() {
@@ -476,9 +492,8 @@ pub fn start_capture_hotkey_listener(
 
 #[cfg(target_os = "windows")]
 fn run_hotkey_message_loop(
-    id: i32,
-    modifiers: HOT_KEY_MODIFIERS,
-    key: u32,
+    capture: (HOT_KEY_MODIFIERS, u32),
+    recording: Option<(HOT_KEY_MODIFIERS, u32)>,
     events: Sender<WindowsHotkeyEvent>,
     started_sender: mpsc::SyncSender<Result<u32, String>>,
 ) {
@@ -488,9 +503,16 @@ fn run_hotkey_message_loop(
         let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
     }
 
-    if let Err(error) = register_windows_hotkey(id, modifiers, key) {
+    if let Err(error) = register_windows_hotkey(CAPTURE_HOTKEY_ID, capture.0, capture.1) {
         let _ = started_sender.send(Err(error.to_string()));
         return;
+    }
+    if let Some((modifiers, key)) = recording {
+        if let Err(error) = register_windows_hotkey(RECORDING_HOTKEY_ID, modifiers, key) {
+            let _ = unsafe { UnregisterHotKey(None, CAPTURE_HOTKEY_ID) };
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
     }
 
     let _ = started_sender.send(Ok(thread_id));
@@ -505,12 +527,21 @@ fn run_hotkey_message_loop(
             break;
         }
 
-        if message.message == WM_HOTKEY && message.wParam == WPARAM(id as usize) {
-            let _ = events.send(WindowsHotkeyEvent::Capture);
+        if message.message == WM_HOTKEY {
+            match message.wParam {
+                WPARAM(value) if value == CAPTURE_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::Capture);
+                }
+                WPARAM(value) if value == RECORDING_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::Recording);
+                }
+                _ => {}
+            }
         }
     }
 
-    let _ = unsafe { UnregisterHotKey(None, id) };
+    let _ = unsafe { UnregisterHotKey(None, CAPTURE_HOTKEY_ID) };
+    let _ = unsafe { UnregisterHotKey(None, RECORDING_HOTKEY_ID) };
 }
 
 #[cfg(target_os = "windows")]
@@ -1420,6 +1451,40 @@ mod tests {
             .expect("receive hotkey event");
 
         assert_eq!(event, super::WindowsHotkeyEvent::Capture);
+    }
+
+    #[test]
+    #[ignore = "registers process-local capture and recording hotkeys and posts synthetic WM_HOTKEY messages"]
+    #[cfg(target_os = "windows")]
+    fn windows_hotkey_listener_dispatches_recording_event() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_HOTKEY};
+
+        let (sender, receiver) = mpsc::channel();
+        let listener = super::start_capture_and_recording_hotkey_listener(
+            "Alt+Shift+F23",
+            Some("Alt+Shift+F24"),
+            sender,
+        )
+        .expect("listener");
+        unsafe {
+            PostThreadMessageW(
+                listener.thread_id(),
+                WM_HOTKEY,
+                WPARAM(super::RECORDING_HOTKEY_ID as usize),
+                LPARAM(0),
+            )
+            .expect("post recording hotkey message");
+        }
+
+        let event = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("receive recording hotkey event");
+
+        assert_eq!(event, super::WindowsHotkeyEvent::Recording);
     }
 
     #[test]

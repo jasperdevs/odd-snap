@@ -140,8 +140,10 @@ impl OddSnapRustApp {
             }
             None => "FFmpeg: not found on PATH".into(),
         };
-        let (hotkey_status, hotkey_listener, hotkey_events) =
-            start_capture_hotkey_listener(&settings.capture_hotkey);
+        let (hotkey_status, hotkey_listener, hotkey_events) = start_capture_hotkey_listener(
+            &settings.capture_hotkey,
+            settings.recording_hotkey.as_deref(),
+        );
 
         let app = Self {
             platform_name: platform.name().into(),
@@ -696,6 +698,10 @@ impl OddSnapRustApp {
                 self.capture_status = "Capture hotkey received.".into();
                 self.run_capture(CaptureMode::FullScreen);
             }
+            oddsnap_platform_windows::WindowsHotkeyEvent::Recording => {
+                self.recording_status = "Recording hotkey received.".into();
+                self.toggle_recording();
+            }
         }
     }
 
@@ -925,15 +931,25 @@ impl OddSnapRustApp {
 #[cfg(target_os = "windows")]
 fn start_capture_hotkey_listener(
     accelerator: &str,
+    recording_accelerator: Option<&str>,
 ) -> (
     String,
     Option<oddsnap_platform_windows::WindowsHotkeyListener>,
     Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsHotkeyEvent>>,
 ) {
     let (sender, receiver) = std::sync::mpsc::channel();
-    match oddsnap_platform_windows::start_capture_hotkey_listener(accelerator, sender) {
+    match oddsnap_platform_windows::start_capture_and_recording_hotkey_listener(
+        accelerator,
+        recording_accelerator,
+        sender,
+    ) {
         Ok(listener) => (
-            format!("Hotkey: {accelerator} listener ready."),
+            match recording_accelerator {
+                Some(recording) => {
+                    format!("Hotkeys: {accelerator} capture, {recording} recording.")
+                }
+                None => format!("Hotkey: {accelerator} listener ready."),
+            },
             Some(listener),
             Some(receiver),
         ),
@@ -942,8 +958,12 @@ fn start_capture_hotkey_listener(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn start_capture_hotkey_listener(accelerator: &str) -> (String, Option<()>, Option<()>) {
+fn start_capture_hotkey_listener(
+    accelerator: &str,
+    recording_accelerator: Option<&str>,
+) -> (String, Option<()>, Option<()>) {
     let _ = accelerator;
+    let _ = recording_accelerator;
     (
         "Hotkey listener: pending on this platform.".into(),
         None,

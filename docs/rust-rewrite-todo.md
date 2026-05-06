@@ -32,6 +32,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows global hotkey registration foundation.
 - [x] Windows global hotkey event loop integration.
 - [x] Legacy capture/recording hotkey settings import.
+- [x] Windows recording hotkey event loop integration.
 - [ ] Windows topmost transparent overlay.
 - [ ] Windows screenshot exclusion.
 - [x] Windows monitor enumeration.
