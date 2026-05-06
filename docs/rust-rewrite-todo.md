@@ -30,7 +30,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 - [ ] Windows tray icon.
 - [x] Windows global hotkey registration foundation.
-- [ ] Windows global hotkey event loop integration.
+- [x] Windows global hotkey event loop integration.
 - [ ] Windows topmost transparent overlay.
 - [ ] Windows screenshot exclusion.
 - [x] Windows monitor enumeration.

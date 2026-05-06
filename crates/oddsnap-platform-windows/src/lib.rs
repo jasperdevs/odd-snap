@@ -9,13 +9,15 @@ use oddsnap_platform::{
 use std::{
     fs, mem,
     path::{Path, PathBuf},
+    sync::mpsc::{self, Sender},
+    thread::{self, JoinHandle},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(target_os = "windows")]
 use windows::core::BOOL;
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, RECT, WPARAM};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
 #[cfg(target_os = "windows")]
@@ -34,8 +36,10 @@ use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Ole::{CF_DIB, CF_UNICODETEXT};
 #[cfg(target_os = "windows")]
+use windows::Win32::System::Threading::GetCurrentThreadId;
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI};
-#[cfg(all(target_os = "windows", test))]
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -43,8 +47,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-    SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    GetForegroundWindow, GetMessageW, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW,
+    GetWindowTextW, PeekMessageW, PostThreadMessageW, MSG, PM_NOREMOVE, SM_CXVIRTUALSCREEN,
+    SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, WM_APP, WM_HOTKEY,
 };
 
 #[derive(Debug, Default)]
@@ -52,6 +57,40 @@ pub struct WindowsPlatform;
 
 #[cfg(target_os = "windows")]
 const CAPTURE_HOTKEY_ID: i32 = 0x0dd5;
+#[cfg(target_os = "windows")]
+const HOTKEY_STOP_MESSAGE: u32 = WM_APP + 0x0dd5;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowsHotkeyEvent {
+    Capture,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug)]
+pub struct WindowsHotkeyListener {
+    thread_id: u32,
+    join_handle: Option<JoinHandle<()>>,
+}
+
+#[cfg(target_os = "windows")]
+impl WindowsHotkeyListener {
+    pub fn thread_id(&self) -> u32 {
+        self.thread_id
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsHotkeyListener {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = PostThreadMessageW(self.thread_id, HOTKEY_STOP_MESSAGE, WPARAM(0), LPARAM(0));
+        }
+
+        if let Some(join_handle) = self.join_handle.take() {
+            let _ = join_handle.join();
+        }
+    }
+}
 
 impl PlatformAdapter for WindowsPlatform {
     fn name(&self) -> &'static str {
@@ -199,6 +238,74 @@ impl HotkeyService for WindowsPlatform {
             ))
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_capture_hotkey_listener(
+    accelerator: &str,
+    events: Sender<WindowsHotkeyEvent>,
+) -> Result<WindowsHotkeyListener, PlatformError> {
+    let (modifiers, key) = parse_hotkey_accelerator(accelerator)?;
+    let (started_sender, started_receiver) = mpsc::sync_channel(1);
+    let join_handle = thread::spawn(move || {
+        run_hotkey_message_loop(CAPTURE_HOTKEY_ID, modifiers, key, events, started_sender);
+    });
+
+    match started_receiver.recv() {
+        Ok(Ok(thread_id)) => Ok(WindowsHotkeyListener {
+            thread_id,
+            join_handle: Some(join_handle),
+        }),
+        Ok(Err(error)) => {
+            let _ = join_handle.join();
+            Err(PlatformError::Failed(error))
+        }
+        Err(error) => {
+            let _ = join_handle.join();
+            Err(PlatformError::Failed(format!(
+                "hotkey listener did not start: {error}"
+            )))
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn run_hotkey_message_loop(
+    id: i32,
+    modifiers: HOT_KEY_MODIFIERS,
+    key: u32,
+    events: Sender<WindowsHotkeyEvent>,
+    started_sender: mpsc::SyncSender<Result<u32, String>>,
+) {
+    let thread_id = unsafe { GetCurrentThreadId() };
+    let mut message = MSG::default();
+    unsafe {
+        let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+    }
+
+    if let Err(error) = register_windows_hotkey(id, modifiers, key) {
+        let _ = started_sender.send(Err(error.to_string()));
+        return;
+    }
+
+    let _ = started_sender.send(Ok(thread_id));
+
+    loop {
+        let status = unsafe { GetMessageW(&mut message, None, 0, 0) };
+        if status.0 <= 0 {
+            break;
+        }
+
+        if message.message == HOTKEY_STOP_MESSAGE {
+            break;
+        }
+
+        if message.message == WM_HOTKEY && message.wParam == WPARAM(id as usize) {
+            let _ = events.send(WindowsHotkeyEvent::Capture);
+        }
+    }
+
+    let _ = unsafe { UnregisterHotKey(None, id) };
 }
 
 #[cfg(target_os = "windows")]
@@ -1000,6 +1107,36 @@ mod tests {
 
         super::register_windows_hotkey(0x0dd6, modifiers, key).expect("register hotkey");
         super::unregister_windows_hotkey(0x0dd6).expect("unregister hotkey");
+    }
+
+    #[test]
+    #[ignore = "registers a process-local Windows global hotkey and posts a synthetic WM_HOTKEY"]
+    #[cfg(target_os = "windows")]
+    fn windows_hotkey_listener_dispatches_capture_event() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_HOTKEY};
+
+        let (sender, receiver) = mpsc::channel();
+        let listener =
+            super::start_capture_hotkey_listener("Alt+Shift+F24", sender).expect("listener");
+        unsafe {
+            PostThreadMessageW(
+                listener.thread_id(),
+                WM_HOTKEY,
+                WPARAM(super::CAPTURE_HOTKEY_ID as usize),
+                LPARAM(0),
+            )
+            .expect("post hotkey message");
+        }
+
+        let event = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("receive hotkey event");
+
+        assert_eq!(event, super::WindowsHotkeyEvent::Capture);
     }
 
     #[test]

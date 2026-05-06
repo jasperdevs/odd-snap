@@ -28,7 +28,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture image format and JPEG quality settings.
 - Rust startup can import legacy file-name template and monthly-folder save settings.
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
-- Windows can parse and register process-local global hotkeys, with listener integration still pending.
+- Windows can parse, register, listen for, and unregister process-local global hotkeys.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.

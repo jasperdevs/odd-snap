@@ -57,8 +57,11 @@ struct OddSnapRustApp {
     history_store: HistoryStore,
     history_path: String,
     media_status: String,
+    hotkey_status: String,
     capture_history: Vec<CaptureHistoryEntry>,
     focus_handle: gpui::FocusHandle,
+    #[cfg(target_os = "windows")]
+    _hotkey_listener: Option<oddsnap_platform_windows::WindowsHotkeyListener>,
 }
 
 struct CaptureHistoryEntry {
@@ -118,8 +121,9 @@ impl OddSnapRustApp {
             }
             None => "FFmpeg: not found on PATH".into(),
         };
+        let (hotkey_status, hotkey_listener, hotkey_events) = start_capture_hotkey_listener();
 
-        Self {
+        let app = Self {
             platform_name: platform.name().into(),
             native_ui_goal: profile.visual_goal,
             capabilities,
@@ -129,9 +133,15 @@ impl OddSnapRustApp {
             history_store,
             history_path,
             media_status,
+            hotkey_status,
             capture_history,
             focus_handle: cx.focus_handle(),
-        }
+            #[cfg(target_os = "windows")]
+            _hotkey_listener: hotkey_listener,
+        };
+
+        app.start_hotkey_event_pump(hotkey_events, cx);
+        app
     }
 
     fn focus_handle(&self, _: &App) -> gpui::FocusHandle {
@@ -322,6 +332,12 @@ impl OddSnapRustApp {
             )
             .child(
                 div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(self.hotkey_status.clone())),
+            )
+            .child(
+                div()
                     .rounded(px(6.0))
                     .bg(rgb(0x1d2027))
                     .px(px(10.0))
@@ -494,6 +510,44 @@ impl OddSnapRustApp {
         };
     }
 
+    #[cfg(target_os = "windows")]
+    fn start_hotkey_event_pump(
+        &self,
+        receiver: Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsHotkeyEvent>>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(receiver) = receiver else {
+            return;
+        };
+
+        cx.spawn(async move |this, cx| loop {
+            while let Ok(event) = receiver.try_recv() {
+                let _ = this.update(cx, |app, cx| {
+                    app.handle_hotkey_event(event);
+                    cx.notify();
+                });
+            }
+
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(100))
+                .await;
+        })
+        .detach();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn start_hotkey_event_pump(&self, _: Option<()>, _: &mut Context<Self>) {}
+
+    #[cfg(target_os = "windows")]
+    fn handle_hotkey_event(&mut self, event: oddsnap_platform_windows::WindowsHotkeyEvent) {
+        match event {
+            oddsnap_platform_windows::WindowsHotkeyEvent::Capture => {
+                self.capture_status = "Capture hotkey received.".into();
+                self.run_capture(CaptureMode::FullScreen);
+            }
+        }
+    }
+
     fn capture_output_directory(&self) -> std::path::PathBuf {
         self.settings
             .capture_output_directory_or(default_capture_directory())
@@ -554,6 +608,32 @@ impl OddSnapRustApp {
             Err(error) => format!("; history failed: {error}"),
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn start_capture_hotkey_listener() -> (
+    String,
+    Option<oddsnap_platform_windows::WindowsHotkeyListener>,
+    Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsHotkeyEvent>>,
+) {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    match oddsnap_platform_windows::start_capture_hotkey_listener("Alt+`", sender) {
+        Ok(listener) => (
+            "Hotkey: Alt+` listener ready.".into(),
+            Some(listener),
+            Some(receiver),
+        ),
+        Err(error) => (format!("Hotkey listener unavailable: {error}"), None, None),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn start_capture_hotkey_listener() -> (String, Option<()>, Option<()>) {
+    (
+        "Hotkey listener: pending on this platform.".into(),
+        None,
+        None,
+    )
 }
 
 fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistoryEntry> {
