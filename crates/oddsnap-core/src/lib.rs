@@ -15,10 +15,13 @@ pub use history::{
     default_history_path, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, HistoryStoreError,
 };
 pub use jobs::{AppJobArea, AppJobSnapshot};
-pub use media::{discover_ffmpeg_tools, discover_ffmpeg_tools_in_path, FfmpegTools};
+pub use media::{
+    build_recording_output_args, discover_ffmpeg_tools, discover_ffmpeg_tools_in_path,
+    FfmpegRecordingRequest, FfmpegTools,
+};
 pub use native_ui::{NativeMaterial, NativeUiProfile};
 pub use settings::{
-    default_settings_path, AppSettings, CaptureImageFormat, SettingDefinition,
-    SettingsOptionDefinition, SettingsPageDefinition, SettingsSectionDefinition, SettingsStore,
-    SettingsStoreError, SettingsValueKind,
+    default_settings_path, AppSettings, CaptureImageFormat, RecordingFormat, RecordingQuality,
+    SettingDefinition, SettingsOptionDefinition, SettingsPageDefinition, SettingsSectionDefinition,
+    SettingsStore, SettingsStoreError, SettingsValueKind,
 };

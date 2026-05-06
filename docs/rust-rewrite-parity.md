@@ -31,6 +31,8 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
 - Windows can parse, register, listen for, and unregister process-local global hotkeys.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
+- Rust startup can import legacy recording format, quality, FPS, and audio-device preferences.
+- Rust core can build format-specific FFmpeg output arguments for GIF, MP4, WebM, and MKV recording targets.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.
 - GPUI shows the newest saved image capture as an inline preview when the file still exists.

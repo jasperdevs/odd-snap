@@ -75,6 +75,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] GIF recording.
 - [ ] MP4/WebM recording.
 - [x] FFmpeg discovery.
+- [x] Rust recording settings import and FFmpeg output argument model.
 - [ ] Microphone recording.
 - [ ] System audio recording where supported.
 - [ ] Video thumbnail generation.
@@ -94,7 +95,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 ## Milestone 6 - Migration And Parity Closure
 
-- [x] Import existing save directory/history/copy/image-format/save-naming settings into Rust settings.
+- [x] Import existing save directory/history/copy/image-format/save-naming/recording settings into Rust settings.
 - [ ] Import all existing settings.
 - [x] Import existing history.
 - [ ] Import existing media metadata where practical.

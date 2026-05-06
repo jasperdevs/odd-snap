@@ -365,6 +365,12 @@ impl OddSnapRustApp {
                 div()
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(self.recording_status_summary())),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(self.hotkey_status.clone())),
             )
             .child(
@@ -645,6 +651,35 @@ impl OddSnapRustApp {
             &file_name,
             self.settings.save_in_monthly_folders,
         )
+    }
+
+    fn recording_status_summary(&self) -> String {
+        let fps = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
+            self.settings.gif_fps
+        } else {
+            self.settings.recording_fps
+        };
+        let base = format!(
+            "Recording config: {} · {} · {fps} FPS",
+            self.settings.recording_format.label(),
+            self.settings.recording_quality.label()
+        );
+
+        if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
+            return base;
+        }
+
+        let microphone = if self.settings.record_microphone {
+            "mic on"
+        } else {
+            "mic off"
+        };
+        let desktop_audio = if self.settings.record_desktop_audio {
+            "desktop audio on"
+        } else {
+            "desktop audio off"
+        };
+        format!("{base} · {microphone} · {desktop_audio}")
     }
 
     fn save_capture_history(

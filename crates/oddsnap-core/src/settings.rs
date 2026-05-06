@@ -35,6 +35,66 @@ impl CaptureImageFormat {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum RecordingFormat {
+    Gif,
+    #[default]
+    Mp4,
+    WebM,
+    Mkv,
+}
+
+impl RecordingFormat {
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Gif => "gif",
+            Self::Mp4 => "mp4",
+            Self::WebM => "webm",
+            Self::Mkv => "mkv",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Gif => "GIF",
+            Self::Mp4 => "MP4",
+            Self::WebM => "WebM",
+            Self::Mkv => "MKV",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum RecordingQuality {
+    #[default]
+    Original,
+    P1080,
+    P720,
+    P480,
+}
+
+impl RecordingQuality {
+    pub fn max_height(self) -> Option<u32> {
+        match self {
+            Self::Original => None,
+            Self::P1080 => Some(1080),
+            Self::P720 => Some(720),
+            Self::P480 => Some(480),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Original => "Original",
+            Self::P1080 => "1080p",
+            Self::P720 => "720p",
+            Self::P480 => "480p",
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SettingsStoreError {
     #[error("failed to read settings: {0}")]
@@ -63,6 +123,22 @@ pub struct AppSettings {
     pub save_in_monthly_folders: bool,
     #[serde(default = "default_file_name_template")]
     pub file_name_template: String,
+    #[serde(default)]
+    pub recording_format: RecordingFormat,
+    #[serde(default)]
+    pub recording_quality: RecordingQuality,
+    #[serde(default = "default_recording_fps")]
+    pub recording_fps: u32,
+    #[serde(default = "default_gif_fps")]
+    pub gif_fps: u32,
+    #[serde(default)]
+    pub record_microphone: bool,
+    #[serde(default = "default_record_desktop_audio")]
+    pub record_desktop_audio: bool,
+    #[serde(default)]
+    pub microphone_device_id: Option<String>,
+    #[serde(default)]
+    pub desktop_audio_device_id: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -75,6 +151,14 @@ impl Default for AppSettings {
             jpeg_quality: default_jpeg_quality(),
             save_in_monthly_folders: default_save_in_monthly_folders(),
             file_name_template: default_file_name_template(),
+            recording_format: RecordingFormat::Mp4,
+            recording_quality: RecordingQuality::Original,
+            recording_fps: default_recording_fps(),
+            gif_fps: default_gif_fps(),
+            record_microphone: false,
+            record_desktop_audio: default_record_desktop_audio(),
+            microphone_device_id: None,
+            desktop_audio_device_id: None,
         }
     }
 }
@@ -106,6 +190,18 @@ fn default_save_in_monthly_folders() -> bool {
 
 fn default_file_name_template() -> String {
     DEFAULT_FILE_NAME_TEMPLATE.into()
+}
+
+fn default_recording_fps() -> u32 {
+    30
+}
+
+fn default_gif_fps() -> u32 {
+    15
+}
+
+fn default_record_desktop_audio() -> bool {
+    true
 }
 
 #[derive(Debug, Clone)]
@@ -219,7 +315,9 @@ pub struct SettingsPageDefinition {
 mod tests {
     use std::{fs, path::PathBuf};
 
-    use super::{AppSettings, CaptureImageFormat, SettingsStore};
+    use super::{
+        AppSettings, CaptureImageFormat, RecordingFormat, RecordingQuality, SettingsStore,
+    };
     use crate::{normalize_file_name_template, DEFAULT_FILE_NAME_TEMPLATE};
 
     #[test]
@@ -230,6 +328,12 @@ mod tests {
         assert!(settings.save_history);
         assert_eq!(settings.capture_image_format, CaptureImageFormat::Png);
         assert_eq!(settings.jpeg_quality, 85);
+        assert_eq!(settings.recording_format, RecordingFormat::Mp4);
+        assert_eq!(settings.recording_quality, RecordingQuality::Original);
+        assert_eq!(settings.recording_fps, 30);
+        assert_eq!(settings.gif_fps, 15);
+        assert!(!settings.record_microphone);
+        assert!(settings.record_desktop_audio);
         assert!(settings.capture_output_directory.is_none());
     }
 
@@ -243,6 +347,14 @@ mod tests {
             jpeg_quality: 85,
             save_in_monthly_folders: true,
             file_name_template: DEFAULT_FILE_NAME_TEMPLATE.into(),
+            recording_format: RecordingFormat::Mp4,
+            recording_quality: RecordingQuality::Original,
+            recording_fps: 30,
+            gif_fps: 15,
+            record_microphone: false,
+            record_desktop_audio: true,
+            microphone_device_id: None,
+            desktop_audio_device_id: None,
         };
 
         assert_eq!(
@@ -265,6 +377,14 @@ mod tests {
             jpeg_quality: 70,
             save_in_monthly_folders: false,
             file_name_template: "Screenshot_{date}".into(),
+            recording_format: RecordingFormat::WebM,
+            recording_quality: RecordingQuality::P720,
+            recording_fps: 60,
+            gif_fps: 24,
+            record_microphone: true,
+            record_desktop_audio: false,
+            microphone_device_id: Some("mic".into()),
+            desktop_audio_device_id: Some("desktop".into()),
         };
 
         store.save(&settings).expect("save settings");
@@ -298,6 +418,14 @@ mod tests {
             jpeg_quality: 85,
             save_in_monthly_folders: true,
             file_name_template: DEFAULT_FILE_NAME_TEMPLATE.into(),
+            recording_format: RecordingFormat::Mp4,
+            recording_quality: RecordingQuality::Original,
+            recording_fps: 30,
+            gif_fps: 15,
+            record_microphone: false,
+            record_desktop_audio: true,
+            microphone_device_id: None,
+            desktop_audio_device_id: None,
         };
 
         let json = serde_json::to_string(&settings).expect("serialize settings");
@@ -305,6 +433,16 @@ mod tests {
 
         assert!(json.contains(r#""capture_image_format":"Bmp""#));
         assert_eq!(loaded.capture_image_format, CaptureImageFormat::Bmp);
+    }
+
+    #[test]
+    fn recording_format_extensions_match_legacy_outputs() {
+        assert_eq!(RecordingFormat::Gif.extension(), "gif");
+        assert_eq!(RecordingFormat::Mp4.extension(), "mp4");
+        assert_eq!(RecordingFormat::WebM.extension(), "webm");
+        assert_eq!(RecordingFormat::Mkv.extension(), "mkv");
+        assert_eq!(RecordingQuality::P1080.max_height(), Some(1080));
+        assert_eq!(RecordingQuality::Original.max_height(), None);
     }
 
     #[test]

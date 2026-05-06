@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use oddsnap_core::{
     normalize_file_name_template, AppSettings, CaptureImageFormat, HistoryEntry, HistoryIndex,
-    HistoryKind,
+    HistoryKind, RecordingFormat, RecordingQuality,
 };
 use rusqlite::Connection;
 use serde_json::Value;
@@ -183,6 +183,46 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
 
     if let Some(file_name_template) = import.raw.get("FileNameTemplate").and_then(Value::as_str) {
         settings.file_name_template = normalize_file_name_template(file_name_template);
+    }
+
+    if let Some(recording_format) = import.raw.get("RecordingFormat") {
+        settings.recording_format = legacy_recording_format(recording_format);
+    }
+
+    if let Some(recording_quality) = import.raw.get("RecordingQuality") {
+        settings.recording_quality = legacy_recording_quality(recording_quality);
+    }
+
+    if let Some(recording_fps) = legacy_fps(import.raw.get("RecordingFps")) {
+        settings.recording_fps = recording_fps;
+    }
+
+    if let Some(gif_fps) = legacy_fps(import.raw.get("GifFps")) {
+        settings.gif_fps = gif_fps;
+    }
+
+    if let Some(record_microphone) = import.raw.get("RecordMicrophone").and_then(Value::as_bool) {
+        settings.record_microphone = record_microphone;
+    }
+
+    if let Some(record_desktop_audio) = import
+        .raw
+        .get("RecordDesktopAudio")
+        .and_then(Value::as_bool)
+    {
+        settings.record_desktop_audio = record_desktop_audio;
+    }
+
+    if let Some(microphone_device_id) =
+        legacy_non_empty_string(import.raw.get("MicrophoneDeviceId"))
+    {
+        settings.microphone_device_id = Some(microphone_device_id);
+    }
+
+    if let Some(desktop_audio_device_id) =
+        legacy_non_empty_string(import.raw.get("DesktopAudioDeviceId"))
+    {
+        settings.desktop_audio_device_id = Some(desktop_audio_device_id);
     }
 
     settings
@@ -431,6 +471,55 @@ fn legacy_capture_image_format(value: &Value) -> CaptureImageFormat {
     }
 }
 
+fn legacy_recording_format(value: &Value) -> RecordingFormat {
+    match value {
+        Value::Number(number) => match number.as_u64() {
+            Some(0) => RecordingFormat::Gif,
+            Some(2) => RecordingFormat::WebM,
+            Some(3) => RecordingFormat::Mkv,
+            _ => RecordingFormat::Mp4,
+        },
+        Value::String(name) if name.eq_ignore_ascii_case("Gif") => RecordingFormat::Gif,
+        Value::String(name) if name.eq_ignore_ascii_case("GIF") => RecordingFormat::Gif,
+        Value::String(name) if name.eq_ignore_ascii_case("WebM") => RecordingFormat::WebM,
+        Value::String(name) if name.eq_ignore_ascii_case("Mkv") => RecordingFormat::Mkv,
+        Value::String(name) if name.eq_ignore_ascii_case("MKV") => RecordingFormat::Mkv,
+        _ => RecordingFormat::Mp4,
+    }
+}
+
+fn legacy_recording_quality(value: &Value) -> RecordingQuality {
+    match value {
+        Value::Number(number) => match number.as_u64() {
+            Some(1) => RecordingQuality::P1080,
+            Some(2) => RecordingQuality::P720,
+            Some(3) => RecordingQuality::P480,
+            _ => RecordingQuality::Original,
+        },
+        Value::String(name) if name.eq_ignore_ascii_case("P1080") => RecordingQuality::P1080,
+        Value::String(name) if name.eq_ignore_ascii_case("1080p") => RecordingQuality::P1080,
+        Value::String(name) if name.eq_ignore_ascii_case("P720") => RecordingQuality::P720,
+        Value::String(name) if name.eq_ignore_ascii_case("720p") => RecordingQuality::P720,
+        Value::String(name) if name.eq_ignore_ascii_case("P480") => RecordingQuality::P480,
+        Value::String(name) if name.eq_ignore_ascii_case("480p") => RecordingQuality::P480,
+        _ => RecordingQuality::Original,
+    }
+}
+
+fn legacy_fps(value: Option<&Value>) -> Option<u32> {
+    value
+        .and_then(Value::as_u64)
+        .map(|fps| fps.clamp(1, 240) as u32)
+}
+
+fn legacy_non_empty_string(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -438,7 +527,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{import_app_settings, read_legacy_settings, LegacyOddSnapPaths};
-    use oddsnap_core::CaptureImageFormat;
+    use oddsnap_core::{CaptureImageFormat, RecordingFormat, RecordingQuality};
 
     #[test]
     fn builds_paths_from_roaming_directory() {
@@ -479,7 +568,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}"}"#,
+            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}","RecordingFormat":2,"RecordingQuality":1,"RecordingFps":60,"GifFps":24,"RecordMicrophone":true,"RecordDesktopAudio":false,"MicrophoneDeviceId":"mic-1","DesktopAudioDeviceId":"desktop-1"}"#,
         )
         .expect("write test settings");
 
@@ -497,6 +586,17 @@ mod tests {
         assert_eq!(settings.jpeg_quality, 92);
         assert!(!settings.save_in_monthly_folders);
         assert_eq!(settings.file_name_template, "Screenshot_{date}");
+        assert_eq!(settings.recording_format, RecordingFormat::WebM);
+        assert_eq!(settings.recording_quality, RecordingQuality::P1080);
+        assert_eq!(settings.recording_fps, 60);
+        assert_eq!(settings.gif_fps, 24);
+        assert!(settings.record_microphone);
+        assert!(!settings.record_desktop_audio);
+        assert_eq!(settings.microphone_device_id.as_deref(), Some("mic-1"));
+        assert_eq!(
+            settings.desktop_audio_device_id.as_deref(),
+            Some("desktop-1")
+        );
     }
 
     #[test]
@@ -524,6 +624,31 @@ mod tests {
 
         assert_eq!(settings.capture_image_format, CaptureImageFormat::Png);
         assert_eq!(settings.jpeg_quality, 100);
+    }
+
+    #[test]
+    fn imports_recording_string_values_and_clamps_fps() {
+        let import = super::LegacySettingsImport {
+            source_path: PathBuf::from("settings.json"),
+            top_level_key_count: 6,
+            raw: serde_json::json!({
+                "RecordingFormat": "MKV",
+                "RecordingQuality": "480p",
+                "RecordingFps": 500,
+                "GifFps": 0,
+                "MicrophoneDeviceId": " ",
+                "DesktopAudioDeviceId": "device"
+            }),
+        };
+
+        let settings = import_app_settings(&import);
+
+        assert_eq!(settings.recording_format, RecordingFormat::Mkv);
+        assert_eq!(settings.recording_quality, RecordingQuality::P480);
+        assert_eq!(settings.recording_fps, 240);
+        assert_eq!(settings.gif_fps, 1);
+        assert_eq!(settings.microphone_device_id, None);
+        assert_eq!(settings.desktop_audio_device_id.as_deref(), Some("device"));
     }
 
     #[test]

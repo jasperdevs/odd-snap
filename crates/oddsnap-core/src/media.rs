@@ -1,9 +1,66 @@
 use std::path::{Path, PathBuf};
 
+use crate::{RecordingFormat, RecordingQuality};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FfmpegTools {
     pub ffmpeg: PathBuf,
     pub ffprobe: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FfmpegRecordingRequest {
+    pub input_args: Vec<String>,
+    pub output_path: PathBuf,
+    pub format: RecordingFormat,
+    pub quality: RecordingQuality,
+    pub fps: u32,
+}
+
+pub fn build_recording_output_args(request: &FfmpegRecordingRequest) -> Vec<String> {
+    let fps = request.fps.clamp(1, 240).to_string();
+    let mut args = vec!["-y".to_string()];
+    args.extend(request.input_args.iter().cloned());
+    args.extend(["-r".to_string(), fps]);
+
+    if let Some(height) = request.quality.max_height() {
+        args.extend(["-vf".to_string(), format!("scale=-2:{height}")]);
+    }
+
+    match request.format {
+        RecordingFormat::Gif => {
+            args.extend(["-loop".to_string(), "0".to_string()]);
+        }
+        RecordingFormat::Mp4 => {
+            args.extend([
+                "-c:v".to_string(),
+                "libx264".to_string(),
+                "-pix_fmt".to_string(),
+                "yuv420p".to_string(),
+                "-movflags".to_string(),
+                "+faststart".to_string(),
+            ]);
+        }
+        RecordingFormat::WebM => {
+            args.extend([
+                "-c:v".to_string(),
+                "libvpx-vp9".to_string(),
+                "-pix_fmt".to_string(),
+                "yuv420p".to_string(),
+            ]);
+        }
+        RecordingFormat::Mkv => {
+            args.extend([
+                "-c:v".to_string(),
+                "libx264".to_string(),
+                "-pix_fmt".to_string(),
+                "yuv420p".to_string(),
+            ]);
+        }
+    }
+
+    args.push(request.output_path.display().to_string());
+    args
 }
 
 pub fn discover_ffmpeg_tools() -> Option<FfmpegTools> {
@@ -41,8 +98,12 @@ fn is_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::PathBuf;
 
-    use super::discover_ffmpeg_tools_in_path;
+    use super::{
+        build_recording_output_args, discover_ffmpeg_tools_in_path, FfmpegRecordingRequest,
+    };
+    use crate::{RecordingFormat, RecordingQuality};
 
     #[test]
     fn discovers_ffmpeg_and_ffprobe_from_path() {
@@ -105,5 +166,58 @@ mod tests {
 
         assert!(tools.is_none());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn builds_mp4_recording_output_args_with_quality_scale() {
+        let args = build_recording_output_args(&FfmpegRecordingRequest {
+            input_args: vec!["-f".into(), "gdigrab".into(), "-i".into(), "desktop".into()],
+            output_path: PathBuf::from("capture.mp4"),
+            format: RecordingFormat::Mp4,
+            quality: RecordingQuality::P720,
+            fps: 30,
+        });
+
+        assert_eq!(args[0], "-y");
+        assert!(args.windows(2).any(|pair| pair == ["-r", "30"]));
+        assert!(args.windows(2).any(|pair| pair == ["-vf", "scale=-2:720"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "libx264"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-movflags", "+faststart"]));
+        assert_eq!(args.last().map(String::as_str), Some("capture.mp4"));
+    }
+
+    #[test]
+    fn builds_format_specific_recording_output_args() {
+        let gif_args = build_recording_output_args(&FfmpegRecordingRequest {
+            input_args: vec!["-i".into(), "pipe:0".into()],
+            output_path: PathBuf::from("capture.gif"),
+            format: RecordingFormat::Gif,
+            quality: RecordingQuality::Original,
+            fps: 999,
+        });
+        let webm_args = build_recording_output_args(&FfmpegRecordingRequest {
+            input_args: vec!["-i".into(), "pipe:0".into()],
+            output_path: PathBuf::from("capture.webm"),
+            format: RecordingFormat::WebM,
+            quality: RecordingQuality::Original,
+            fps: 60,
+        });
+        let mkv_args = build_recording_output_args(&FfmpegRecordingRequest {
+            input_args: vec!["-i".into(), "pipe:0".into()],
+            output_path: PathBuf::from("capture.mkv"),
+            format: RecordingFormat::Mkv,
+            quality: RecordingQuality::Original,
+            fps: 0,
+        });
+
+        assert!(gif_args.windows(2).any(|pair| pair == ["-loop", "0"]));
+        assert!(gif_args.windows(2).any(|pair| pair == ["-r", "240"]));
+        assert!(webm_args
+            .windows(2)
+            .any(|pair| pair == ["-c:v", "libvpx-vp9"]));
+        assert!(mkv_args.windows(2).any(|pair| pair == ["-c:v", "libx264"]));
+        assert!(mkv_args.windows(2).any(|pair| pair == ["-r", "1"]));
     }
 }
