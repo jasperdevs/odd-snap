@@ -3515,6 +3515,7 @@ version = "0.1.0"
 dependencies = [
  "oddsnap-core",
  "oddsnap-platform",
+ "windows 0.61.3",
 ]
 
 [[package]]

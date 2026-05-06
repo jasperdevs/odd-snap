@@ -12,6 +12,7 @@ The Rust rewrite must not replace the current app until this document and the li
   - macOS: Liquid Glass aligned.
   - Linux: freedesktop adaptive.
 - Legacy settings JSON can be located and parsed without requiring the full old C# schema.
+- Windows monitor enumeration returns the virtual-screen bounds through the platform service.
 
 ## Current Non-Parity State
 

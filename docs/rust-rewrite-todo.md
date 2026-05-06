@@ -34,7 +34,8 @@ Draft PR: https://github.com/jasperdevs/odd-snap/pull/41
 - [ ] Windows global hotkey.
 - [ ] Windows topmost transparent overlay.
 - [ ] Windows screenshot exclusion.
-- [ ] Windows monitor enumeration and DPI mapping.
+- [x] Windows monitor enumeration.
+- [ ] Windows DPI mapping.
 - [ ] macOS screen recording permission detection.
 - [ ] macOS tray/menu bar presence.
 - [ ] macOS global hotkey.
