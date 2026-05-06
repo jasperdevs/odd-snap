@@ -1,10 +1,7 @@
 # OddSnap Rust Rewrite Live TODO
 
-This checklist is the persistent GitHub-facing tracker for the Rust rewrite branch.
+This checklist is the persistent local tracker for the Rust rewrite branch.
 Keep it updated whenever a rewrite milestone lands.
-
-GitHub tracker: https://github.com/jasperdevs/odd-snap/issues/40
-Draft PR: https://github.com/jasperdevs/odd-snap/pull/41
 
 ## Ground Rules
 
@@ -56,7 +53,8 @@ Draft PR: https://github.com/jasperdevs/odd-snap/pull/41
 - [ ] Magnifier.
 - [ ] Annotation drawing.
 - [ ] Save to file.
-- [ ] Copy to clipboard.
+- [x] Windows image clipboard foundation.
+- [ ] Cross-platform image clipboard.
 - [ ] Post-capture preview.
 
 ## Milestone 4 - Recording And Media

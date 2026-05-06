@@ -1,7 +1,7 @@
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, MonitorInfo, PlatformAdapter, PlatformError,
-    ScreenCaptureService, WindowInfo, WindowPickerService,
+    CaptureRegion, CaptureResult, ClipboardImageService, MonitorInfo, PlatformAdapter,
+    PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -12,7 +12,7 @@ use std::{
 };
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{HANDLE, HWND, RECT};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
 #[cfg(target_os = "windows")]
@@ -21,6 +21,14 @@ use windows::Win32::Graphics::Gdi::{
     ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
     HBITMAP, HDC, ROP_CODE, SRCCOPY,
 };
+#[cfg(target_os = "windows")]
+use windows::Win32::System::DataExchange::{
+    CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Ole::CF_DIB;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
@@ -51,14 +59,17 @@ impl PlatformAdapter for WindowsPlatform {
                     PlatformCapability::RegionOverlay,
                     CapabilityState::InProgress,
                 ),
-                (PlatformCapability::WindowCapture, CapabilityState::Planned),
+                (
+                    PlatformCapability::WindowCapture,
+                    CapabilityState::InProgress,
+                ),
                 (
                     PlatformCapability::ScreenshotExclusion,
                     CapabilityState::Planned,
                 ),
                 (PlatformCapability::GlobalHotkeys, CapabilityState::Planned),
                 (PlatformCapability::Tray, CapabilityState::Planned),
-                (PlatformCapability::Clipboard, CapabilityState::Planned),
+                (PlatformCapability::Clipboard, CapabilityState::InProgress),
                 (PlatformCapability::FileDialogs, CapabilityState::Planned),
                 (
                     PlatformCapability::MicrophoneAudio,
@@ -139,6 +150,23 @@ impl WindowPickerService for WindowsPlatform {
     }
 }
 
+impl ClipboardImageService for WindowsPlatform {
+    fn copy_image_to_clipboard(&self, image_path: &Path) -> Result<(), PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            copy_bmp_to_clipboard(image_path)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = image_path;
+            Err(PlatformError::Unsupported(
+                "Windows image clipboard is only available on Windows",
+            ))
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn active_window_info() -> Result<WindowInfo, PlatformError> {
     let hwnd = unsafe { GetForegroundWindow() };
@@ -212,6 +240,83 @@ fn window_title(hwnd: HWND) -> String {
     }
 
     String::from_utf16_lossy(&buffer[..copied as usize])
+}
+
+#[cfg(target_os = "windows")]
+fn copy_bmp_to_clipboard(path: &Path) -> Result<(), PlatformError> {
+    let dib = bmp_file_to_dib_bytes(path)?;
+    unsafe { copy_dib_to_clipboard(&dib) }
+}
+
+#[cfg(target_os = "windows")]
+fn bmp_file_to_dib_bytes(path: &Path) -> Result<Vec<u8>, PlatformError> {
+    let bytes = fs::read(path)
+        .map_err(|source| PlatformError::Failed(format!("failed to read BMP: {source}")))?;
+    bmp_bytes_to_dib_bytes(&bytes)
+}
+
+#[cfg(target_os = "windows")]
+fn bmp_bytes_to_dib_bytes(bytes: &[u8]) -> Result<Vec<u8>, PlatformError> {
+    const BMP_FILE_HEADER_SIZE: usize = 14;
+
+    if bytes.len() < BMP_FILE_HEADER_SIZE || &bytes[0..2] != b"BM" {
+        return Err(PlatformError::Failed(
+            "clipboard image must be a BMP file".into(),
+        ));
+    }
+
+    let pixel_offset = u32::from_le_bytes(
+        bytes[10..14]
+            .try_into()
+            .map_err(|_| PlatformError::Failed("BMP header is truncated".into()))?,
+    ) as usize;
+    if pixel_offset < BMP_FILE_HEADER_SIZE || pixel_offset > bytes.len() {
+        return Err(PlatformError::Failed("BMP pixel offset is invalid".into()));
+    }
+
+    Ok(bytes[BMP_FILE_HEADER_SIZE..].to_vec())
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn copy_dib_to_clipboard(dib: &[u8]) -> Result<(), PlatformError> {
+    if dib.is_empty() {
+        return Err(PlatformError::Failed("clipboard DIB is empty".into()));
+    }
+
+    let memory = unsafe {
+        GlobalAlloc(GMEM_MOVEABLE, dib.len())
+            .map_err(|error| PlatformError::Failed(format!("GlobalAlloc failed: {error}")))?
+    };
+    let locked = unsafe { GlobalLock(memory) };
+    if locked.is_null() {
+        return Err(PlatformError::Failed("GlobalLock failed".into()));
+    }
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(dib.as_ptr(), locked.cast(), dib.len());
+        let _ = GlobalUnlock(memory);
+    }
+
+    unsafe {
+        OpenClipboard(None)
+            .map_err(|error| PlatformError::Failed(format!("OpenClipboard failed: {error}")))?;
+        let set_result = EmptyClipboard()
+            .map_err(|error| PlatformError::Failed(format!("EmptyClipboard failed: {error}")))
+            .and_then(|()| {
+                SetClipboardData(CF_DIB.0 as u32, Some(HANDLE(memory.0)))
+                    .map(|_| ())
+                    .map_err(|error| {
+                        PlatformError::Failed(format!("SetClipboardData failed: {error}"))
+                    })
+            });
+        let close_result = CloseClipboard()
+            .map_err(|error| PlatformError::Failed(format!("CloseClipboard failed: {error}")));
+
+        set_result?;
+        close_result?;
+    }
+
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]
@@ -438,6 +543,14 @@ mod tests {
             capabilities.state(PlatformCapability::ScreenCapture),
             CapabilityState::InProgress
         );
+        assert_eq!(
+            capabilities.state(PlatformCapability::Clipboard),
+            CapabilityState::InProgress
+        );
+        assert_eq!(
+            capabilities.state(PlatformCapability::WindowCapture),
+            CapabilityState::InProgress
+        );
     }
 
     #[test]
@@ -492,6 +605,31 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "windows")]
+    fn bmp_bytes_to_dib_bytes_removes_file_header() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"BM");
+        bytes.extend_from_slice(&58u32.to_le_bytes());
+        bytes.extend_from_slice(&[0, 0, 0, 0]);
+        bytes.extend_from_slice(&54u32.to_le_bytes());
+        bytes.extend_from_slice(&40u32.to_le_bytes());
+        bytes.extend_from_slice(&1i32.to_le_bytes());
+        bytes.extend_from_slice(&(-1i32).to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&32u16.to_le_bytes());
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(&4u32.to_le_bytes());
+        bytes.extend_from_slice(&[0; 16]);
+        bytes.extend_from_slice(&[1, 2, 3, 4]);
+
+        let dib = super::bmp_bytes_to_dib_bytes(&bytes).expect("DIB bytes");
+
+        assert_eq!(dib.len(), bytes.len() - 14);
+        assert_eq!(&dib[0..4], &40u32.to_le_bytes());
+        assert_eq!(&dib[dib.len() - 4..], &[1, 2, 3, 4]);
+    }
+
+    #[test]
     #[ignore = "depends on the currently focused local desktop window"]
     #[cfg(target_os = "windows")]
     fn windows_active_window_capture_writes_bmp_file() {
@@ -509,6 +647,30 @@ mod tests {
         assert_eq!(&bytes[0..2], b"BM");
         assert!(result.region.width > 0);
         assert!(result.region.height > 0);
+    }
+
+    #[test]
+    #[ignore = "writes a tiny image to the local Windows clipboard"]
+    #[cfg(target_os = "windows")]
+    fn windows_region_capture_can_copy_to_clipboard() {
+        use std::fs;
+
+        use oddsnap_platform::{CaptureRegion, ClipboardImageService, ScreenCaptureService};
+
+        let adapter = WindowsPlatform;
+        let result = adapter
+            .capture_region(CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 2,
+                height: 2,
+            })
+            .expect("capture tiny region");
+
+        adapter
+            .copy_image_to_clipboard(&result.image_path)
+            .expect("copy capture");
+        fs::remove_file(&result.image_path).expect("remove captured bmp");
     }
 
     #[test]

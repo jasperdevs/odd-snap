@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use oddsnap_core::{NativeUiProfile, PlatformCapabilities};
 use thiserror::Error;
@@ -73,6 +73,10 @@ pub trait WindowCaptureService: ScreenCaptureService + WindowPickerService {
 }
 
 impl<T> WindowCaptureService for T where T: ScreenCaptureService + WindowPickerService {}
+
+pub trait ClipboardImageService: Send + Sync {
+    fn copy_image_to_clipboard(&self, image_path: &Path) -> Result<(), PlatformError>;
+}
 
 pub trait HotkeyService: Send + Sync {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError>;
