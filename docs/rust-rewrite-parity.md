@@ -21,6 +21,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Shared capture persistence can save generated captures into a stable output directory.
 - GPUI shell exposes full-screen and active-window capture smoke controls with a local recent-captures list.
 - Rust app settings can load capture output and clipboard preferences from a JSON settings file.
+- macOS and Linux adapters expose explicit pending capture/window/clipboard service implementations instead of missing trait surfaces.
 
 ## Current Non-Parity State
 

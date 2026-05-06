@@ -1,5 +1,10 @@
+use std::path::Path;
+
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
-use oddsnap_platform::PlatformAdapter;
+use oddsnap_platform::{
+    CaptureRegion, CaptureResult, ClipboardImageService, MonitorInfo, PlatformAdapter,
+    PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
+};
 
 #[derive(Debug, Default)]
 pub struct LinuxPlatform;
@@ -41,10 +46,42 @@ impl PlatformAdapter for LinuxPlatform {
     }
 }
 
+impl ScreenCaptureService for LinuxPlatform {
+    fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError> {
+        Err(PlatformError::Unsupported(
+            "Linux monitor enumeration is not implemented yet",
+        ))
+    }
+
+    fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
+        let _ = region;
+        Err(PlatformError::Unsupported(
+            "Linux region capture is not implemented yet",
+        ))
+    }
+}
+
+impl WindowPickerService for LinuxPlatform {
+    fn active_window(&self) -> Result<WindowInfo, PlatformError> {
+        Err(PlatformError::Unsupported(
+            "Linux active-window detection is not implemented yet",
+        ))
+    }
+}
+
+impl ClipboardImageService for LinuxPlatform {
+    fn copy_image_to_clipboard(&self, image_path: &Path) -> Result<(), PlatformError> {
+        let _ = image_path;
+        Err(PlatformError::Unsupported(
+            "Linux image clipboard is not implemented yet",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use oddsnap_core::NativeMaterial;
-    use oddsnap_platform::PlatformAdapter;
+    use oddsnap_platform::{ClipboardImageService, PlatformAdapter, ScreenCaptureService};
 
     use super::LinuxPlatform;
 
@@ -56,5 +93,25 @@ mod tests {
             adapter.native_ui_profile().material,
             NativeMaterial::FreedesktopAdaptive
         );
+    }
+
+    #[test]
+    fn linux_capture_services_are_explicitly_unimplemented() {
+        let adapter = LinuxPlatform;
+
+        let error = adapter.monitors().expect_err("Linux capture pending");
+
+        assert!(error.to_string().contains("not implemented yet"));
+    }
+
+    #[test]
+    fn linux_clipboard_service_is_explicitly_unimplemented() {
+        let adapter = LinuxPlatform;
+
+        let error = adapter
+            .copy_image_to_clipboard(std::path::Path::new("capture.bmp"))
+            .expect_err("Linux clipboard pending");
+
+        assert!(error.to_string().contains("not implemented yet"));
     }
 }

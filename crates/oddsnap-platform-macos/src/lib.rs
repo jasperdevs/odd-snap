@@ -1,5 +1,10 @@
+use std::path::Path;
+
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
-use oddsnap_platform::PlatformAdapter;
+use oddsnap_platform::{
+    CaptureRegion, CaptureResult, ClipboardImageService, MonitorInfo, PlatformAdapter,
+    PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
+};
 
 #[derive(Debug, Default)]
 pub struct MacosPlatform;
@@ -41,10 +46,42 @@ impl PlatformAdapter for MacosPlatform {
     }
 }
 
+impl ScreenCaptureService for MacosPlatform {
+    fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError> {
+        Err(PlatformError::Unsupported(
+            "macOS monitor enumeration is not implemented yet",
+        ))
+    }
+
+    fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
+        let _ = region;
+        Err(PlatformError::Unsupported(
+            "macOS region capture is not implemented yet",
+        ))
+    }
+}
+
+impl WindowPickerService for MacosPlatform {
+    fn active_window(&self) -> Result<WindowInfo, PlatformError> {
+        Err(PlatformError::Unsupported(
+            "macOS active-window detection is not implemented yet",
+        ))
+    }
+}
+
+impl ClipboardImageService for MacosPlatform {
+    fn copy_image_to_clipboard(&self, image_path: &Path) -> Result<(), PlatformError> {
+        let _ = image_path;
+        Err(PlatformError::Unsupported(
+            "macOS image clipboard is not implemented yet",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use oddsnap_core::NativeMaterial;
-    use oddsnap_platform::PlatformAdapter;
+    use oddsnap_platform::{ClipboardImageService, PlatformAdapter, ScreenCaptureService};
 
     use super::MacosPlatform;
 
@@ -56,5 +93,25 @@ mod tests {
             adapter.native_ui_profile().material,
             NativeMaterial::LiquidGlass
         );
+    }
+
+    #[test]
+    fn macos_capture_services_are_explicitly_unimplemented() {
+        let adapter = MacosPlatform;
+
+        let error = adapter.monitors().expect_err("macOS capture pending");
+
+        assert!(error.to_string().contains("not implemented yet"));
+    }
+
+    #[test]
+    fn macos_clipboard_service_is_explicitly_unimplemented() {
+        let adapter = MacosPlatform;
+
+        let error = adapter
+            .copy_image_to_clipboard(std::path::Path::new("capture.bmp"))
+            .expect_err("macOS clipboard pending");
+
+        assert!(error.to_string().contains("not implemented yet"));
     }
 }

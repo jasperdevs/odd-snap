@@ -37,9 +37,11 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] macOS screen recording permission detection.
 - [ ] macOS tray/menu bar presence.
 - [ ] macOS global hotkey.
+- [x] macOS explicit unsupported capture/clipboard adapter surfaces.
 - [ ] Linux portal-aware screen capture plan.
 - [ ] Linux tray/appindicator strategy.
 - [ ] Linux global hotkey strategy.
+- [x] Linux explicit unsupported capture/clipboard adapter surfaces.
 
 ## Milestone 3 - Capture Core
 
