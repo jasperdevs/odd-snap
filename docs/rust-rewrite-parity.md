@@ -16,6 +16,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
 - GPUI shell can invoke the Windows capture service through a local smoke action.
 - Shared capture trait can capture the full virtual screen by reusing monitor enumeration and region capture.
+- Windows can detect active-window bounds and capture that window through the shared capture service.
 
 ## Current Non-Parity State
 

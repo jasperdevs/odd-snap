@@ -49,7 +49,8 @@ Draft PR: https://github.com/jasperdevs/odd-snap/pull/41
 - [x] Windows full-screen capture path.
 - [x] Windows GDI region capture foundation.
 - [ ] Cross-platform region capture.
-- [ ] Window capture.
+- [x] Windows active-window capture foundation.
+- [ ] Cross-platform window capture.
 - [ ] Region selection overlay.
 - [ ] Crosshair guides.
 - [ ] Magnifier.

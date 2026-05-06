@@ -1,6 +1,7 @@
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService,
+    CaptureRegion, CaptureResult, MonitorInfo, PlatformAdapter, PlatformError,
+    ScreenCaptureService, WindowInfo, WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -11,6 +12,10 @@ use std::{
 };
 
 #[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{HWND, RECT};
+#[cfg(target_os = "windows")]
+use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+#[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
@@ -18,7 +23,8 @@ use windows::Win32::Graphics::Gdi::{
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
+    SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
 
 #[derive(Debug, Default)]
@@ -115,6 +121,97 @@ impl ScreenCaptureService for WindowsPlatform {
             ))
         }
     }
+}
+
+impl WindowPickerService for WindowsPlatform {
+    fn active_window(&self) -> Result<WindowInfo, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            active_window_info()
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(PlatformError::Unsupported(
+                "Windows active-window detection is only available on Windows",
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn active_window_info() -> Result<WindowInfo, PlatformError> {
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.is_invalid() {
+        return Err(PlatformError::Failed(
+            "GetForegroundWindow returned no window".into(),
+        ));
+    }
+
+    let rect = window_capture_rect(hwnd)?;
+    Ok(WindowInfo {
+        id: format!("{:?}", hwnd.0),
+        title: window_title(hwnd),
+        bounds: rect_to_region(rect)?,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn window_capture_rect(hwnd: HWND) -> Result<RECT, PlatformError> {
+    let mut dwm_rect = RECT::default();
+    let dwm_result = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&mut dwm_rect as *mut RECT).cast(),
+            mem::size_of::<RECT>() as u32,
+        )
+    };
+    if dwm_result.is_ok() && rect_has_area(dwm_rect) {
+        return Ok(dwm_rect);
+    }
+
+    let mut rect = RECT::default();
+    unsafe { GetWindowRect(hwnd, &mut rect) }
+        .map_err(|error| PlatformError::Failed(format!("GetWindowRect failed: {error}")))?;
+    Ok(rect)
+}
+
+#[cfg(target_os = "windows")]
+fn rect_has_area(rect: RECT) -> bool {
+    rect.right > rect.left && rect.bottom > rect.top
+}
+
+#[cfg(target_os = "windows")]
+fn rect_to_region(rect: RECT) -> Result<CaptureRegion, PlatformError> {
+    if !rect_has_area(rect) {
+        return Err(PlatformError::Failed("window bounds are empty".into()));
+    }
+
+    Ok(CaptureRegion {
+        x: rect.left,
+        y: rect.top,
+        width: u32::try_from(rect.right - rect.left)
+            .map_err(|_| PlatformError::Failed("window width is invalid".into()))?,
+        height: u32::try_from(rect.bottom - rect.top)
+            .map_err(|_| PlatformError::Failed("window height is invalid".into()))?,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn window_title(hwnd: HWND) -> String {
+    let length = unsafe { GetWindowTextLengthW(hwnd) };
+    if length <= 0 {
+        return String::new();
+    }
+
+    let mut buffer = vec![0u16; length as usize + 1];
+    let copied = unsafe { GetWindowTextW(hwnd, &mut buffer) };
+    if copied <= 0 {
+        return String::new();
+    }
+
+    String::from_utf16_lossy(&buffer[..copied as usize])
 }
 
 #[cfg(target_os = "windows")]
@@ -378,6 +475,40 @@ mod tests {
         assert_eq!(&bytes[0..2], b"BM");
         assert_eq!(result.region.width, 2);
         assert_eq!(result.region.height, 2);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn rect_to_region_rejects_empty_bounds() {
+        let error = super::rect_to_region(windows::Win32::Foundation::RECT {
+            left: 10,
+            top: 10,
+            right: 10,
+            bottom: 20,
+        })
+        .expect_err("empty rect should fail");
+
+        assert!(error.to_string().contains("empty"));
+    }
+
+    #[test]
+    #[ignore = "depends on the currently focused local desktop window"]
+    #[cfg(target_os = "windows")]
+    fn windows_active_window_capture_writes_bmp_file() {
+        use std::fs;
+
+        use oddsnap_platform::WindowCaptureService;
+
+        let adapter = WindowsPlatform;
+        let result = adapter
+            .capture_active_window()
+            .expect("capture active window");
+        let bytes = fs::read(&result.image_path).expect("read active-window bmp");
+        fs::remove_file(&result.image_path).expect("remove active-window bmp");
+
+        assert_eq!(&bytes[0..2], b"BM");
+        assert!(result.region.width > 0);
+        assert!(result.region.height > 0);
     }
 
     #[test]

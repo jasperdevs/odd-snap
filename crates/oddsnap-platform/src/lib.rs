@@ -36,6 +36,13 @@ pub struct CaptureResult {
     pub region: CaptureRegion,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WindowInfo {
+    pub id: String,
+    pub title: String,
+    pub bounds: CaptureRegion,
+}
+
 pub trait PlatformAdapter: Send + Sync {
     fn name(&self) -> &'static str;
     fn native_ui_profile(&self) -> NativeUiProfile;
@@ -53,6 +60,19 @@ pub trait ScreenCaptureService: Send + Sync {
         self.capture_region(region)
     }
 }
+
+pub trait WindowPickerService: Send + Sync {
+    fn active_window(&self) -> Result<WindowInfo, PlatformError>;
+}
+
+pub trait WindowCaptureService: ScreenCaptureService + WindowPickerService {
+    fn capture_active_window(&self) -> Result<CaptureResult, PlatformError> {
+        let window = self.active_window()?;
+        self.capture_region(window.bounds)
+    }
+}
+
+impl<T> WindowCaptureService for T where T: ScreenCaptureService + WindowPickerService {}
 
 pub trait HotkeyService: Send + Sync {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError>;
