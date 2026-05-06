@@ -74,6 +74,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 - [ ] GIF recording.
 - [x] Windows FFmpeg-backed desktop video recording start/stop foundation.
+- [x] Windows FFmpeg recording can target an explicit capture region.
 - [ ] Region GIF recording.
 - [ ] Region MP4/WebM recording.
 - [x] FFmpeg discovery.

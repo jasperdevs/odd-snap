@@ -177,6 +177,7 @@ mod tests {
 
         let result = adapter.start_desktop_recording(VideoRecordingRequest {
             output_path: std::path::PathBuf::from("capture.mp4"),
+            region: None,
             format: RecordingFormat::Mp4,
             quality: RecordingQuality::Original,
             fps: 30,

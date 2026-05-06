@@ -391,16 +391,27 @@ fn start_windows_desktop_recording(
 #[cfg(target_os = "windows")]
 fn windows_desktop_recording_args(request: &VideoRecordingRequest) -> Vec<String> {
     let fps = request.fps.clamp(1, 240).to_string();
+    let mut input_args = vec![
+        "-hide_banner".into(),
+        "-f".into(),
+        "gdigrab".into(),
+        "-framerate".into(),
+        fps,
+    ];
+    if let Some(region) = &request.region {
+        input_args.extend([
+            "-offset_x".into(),
+            region.x.to_string(),
+            "-offset_y".into(),
+            region.y.to_string(),
+            "-video_size".into(),
+            format!("{}x{}", region.width, region.height),
+        ]);
+    }
+    input_args.extend(["-i".into(), "desktop".into()]);
+
     build_recording_output_args(&FfmpegRecordingRequest {
-        input_args: vec![
-            "-hide_banner".into(),
-            "-f".into(),
-            "gdigrab".into(),
-            "-framerate".into(),
-            fps,
-            "-i".into(),
-            "desktop".into(),
-        ],
+        input_args,
         output_path: request.output_path.clone(),
         format: request.format,
         quality: request.quality,
@@ -1177,6 +1188,12 @@ mod tests {
     fn windows_desktop_recording_args_use_gdigrab_and_configured_format() {
         let args = super::windows_desktop_recording_args(&VideoRecordingRequest {
             output_path: std::path::PathBuf::from("capture.webm"),
+            region: Some(oddsnap_platform::CaptureRegion {
+                x: -10,
+                y: 20,
+                width: 640,
+                height: 480,
+            }),
             format: RecordingFormat::WebM,
             quality: RecordingQuality::P1080,
             fps: 60,
@@ -1188,6 +1205,11 @@ mod tests {
 
         assert!(args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
         assert!(args.windows(2).any(|pair| pair == ["-framerate", "60"]));
+        assert!(args.windows(2).any(|pair| pair == ["-offset_x", "-10"]));
+        assert!(args.windows(2).any(|pair| pair == ["-offset_y", "20"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-video_size", "640x480"]));
         assert!(args.windows(2).any(|pair| pair == ["-vf", "scale=-2:1080"]));
         assert!(args.windows(2).any(|pair| pair == ["-c:v", "libvpx-vp9"]));
         assert_eq!(args.last().map(String::as_str), Some("capture.webm"));
@@ -1210,6 +1232,12 @@ mod tests {
         let mut handle = adapter
             .start_desktop_recording(VideoRecordingRequest {
                 output_path: output.clone(),
+                region: Some(oddsnap_platform::CaptureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 320,
+                    height: 240,
+                }),
                 format: RecordingFormat::Mp4,
                 quality: RecordingQuality::P480,
                 fps: 10,

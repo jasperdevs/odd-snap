@@ -745,6 +745,7 @@ impl OddSnapRustApp {
             };
             let handle = adapter.start_desktop_recording(VideoRecordingRequest {
                 output_path,
+                region: Some(region.clone()),
                 format: self.settings.recording_format,
                 quality: self.settings.recording_quality,
                 fps,

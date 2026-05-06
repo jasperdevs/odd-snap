@@ -54,6 +54,7 @@ pub struct WindowInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoRecordingRequest {
     pub output_path: PathBuf,
+    pub region: Option<CaptureRegion>,
     pub format: RecordingFormat,
     pub quality: RecordingQuality,
     pub fps: u32,
