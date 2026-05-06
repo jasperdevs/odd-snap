@@ -4,6 +4,7 @@ This checklist is the persistent GitHub-facing tracker for the Rust rewrite bran
 Keep it updated whenever a rewrite milestone lands.
 
 GitHub tracker: https://github.com/jasperdevs/odd-snap/issues/40
+Draft PR: https://github.com/jasperdevs/odd-snap/pull/41
 
 ## Ground Rules
 
