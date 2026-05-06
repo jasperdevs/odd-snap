@@ -381,6 +381,26 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "captures the full local desktop and writes a large temporary BMP"]
+    #[cfg(target_os = "windows")]
+    fn windows_full_screen_capture_writes_bmp_file() {
+        use std::fs;
+
+        use oddsnap_platform::ScreenCaptureService;
+
+        let adapter = WindowsPlatform;
+        let result = adapter
+            .capture_all_screens()
+            .expect("capture full virtual screen");
+        let bytes = fs::read(&result.image_path).expect("read full-screen bmp");
+        fs::remove_file(&result.image_path).expect("remove full-screen bmp");
+
+        assert_eq!(&bytes[0..2], b"BM");
+        assert!(result.region.width > 0);
+        assert!(result.region.height > 0);
+    }
+
+    #[test]
     #[cfg(not(target_os = "windows"))]
     fn windows_monitor_enumeration_is_gated_off_windows() {
         use oddsnap_platform::ScreenCaptureService;

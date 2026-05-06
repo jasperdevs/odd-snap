@@ -15,6 +15,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows monitor enumeration returns the virtual-screen bounds through the platform service.
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
 - GPUI shell can invoke the Windows capture service through a local smoke action.
+- Shared capture trait can capture the full virtual screen by reusing monitor enumeration and region capture.
 
 ## Current Non-Parity State
 

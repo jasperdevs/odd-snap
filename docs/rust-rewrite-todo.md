@@ -46,7 +46,7 @@ Draft PR: https://github.com/jasperdevs/odd-snap/pull/41
 
 ## Milestone 3 - Capture Core
 
-- [ ] Full-screen capture.
+- [x] Windows full-screen capture path.
 - [x] Windows GDI region capture foundation.
 - [ ] Cross-platform region capture.
 - [ ] Window capture.

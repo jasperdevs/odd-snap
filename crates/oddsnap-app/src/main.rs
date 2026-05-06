@@ -7,7 +7,7 @@ use gpui::{
 };
 use gpui_platform::application;
 use oddsnap_core::{CapabilityState, PlatformCapability};
-use oddsnap_platform::{CaptureRegion, PlatformAdapter, ScreenCaptureService};
+use oddsnap_platform::{PlatformAdapter, ScreenCaptureService};
 
 fn main() {
     application().run(|cx: &mut App| {
@@ -244,12 +244,7 @@ impl OddSnapRustApp {
     fn run_capture_smoke(&mut self) {
         let platform = host_platform();
         #[cfg(target_os = "windows")]
-        let result = oddsnap_platform_windows::WindowsPlatform.capture_region(CaptureRegion {
-            x: 0,
-            y: 0,
-            width: 64,
-            height: 64,
-        });
+        let result = oddsnap_platform_windows::WindowsPlatform.capture_all_screens();
 
         #[cfg(not(target_os = "windows"))]
         let result = Err(oddsnap_platform::PlatformError::Unsupported(

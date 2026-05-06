@@ -45,6 +45,13 @@ pub trait PlatformAdapter: Send + Sync {
 pub trait ScreenCaptureService: Send + Sync {
     fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError>;
     fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError>;
+
+    fn capture_all_screens(&self) -> Result<CaptureResult, PlatformError> {
+        let monitors = self.monitors()?;
+        let region = virtual_screen_region(&monitors)
+            .ok_or_else(|| PlatformError::Failed("no monitors available for capture".into()))?;
+        self.capture_region(region)
+    }
 }
 
 pub trait HotkeyService: Send + Sync {
@@ -57,4 +64,69 @@ pub trait TrayService: Send + Sync {
 
 pub trait PermissionsService: Send + Sync {
     fn missing_permissions(&self) -> Vec<String>;
+}
+
+pub fn virtual_screen_region(monitors: &[MonitorInfo]) -> Option<CaptureRegion> {
+    let first = monitors.first()?;
+    let mut left = first.x as i64;
+    let mut top = first.y as i64;
+    let mut right = left + first.width as i64;
+    let mut bottom = top + first.height as i64;
+
+    for monitor in &monitors[1..] {
+        let monitor_left = monitor.x as i64;
+        let monitor_top = monitor.y as i64;
+        let monitor_right = monitor_left + monitor.width as i64;
+        let monitor_bottom = monitor_top + monitor.height as i64;
+
+        left = left.min(monitor_left);
+        top = top.min(monitor_top);
+        right = right.max(monitor_right);
+        bottom = bottom.max(monitor_bottom);
+    }
+
+    let width = u32::try_from(right - left).ok()?;
+    let height = u32::try_from(bottom - top).ok()?;
+    Some(CaptureRegion {
+        x: i32::try_from(left).ok()?,
+        y: i32::try_from(top).ok()?,
+        width,
+        height,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{virtual_screen_region, MonitorInfo};
+
+    #[test]
+    fn virtual_screen_region_combines_negative_and_positive_monitors() {
+        let monitors = vec![
+            MonitorInfo {
+                id: "left".into(),
+                name: "Left".into(),
+                x: -1920,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                scale_percent: 100,
+            },
+            MonitorInfo {
+                id: "main".into(),
+                name: "Main".into(),
+                x: 0,
+                y: -120,
+                width: 2560,
+                height: 1440,
+                scale_percent: 100,
+            },
+        ];
+
+        let region = virtual_screen_region(&monitors).expect("virtual region");
+
+        assert_eq!(region.x, -1920);
+        assert_eq!(region.y, -120);
+        assert_eq!(region.width, 4480);
+        assert_eq!(region.height, 1440);
+    }
 }
