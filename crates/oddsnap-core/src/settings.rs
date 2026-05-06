@@ -6,6 +6,33 @@ use std::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum CaptureImageFormat {
+    #[default]
+    Png,
+    Jpeg,
+    Bmp,
+}
+
+impl CaptureImageFormat {
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::Png => "png",
+            Self::Jpeg => "jpg",
+            Self::Bmp => "bmp",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Png => "PNG",
+            Self::Jpeg => "JPEG",
+            Self::Bmp => "BMP",
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SettingsStoreError {
     #[error("failed to read settings: {0}")]
@@ -26,6 +53,10 @@ pub struct AppSettings {
     pub copy_captures_to_clipboard: bool,
     #[serde(default = "default_save_history")]
     pub save_history: bool,
+    #[serde(default)]
+    pub capture_image_format: CaptureImageFormat,
+    #[serde(default = "default_jpeg_quality")]
+    pub jpeg_quality: u8,
 }
 
 impl Default for AppSettings {
@@ -34,6 +65,8 @@ impl Default for AppSettings {
             capture_output_directory: None,
             copy_captures_to_clipboard: true,
             save_history: true,
+            capture_image_format: CaptureImageFormat::Png,
+            jpeg_quality: default_jpeg_quality(),
         }
     }
 }
@@ -53,6 +86,10 @@ fn default_copy_captures_to_clipboard() -> bool {
 
 fn default_save_history() -> bool {
     true
+}
+
+fn default_jpeg_quality() -> u8 {
+    85
 }
 
 #[derive(Debug, Clone)]
@@ -166,7 +203,7 @@ pub struct SettingsPageDefinition {
 mod tests {
     use std::{fs, path::PathBuf};
 
-    use super::{AppSettings, SettingsStore};
+    use super::{AppSettings, CaptureImageFormat, SettingsStore};
 
     #[test]
     fn app_settings_defaults_copy_captures_to_clipboard() {
@@ -174,6 +211,8 @@ mod tests {
 
         assert!(settings.copy_captures_to_clipboard);
         assert!(settings.save_history);
+        assert_eq!(settings.capture_image_format, CaptureImageFormat::Png);
+        assert_eq!(settings.jpeg_quality, 85);
         assert!(settings.capture_output_directory.is_none());
     }
 
@@ -183,6 +222,8 @@ mod tests {
             capture_output_directory: Some(PathBuf::new()),
             copy_captures_to_clipboard: true,
             save_history: true,
+            capture_image_format: CaptureImageFormat::Png,
+            jpeg_quality: 85,
         };
 
         assert_eq!(
@@ -201,6 +242,8 @@ mod tests {
             capture_output_directory: Some(root.join("captures")),
             copy_captures_to_clipboard: false,
             save_history: false,
+            capture_image_format: CaptureImageFormat::Jpeg,
+            jpeg_quality: 70,
         };
 
         store.save(&settings).expect("save settings");
@@ -222,5 +265,22 @@ mod tests {
         let loaded = store.load_or_default().expect("load defaults");
 
         assert_eq!(loaded, AppSettings::default());
+    }
+
+    #[test]
+    fn capture_image_format_uses_pascal_case_json() {
+        let settings = AppSettings {
+            capture_output_directory: None,
+            copy_captures_to_clipboard: true,
+            save_history: true,
+            capture_image_format: CaptureImageFormat::Bmp,
+            jpeg_quality: 85,
+        };
+
+        let json = serde_json::to_string(&settings).expect("serialize settings");
+        let loaded: AppSettings = serde_json::from_str(&json).expect("deserialize settings");
+
+        assert!(json.contains(r#""capture_image_format":"Bmp""#));
+        assert_eq!(loaded.capture_image_format, CaptureImageFormat::Bmp);
     }
 }

@@ -12,7 +12,7 @@ use oddsnap_core::{
     SettingsStore,
 };
 use oddsnap_platform::{
-    default_capture_directory, persist_capture_to_directory, ClipboardImageService,
+    default_capture_directory, persist_capture_to_directory_as, ClipboardImageService,
     PlatformAdapter, ScreenCaptureService, WindowCaptureService,
 };
 
@@ -294,6 +294,16 @@ impl OddSnapRustApp {
                 div()
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(format!(
+                        "Image format: {} · JPEG quality {}",
+                        self.settings.capture_image_format.label(),
+                        self.settings.jpeg_quality
+                    ))),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(self.media_status.clone())),
             )
             .child(
@@ -433,7 +443,12 @@ impl OddSnapRustApp {
             };
             capture.and_then(|capture| {
                 let output_dir = self.capture_output_directory();
-                let saved = persist_capture_to_directory(&capture, &output_dir)?;
+                let saved = persist_capture_to_directory_as(
+                    &capture,
+                    &output_dir,
+                    self.settings.capture_image_format,
+                    self.settings.jpeg_quality,
+                )?;
                 if self.settings.copy_captures_to_clipboard {
                     adapter.copy_image_to_clipboard(&saved.image_path)?;
                 }

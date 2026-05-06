@@ -1,10 +1,12 @@
 use std::{
     fs,
+    io::BufWriter,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use oddsnap_core::{NativeUiProfile, PlatformCapabilities};
+use image::{codecs::jpeg::JpegEncoder, ImageFormat};
+use oddsnap_core::{CaptureImageFormat, NativeUiProfile, PlatformCapabilities};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -129,6 +131,71 @@ pub fn persist_capture_to_directory(
     })
 }
 
+pub fn persist_capture_to_directory_as(
+    capture: &CaptureResult,
+    output_dir: &Path,
+    format: CaptureImageFormat,
+    jpeg_quality: u8,
+) -> Result<CaptureResult, PlatformError> {
+    fs::create_dir_all(output_dir).map_err(|source| {
+        PlatformError::Failed(format!("failed to create capture directory: {source}"))
+    })?;
+
+    let destination = unique_capture_path(output_dir, format.extension());
+
+    save_capture_file_as(&capture.image_path, &destination, format, jpeg_quality)?;
+
+    Ok(CaptureResult {
+        image_path: destination,
+        region: capture.region.clone(),
+    })
+}
+
+fn save_capture_file_as(
+    source: &Path,
+    destination: &Path,
+    format: CaptureImageFormat,
+    jpeg_quality: u8,
+) -> Result<(), PlatformError> {
+    if format == CaptureImageFormat::Bmp
+        && source
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("bmp"))
+    {
+        fs::copy(source, destination)
+            .map_err(|source| PlatformError::Failed(format!("failed to save capture: {source}")))?;
+        return Ok(());
+    }
+
+    let image = image::open(source)
+        .map_err(|source| PlatformError::Failed(format!("failed to decode capture: {source}")))?;
+
+    match format {
+        CaptureImageFormat::Png => image
+            .save_with_format(destination, ImageFormat::Png)
+            .map_err(|source| {
+                PlatformError::Failed(format!("failed to save PNG capture: {source}"))
+            }),
+        CaptureImageFormat::Bmp => image
+            .save_with_format(destination, ImageFormat::Bmp)
+            .map_err(|source| {
+                PlatformError::Failed(format!("failed to save BMP capture: {source}"))
+            }),
+        CaptureImageFormat::Jpeg => {
+            let file = fs::File::create(destination).map_err(|source| {
+                PlatformError::Failed(format!("failed to create JPEG capture: {source}"))
+            })?;
+            let rgb = image.to_rgb8();
+            let mut encoder =
+                JpegEncoder::new_with_quality(BufWriter::new(file), jpeg_quality.clamp(1, 100));
+            encoder.encode_image(&rgb).map_err(|source| {
+                PlatformError::Failed(format!("failed to save JPEG capture: {source}"))
+            })
+        }
+    }
+}
+
 pub trait HotkeyService: Send + Sync {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError>;
 }
@@ -200,9 +267,10 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        persist_capture_to_directory, virtual_screen_region, CaptureRegion, CaptureResult,
-        MonitorInfo,
+        persist_capture_to_directory, persist_capture_to_directory_as, virtual_screen_region,
+        CaptureRegion, CaptureResult, MonitorInfo,
     };
+    use oddsnap_core::CaptureImageFormat;
 
     #[test]
     fn virtual_screen_region_combines_negative_and_positive_monitors() {
@@ -290,5 +358,52 @@ mod tests {
 
         assert!(error.to_string().contains("failed to save capture"));
         let _ = fs::remove_dir_all(output);
+    }
+
+    #[test]
+    fn persist_capture_to_directory_as_writes_requested_formats() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-platform-format-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp test root");
+        let source = root.join("source.bmp");
+        let output = root.join("saved");
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            2,
+            1,
+            image::Rgba([200, 40, 20, 255]),
+        ));
+        image
+            .save_with_format(&source, image::ImageFormat::Bmp)
+            .expect("write source bmp");
+        let capture = CaptureResult {
+            image_path: source,
+            region: CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 2,
+                height: 1,
+            },
+        };
+
+        for (format, extension) in [
+            (CaptureImageFormat::Png, "png"),
+            (CaptureImageFormat::Jpeg, "jpg"),
+            (CaptureImageFormat::Bmp, "bmp"),
+        ] {
+            let saved =
+                persist_capture_to_directory_as(&capture, &output, format, 85).expect("persist");
+
+            assert_eq!(
+                saved.image_path.extension(),
+                Some(std::ffi::OsStr::new(extension))
+            );
+            assert!(saved.image_path.exists());
+            assert_eq!(saved.region, capture.region);
+        }
+
+        let _ = fs::remove_dir_all(root);
     }
 }

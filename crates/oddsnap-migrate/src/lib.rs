@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use oddsnap_core::AppSettings;
+use oddsnap_core::{AppSettings, CaptureImageFormat};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -119,6 +119,14 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
         settings.copy_captures_to_clipboard = legacy_after_capture_copies(after_capture);
     }
 
+    if let Some(capture_image_format) = import.raw.get("CaptureImageFormat") {
+        settings.capture_image_format = legacy_capture_image_format(capture_image_format);
+    }
+
+    if let Some(jpeg_quality) = import.raw.get("JpegQuality").and_then(Value::as_u64) {
+        settings.jpeg_quality = jpeg_quality.clamp(1, 100) as u8;
+    }
+
     settings
 }
 
@@ -130,6 +138,19 @@ fn legacy_after_capture_copies(value: &Value) -> bool {
     }
 }
 
+fn legacy_capture_image_format(value: &Value) -> CaptureImageFormat {
+    match value {
+        Value::Number(number) => match number.as_u64() {
+            Some(1) => CaptureImageFormat::Jpeg,
+            Some(2) => CaptureImageFormat::Bmp,
+            _ => CaptureImageFormat::Png,
+        },
+        Value::String(name) if name.eq_ignore_ascii_case("Jpeg") => CaptureImageFormat::Jpeg,
+        Value::String(name) if name.eq_ignore_ascii_case("Bmp") => CaptureImageFormat::Bmp,
+        _ => CaptureImageFormat::Png,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -137,6 +158,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{import_app_settings, read_legacy_settings, LegacyOddSnapPaths};
+    use oddsnap_core::CaptureImageFormat;
 
     #[test]
     fn builds_paths_from_roaming_directory() {
@@ -176,7 +198,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2}"#,
+            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92}"#,
         )
         .expect("write test settings");
 
@@ -190,6 +212,8 @@ mod tests {
         );
         assert!(!settings.save_history);
         assert!(!settings.copy_captures_to_clipboard);
+        assert_eq!(settings.capture_image_format, CaptureImageFormat::Jpeg);
+        assert_eq!(settings.jpeg_quality, 92);
     }
 
     #[test]
@@ -203,5 +227,19 @@ mod tests {
         let settings = import_app_settings(&import);
 
         assert!(settings.copy_captures_to_clipboard);
+    }
+
+    #[test]
+    fn imports_invalid_capture_format_as_png_and_clamps_jpeg_quality() {
+        let import = super::LegacySettingsImport {
+            source_path: PathBuf::from("settings.json"),
+            top_level_key_count: 2,
+            raw: serde_json::json!({"CaptureImageFormat":99,"JpegQuality":250}),
+        };
+
+        let settings = import_app_settings(&import);
+
+        assert_eq!(settings.capture_image_format, CaptureImageFormat::Png);
+        assert_eq!(settings.jpeg_quality, 100);
     }
 }
