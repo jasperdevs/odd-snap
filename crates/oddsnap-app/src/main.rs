@@ -9,7 +9,7 @@ use gpui_platform::application;
 use oddsnap_core::{CapabilityState, PlatformCapability};
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_directory, ClipboardImageService,
-    PlatformAdapter, ScreenCaptureService,
+    PlatformAdapter, ScreenCaptureService, WindowCaptureService,
 };
 
 fn main() {
@@ -48,7 +48,30 @@ struct OddSnapRustApp {
     native_ui_goal: String,
     capabilities: Vec<(PlatformCapability, CapabilityState)>,
     capture_status: String,
+    capture_history: Vec<CaptureHistoryEntry>,
     focus_handle: gpui::FocusHandle,
+}
+
+struct CaptureHistoryEntry {
+    mode: CaptureMode,
+    path: String,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Clone, Copy)]
+enum CaptureMode {
+    FullScreen,
+    ActiveWindow,
+}
+
+impl CaptureMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::FullScreen => "Full screen",
+            Self::ActiveWindow => "Active window",
+        }
+    }
 }
 
 impl OddSnapRustApp {
@@ -62,6 +85,7 @@ impl OddSnapRustApp {
             native_ui_goal: profile.visual_goal,
             capabilities,
             capture_status: "No capture run in this session.".into(),
+            capture_history: Vec::new(),
             focus_handle: cx.focus_handle(),
         }
     }
@@ -139,21 +163,14 @@ impl Render for OddSnapRustApp {
                     .flex_1()
                     .gap(px(14.0))
                     .p(px(18.0))
-                    .child(self.panel(
-                        "Native UI target",
-                        vec![
-                            self.native_ui_goal.clone(),
-                            "Windows: WinUI 3 aligned; macOS: Liquid Glass aligned; Linux: freedesktop adaptive.".into(),
-                            self.capture_status.clone(),
-                        ],
-                    ))
-                    .child(self.capability_panel(cx)),
+                    .child(self.capture_panel(cx))
+                    .child(self.capability_panel()),
             )
     }
 }
 
 impl OddSnapRustApp {
-    fn panel(&self, title: &'static str, lines: Vec<String>) -> impl IntoElement {
+    fn capture_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut body = div()
             .flex()
             .flex_col()
@@ -164,21 +181,83 @@ impl OddSnapRustApp {
             .border_color(rgb(0x272b33))
             .bg(rgb(0x17191f))
             .p(px(16.0))
-            .child(div().text_size(px(14.0)).child(title));
-
-        for line in lines {
-            body = body.child(
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_size(px(14.0)).child("Capture"))
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(8.0))
+                            .child(self.capture_button(cx, "capture-full-button", CaptureMode::FullScreen))
+                            .child(self.capture_button(cx, "capture-window-button", CaptureMode::ActiveWindow)),
+                    ),
+            )
+            .child(
                 div()
                     .text_size(px(12.0))
                     .text_color(rgb(0xc6ccd6))
-                    .child(SharedString::from(line)),
+                    .child(SharedString::from(self.native_ui_goal.clone())),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child("Windows: WinUI 3 aligned; macOS: Liquid Glass aligned; Linux: freedesktop adaptive."),
+            )
+            .child(
+                div()
+                    .rounded(px(6.0))
+                    .bg(rgb(0x1d2027))
+                    .px(px(10.0))
+                    .py(px(8.0))
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xd8dde6))
+                    .child(SharedString::from(self.capture_status.clone())),
+            );
+
+        body = body.child(div().text_size(px(13.0)).child("Recent captures"));
+
+        if self.capture_history.is_empty() {
+            return body.child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0x8b93a3))
+                    .child("No saved captures yet."),
+            );
+        }
+
+        for entry in &self.capture_history {
+            body = body.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(3.0))
+                    .rounded(px(6.0))
+                    .bg(rgb(0x1d2027))
+                    .px(px(10.0))
+                    .py(px(8.0))
+                    .child(div().text_size(px(12.0)).child(SharedString::from(format!(
+                        "{} · {}x{}",
+                        entry.mode.label(),
+                        entry.width,
+                        entry.height
+                    ))))
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(rgb(0x9ba3af))
+                            .child(SharedString::from(entry.path.clone())),
+                    ),
             );
         }
 
         body
     }
 
-    fn capability_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn capability_panel(&self) -> impl IntoElement {
         let mut body = div()
             .flex()
             .flex_col()
@@ -195,7 +274,12 @@ impl OddSnapRustApp {
                     .items_center()
                     .justify_between()
                     .child(div().text_size(px(14.0)).child("Platform parity tracker"))
-                    .child(self.capture_button(cx)),
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(rgb(0x8b93a3))
+                            .child("Local"),
+                    ),
             );
 
         for (capability, state) in &self.capabilities {
@@ -225,9 +309,14 @@ impl OddSnapRustApp {
         body
     }
 
-    fn capture_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn capture_button(
+        &self,
+        cx: &mut Context<Self>,
+        element_id: &'static str,
+        mode: CaptureMode,
+    ) -> impl IntoElement {
         div()
-            .id("capture-smoke-button")
+            .id(element_id)
             .rounded(px(7.0))
             .border_1()
             .border_color(rgb(0x4a5262))
@@ -236,20 +325,24 @@ impl OddSnapRustApp {
             .px(px(10.0))
             .py(px(6.0))
             .text_size(px(11.0))
-            .child("Test capture")
-            .on_click(cx.listener(|this: &mut Self, _, _, cx| {
+            .child(mode.label())
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
-                this.run_capture_smoke();
+                this.run_capture(mode);
                 cx.notify();
             }))
     }
 
-    fn run_capture_smoke(&mut self) {
+    fn run_capture(&mut self, mode: CaptureMode) {
         let platform = host_platform();
         #[cfg(target_os = "windows")]
         let result = {
             let adapter = oddsnap_platform_windows::WindowsPlatform;
-            adapter.capture_all_screens().and_then(|capture| {
+            let capture = match mode {
+                CaptureMode::FullScreen => adapter.capture_all_screens(),
+                CaptureMode::ActiveWindow => adapter.capture_active_window(),
+            };
+            capture.and_then(|capture| {
                 let saved = persist_capture_to_directory(&capture, &default_capture_directory())?;
                 adapter.copy_image_to_clipboard(&saved.image_path)?;
                 Ok(saved)
@@ -262,11 +355,24 @@ impl OddSnapRustApp {
         ));
 
         self.capture_status = match result {
-            Ok(capture) => format!(
-                "{} capture copied and saved {}",
-                platform.name(),
-                capture.image_path.display()
-            ),
+            Ok(capture) => {
+                let path = capture.image_path.display().to_string();
+                self.capture_history.insert(
+                    0,
+                    CaptureHistoryEntry {
+                        mode,
+                        path: path.clone(),
+                        width: capture.region.width,
+                        height: capture.region.height,
+                    },
+                );
+                self.capture_history.truncate(6);
+                format!(
+                    "{} {} copied and saved {path}",
+                    platform.name(),
+                    mode.label()
+                )
+            }
             Err(error) => format!("{} capture failed: {error}", platform.name()),
         };
     }

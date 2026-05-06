@@ -19,6 +19,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can detect active-window bounds and capture that window through the shared capture service.
 - Windows can copy generated BMP captures to the system clipboard as image data.
 - Shared capture persistence can save generated captures into a stable output directory.
+- GPUI shell exposes full-screen and active-window capture smoke controls with a local recent-captures list.
 
 ## Current Non-Parity State
 

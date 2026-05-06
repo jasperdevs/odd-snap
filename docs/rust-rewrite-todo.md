@@ -56,7 +56,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] User-configurable save destination.
 - [x] Windows image clipboard foundation.
 - [ ] Cross-platform image clipboard.
-- [ ] Post-capture preview.
+- [x] GPUI recent-captures list for capture smoke results.
+- [ ] Post-capture image preview.
 
 ## Milestone 4 - Recording And Media
 
