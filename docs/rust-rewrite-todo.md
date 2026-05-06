@@ -96,7 +96,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 - [x] Import existing save directory/history/copy/image-format/save-naming settings into Rust settings.
 - [ ] Import all existing settings.
-- [ ] Import existing history.
+- [x] Import existing history.
 - [ ] Import existing media metadata where practical.
 - [ ] Windows full parity verification.
 - [ ] macOS full parity verification.

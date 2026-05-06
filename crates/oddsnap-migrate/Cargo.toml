@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 oddsnap-core = { path = "../oddsnap-core" }
+rusqlite.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 

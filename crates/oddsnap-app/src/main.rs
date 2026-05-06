@@ -110,6 +110,7 @@ impl OddSnapRustApp {
         };
         let history_store = HistoryStore::new(default_history_path());
         let history_path = history_store.path().display().to_string();
+        let history_migration_status = import_legacy_history_if_needed(&history_store);
         let capture_history = history_store
             .load_or_default()
             .map(history_entries_to_capture_history)
@@ -131,7 +132,7 @@ impl OddSnapRustApp {
             platform_name: platform.name().into(),
             native_ui_goal: profile.visual_goal,
             capabilities,
-            capture_status,
+            capture_status: combine_startup_status(capture_status, history_migration_status),
             settings,
             settings_path,
             history_store,
@@ -168,6 +169,32 @@ fn import_legacy_settings_if_needed(settings_store: &SettingsStore) -> Option<St
             imported.source_path.display()
         )),
         Err(error) => Some(format!("Legacy settings import failed: {error}")),
+    }
+}
+
+fn import_legacy_history_if_needed(history_store: &HistoryStore) -> Option<String> {
+    if history_store.path().exists() {
+        return None;
+    }
+
+    let legacy_paths = oddsnap_migrate::LegacyOddSnapPaths::from_current_environment()?;
+    match oddsnap_migrate::import_existing_history(&legacy_paths) {
+        Ok(index) if index.entries.is_empty() => None,
+        Ok(index) => {
+            let count = index.entries.len();
+            match history_store.save(&index) {
+                Ok(()) => Some(format!("Imported {count} existing history entries.")),
+                Err(error) => Some(format!("Existing history import failed: {error}")),
+            }
+        }
+        Err(error) => Some(format!("Existing history import failed: {error}")),
+    }
+}
+
+fn combine_startup_status(base: String, extra: Option<String>) -> String {
+    match extra {
+        Some(extra) if !extra.is_empty() => format!("{base} {extra}"),
+        _ => base,
     }
 }
 
