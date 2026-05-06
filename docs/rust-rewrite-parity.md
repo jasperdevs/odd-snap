@@ -26,10 +26,12 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
 - Rust startup can import legacy capture image format and JPEG quality settings.
+- Rust startup can import legacy file-name template and monthly-folder save settings.
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
 - Windows can parse and register process-local global hotkeys, with listener integration still pending.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
+- Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.
 
 ## Current Non-Parity State
 

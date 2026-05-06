@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use oddsnap_core::{AppSettings, CaptureImageFormat};
+use oddsnap_core::{normalize_file_name_template, AppSettings, CaptureImageFormat};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -127,6 +127,18 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
         settings.jpeg_quality = jpeg_quality.clamp(1, 100) as u8;
     }
 
+    if let Some(save_in_monthly_folders) = import
+        .raw
+        .get("SaveInMonthlyFolders")
+        .and_then(Value::as_bool)
+    {
+        settings.save_in_monthly_folders = save_in_monthly_folders;
+    }
+
+    if let Some(file_name_template) = import.raw.get("FileNameTemplate").and_then(Value::as_str) {
+        settings.file_name_template = normalize_file_name_template(file_name_template);
+    }
+
     settings
 }
 
@@ -198,7 +210,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92}"#,
+            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}"}"#,
         )
         .expect("write test settings");
 
@@ -214,6 +226,8 @@ mod tests {
         assert!(!settings.copy_captures_to_clipboard);
         assert_eq!(settings.capture_image_format, CaptureImageFormat::Jpeg);
         assert_eq!(settings.jpeg_quality, 92);
+        assert!(!settings.save_in_monthly_folders);
+        assert_eq!(settings.file_name_template, "Screenshot_{date}");
     }
 
     #[test]

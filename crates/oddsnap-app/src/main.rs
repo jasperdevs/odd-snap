@@ -7,13 +7,13 @@ use gpui::{
 };
 use gpui_platform::application;
 use oddsnap_core::{
-    default_history_path, default_settings_path, discover_ffmpeg_tools, AppSettings,
-    CapabilityState, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, PlatformCapability,
-    SettingsStore,
+    build_available_capture_path, default_history_path, default_settings_path,
+    discover_ffmpeg_tools, format_file_name_template, AppSettings, CapabilityState, HistoryEntry,
+    HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, SettingsStore,
 };
 use oddsnap_platform::{
-    default_capture_directory, persist_capture_to_directory_as, ClipboardImageService,
-    PlatformAdapter, ScreenCaptureService, WindowCaptureService,
+    default_capture_directory, persist_capture_to_path_as, ClipboardImageService, PlatformAdapter,
+    ScreenCaptureService, WindowCaptureService,
 };
 
 fn main() {
@@ -304,6 +304,20 @@ impl OddSnapRustApp {
                 div()
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(format!(
+                        "File naming: {}{}",
+                        self.settings.file_name_template,
+                        if self.settings.save_in_monthly_folders {
+                            " · monthly folders"
+                        } else {
+                            ""
+                        }
+                    ))),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(self.media_status.clone())),
             )
             .child(
@@ -442,10 +456,10 @@ impl OddSnapRustApp {
                 CaptureMode::ActiveWindow => adapter.capture_active_window(),
             };
             capture.and_then(|capture| {
-                let output_dir = self.capture_output_directory();
-                let saved = persist_capture_to_directory_as(
+                let destination = self.capture_destination(&capture);
+                let saved = persist_capture_to_path_as(
                     &capture,
-                    &output_dir,
+                    &destination,
                     self.settings.capture_image_format,
                     self.settings.jpeg_quality,
                 )?;
@@ -483,6 +497,24 @@ impl OddSnapRustApp {
     fn capture_output_directory(&self) -> std::path::PathBuf {
         self.settings
             .capture_output_directory_or(default_capture_directory())
+    }
+
+    fn capture_destination(&self, capture: &oddsnap_platform::CaptureResult) -> std::path::PathBuf {
+        let stem = format_file_name_template(
+            &self.settings.file_name_template,
+            capture.region.width,
+            capture.region.height,
+        );
+        let file_name = format!(
+            "{}.{}",
+            stem,
+            self.settings.capture_image_format.extension()
+        );
+        build_available_capture_path(
+            &self.capture_output_directory(),
+            &file_name,
+            self.settings.save_in_monthly_folders,
+        )
     }
 
     fn save_capture_history(

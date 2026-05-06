@@ -142,11 +142,24 @@ pub fn persist_capture_to_directory_as(
     })?;
 
     let destination = unique_capture_path(output_dir, format.extension());
+    persist_capture_to_path_as(capture, &destination, format, jpeg_quality)
+}
 
-    save_capture_file_as(&capture.image_path, &destination, format, jpeg_quality)?;
+pub fn persist_capture_to_path_as(
+    capture: &CaptureResult,
+    destination: &Path,
+    format: CaptureImageFormat,
+    jpeg_quality: u8,
+) -> Result<CaptureResult, PlatformError> {
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|source| {
+            PlatformError::Failed(format!("failed to create capture directory: {source}"))
+        })?;
+    }
+    save_capture_file_as(&capture.image_path, destination, format, jpeg_quality)?;
 
     Ok(CaptureResult {
-        image_path: destination,
+        image_path: destination.to_path_buf(),
         region: capture.region.clone(),
     })
 }
@@ -267,8 +280,8 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        persist_capture_to_directory, persist_capture_to_directory_as, virtual_screen_region,
-        CaptureRegion, CaptureResult, MonitorInfo,
+        persist_capture_to_directory, persist_capture_to_directory_as, persist_capture_to_path_as,
+        virtual_screen_region, CaptureRegion, CaptureResult, MonitorInfo,
     };
     use oddsnap_core::CaptureImageFormat;
 
@@ -404,6 +417,40 @@ mod tests {
             assert_eq!(saved.region, capture.region);
         }
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persist_capture_to_path_as_uses_exact_destination_path() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-platform-path-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp test root");
+        let source = root.join("source.bmp");
+        let destination = root.join("2026-01").join("Custom.png");
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            1,
+            1,
+            image::Rgba([10, 20, 30, 255]),
+        ));
+        image
+            .save_with_format(&source, image::ImageFormat::Bmp)
+            .expect("write source bmp");
+        let capture = CaptureResult {
+            image_path: source,
+            region: CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
+        };
+
+        let saved = persist_capture_to_path_as(&capture, &destination, CaptureImageFormat::Png, 85)
+            .expect("persist to path");
+
+        assert_eq!(saved.image_path, destination);
+        assert!(saved.image_path.exists());
         let _ = fs::remove_dir_all(root);
     }
 }

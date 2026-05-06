@@ -6,6 +6,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::DEFAULT_FILE_NAME_TEMPLATE;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub enum CaptureImageFormat {
@@ -57,6 +59,10 @@ pub struct AppSettings {
     pub capture_image_format: CaptureImageFormat,
     #[serde(default = "default_jpeg_quality")]
     pub jpeg_quality: u8,
+    #[serde(default = "default_save_in_monthly_folders")]
+    pub save_in_monthly_folders: bool,
+    #[serde(default = "default_file_name_template")]
+    pub file_name_template: String,
 }
 
 impl Default for AppSettings {
@@ -67,6 +73,8 @@ impl Default for AppSettings {
             save_history: true,
             capture_image_format: CaptureImageFormat::Png,
             jpeg_quality: default_jpeg_quality(),
+            save_in_monthly_folders: default_save_in_monthly_folders(),
+            file_name_template: default_file_name_template(),
         }
     }
 }
@@ -90,6 +98,14 @@ fn default_save_history() -> bool {
 
 fn default_jpeg_quality() -> u8 {
     85
+}
+
+fn default_save_in_monthly_folders() -> bool {
+    true
+}
+
+fn default_file_name_template() -> String {
+    DEFAULT_FILE_NAME_TEMPLATE.into()
 }
 
 #[derive(Debug, Clone)]
@@ -204,6 +220,7 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{AppSettings, CaptureImageFormat, SettingsStore};
+    use crate::{normalize_file_name_template, DEFAULT_FILE_NAME_TEMPLATE};
 
     #[test]
     fn app_settings_defaults_copy_captures_to_clipboard() {
@@ -224,6 +241,8 @@ mod tests {
             save_history: true,
             capture_image_format: CaptureImageFormat::Png,
             jpeg_quality: 85,
+            save_in_monthly_folders: true,
+            file_name_template: DEFAULT_FILE_NAME_TEMPLATE.into(),
         };
 
         assert_eq!(
@@ -244,6 +263,8 @@ mod tests {
             save_history: false,
             capture_image_format: CaptureImageFormat::Jpeg,
             jpeg_quality: 70,
+            save_in_monthly_folders: false,
+            file_name_template: "Screenshot_{date}".into(),
         };
 
         store.save(&settings).expect("save settings");
@@ -275,6 +296,8 @@ mod tests {
             save_history: true,
             capture_image_format: CaptureImageFormat::Bmp,
             jpeg_quality: 85,
+            save_in_monthly_folders: true,
+            file_name_template: DEFAULT_FILE_NAME_TEMPLATE.into(),
         };
 
         let json = serde_json::to_string(&settings).expect("serialize settings");
@@ -282,5 +305,21 @@ mod tests {
 
         assert!(json.contains(r#""capture_image_format":"Bmp""#));
         assert_eq!(loaded.capture_image_format, CaptureImageFormat::Bmp);
+    }
+
+    #[test]
+    fn app_settings_defaults_save_naming_preferences() {
+        let settings = AppSettings::default();
+
+        assert!(settings.save_in_monthly_folders);
+        assert_eq!(settings.file_name_template, DEFAULT_FILE_NAME_TEMPLATE);
+    }
+
+    #[test]
+    fn normalize_file_name_template_maps_legacy_default() {
+        assert_eq!(
+            normalize_file_name_template("oddsnap_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}"),
+            DEFAULT_FILE_NAME_TEMPLATE
+        );
     }
 }

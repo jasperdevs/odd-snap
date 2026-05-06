@@ -57,7 +57,9 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Magnifier.
 - [ ] Annotation drawing.
 - [x] Shared save-to-file persistence helper.
-- [ ] User-configurable save destination.
+- [x] User-configurable save destination.
+- [x] Legacy file-name template persistence for saved captures.
+- [x] Monthly save folder persistence for saved captures.
 - [x] Capture image format persistence for PNG/JPEG/BMP.
 - [x] Windows image clipboard foundation.
 - [x] Windows text clipboard foundation.
@@ -92,7 +94,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 ## Milestone 6 - Migration And Parity Closure
 
-- [x] Import existing save directory/history/copy/image-format settings into Rust settings.
+- [x] Import existing save directory/history/copy/image-format/save-naming settings into Rust settings.
 - [ ] Import all existing settings.
 - [ ] Import existing history.
 - [ ] Import existing media metadata where practical.
