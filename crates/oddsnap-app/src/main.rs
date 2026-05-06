@@ -1,13 +1,13 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 use gpui::{
-    div, px, rgb, size, App, AppContext, Bounds, Context, IntoElement, ParentElement, Render,
-    SharedString, Styled, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
-    WindowDecorations, WindowOptions,
+    div, px, rgb, size, App, AppContext, Bounds, Context, InteractiveElement, IntoElement,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, TitlebarOptions,
+    Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations, WindowOptions,
 };
 use gpui_platform::application;
 use oddsnap_core::{CapabilityState, PlatformCapability};
-use oddsnap_platform::PlatformAdapter;
+use oddsnap_platform::{CaptureRegion, PlatformAdapter, ScreenCaptureService};
 
 fn main() {
     application().run(|cx: &mut App| {
@@ -44,6 +44,7 @@ struct OddSnapRustApp {
     platform_name: String,
     native_ui_goal: String,
     capabilities: Vec<(PlatformCapability, CapabilityState)>,
+    capture_status: String,
     focus_handle: gpui::FocusHandle,
 }
 
@@ -57,6 +58,7 @@ impl OddSnapRustApp {
             platform_name: platform.name().into(),
             native_ui_goal: profile.visual_goal,
             capabilities,
+            capture_status: "No capture run in this session.".into(),
             focus_handle: cx.focus_handle(),
         }
     }
@@ -88,7 +90,7 @@ impl gpui::Focusable for OddSnapRustApp {
 }
 
 impl Render for OddSnapRustApp {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
@@ -139,9 +141,10 @@ impl Render for OddSnapRustApp {
                         vec![
                             self.native_ui_goal.clone(),
                             "Windows: WinUI 3 aligned; macOS: Liquid Glass aligned; Linux: freedesktop adaptive.".into(),
+                            self.capture_status.clone(),
                         ],
                     ))
-                    .child(self.capability_panel()),
+                    .child(self.capability_panel(cx)),
             )
     }
 }
@@ -172,7 +175,7 @@ impl OddSnapRustApp {
         body
     }
 
-    fn capability_panel(&self) -> impl IntoElement {
+    fn capability_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut body = div()
             .flex()
             .flex_col()
@@ -183,7 +186,14 @@ impl OddSnapRustApp {
             .border_color(rgb(0x272b33))
             .bg(rgb(0x17191f))
             .p(px(16.0))
-            .child(div().text_size(px(14.0)).child("Platform parity tracker"));
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_size(px(14.0)).child("Platform parity tracker"))
+                    .child(self.capture_button(cx)),
+            );
 
         for (capability, state) in &self.capabilities {
             body = body.child(
@@ -210,6 +220,50 @@ impl OddSnapRustApp {
         }
 
         body
+    }
+
+    fn capture_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("capture-smoke-button")
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(rgb(0x4a5262))
+            .bg(rgb(0x242936))
+            .hover(|this| this.bg(rgb(0x303746)))
+            .px(px(10.0))
+            .py(px(6.0))
+            .text_size(px(11.0))
+            .child("Test capture")
+            .on_click(cx.listener(|this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.run_capture_smoke();
+                cx.notify();
+            }))
+    }
+
+    fn run_capture_smoke(&mut self) {
+        let platform = host_platform();
+        #[cfg(target_os = "windows")]
+        let result = oddsnap_platform_windows::WindowsPlatform.capture_region(CaptureRegion {
+            x: 0,
+            y: 0,
+            width: 64,
+            height: 64,
+        });
+
+        #[cfg(not(target_os = "windows"))]
+        let result = Err(oddsnap_platform::PlatformError::Unsupported(
+            "capture smoke is only wired on Windows so far",
+        ));
+
+        self.capture_status = match result {
+            Ok(capture) => format!(
+                "{} capture wrote {}",
+                platform.name(),
+                capture.image_path.display()
+            ),
+            Err(error) => format!("{} capture failed: {error}", platform.name()),
+        };
     }
 }
 

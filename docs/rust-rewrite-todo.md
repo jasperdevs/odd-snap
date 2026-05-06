@@ -27,6 +27,7 @@ Draft PR: https://github.com/jasperdevs/odd-snap/pull/41
 - [x] Verify `cargo check --workspace`.
 - [x] Verify `cargo test --workspace`.
 - [x] Launch the GPUI shell on Windows.
+- [x] Wire GPUI shell smoke button to Windows capture service.
 
 ## Milestone 2 - Platform Risk Proofs
 
