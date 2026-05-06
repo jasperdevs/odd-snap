@@ -13,6 +13,7 @@ The Rust rewrite must not replace the current app until this document and the li
   - Linux: freedesktop adaptive.
 - Legacy settings JSON can be located and parsed without requiring the full old C# schema.
 - Windows monitor enumeration returns the virtual-screen bounds through the platform service.
+- Windows can capture a screen region through the Rust platform service and write a BMP file.
 
 ## Current Non-Parity State
 

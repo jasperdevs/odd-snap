@@ -4,6 +4,19 @@ use oddsnap_platform::{
 };
 
 #[cfg(target_os = "windows")]
+use std::{
+    fs, mem,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+#[cfg(target_os = "windows")]
+use windows::Win32::Graphics::Gdi::{
+    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
+    ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
+    HBITMAP, HDC, ROP_CODE, SRCCOPY,
+};
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
@@ -88,11 +101,228 @@ impl ScreenCaptureService for WindowsPlatform {
         }
     }
 
-    fn capture_region(&self, _: CaptureRegion) -> Result<CaptureResult, PlatformError> {
-        Err(PlatformError::Unsupported(
-            "Windows region capture is not implemented in the Rust rewrite yet",
-        ))
+    fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            capture_region_to_bmp(region)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = region;
+            Err(PlatformError::Unsupported(
+                "Windows region capture is only available on Windows",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn capture_region_to_bmp(region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
+    if region.width == 0 || region.height == 0 {
+        return Err(PlatformError::Failed(
+            "capture region must have non-zero width and height".into(),
+        ));
+    }
+
+    let width = i32::try_from(region.width)
+        .map_err(|_| PlatformError::Failed("capture region width is too large".into()))?;
+    let height = i32::try_from(region.height)
+        .map_err(|_| PlatformError::Failed("capture region height is too large".into()))?;
+    let output_path = capture_output_path();
+
+    let bgra = unsafe { read_screen_bgra(region.x, region.y, width, height)? };
+    write_bmp(&output_path, region.width, region.height, &bgra)?;
+
+    Ok(CaptureResult {
+        image_path: output_path,
+        region,
+    })
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn read_screen_bgra(
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> Result<Vec<u8>, PlatformError> {
+    let screen_dc = unsafe { GetDC(None) };
+    if screen_dc.is_invalid() {
+        return Err(PlatformError::Failed("GetDC failed for the desktop".into()));
+    }
+
+    let result = unsafe { read_screen_bgra_with_dc(screen_dc, x, y, width, height) };
+    unsafe {
+        ReleaseDC(None, screen_dc);
+    }
+    result
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn read_screen_bgra_with_dc(
+    screen_dc: HDC,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> Result<Vec<u8>, PlatformError> {
+    let memory_dc = unsafe { CreateCompatibleDC(Some(screen_dc)) };
+    if memory_dc.is_invalid() {
+        return Err(PlatformError::Failed("CreateCompatibleDC failed".into()));
+    }
+
+    let bitmap = unsafe { CreateCompatibleBitmap(screen_dc, width, height) };
+    if bitmap.is_invalid() {
+        unsafe {
+            let _ = DeleteDC(memory_dc);
+        }
+        return Err(PlatformError::Failed(
+            "CreateCompatibleBitmap failed".into(),
+        ));
+    }
+
+    let result =
+        unsafe { read_screen_bgra_with_bitmap(screen_dc, memory_dc, bitmap, x, y, width, height) };
+
+    unsafe {
+        let _ = DeleteObject(bitmap.into());
+        let _ = DeleteDC(memory_dc);
+    }
+
+    result
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn read_screen_bgra_with_bitmap(
+    screen_dc: HDC,
+    memory_dc: HDC,
+    bitmap: HBITMAP,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> Result<Vec<u8>, PlatformError> {
+    let old_object = unsafe { SelectObject(memory_dc, bitmap.into()) };
+    if old_object.is_invalid() {
+        return Err(PlatformError::Failed(
+            "SelectObject failed for capture bitmap".into(),
+        ));
+    }
+
+    let blt_result = unsafe {
+        BitBlt(
+            memory_dc,
+            0,
+            0,
+            width,
+            height,
+            Some(screen_dc),
+            x,
+            y,
+            ROP_CODE(SRCCOPY.0 | CAPTUREBLT.0),
+        )
+    };
+
+    if let Err(error) = blt_result {
+        unsafe {
+            SelectObject(memory_dc, old_object);
+        }
+        return Err(PlatformError::Failed(format!("BitBlt failed: {error}")));
+    }
+
+    let mut info = BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: width,
+            biHeight: -height,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let byte_count = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or_else(|| PlatformError::Failed("capture region is too large".into()))?;
+    let mut pixels = vec![0u8; byte_count];
+
+    let rows = unsafe {
+        GetDIBits(
+            memory_dc,
+            bitmap,
+            0,
+            height as u32,
+            Some(pixels.as_mut_ptr().cast()),
+            &mut info,
+            DIB_RGB_COLORS,
+        )
+    };
+
+    unsafe {
+        SelectObject(memory_dc, old_object);
+    }
+
+    if rows == 0 {
+        return Err(PlatformError::Failed("GetDIBits returned no rows".into()));
+    }
+
+    Ok(pixels)
+}
+
+#[cfg(target_os = "windows")]
+fn capture_output_path() -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!(
+        "oddsnap-rust-capture-{}-{nanos}.bmp",
+        std::process::id()
+    ))
+}
+
+#[cfg(target_os = "windows")]
+fn write_bmp(path: &Path, width: u32, height: u32, bgra: &[u8]) -> Result<(), PlatformError> {
+    let pixel_size = width
+        .checked_mul(height)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or_else(|| PlatformError::Failed("BMP output is too large".into()))?;
+    if bgra.len() != pixel_size as usize {
+        return Err(PlatformError::Failed(
+            "pixel buffer size does not match BMP dimensions".into(),
+        ));
+    }
+
+    let file_header_size = 14u32;
+    let dib_header_size = 40u32;
+    let pixel_offset = file_header_size + dib_header_size;
+    let file_size = pixel_offset
+        .checked_add(pixel_size)
+        .ok_or_else(|| PlatformError::Failed("BMP file is too large".into()))?;
+
+    let mut bytes = Vec::with_capacity(file_size as usize);
+    bytes.extend_from_slice(b"BM");
+    bytes.extend_from_slice(&file_size.to_le_bytes());
+    bytes.extend_from_slice(&[0, 0, 0, 0]);
+    bytes.extend_from_slice(&pixel_offset.to_le_bytes());
+    bytes.extend_from_slice(&dib_header_size.to_le_bytes());
+    bytes.extend_from_slice(&(width as i32).to_le_bytes());
+    bytes.extend_from_slice(&(-(height as i32)).to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&32u16.to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&pixel_size.to_le_bytes());
+    bytes.extend_from_slice(&0i32.to_le_bytes());
+    bytes.extend_from_slice(&0i32.to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(bgra);
+
+    fs::write(path, bytes)
+        .map_err(|source| PlatformError::Failed(format!("failed to write BMP: {source}")))
 }
 
 #[cfg(test)]
@@ -124,6 +354,30 @@ mod tests {
         assert_eq!(monitors.len(), 1);
         assert!(monitors[0].width > 0);
         assert!(monitors[0].height > 0);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn windows_region_capture_writes_bmp_file() {
+        use std::fs;
+
+        use oddsnap_platform::{CaptureRegion, ScreenCaptureService};
+
+        let adapter = WindowsPlatform;
+        let result = adapter
+            .capture_region(CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 2,
+                height: 2,
+            })
+            .expect("capture tiny region");
+        let bytes = fs::read(&result.image_path).expect("read captured bmp");
+        fs::remove_file(&result.image_path).expect("remove captured bmp");
+
+        assert_eq!(&bytes[0..2], b"BM");
+        assert_eq!(result.region.width, 2);
+        assert_eq!(result.region.height, 2);
     }
 
     #[test]
