@@ -73,7 +73,9 @@ Keep it updated whenever a rewrite milestone lands.
 ## Milestone 4 - Recording And Media
 
 - [ ] GIF recording.
-- [ ] MP4/WebM recording.
+- [x] Windows FFmpeg-backed desktop video recording start/stop foundation.
+- [ ] Region GIF recording.
+- [ ] Region MP4/WebM recording.
 - [x] FFmpeg discovery.
 - [x] Rust recording settings import and FFmpeg output argument model.
 - [ ] Microphone recording.

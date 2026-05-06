@@ -6,7 +6,9 @@ use std::{
 };
 
 use image::{codecs::jpeg::JpegEncoder, ImageFormat};
-use oddsnap_core::{CaptureImageFormat, NativeUiProfile, PlatformCapabilities};
+use oddsnap_core::{
+    CaptureImageFormat, NativeUiProfile, PlatformCapabilities, RecordingFormat, RecordingQuality,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -49,6 +51,23 @@ pub struct WindowInfo {
     pub bounds: CaptureRegion,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoRecordingRequest {
+    pub output_path: PathBuf,
+    pub format: RecordingFormat,
+    pub quality: RecordingQuality,
+    pub fps: u32,
+    pub record_microphone: bool,
+    pub record_desktop_audio: bool,
+    pub microphone_device_id: Option<String>,
+    pub desktop_audio_device_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VideoRecordingResult {
+    pub output_path: PathBuf,
+}
+
 pub trait PlatformAdapter: Send + Sync {
     fn name(&self) -> &'static str;
     fn native_ui_profile(&self) -> NativeUiProfile;
@@ -86,6 +105,19 @@ pub trait ClipboardImageService: Send + Sync {
 
 pub trait ClipboardTextService: Send + Sync {
     fn copy_text_to_clipboard(&self, text: &str) -> Result<(), PlatformError>;
+}
+
+pub trait VideoRecordingHandle: Send {
+    fn output_path(&self) -> &Path;
+    fn stop(&mut self) -> Result<VideoRecordingResult, PlatformError>;
+    fn cancel(&mut self);
+}
+
+pub trait VideoRecordingService: Send + Sync {
+    fn start_desktop_recording(
+        &self,
+        request: VideoRecordingRequest,
+    ) -> Result<Box<dyn VideoRecordingHandle>, PlatformError>;
 }
 
 pub fn default_capture_directory() -> PathBuf {

@@ -3,8 +3,8 @@ use std::path::Path;
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
     CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, HotkeyService,
-    MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService, WindowInfo,
-    WindowPickerService,
+    MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService, VideoRecordingRequest,
+    VideoRecordingService, WindowInfo, WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -97,12 +97,24 @@ impl HotkeyService for LinuxPlatform {
     }
 }
 
+impl VideoRecordingService for LinuxPlatform {
+    fn start_desktop_recording(
+        &self,
+        request: VideoRecordingRequest,
+    ) -> Result<Box<dyn oddsnap_platform::VideoRecordingHandle>, PlatformError> {
+        let _ = request;
+        Err(PlatformError::Unsupported(
+            "Linux desktop recording is not implemented yet",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use oddsnap_core::NativeMaterial;
+    use oddsnap_core::{NativeMaterial, RecordingFormat, RecordingQuality};
     use oddsnap_platform::{
         ClipboardImageService, ClipboardTextService, HotkeyService, PlatformAdapter,
-        ScreenCaptureService,
+        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
     };
 
     use super::LinuxPlatform;
@@ -155,6 +167,28 @@ mod tests {
         let error = adapter
             .register_capture_hotkey("Alt+`")
             .expect_err("Linux hotkey pending");
+
+        assert!(error.to_string().contains("not implemented yet"));
+    }
+
+    #[test]
+    fn linux_recording_service_is_explicitly_unimplemented() {
+        let adapter = LinuxPlatform;
+
+        let result = adapter.start_desktop_recording(VideoRecordingRequest {
+            output_path: std::path::PathBuf::from("capture.mp4"),
+            format: RecordingFormat::Mp4,
+            quality: RecordingQuality::Original,
+            fps: 30,
+            record_microphone: false,
+            record_desktop_audio: false,
+            microphone_device_id: None,
+            desktop_audio_device_id: None,
+        });
+        let error = match result {
+            Ok(_) => panic!("Linux recording should be pending"),
+            Err(error) => error,
+        };
 
         assert!(error.to_string().contains("not implemented yet"));
     }

@@ -33,6 +33,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
 - Rust startup can import legacy recording format, quality, FPS, and audio-device preferences.
 - Rust core can build format-specific FFmpeg output arguments for GIF, MP4, WebM, and MKV recording targets.
+- Windows has a Rust platform service boundary for starting/stopping FFmpeg-backed desktop video recordings from the GPUI shell.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.
 - GPUI shows the newest saved image capture as an inline preview when the file still exists.

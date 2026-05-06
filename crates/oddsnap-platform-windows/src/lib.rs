@@ -1,17 +1,26 @@
-use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
+use oddsnap_core::{
+    build_recording_output_args, discover_ffmpeg_tools, CapabilityState, FfmpegRecordingRequest,
+    NativeUiProfile, PlatformCapabilities, PlatformCapability,
+};
 use oddsnap_platform::{
     CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, HotkeyService,
-    MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService, WindowInfo,
+    MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService, VideoRecordingHandle,
+    VideoRecordingRequest, VideoRecordingResult, VideoRecordingService, WindowInfo,
     WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
 use std::{
-    fs, mem,
+    fs,
+    io::{Read, Write},
+    mem,
     path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
     sync::mpsc::{self, Sender},
     thread::{self, JoinHandle},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(target_os = "windows")]
@@ -222,6 +231,27 @@ impl ClipboardTextService for WindowsPlatform {
     }
 }
 
+impl VideoRecordingService for WindowsPlatform {
+    fn start_desktop_recording(
+        &self,
+        request: VideoRecordingRequest,
+    ) -> Result<Box<dyn VideoRecordingHandle>, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            start_windows_desktop_recording(request)
+                .map(|handle| Box::new(handle) as Box<dyn VideoRecordingHandle>)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "Windows desktop recording is only available on Windows",
+            ))
+        }
+    }
+}
+
 impl HotkeyService for WindowsPlatform {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError> {
         #[cfg(target_os = "windows")]
@@ -237,6 +267,170 @@ impl HotkeyService for WindowsPlatform {
                 "Windows global hotkey registration is only available on Windows",
             ))
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug)]
+struct WindowsVideoRecordingHandle {
+    child: Option<Child>,
+    output_path: PathBuf,
+    stderr_thread: Option<JoinHandle<String>>,
+}
+
+#[cfg(target_os = "windows")]
+impl VideoRecordingHandle for WindowsVideoRecordingHandle {
+    fn output_path(&self) -> &Path {
+        &self.output_path
+    }
+
+    fn stop(&mut self) -> Result<VideoRecordingResult, PlatformError> {
+        let Some(mut child) = self.child.take() else {
+            return Ok(VideoRecordingResult {
+                output_path: self.output_path.clone(),
+            });
+        };
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            let _ = stdin.write_all(b"q\n");
+            let _ = stdin.flush();
+        }
+
+        let status = wait_for_child_exit(&mut child, Duration::from_secs(30))?;
+        let stderr = self
+            .stderr_thread
+            .take()
+            .and_then(|thread| thread.join().ok())
+            .unwrap_or_default();
+
+        if !status.success() {
+            return Err(PlatformError::Failed(format!(
+                "FFmpeg recording failed with exit code {:?}: {}",
+                status.code(),
+                stderr.trim()
+            )));
+        }
+
+        let metadata = fs::metadata(&self.output_path).map_err(|source| {
+            PlatformError::Failed(format!(
+                "recording output was not created at {}: {source}",
+                self.output_path.display()
+            ))
+        })?;
+        if metadata.len() == 0 {
+            return Err(PlatformError::Failed(format!(
+                "recording output is empty: {}",
+                self.output_path.display()
+            )));
+        }
+
+        Ok(VideoRecordingResult {
+            output_path: self.output_path.clone(),
+        })
+    }
+
+    fn cancel(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        if let Some(thread) = self.stderr_thread.take() {
+            let _ = thread.join();
+        }
+        let _ = fs::remove_file(&self.output_path);
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsVideoRecordingHandle {
+    fn drop(&mut self) {
+        if self.child.is_some() {
+            self.cancel();
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn start_windows_desktop_recording(
+    request: VideoRecordingRequest,
+) -> Result<WindowsVideoRecordingHandle, PlatformError> {
+    if let Some(parent) = request.output_path.parent() {
+        fs::create_dir_all(parent).map_err(|source| {
+            PlatformError::Failed(format!("failed to create recording directory: {source}"))
+        })?;
+    }
+
+    let tools = discover_ffmpeg_tools()
+        .ok_or_else(|| PlatformError::Failed("FFmpeg not found on PATH".into()))?;
+    let args = windows_desktop_recording_args(&request);
+    let mut child = Command::new(&tools.ffmpeg)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .creation_flags(0x08000000)
+        .spawn()
+        .map_err(|source| PlatformError::Failed(format!("failed to start FFmpeg: {source}")))?;
+
+    let stderr = child.stderr.take();
+    let stderr_thread = stderr.map(|mut stderr| {
+        thread::spawn(move || {
+            let mut buffer = String::new();
+            let _ = stderr.read_to_string(&mut buffer);
+            buffer
+        })
+    });
+
+    Ok(WindowsVideoRecordingHandle {
+        child: Some(child),
+        output_path: request.output_path,
+        stderr_thread,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn windows_desktop_recording_args(request: &VideoRecordingRequest) -> Vec<String> {
+    let fps = request.fps.clamp(1, 240).to_string();
+    build_recording_output_args(&FfmpegRecordingRequest {
+        input_args: vec![
+            "-hide_banner".into(),
+            "-f".into(),
+            "gdigrab".into(),
+            "-framerate".into(),
+            fps,
+            "-i".into(),
+            "desktop".into(),
+        ],
+        output_path: request.output_path.clone(),
+        format: request.format,
+        quality: request.quality,
+        fps: request.fps,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn wait_for_child_exit(
+    child: &mut Child,
+    timeout: Duration,
+) -> Result<std::process::ExitStatus, PlatformError> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|source| PlatformError::Failed(format!("FFmpeg wait failed: {source}")))?
+        {
+            return Ok(status);
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(PlatformError::Failed(
+                "FFmpeg recording did not stop within 30 seconds".into(),
+            ));
+        }
+
+        thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -911,8 +1105,8 @@ fn write_bmp(path: &Path, width: u32, height: u32, bgra: &[u8]) -> Result<(), Pl
 
 #[cfg(test)]
 mod tests {
-    use oddsnap_core::{CapabilityState, PlatformCapability};
-    use oddsnap_platform::PlatformAdapter;
+    use oddsnap_core::{CapabilityState, PlatformCapability, RecordingFormat, RecordingQuality};
+    use oddsnap_platform::{PlatformAdapter, VideoRecordingRequest, VideoRecordingService};
 
     use super::WindowsPlatform;
 
@@ -976,6 +1170,67 @@ mod tests {
         let error = super::parse_hotkey_accelerator("F24").expect_err("missing modifier");
 
         assert!(error.to_string().contains("modifier"));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn windows_desktop_recording_args_use_gdigrab_and_configured_format() {
+        let args = super::windows_desktop_recording_args(&VideoRecordingRequest {
+            output_path: std::path::PathBuf::from("capture.webm"),
+            format: RecordingFormat::WebM,
+            quality: RecordingQuality::P1080,
+            fps: 60,
+            record_microphone: false,
+            record_desktop_audio: false,
+            microphone_device_id: None,
+            desktop_audio_device_id: None,
+        });
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
+        assert!(args.windows(2).any(|pair| pair == ["-framerate", "60"]));
+        assert!(args.windows(2).any(|pair| pair == ["-vf", "scale=-2:1080"]));
+        assert!(args.windows(2).any(|pair| pair == ["-c:v", "libvpx-vp9"]));
+        assert_eq!(args.last().map(String::as_str), Some("capture.webm"));
+    }
+
+    #[test]
+    #[ignore = "starts FFmpeg and records the local Windows desktop for about one second"]
+    #[cfg(target_os = "windows")]
+    fn windows_desktop_recording_can_start_and_stop_if_ffmpeg_exists() {
+        if oddsnap_core::discover_ffmpeg_tools().is_none() {
+            return;
+        }
+
+        let output = std::env::temp_dir().join(format!(
+            "oddsnap-rust-recording-smoke-{}.mp4",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&output);
+        let adapter = WindowsPlatform;
+        let mut handle = adapter
+            .start_desktop_recording(VideoRecordingRequest {
+                output_path: output.clone(),
+                format: RecordingFormat::Mp4,
+                quality: RecordingQuality::P480,
+                fps: 10,
+                record_microphone: false,
+                record_desktop_audio: false,
+                microphone_device_id: None,
+                desktop_audio_device_id: None,
+            })
+            .expect("start desktop recording");
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let result = handle.stop().expect("stop desktop recording");
+
+        assert_eq!(result.output_path, output);
+        assert!(
+            std::fs::metadata(&result.output_path)
+                .expect("recording metadata")
+                .len()
+                > 0
+        );
+        let _ = std::fs::remove_file(result.output_path);
     }
 
     #[test]

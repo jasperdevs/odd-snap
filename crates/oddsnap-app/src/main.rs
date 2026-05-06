@@ -15,8 +15,9 @@ use oddsnap_core::{
     HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, SettingsStore,
 };
 use oddsnap_platform::{
-    default_capture_directory, persist_capture_to_path_as, ClipboardImageService, PlatformAdapter,
-    ScreenCaptureService, WindowCaptureService,
+    default_capture_directory, persist_capture_to_path_as, virtual_screen_region,
+    ClipboardImageService, PlatformAdapter, ScreenCaptureService, VideoRecordingHandle,
+    VideoRecordingRequest, VideoRecordingService, WindowCaptureService,
 };
 
 fn main() {
@@ -61,6 +62,8 @@ struct OddSnapRustApp {
     history_path: String,
     media_status: String,
     hotkey_status: String,
+    recording_status: String,
+    active_recording: Option<ActiveRecording>,
     capture_history: Vec<CaptureHistoryEntry>,
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
@@ -71,6 +74,12 @@ struct CaptureHistoryEntry {
     mode: CaptureMode,
     path: String,
     preview_path: Option<PathBuf>,
+    width: u32,
+    height: u32,
+}
+
+struct ActiveRecording {
+    handle: Box<dyn VideoRecordingHandle>,
     width: u32,
     height: u32,
 }
@@ -139,6 +148,8 @@ impl OddSnapRustApp {
             history_path,
             media_status,
             hotkey_status,
+            recording_status: "No recording running.".into(),
+            active_recording: None,
             capture_history,
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
@@ -294,8 +305,17 @@ impl OddSnapRustApp {
                         div()
                             .flex()
                             .gap(px(8.0))
-                            .child(self.capture_button(cx, "capture-full-button", CaptureMode::FullScreen))
-                            .child(self.capture_button(cx, "capture-window-button", CaptureMode::ActiveWindow)),
+                            .child(self.capture_button(
+                                cx,
+                                "capture-full-button",
+                                CaptureMode::FullScreen,
+                            ))
+                            .child(self.capture_button(
+                                cx,
+                                "capture-window-button",
+                                CaptureMode::ActiveWindow,
+                            ))
+                            .child(self.recording_button(cx)),
                     ),
             )
             .child(
@@ -366,6 +386,12 @@ impl OddSnapRustApp {
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(self.recording_status_summary())),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(self.recording_status.clone())),
             )
             .child(
                 div()
@@ -544,6 +570,31 @@ impl OddSnapRustApp {
             }))
     }
 
+    fn recording_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let label = if self.active_recording.is_some() {
+            "Stop recording"
+        } else {
+            "Start recording"
+        };
+
+        div()
+            .id("recording-toggle-button")
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(rgb(0x5a3d45))
+            .bg(rgb(0x3a2229))
+            .hover(|this| this.bg(rgb(0x4a2a33)))
+            .px(px(10.0))
+            .py(px(6.0))
+            .text_size(px(11.0))
+            .child(label)
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.toggle_recording();
+                cx.notify();
+            }))
+    }
+
     fn run_capture(&mut self, mode: CaptureMode) {
         let platform = host_platform();
         #[cfg(target_os = "windows")]
@@ -653,6 +704,97 @@ impl OddSnapRustApp {
         )
     }
 
+    fn recording_destination(&self, width: u32, height: u32) -> std::path::PathBuf {
+        let stem = format_file_name_template(&self.settings.file_name_template, width, height);
+        let file_name = format!("{}.{}", stem, self.settings.recording_format.extension());
+        let output_root = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
+            self.capture_output_directory()
+        } else {
+            self.capture_output_directory().join("Videos")
+        };
+        build_available_capture_path(
+            &output_root,
+            &file_name,
+            self.settings.save_in_monthly_folders,
+        )
+    }
+
+    fn toggle_recording(&mut self) {
+        if self.active_recording.is_some() {
+            self.stop_recording();
+        } else {
+            self.start_recording();
+        }
+    }
+
+    fn start_recording(&mut self) {
+        #[cfg(target_os = "windows")]
+        let result = (|| {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            let monitors = adapter.monitors()?;
+            let region = virtual_screen_region(&monitors).ok_or_else(|| {
+                oddsnap_platform::PlatformError::Failed(
+                    "no monitors available for recording".into(),
+                )
+            })?;
+            let output_path = self.recording_destination(region.width, region.height);
+            let fps = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
+                self.settings.gif_fps
+            } else {
+                self.settings.recording_fps
+            };
+            let handle = adapter.start_desktop_recording(VideoRecordingRequest {
+                output_path,
+                format: self.settings.recording_format,
+                quality: self.settings.recording_quality,
+                fps,
+                record_microphone: self.settings.record_microphone,
+                record_desktop_audio: self.settings.record_desktop_audio,
+                microphone_device_id: self.settings.microphone_device_id.clone(),
+                desktop_audio_device_id: self.settings.desktop_audio_device_id.clone(),
+            })?;
+            Ok::<_, oddsnap_platform::PlatformError>((handle, region.width, region.height))
+        })();
+
+        #[cfg(not(target_os = "windows"))]
+        let result: Result<
+            (Box<dyn VideoRecordingHandle>, u32, u32),
+            oddsnap_platform::PlatformError,
+        > = Err(oddsnap_platform::PlatformError::Unsupported(
+            "desktop recording is not implemented on this platform yet",
+        ));
+
+        self.recording_status = match result {
+            Ok((handle, width, height)) => {
+                let path = handle.output_path().display().to_string();
+                self.active_recording = Some(ActiveRecording {
+                    handle,
+                    width,
+                    height,
+                });
+                format!("Recording started: {path}")
+            }
+            Err(error) => format!("Recording failed to start: {error}"),
+        };
+    }
+
+    fn stop_recording(&mut self) {
+        let Some(mut active) = self.active_recording.take() else {
+            self.recording_status = "No recording running.".into();
+            return;
+        };
+
+        self.recording_status = match active.handle.stop() {
+            Ok(result) => {
+                let path = result.output_path.display().to_string();
+                let history_status =
+                    self.save_recording_history(result.output_path, active.width, active.height);
+                format!("Recording saved: {path}{history_status}")
+            }
+            Err(error) => format!("Recording failed to stop: {error}"),
+        };
+    }
+
     fn recording_status_summary(&self) -> String {
         let fps = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
             self.settings.gif_fps
@@ -670,16 +812,51 @@ impl OddSnapRustApp {
         }
 
         let microphone = if self.settings.record_microphone {
-            "mic on"
+            "mic configured, capture pending"
         } else {
             "mic off"
         };
         let desktop_audio = if self.settings.record_desktop_audio {
-            "desktop audio on"
+            "desktop audio configured, capture pending"
         } else {
             "desktop audio off"
         };
         format!("{base} · {microphone} · {desktop_audio}")
+    }
+
+    fn save_recording_history(&mut self, path: PathBuf, width: u32, height: u32) -> String {
+        if !self.settings.save_history {
+            self.capture_history.insert(
+                0,
+                CaptureHistoryEntry {
+                    mode: CaptureMode::FullScreen,
+                    path: path.display().to_string(),
+                    preview_path: preview_path_for_capture(&path),
+                    width,
+                    height,
+                },
+            );
+            self.capture_history.truncate(6);
+            return String::new();
+        }
+
+        let kind = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
+            HistoryKind::Gif
+        } else {
+            HistoryKind::Video
+        };
+        let entry = match HistoryEntry::from_capture_file(path, width, height, kind) {
+            Ok(entry) => entry,
+            Err(error) => return format!("; history failed: {error}"),
+        };
+
+        match self.history_store.append_entry(entry) {
+            Ok(index) => {
+                self.capture_history = history_entries_to_capture_history(index);
+                String::new()
+            }
+            Err(error) => format!("; history failed: {error}"),
+        }
     }
 
     fn save_capture_history(
