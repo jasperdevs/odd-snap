@@ -35,12 +35,12 @@ use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM
 use windows::Win32::System::Ole::{CF_DIB, CF_UNICODETEXT};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI};
+#[cfg(all(target_os = "windows", test))]
+use windows::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN,
 };
-#[cfg(all(target_os = "windows", test))]
-use windows::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,

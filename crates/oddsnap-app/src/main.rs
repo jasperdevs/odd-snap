@@ -7,8 +7,9 @@ use gpui::{
 };
 use gpui_platform::application;
 use oddsnap_core::{
-    default_history_path, default_settings_path, AppSettings, CapabilityState, HistoryEntry,
-    HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, SettingsStore,
+    default_history_path, default_settings_path, discover_ffmpeg_tools, AppSettings,
+    CapabilityState, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, PlatformCapability,
+    SettingsStore,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_directory, ClipboardImageService,
@@ -55,6 +56,7 @@ struct OddSnapRustApp {
     settings_path: String,
     history_store: HistoryStore,
     history_path: String,
+    media_status: String,
     capture_history: Vec<CaptureHistoryEntry>,
     focus_handle: gpui::FocusHandle,
 }
@@ -105,6 +107,17 @@ impl OddSnapRustApp {
             .load_or_default()
             .map(history_entries_to_capture_history)
             .unwrap_or_default();
+        let media_status = match discover_ffmpeg_tools() {
+            Some(tools) => {
+                let probe = tools
+                    .ffprobe
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_else(|| "ffprobe not found".into());
+                format!("FFmpeg: {}; ffprobe: {probe}", tools.ffmpeg.display())
+            }
+            None => "FFmpeg: not found on PATH".into(),
+        };
 
         Self {
             platform_name: platform.name().into(),
@@ -115,6 +128,7 @@ impl OddSnapRustApp {
             settings_path,
             history_store,
             history_path,
+            media_status,
             capture_history,
             focus_handle: cx.focus_handle(),
         }
@@ -275,6 +289,12 @@ impl OddSnapRustApp {
                         "Output: {}",
                         self.capture_output_directory().display()
                     ))),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(self.media_status.clone())),
             )
             .child(
                 div()

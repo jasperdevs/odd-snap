@@ -71,7 +71,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 - [ ] GIF recording.
 - [ ] MP4/WebM recording.
-- [ ] FFmpeg discovery.
+- [x] FFmpeg discovery.
 - [ ] Microphone recording.
 - [ ] System audio recording where supported.
 - [ ] Video thumbnail generation.

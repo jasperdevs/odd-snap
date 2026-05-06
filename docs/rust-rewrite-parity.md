@@ -27,6 +27,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
 - Windows can parse and register process-local global hotkeys, with listener integration still pending.
+- Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
 
 ## Current Non-Parity State
 

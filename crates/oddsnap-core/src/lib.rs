@@ -1,6 +1,7 @@
 pub mod capabilities;
 pub mod history;
 pub mod jobs;
+pub mod media;
 pub mod native_ui;
 pub mod settings;
 
@@ -9,6 +10,7 @@ pub use history::{
     default_history_path, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, HistoryStoreError,
 };
 pub use jobs::{AppJobArea, AppJobSnapshot};
+pub use media::{discover_ffmpeg_tools, discover_ffmpeg_tools_in_path, FfmpegTools};
 pub use native_ui::{NativeMaterial, NativeUiProfile};
 pub use settings::{
     default_settings_path, AppSettings, SettingDefinition, SettingsOptionDefinition,
