@@ -33,7 +33,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Windows topmost transparent overlay.
 - [ ] Windows screenshot exclusion.
 - [x] Windows monitor enumeration.
-- [ ] Windows DPI mapping.
+- [x] Windows system DPI mapping for monitor scale.
+- [ ] Windows per-monitor DPI verification.
 - [ ] macOS screen recording permission detection.
 - [ ] macOS tray/menu bar presence.
 - [ ] macOS global hotkey.

@@ -12,14 +12,17 @@ use std::{
 };
 
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{HANDLE, HWND, RECT};
+use windows::core::BOOL;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, RECT};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Gdi::{
-    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
-    ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
-    HBITMAP, HDC, ROP_CODE, SRCCOPY,
+    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject,
+    EnumDisplayMonitors, GetDC, GetDIBits, GetMonitorInfoW, ReleaseDC, SelectObject, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, HMONITOR, MONITORINFO,
+    ROP_CODE, SRCCOPY,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::System::DataExchange::{
@@ -29,6 +32,8 @@ use windows::Win32::System::DataExchange::{
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Ole::CF_DIB;
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
@@ -88,26 +93,7 @@ impl ScreenCaptureService for WindowsPlatform {
     fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError> {
         #[cfg(target_os = "windows")]
         {
-            let x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
-            let y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
-            let width = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
-            let height = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
-
-            if width <= 0 || height <= 0 {
-                return Err(PlatformError::Failed(
-                    "Windows returned an empty virtual screen".into(),
-                ));
-            }
-
-            Ok(vec![MonitorInfo {
-                id: "windows-virtual-screen".into(),
-                name: "Virtual screen".into(),
-                x,
-                y,
-                width: width as u32,
-                height: height as u32,
-                scale_percent: 100,
-            }])
+            enumerate_windows_monitors()
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -165,6 +151,111 @@ impl ClipboardImageService for WindowsPlatform {
             ))
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn enumerate_windows_monitors() -> Result<Vec<MonitorInfo>, PlatformError> {
+    let mut monitors = Vec::<MonitorInfo>::new();
+    let data = LPARAM((&mut monitors as *mut Vec<MonitorInfo>) as isize);
+    let success = unsafe { EnumDisplayMonitors(None, None, Some(enum_monitor), data) };
+    if !success.as_bool() {
+        return Err(PlatformError::Failed("EnumDisplayMonitors failed".into()));
+    }
+
+    if monitors.is_empty() {
+        return fallback_virtual_screen_monitor();
+    }
+
+    Ok(monitors)
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn enum_monitor(
+    monitor: HMONITOR,
+    _: HDC,
+    rect: *mut RECT,
+    data: LPARAM,
+) -> BOOL {
+    let monitors = unsafe { &mut *(data.0 as *mut Vec<MonitorInfo>) };
+    let bounds = if rect.is_null() {
+        match monitor_bounds(monitor) {
+            Some(bounds) => bounds,
+            None => return true.into(),
+        }
+    } else {
+        unsafe { *rect }
+    };
+
+    if let Ok(region) = rect_to_region(bounds) {
+        monitors.push(MonitorInfo {
+            id: format!("windows-monitor-{}", monitors.len() + 1),
+            name: format!("Monitor {}", monitors.len() + 1),
+            x: region.x,
+            y: region.y,
+            width: region.width,
+            height: region.height,
+            scale_percent: monitor_scale_percent(monitor),
+        });
+    }
+
+    true.into()
+}
+
+#[cfg(target_os = "windows")]
+fn monitor_bounds(monitor: HMONITOR) -> Option<RECT> {
+    let mut info = MONITORINFO {
+        cbSize: mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    let success = unsafe { GetMonitorInfoW(monitor, &mut info) };
+    success.as_bool().then_some(info.rcMonitor)
+}
+
+#[cfg(target_os = "windows")]
+fn fallback_virtual_screen_monitor() -> Result<Vec<MonitorInfo>, PlatformError> {
+    let x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
+    let y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+    let width = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+    let height = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+
+    if width <= 0 || height <= 0 {
+        return Err(PlatformError::Failed(
+            "Windows returned an empty virtual screen".into(),
+        ));
+    }
+
+    Ok(vec![MonitorInfo {
+        id: "windows-virtual-screen".into(),
+        name: "Virtual screen".into(),
+        x,
+        y,
+        width: width as u32,
+        height: height as u32,
+        scale_percent: system_scale_percent(),
+    }])
+}
+
+#[cfg(target_os = "windows")]
+fn monitor_scale_percent(monitor: HMONITOR) -> u32 {
+    let mut dpi_x = 0u32;
+    let mut dpi_y = 0u32;
+    let result = unsafe { GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) };
+    if result.is_ok() && dpi_x > 0 {
+        return dpi_to_scale_percent(dpi_x);
+    }
+
+    system_scale_percent()
+}
+
+#[cfg(target_os = "windows")]
+fn system_scale_percent() -> u32 {
+    let dpi = unsafe { GetDpiForSystem() };
+    dpi_to_scale_percent(dpi.max(96))
+}
+
+#[cfg(target_os = "windows")]
+fn dpi_to_scale_percent(dpi: u32) -> u32 {
+    dpi.saturating_mul(100).saturating_add(48) / 96
 }
 
 #[cfg(target_os = "windows")]
@@ -561,9 +652,18 @@ mod tests {
         let adapter = WindowsPlatform;
         let monitors = adapter.monitors().expect("enumerate monitors");
 
-        assert_eq!(monitors.len(), 1);
-        assert!(monitors[0].width > 0);
-        assert!(monitors[0].height > 0);
+        assert!(!monitors.is_empty());
+        assert!(monitors.iter().all(|monitor| monitor.width > 0));
+        assert!(monitors.iter().all(|monitor| monitor.height > 0));
+        assert!(monitors.iter().all(|monitor| monitor.scale_percent >= 100));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn dpi_to_scale_percent_rounds_common_windows_scales() {
+        assert_eq!(super::dpi_to_scale_percent(96), 100);
+        assert_eq!(super::dpi_to_scale_percent(120), 125);
+        assert_eq!(super::dpi_to_scale_percent(144), 150);
     }
 
     #[test]
