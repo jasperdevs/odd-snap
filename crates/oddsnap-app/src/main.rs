@@ -1,9 +1,12 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+use std::path::{Path, PathBuf};
+
 use gpui::{
-    div, px, rgb, size, App, AppContext, Bounds, Context, InteractiveElement, IntoElement,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, TitlebarOptions,
-    Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations, WindowOptions,
+    div, img, px, rgb, size, App, AppContext, Bounds, Context, InteractiveElement, IntoElement,
+    ObjectFit, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
+    StyledImage, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
+    WindowDecorations, WindowOptions,
 };
 use gpui_platform::application;
 use oddsnap_core::{
@@ -67,6 +70,7 @@ struct OddSnapRustApp {
 struct CaptureHistoryEntry {
     mode: CaptureMode,
     path: String,
+    preview_path: Option<PathBuf>,
     width: u32,
     height: u32,
 }
@@ -358,6 +362,14 @@ impl OddSnapRustApp {
             );
         }
 
+        if let Some(preview_path) = self
+            .capture_history
+            .iter()
+            .find_map(|entry| entry.preview_path.clone())
+        {
+            body = body.child(self.capture_preview(preview_path));
+        }
+
         for entry in &self.capture_history {
             body = body.child(
                 div()
@@ -384,6 +396,43 @@ impl OddSnapRustApp {
         }
 
         body
+    }
+
+    fn capture_preview(&self, preview_path: PathBuf) -> impl IntoElement {
+        div()
+            .h(px(180.0))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(rgb(0x2b3039))
+            .bg(rgb(0x0f1116))
+            .p(px(6.0))
+            .child(
+                img(preview_path)
+                    .size_full()
+                    .object_fit(ObjectFit::Contain)
+                    .with_loading(|| {
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size_full()
+                            .text_size(px(12.0))
+                            .text_color(rgb(0x8b93a3))
+                            .child("Loading preview")
+                            .into_any_element()
+                    })
+                    .with_fallback(|| {
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size_full()
+                            .text_size(px(12.0))
+                            .text_color(rgb(0x8b93a3))
+                            .child("Preview unavailable")
+                            .into_any_element()
+                    }),
+            )
     }
 
     fn capability_panel(&self) -> impl IntoElement {
@@ -582,6 +631,7 @@ impl OddSnapRustApp {
                 CaptureHistoryEntry {
                     mode,
                     path: capture.image_path.display().to_string(),
+                    preview_path: preview_path_for_capture(&capture.image_path),
                     width: capture.region.width,
                     height: capture.region.height,
                 },
@@ -644,10 +694,23 @@ fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistory
         .map(|entry| CaptureHistoryEntry {
             mode: CaptureMode::FullScreen,
             path: entry.file_path.display().to_string(),
+            preview_path: preview_path_for_capture(&entry.file_path),
             width: entry.width,
             height: entry.height,
         })
         .collect()
+}
+
+fn preview_path_for_capture(path: &Path) -> Option<PathBuf> {
+    let extension = path.extension()?.to_str()?;
+    let is_supported = gpui::Img::extensions()
+        .iter()
+        .any(|supported| supported.eq_ignore_ascii_case(extension));
+    if is_supported && path.exists() {
+        Some(path.to_path_buf())
+    } else {
+        None
+    }
 }
 
 fn state_color(state: CapabilityState) -> u32 {

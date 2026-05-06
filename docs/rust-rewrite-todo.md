@@ -68,7 +68,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI recent-captures list for capture smoke results.
 - [x] Rust settings store for capture output and clipboard preferences.
 - [x] Rust JSON media history store for saved image captures.
-- [ ] Post-capture image preview.
+- [x] Post-capture image preview.
 
 ## Milestone 4 - Recording And Media
 
