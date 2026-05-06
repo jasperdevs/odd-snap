@@ -1,0 +1,29 @@
+name: Rust rewrite
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "docs/rust-rewrite-todo.md"
+      - ".github/workflows/rust-rewrite.yml"
+  push:
+    branches:
+      - codex/rust-gpui-rewrite-20260506
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check
+        run: cargo check --workspace
+      - name: Test
+        run: cargo test --workspace

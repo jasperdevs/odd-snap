@@ -46,3 +46,6 @@ src/OddSnap/oddsnap_*.png
 site/node_modules/
 *.tsbuildinfo
 site/vite-dev.*.log
+
+## Rust rewrite
+target/
