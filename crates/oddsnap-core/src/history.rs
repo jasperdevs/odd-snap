@@ -44,6 +44,8 @@ pub struct HistoryEntry {
     pub upload_provider: Option<String>,
     #[serde(default)]
     pub upload_error: Option<String>,
+    #[serde(default)]
+    pub thumbnail_path: Option<PathBuf>,
 }
 
 impl HistoryEntry {
@@ -73,6 +75,7 @@ impl HistoryEntry {
             upload_url: None,
             upload_provider: None,
             upload_error: None,
+            thumbnail_path: None,
         })
     }
 }

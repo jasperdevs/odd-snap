@@ -16,8 +16,9 @@ pub use history::{
 };
 pub use jobs::{AppJobArea, AppJobSnapshot};
 pub use media::{
-    build_recording_output_args, discover_ffmpeg_tools, discover_ffmpeg_tools_in_locations,
-    discover_ffmpeg_tools_in_path, FfmpegRecordingRequest, FfmpegTools,
+    build_recording_output_args, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
+    discover_ffmpeg_tools, discover_ffmpeg_tools_in_locations, discover_ffmpeg_tools_in_path,
+    FfmpegRecordingRequest, FfmpegThumbnailRequest, FfmpegTools,
 };
 pub use native_ui::{NativeMaterial, NativeUiProfile};
 pub use settings::{

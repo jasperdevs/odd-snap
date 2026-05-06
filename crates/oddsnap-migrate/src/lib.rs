@@ -408,6 +408,7 @@ fn legacy_history_entry(record: LegacyHistoryRecord) -> HistoryEntry {
         upload_url: record.upload_url,
         upload_provider: record.upload_provider,
         upload_error: record.upload_error,
+        thumbnail_path: None,
     }
 }
 

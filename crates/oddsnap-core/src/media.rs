@@ -17,6 +17,13 @@ pub struct FfmpegRecordingRequest {
     pub fps: u32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FfmpegThumbnailRequest {
+    pub input_path: PathBuf,
+    pub output_path: PathBuf,
+    pub seek_seconds: Option<String>,
+}
+
 pub fn build_recording_output_args(request: &FfmpegRecordingRequest) -> Vec<String> {
     let fps = request.fps.clamp(1, 240).to_string();
     let mut args = vec!["-y".to_string()];
@@ -61,6 +68,40 @@ pub fn build_recording_output_args(request: &FfmpegRecordingRequest) -> Vec<Stri
 
     args.push(request.output_path.display().to_string());
     args
+}
+
+pub fn build_video_thumbnail_args(request: &FfmpegThumbnailRequest) -> Vec<String> {
+    let mut args = vec!["-y".to_string()];
+    if let Some(seek_seconds) = &request.seek_seconds {
+        args.extend(["-ss".to_string(), seek_seconds.clone()]);
+    }
+    args.extend([
+        "-i".to_string(),
+        request.input_path.display().to_string(),
+        "-vf".to_string(),
+        "scale=480:-1".to_string(),
+        "-vframes".to_string(),
+        "1".to_string(),
+        "-q:v".to_string(),
+        "3".to_string(),
+        request.output_path.display().to_string(),
+    ]);
+    args
+}
+
+pub fn build_video_thumbnail_fallback_args(request: &FfmpegThumbnailRequest) -> Vec<String> {
+    vec![
+        "-y".to_string(),
+        "-i".to_string(),
+        request.input_path.display().to_string(),
+        "-vf".to_string(),
+        "thumbnail=24,scale=480:-1".to_string(),
+        "-frames:v".to_string(),
+        "1".to_string(),
+        "-q:v".to_string(),
+        "3".to_string(),
+        request.output_path.display().to_string(),
+    ]
 }
 
 pub fn discover_ffmpeg_tools() -> Option<FfmpegTools> {
@@ -158,8 +199,9 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        build_recording_output_args, discover_ffmpeg_tools_in_locations,
-        discover_ffmpeg_tools_in_path, FfmpegRecordingRequest,
+        build_recording_output_args, build_video_thumbnail_args,
+        build_video_thumbnail_fallback_args, discover_ffmpeg_tools_in_locations,
+        discover_ffmpeg_tools_in_path, FfmpegRecordingRequest, FfmpegThumbnailRequest,
     };
     use crate::{RecordingFormat, RecordingQuality};
 
@@ -306,5 +348,28 @@ mod tests {
             .any(|pair| pair == ["-c:v", "libvpx-vp9"]));
         assert!(mkv_args.windows(2).any(|pair| pair == ["-c:v", "libx264"]));
         assert!(mkv_args.windows(2).any(|pair| pair == ["-r", "1"]));
+    }
+
+    #[test]
+    fn builds_video_thumbnail_args_with_legacy_filters() {
+        let request = FfmpegThumbnailRequest {
+            input_path: PathBuf::from("capture.mp4"),
+            output_path: PathBuf::from("thumb.jpg"),
+            seek_seconds: Some("0.40".into()),
+        };
+
+        let args = build_video_thumbnail_args(&request);
+        let fallback_args = build_video_thumbnail_fallback_args(&request);
+
+        assert!(args.windows(2).any(|pair| pair == ["-ss", "0.40"]));
+        assert!(args.windows(2).any(|pair| pair == ["-vf", "scale=480:-1"]));
+        assert!(args.windows(2).any(|pair| pair == ["-q:v", "3"]));
+        assert_eq!(args.last().map(String::as_str), Some("thumb.jpg"));
+        assert!(fallback_args
+            .windows(2)
+            .any(|pair| pair == ["-vf", "thumbnail=24,scale=480:-1"]));
+        assert!(fallback_args
+            .windows(2)
+            .any(|pair| pair == ["-frames:v", "1"]));
     }
 }

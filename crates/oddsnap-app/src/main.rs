@@ -1,6 +1,10 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
 
 use gpui::{
     div, img, px, rgb, size, App, AppContext, Bounds, Context, InteractiveElement, IntoElement,
@@ -10,9 +14,10 @@ use gpui::{
 };
 use gpui_platform::application;
 use oddsnap_core::{
-    build_available_capture_path, default_history_path, default_settings_path,
-    discover_ffmpeg_tools, format_file_name_template, AppSettings, CapabilityState, HistoryEntry,
-    HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, SettingsStore,
+    build_available_capture_path, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
+    default_history_path, default_settings_path, discover_ffmpeg_tools, format_file_name_template,
+    AppSettings, CapabilityState, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind,
+    HistoryStore, PlatformCapability, SettingsStore,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region,
@@ -827,12 +832,14 @@ impl OddSnapRustApp {
 
     fn save_recording_history(&mut self, path: PathBuf, width: u32, height: u32) -> String {
         if !self.settings.save_history {
+            let preview_path = create_video_thumbnail(&self.history_store, &path)
+                .or_else(|| preview_path_for_capture(&path));
             self.capture_history.insert(
                 0,
                 CaptureHistoryEntry {
                     mode: CaptureMode::FullScreen,
                     path: path.display().to_string(),
-                    preview_path: preview_path_for_capture(&path),
+                    preview_path,
                     width,
                     height,
                 },
@@ -846,10 +853,12 @@ impl OddSnapRustApp {
         } else {
             HistoryKind::Video
         };
-        let entry = match HistoryEntry::from_capture_file(path, width, height, kind) {
+        let thumbnail_path = create_video_thumbnail(&self.history_store, &path);
+        let mut entry = match HistoryEntry::from_capture_file(path, width, height, kind) {
             Ok(entry) => entry,
             Err(error) => return format!("; history failed: {error}"),
         };
+        entry.thumbnail_path = thumbnail_path;
 
         match self.history_store.append_entry(entry) {
             Ok(index) => {
@@ -934,11 +943,83 @@ fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistory
         .map(|entry| CaptureHistoryEntry {
             mode: CaptureMode::FullScreen,
             path: entry.file_path.display().to_string(),
-            preview_path: preview_path_for_capture(&entry.file_path),
+            preview_path: entry
+                .thumbnail_path
+                .filter(|path| path.exists())
+                .or_else(|| preview_path_for_capture(&entry.file_path)),
             width: entry.width,
             height: entry.height,
         })
         .collect()
+}
+
+fn create_video_thumbnail(history_store: &HistoryStore, media_path: &Path) -> Option<PathBuf> {
+    let tools = discover_ffmpeg_tools()?;
+    let output_path = video_thumbnail_path(history_store, media_path)?;
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent).ok()?;
+    }
+    let _ = fs::remove_file(&output_path);
+
+    for seek_seconds in ["0.40", "1.00", "2.00"] {
+        let request = FfmpegThumbnailRequest {
+            input_path: media_path.to_path_buf(),
+            output_path: output_path.clone(),
+            seek_seconds: Some(seek_seconds.into()),
+        };
+        if run_ffmpeg_thumbnail(
+            &tools.ffmpeg,
+            build_video_thumbnail_args(&request),
+            &output_path,
+        ) {
+            return Some(output_path);
+        }
+    }
+
+    let request = FfmpegThumbnailRequest {
+        input_path: media_path.to_path_buf(),
+        output_path: output_path.clone(),
+        seek_seconds: None,
+    };
+    if run_ffmpeg_thumbnail(
+        &tools.ffmpeg,
+        build_video_thumbnail_fallback_args(&request),
+        &output_path,
+    ) {
+        Some(output_path)
+    } else {
+        let _ = fs::remove_file(&output_path);
+        None
+    }
+}
+
+fn video_thumbnail_path(history_store: &HistoryStore, media_path: &Path) -> Option<PathBuf> {
+    let directory = history_store.path().parent()?.join("thumbs");
+    Some(directory.join(format!("{}.jpg", stable_path_key(media_path))))
+}
+
+fn stable_path_key(path: &Path) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in path.display().to_string().to_ascii_lowercase().bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
+fn run_ffmpeg_thumbnail(ffmpeg: &Path, args: Vec<String>, output_path: &Path) -> bool {
+    let status = Command::new(ffmpeg)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    if !matches!(status, Ok(status) if status.success()) {
+        return false;
+    }
+    fs::metadata(output_path)
+        .map(|metadata| metadata.len() > 0)
+        .unwrap_or(false)
 }
 
 fn preview_path_for_capture(path: &Path) -> Option<PathBuf> {

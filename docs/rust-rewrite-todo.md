@@ -82,7 +82,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Rust recording settings import and FFmpeg output argument model.
 - [ ] Microphone recording.
 - [ ] System audio recording where supported.
-- [ ] Video thumbnail generation.
+- [x] Video thumbnail generation for Rust recording history.
 - [x] Basic persisted media history index.
 - [ ] Full media history UI and actions.
 
