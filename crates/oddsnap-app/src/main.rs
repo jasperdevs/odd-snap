@@ -7,7 +7,10 @@ use gpui::{
 };
 use gpui_platform::application;
 use oddsnap_core::{CapabilityState, PlatformCapability};
-use oddsnap_platform::{ClipboardImageService, PlatformAdapter, ScreenCaptureService};
+use oddsnap_platform::{
+    default_capture_directory, persist_capture_to_directory, ClipboardImageService,
+    PlatformAdapter, ScreenCaptureService,
+};
 
 fn main() {
     application().run(|cx: &mut App| {
@@ -247,8 +250,9 @@ impl OddSnapRustApp {
         let result = {
             let adapter = oddsnap_platform_windows::WindowsPlatform;
             adapter.capture_all_screens().and_then(|capture| {
-                adapter.copy_image_to_clipboard(&capture.image_path)?;
-                Ok(capture)
+                let saved = persist_capture_to_directory(&capture, &default_capture_directory())?;
+                adapter.copy_image_to_clipboard(&saved.image_path)?;
+                Ok(saved)
             })
         };
 
@@ -259,7 +263,7 @@ impl OddSnapRustApp {
 
         self.capture_status = match result {
             Ok(capture) => format!(
-                "{} capture copied and wrote {}",
+                "{} capture copied and saved {}",
                 platform.name(),
                 capture.image_path.display()
             ),

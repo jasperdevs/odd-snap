@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use oddsnap_core::{NativeUiProfile, PlatformCapabilities};
 use thiserror::Error;
@@ -78,6 +82,49 @@ pub trait ClipboardImageService: Send + Sync {
     fn copy_image_to_clipboard(&self, image_path: &Path) -> Result<(), PlatformError>;
 }
 
+pub fn default_capture_directory() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            return PathBuf::from(profile).join("Pictures").join("OddSnap");
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home).join("Pictures").join("OddSnap");
+        }
+    }
+
+    std::env::temp_dir().join("OddSnap")
+}
+
+pub fn persist_capture_to_directory(
+    capture: &CaptureResult,
+    output_dir: &Path,
+) -> Result<CaptureResult, PlatformError> {
+    fs::create_dir_all(output_dir).map_err(|source| {
+        PlatformError::Failed(format!("failed to create capture directory: {source}"))
+    })?;
+
+    let extension = capture
+        .image_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| !extension.is_empty())
+        .unwrap_or("bmp");
+    let destination = unique_capture_path(output_dir, extension);
+
+    fs::copy(&capture.image_path, &destination)
+        .map_err(|source| PlatformError::Failed(format!("failed to save capture: {source}")))?;
+
+    Ok(CaptureResult {
+        image_path: destination,
+        region: capture.region.clone(),
+    })
+}
+
 pub trait HotkeyService: Send + Sync {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError>;
 }
@@ -119,9 +166,39 @@ pub fn virtual_screen_region(monitors: &[MonitorInfo]) -> Option<CaptureRegion> 
     })
 }
 
+fn unique_capture_path(output_dir: &Path, extension: &str) -> PathBuf {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let base = format!(
+        "OddSnap-{}-{:09}",
+        duration.as_secs(),
+        duration.subsec_nanos()
+    );
+
+    for suffix in 0..1000 {
+        let file_name = if suffix == 0 {
+            format!("{base}.{extension}")
+        } else {
+            format!("{base}-{suffix}.{extension}")
+        };
+        let candidate = output_dir.join(file_name);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    output_dir.join(format!("{base}-{}.{}", std::process::id(), extension))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{virtual_screen_region, MonitorInfo};
+    use std::{fs, path::PathBuf};
+
+    use super::{
+        persist_capture_to_directory, virtual_screen_region, CaptureRegion, CaptureResult,
+        MonitorInfo,
+    };
 
     #[test]
     fn virtual_screen_region_combines_negative_and_positive_monitors() {
@@ -152,5 +229,62 @@ mod tests {
         assert_eq!(region.y, -120);
         assert_eq!(region.width, 4480);
         assert_eq!(region.height, 1440);
+    }
+
+    #[test]
+    fn persist_capture_to_directory_copies_file_and_region() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-platform-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp test root");
+        let source = root.join("source.bmp");
+        let output = root.join("saved");
+        fs::write(&source, b"BMtest").expect("write source capture");
+
+        let capture = CaptureResult {
+            image_path: source.clone(),
+            region: CaptureRegion {
+                x: -10,
+                y: 20,
+                width: 30,
+                height: 40,
+            },
+        };
+
+        let saved = persist_capture_to_directory(&capture, &output).expect("persist capture");
+
+        assert_ne!(saved.image_path, source);
+        assert_eq!(saved.region, capture.region);
+        assert_eq!(saved.image_path.parent(), Some(output.as_path()));
+        assert_eq!(
+            saved.image_path.extension(),
+            Some(std::ffi::OsStr::new("bmp"))
+        );
+        assert_eq!(
+            fs::read(&saved.image_path).expect("read saved capture"),
+            b"BMtest"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn persist_capture_to_directory_reports_missing_source() {
+        let missing = PathBuf::from("does-not-exist.bmp");
+        let output = std::env::temp_dir().join("oddsnap-platform-missing-source-test");
+        let capture = CaptureResult {
+            image_path: missing,
+            region: CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
+        };
+
+        let error = persist_capture_to_directory(&capture, &output).expect_err("missing source");
+
+        assert!(error.to_string().contains("failed to save capture"));
+        let _ = fs::remove_dir_all(output);
     }
 }

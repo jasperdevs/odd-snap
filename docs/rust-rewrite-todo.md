@@ -52,7 +52,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Crosshair guides.
 - [ ] Magnifier.
 - [ ] Annotation drawing.
-- [ ] Save to file.
+- [x] Shared save-to-file persistence helper.
+- [ ] User-configurable save destination.
 - [x] Windows image clipboard foundation.
 - [ ] Cross-platform image clipboard.
 - [ ] Post-capture preview.

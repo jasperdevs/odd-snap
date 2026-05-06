@@ -18,6 +18,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Shared capture trait can capture the full virtual screen by reusing monitor enumeration and region capture.
 - Windows can detect active-window bounds and capture that window through the shared capture service.
 - Windows can copy generated BMP captures to the system clipboard as image data.
+- Shared capture persistence can save generated captures into a stable output directory.
 
 ## Current Non-Parity State
 
