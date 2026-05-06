@@ -6,7 +6,9 @@ use gpui::{
     Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations, WindowOptions,
 };
 use gpui_platform::application;
-use oddsnap_core::{CapabilityState, PlatformCapability};
+use oddsnap_core::{
+    default_settings_path, AppSettings, CapabilityState, PlatformCapability, SettingsStore,
+};
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_directory, ClipboardImageService,
     PlatformAdapter, ScreenCaptureService, WindowCaptureService,
@@ -48,6 +50,8 @@ struct OddSnapRustApp {
     native_ui_goal: String,
     capabilities: Vec<(PlatformCapability, CapabilityState)>,
     capture_status: String,
+    settings: AppSettings,
+    settings_path: String,
     capture_history: Vec<CaptureHistoryEntry>,
     focus_handle: gpui::FocusHandle,
 }
@@ -79,12 +83,23 @@ impl OddSnapRustApp {
         let platform = host_platform();
         let profile = platform.native_ui_profile();
         let capabilities = platform.capabilities().items;
+        let settings_store = SettingsStore::new(default_settings_path());
+        let settings_path = settings_store.path().display().to_string();
+        let (settings, capture_status) = match settings_store.load_or_default() {
+            Ok(settings) => (settings, "No capture run in this session.".into()),
+            Err(error) => (
+                AppSettings::default(),
+                format!("Settings load failed, using defaults: {error}"),
+            ),
+        };
 
         Self {
             platform_name: platform.name().into(),
             native_ui_goal: profile.visual_goal,
             capabilities,
-            capture_status: "No capture run in this session.".into(),
+            capture_status,
+            settings,
+            settings_path,
             capture_history: Vec::new(),
             focus_handle: cx.focus_handle(),
         }
@@ -206,6 +221,21 @@ impl OddSnapRustApp {
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
                     .child("Windows: WinUI 3 aligned; macOS: Liquid Glass aligned; Linux: freedesktop adaptive."),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(format!("Settings: {}", self.settings_path))),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(format!(
+                        "Output: {}",
+                        self.capture_output_directory().display()
+                    ))),
             )
             .child(
                 div()
@@ -343,8 +373,11 @@ impl OddSnapRustApp {
                 CaptureMode::ActiveWindow => adapter.capture_active_window(),
             };
             capture.and_then(|capture| {
-                let saved = persist_capture_to_directory(&capture, &default_capture_directory())?;
-                adapter.copy_image_to_clipboard(&saved.image_path)?;
+                let output_dir = self.capture_output_directory();
+                let saved = persist_capture_to_directory(&capture, &output_dir)?;
+                if self.settings.copy_captures_to_clipboard {
+                    adapter.copy_image_to_clipboard(&saved.image_path)?;
+                }
                 Ok(saved)
             })
         };
@@ -367,14 +400,20 @@ impl OddSnapRustApp {
                     },
                 );
                 self.capture_history.truncate(6);
-                format!(
-                    "{} {} copied and saved {path}",
-                    platform.name(),
-                    mode.label()
-                )
+                let copy_status = if self.settings.copy_captures_to_clipboard {
+                    "copied and saved"
+                } else {
+                    "saved"
+                };
+                format!("{} {} {copy_status} {path}", platform.name(), mode.label())
             }
             Err(error) => format!("{} capture failed: {error}", platform.name()),
         };
+    }
+
+    fn capture_output_directory(&self) -> std::path::PathBuf {
+        self.settings
+            .capture_output_directory_or(default_capture_directory())
     }
 }
 

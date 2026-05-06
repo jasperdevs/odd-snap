@@ -57,6 +57,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows image clipboard foundation.
 - [ ] Cross-platform image clipboard.
 - [x] GPUI recent-captures list for capture smoke results.
+- [x] Rust settings store for capture output and clipboard preferences.
 - [ ] Post-capture image preview.
 
 ## Milestone 4 - Recording And Media

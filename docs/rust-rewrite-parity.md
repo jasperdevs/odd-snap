@@ -20,6 +20,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can copy generated BMP captures to the system clipboard as image data.
 - Shared capture persistence can save generated captures into a stable output directory.
 - GPUI shell exposes full-screen and active-window capture smoke controls with a local recent-captures list.
+- Rust app settings can load capture output and clipboard preferences from a JSON settings file.
 
 ## Current Non-Parity State
 
