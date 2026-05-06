@@ -82,6 +82,10 @@ pub trait ClipboardImageService: Send + Sync {
     fn copy_image_to_clipboard(&self, image_path: &Path) -> Result<(), PlatformError>;
 }
 
+pub trait ClipboardTextService: Send + Sync {
+    fn copy_text_to_clipboard(&self, text: &str) -> Result<(), PlatformError>;
+}
+
 pub fn default_capture_directory() -> PathBuf {
     #[cfg(target_os = "windows")]
     {

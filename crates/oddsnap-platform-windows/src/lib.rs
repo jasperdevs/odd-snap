@@ -1,7 +1,7 @@
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, ClipboardImageService, MonitorInfo, PlatformAdapter,
-    PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
+    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, MonitorInfo,
+    PlatformAdapter, PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -31,7 +31,7 @@ use windows::Win32::System::DataExchange::{
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 #[cfg(target_os = "windows")]
-use windows::Win32::System::Ole::CF_DIB;
+use windows::Win32::System::Ole::{CF_DIB, CF_UNICODETEXT};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI};
 #[cfg(target_os = "windows")]
@@ -148,6 +148,23 @@ impl ClipboardImageService for WindowsPlatform {
             let _ = image_path;
             Err(PlatformError::Unsupported(
                 "Windows image clipboard is only available on Windows",
+            ))
+        }
+    }
+}
+
+impl ClipboardTextService for WindowsPlatform {
+    fn copy_text_to_clipboard(&self, text: &str) -> Result<(), PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            copy_text_to_clipboard(text)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = text;
+            Err(PlatformError::Unsupported(
+                "Windows text clipboard is only available on Windows",
             ))
         }
     }
@@ -395,6 +412,61 @@ unsafe fn copy_dib_to_clipboard(dib: &[u8]) -> Result<(), PlatformError> {
             .map_err(|error| PlatformError::Failed(format!("EmptyClipboard failed: {error}")))
             .and_then(|()| {
                 SetClipboardData(CF_DIB.0 as u32, Some(HANDLE(memory.0)))
+                    .map(|_| ())
+                    .map_err(|error| {
+                        PlatformError::Failed(format!("SetClipboardData failed: {error}"))
+                    })
+            });
+        let close_result = CloseClipboard()
+            .map_err(|error| PlatformError::Failed(format!("CloseClipboard failed: {error}")));
+
+        set_result?;
+        close_result?;
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn copy_text_to_clipboard(text: &str) -> Result<(), PlatformError> {
+    let mut utf16: Vec<u16> = text.encode_utf16().collect();
+    utf16.push(0);
+    let bytes = unsafe {
+        std::slice::from_raw_parts(
+            utf16.as_ptr().cast::<u8>(),
+            utf16.len() * mem::size_of::<u16>(),
+        )
+    };
+    unsafe { copy_bytes_to_clipboard(CF_UNICODETEXT.0 as u32, bytes) }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn copy_bytes_to_clipboard(format: u32, bytes: &[u8]) -> Result<(), PlatformError> {
+    if bytes.is_empty() {
+        return Err(PlatformError::Failed("clipboard payload is empty".into()));
+    }
+
+    let memory = unsafe {
+        GlobalAlloc(GMEM_MOVEABLE, bytes.len())
+            .map_err(|error| PlatformError::Failed(format!("GlobalAlloc failed: {error}")))?
+    };
+    let locked = unsafe { GlobalLock(memory) };
+    if locked.is_null() {
+        return Err(PlatformError::Failed("GlobalLock failed".into()));
+    }
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), locked.cast(), bytes.len());
+        let _ = GlobalUnlock(memory);
+    }
+
+    unsafe {
+        OpenClipboard(None)
+            .map_err(|error| PlatformError::Failed(format!("OpenClipboard failed: {error}")))?;
+        let set_result = EmptyClipboard()
+            .map_err(|error| PlatformError::Failed(format!("EmptyClipboard failed: {error}")))
+            .and_then(|()| {
+                SetClipboardData(format, Some(HANDLE(memory.0)))
                     .map(|_| ())
                     .map_err(|error| {
                         PlatformError::Failed(format!("SetClipboardData failed: {error}"))
@@ -771,6 +843,19 @@ mod tests {
             .copy_image_to_clipboard(&result.image_path)
             .expect("copy capture");
         fs::remove_file(&result.image_path).expect("remove captured bmp");
+    }
+
+    #[test]
+    #[ignore = "writes text to the local Windows clipboard"]
+    #[cfg(target_os = "windows")]
+    fn windows_text_clipboard_can_copy_text() {
+        use oddsnap_platform::ClipboardTextService;
+
+        let adapter = WindowsPlatform;
+
+        adapter
+            .copy_text_to_clipboard("OddSnap Rust clipboard smoke")
+            .expect("copy text");
     }
 
     #[test]

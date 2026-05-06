@@ -2,8 +2,8 @@ use std::path::Path;
 
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, ClipboardImageService, MonitorInfo, PlatformAdapter,
-    PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
+    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, MonitorInfo,
+    PlatformAdapter, PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -78,10 +78,21 @@ impl ClipboardImageService for LinuxPlatform {
     }
 }
 
+impl ClipboardTextService for LinuxPlatform {
+    fn copy_text_to_clipboard(&self, text: &str) -> Result<(), PlatformError> {
+        let _ = text;
+        Err(PlatformError::Unsupported(
+            "Linux text clipboard is not implemented yet",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use oddsnap_core::NativeMaterial;
-    use oddsnap_platform::{ClipboardImageService, PlatformAdapter, ScreenCaptureService};
+    use oddsnap_platform::{
+        ClipboardImageService, ClipboardTextService, PlatformAdapter, ScreenCaptureService,
+    };
 
     use super::LinuxPlatform;
 
@@ -111,6 +122,17 @@ mod tests {
         let error = adapter
             .copy_image_to_clipboard(std::path::Path::new("capture.bmp"))
             .expect_err("Linux clipboard pending");
+
+        assert!(error.to_string().contains("not implemented yet"));
+    }
+
+    #[test]
+    fn linux_text_clipboard_service_is_explicitly_unimplemented() {
+        let adapter = LinuxPlatform;
+
+        let error = adapter
+            .copy_text_to_clipboard("capture text")
+            .expect_err("Linux text clipboard pending");
 
         assert!(error.to_string().contains("not implemented yet"));
     }

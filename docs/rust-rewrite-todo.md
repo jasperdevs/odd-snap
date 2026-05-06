@@ -58,7 +58,9 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Shared save-to-file persistence helper.
 - [ ] User-configurable save destination.
 - [x] Windows image clipboard foundation.
+- [x] Windows text clipboard foundation.
 - [ ] Cross-platform image clipboard.
+- [ ] Cross-platform text clipboard.
 - [x] GPUI recent-captures list for capture smoke results.
 - [x] Rust settings store for capture output and clipboard preferences.
 - [x] Rust JSON media history store for saved image captures.
