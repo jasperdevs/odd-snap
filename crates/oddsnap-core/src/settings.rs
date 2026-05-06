@@ -24,6 +24,8 @@ pub struct AppSettings {
     pub capture_output_directory: Option<PathBuf>,
     #[serde(default = "default_copy_captures_to_clipboard")]
     pub copy_captures_to_clipboard: bool,
+    #[serde(default = "default_save_history")]
+    pub save_history: bool,
 }
 
 impl Default for AppSettings {
@@ -31,6 +33,7 @@ impl Default for AppSettings {
         Self {
             capture_output_directory: None,
             copy_captures_to_clipboard: true,
+            save_history: true,
         }
     }
 }
@@ -45,6 +48,10 @@ impl AppSettings {
 }
 
 fn default_copy_captures_to_clipboard() -> bool {
+    true
+}
+
+fn default_save_history() -> bool {
     true
 }
 
@@ -166,6 +173,7 @@ mod tests {
         let settings = AppSettings::default();
 
         assert!(settings.copy_captures_to_clipboard);
+        assert!(settings.save_history);
         assert!(settings.capture_output_directory.is_none());
     }
 
@@ -174,6 +182,7 @@ mod tests {
         let settings = AppSettings {
             capture_output_directory: Some(PathBuf::new()),
             copy_captures_to_clipboard: true,
+            save_history: true,
         };
 
         assert_eq!(
@@ -191,6 +200,7 @@ mod tests {
         let settings = AppSettings {
             capture_output_directory: Some(root.join("captures")),
             copy_captures_to_clipboard: false,
+            save_history: false,
         };
 
         store.save(&settings).expect("save settings");

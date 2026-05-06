@@ -23,6 +23,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust app settings can load capture output and clipboard preferences from a JSON settings file.
 - macOS and Linux adapters expose explicit pending capture/window/clipboard service implementations instead of missing trait surfaces.
 - Windows monitor enumeration now reports real display entries with DPI-derived scale percentages.
+- Rust captures can append durable JSON history entries and reload recent captures on startup.
 
 ## Current Non-Parity State
 

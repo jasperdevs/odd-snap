@@ -61,6 +61,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Cross-platform image clipboard.
 - [x] GPUI recent-captures list for capture smoke results.
 - [x] Rust settings store for capture output and clipboard preferences.
+- [x] Rust JSON media history store for saved image captures.
 - [ ] Post-capture image preview.
 
 ## Milestone 4 - Recording And Media
@@ -71,7 +72,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Microphone recording.
 - [ ] System audio recording where supported.
 - [ ] Video thumbnail generation.
-- [ ] Media history.
+- [x] Basic persisted media history index.
+- [ ] Full media history UI and actions.
 
 ## Milestone 5 - Advanced OddSnap Features
 

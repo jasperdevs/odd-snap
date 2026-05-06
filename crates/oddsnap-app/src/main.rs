@@ -7,7 +7,8 @@ use gpui::{
 };
 use gpui_platform::application;
 use oddsnap_core::{
-    default_settings_path, AppSettings, CapabilityState, PlatformCapability, SettingsStore,
+    default_history_path, default_settings_path, AppSettings, CapabilityState, HistoryEntry,
+    HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, SettingsStore,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_directory, ClipboardImageService,
@@ -52,6 +53,8 @@ struct OddSnapRustApp {
     capture_status: String,
     settings: AppSettings,
     settings_path: String,
+    history_store: HistoryStore,
+    history_path: String,
     capture_history: Vec<CaptureHistoryEntry>,
     focus_handle: gpui::FocusHandle,
 }
@@ -92,6 +95,12 @@ impl OddSnapRustApp {
                 format!("Settings load failed, using defaults: {error}"),
             ),
         };
+        let history_store = HistoryStore::new(default_history_path());
+        let history_path = history_store.path().display().to_string();
+        let capture_history = history_store
+            .load_or_default()
+            .map(history_entries_to_capture_history)
+            .unwrap_or_default();
 
         Self {
             platform_name: platform.name().into(),
@@ -100,7 +109,9 @@ impl OddSnapRustApp {
             capture_status,
             settings,
             settings_path,
-            capture_history: Vec::new(),
+            history_store,
+            history_path,
+            capture_history,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -227,6 +238,12 @@ impl OddSnapRustApp {
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(format!("Settings: {}", self.settings_path))),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(format!("History: {}", self.history_path))),
             )
             .child(
                 div()
@@ -390,22 +407,17 @@ impl OddSnapRustApp {
         self.capture_status = match result {
             Ok(capture) => {
                 let path = capture.image_path.display().to_string();
-                self.capture_history.insert(
-                    0,
-                    CaptureHistoryEntry {
-                        mode,
-                        path: path.clone(),
-                        width: capture.region.width,
-                        height: capture.region.height,
-                    },
-                );
-                self.capture_history.truncate(6);
+                let history_status = self.save_capture_history(&capture, mode);
                 let copy_status = if self.settings.copy_captures_to_clipboard {
                     "copied and saved"
                 } else {
                     "saved"
                 };
-                format!("{} {} {copy_status} {path}", platform.name(), mode.label())
+                format!(
+                    "{} {} {copy_status} {path}{history_status}",
+                    platform.name(),
+                    mode.label()
+                )
             }
             Err(error) => format!("{} capture failed: {error}", platform.name()),
         };
@@ -415,6 +427,58 @@ impl OddSnapRustApp {
         self.settings
             .capture_output_directory_or(default_capture_directory())
     }
+
+    fn save_capture_history(
+        &mut self,
+        capture: &oddsnap_platform::CaptureResult,
+        mode: CaptureMode,
+    ) -> String {
+        if !self.settings.save_history {
+            self.capture_history.insert(
+                0,
+                CaptureHistoryEntry {
+                    mode,
+                    path: capture.image_path.display().to_string(),
+                    width: capture.region.width,
+                    height: capture.region.height,
+                },
+            );
+            self.capture_history.truncate(6);
+            return String::new();
+        }
+
+        let entry = match HistoryEntry::from_capture_file(
+            capture.image_path.clone(),
+            capture.region.width,
+            capture.region.height,
+            HistoryKind::Image,
+        ) {
+            Ok(entry) => entry,
+            Err(error) => return format!("; history failed: {error}"),
+        };
+
+        match self.history_store.append_entry(entry) {
+            Ok(index) => {
+                self.capture_history = history_entries_to_capture_history(index);
+                String::new()
+            }
+            Err(error) => format!("; history failed: {error}"),
+        }
+    }
+}
+
+fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistoryEntry> {
+    index
+        .entries
+        .into_iter()
+        .take(6)
+        .map(|entry| CaptureHistoryEntry {
+            mode: CaptureMode::FullScreen,
+            path: entry.file_path.display().to_string(),
+            width: entry.width,
+            height: entry.height,
+        })
+        .collect()
 }
 
 fn state_color(state: CapabilityState) -> u32 {
