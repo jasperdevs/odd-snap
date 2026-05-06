@@ -140,7 +140,8 @@ impl OddSnapRustApp {
             }
             None => "FFmpeg: not found on PATH".into(),
         };
-        let (hotkey_status, hotkey_listener, hotkey_events) = start_capture_hotkey_listener();
+        let (hotkey_status, hotkey_listener, hotkey_events) =
+            start_capture_hotkey_listener(&settings.capture_hotkey);
 
         let app = Self {
             platform_name: platform.name().into(),
@@ -403,6 +404,18 @@ impl OddSnapRustApp {
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(self.hotkey_status.clone())),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(format!(
+                        "Recording hotkey: {}",
+                        self.settings
+                            .recording_hotkey
+                            .as_deref()
+                            .unwrap_or("disabled")
+                    ))),
             )
             .child(
                 div()
@@ -910,15 +923,17 @@ impl OddSnapRustApp {
 }
 
 #[cfg(target_os = "windows")]
-fn start_capture_hotkey_listener() -> (
+fn start_capture_hotkey_listener(
+    accelerator: &str,
+) -> (
     String,
     Option<oddsnap_platform_windows::WindowsHotkeyListener>,
     Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsHotkeyEvent>>,
 ) {
     let (sender, receiver) = std::sync::mpsc::channel();
-    match oddsnap_platform_windows::start_capture_hotkey_listener("Alt+`", sender) {
+    match oddsnap_platform_windows::start_capture_hotkey_listener(accelerator, sender) {
         Ok(listener) => (
-            "Hotkey: Alt+` listener ready.".into(),
+            format!("Hotkey: {accelerator} listener ready."),
             Some(listener),
             Some(receiver),
         ),
@@ -927,7 +942,8 @@ fn start_capture_hotkey_listener() -> (
 }
 
 #[cfg(not(target_os = "windows"))]
-fn start_capture_hotkey_listener() -> (String, Option<()>, Option<()>) {
+fn start_capture_hotkey_listener(accelerator: &str) -> (String, Option<()>, Option<()>) {
+    let _ = accelerator;
     (
         "Hotkey listener: pending on this platform.".into(),
         None,

@@ -139,6 +139,10 @@ pub struct AppSettings {
     pub microphone_device_id: Option<String>,
     #[serde(default)]
     pub desktop_audio_device_id: Option<String>,
+    #[serde(default = "default_capture_hotkey")]
+    pub capture_hotkey: String,
+    #[serde(default)]
+    pub recording_hotkey: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -159,6 +163,8 @@ impl Default for AppSettings {
             record_desktop_audio: default_record_desktop_audio(),
             microphone_device_id: None,
             desktop_audio_device_id: None,
+            capture_hotkey: default_capture_hotkey(),
+            recording_hotkey: None,
         }
     }
 }
@@ -202,6 +208,10 @@ fn default_gif_fps() -> u32 {
 
 fn default_record_desktop_audio() -> bool {
     true
+}
+
+fn default_capture_hotkey() -> String {
+    "Alt+`".into()
 }
 
 #[derive(Debug, Clone)]
@@ -334,6 +344,8 @@ mod tests {
         assert_eq!(settings.gif_fps, 15);
         assert!(!settings.record_microphone);
         assert!(settings.record_desktop_audio);
+        assert_eq!(settings.capture_hotkey, "Alt+`");
+        assert_eq!(settings.recording_hotkey, None);
         assert!(settings.capture_output_directory.is_none());
     }
 
@@ -355,6 +367,8 @@ mod tests {
             record_desktop_audio: true,
             microphone_device_id: None,
             desktop_audio_device_id: None,
+            capture_hotkey: "Alt+`".into(),
+            recording_hotkey: None,
         };
 
         assert_eq!(
@@ -385,6 +399,8 @@ mod tests {
             record_desktop_audio: false,
             microphone_device_id: Some("mic".into()),
             desktop_audio_device_id: Some("desktop".into()),
+            capture_hotkey: "Ctrl+Shift+S".into(),
+            recording_hotkey: Some("Alt+R".into()),
         };
 
         store.save(&settings).expect("save settings");
@@ -426,6 +442,8 @@ mod tests {
             record_desktop_audio: true,
             microphone_device_id: None,
             desktop_audio_device_id: None,
+            capture_hotkey: "Alt+`".into(),
+            recording_hotkey: None,
         };
 
         let json = serde_json::to_string(&settings).expect("serialize settings");

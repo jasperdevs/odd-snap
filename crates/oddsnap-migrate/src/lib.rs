@@ -225,6 +225,18 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
         settings.desktop_audio_device_id = Some(desktop_audio_device_id);
     }
 
+    if let Some(capture_hotkey) = legacy_hotkey(
+        import.raw.get("HotkeyModifiers"),
+        import.raw.get("HotkeyKey"),
+    ) {
+        settings.capture_hotkey = capture_hotkey;
+    }
+
+    settings.recording_hotkey = legacy_hotkey(
+        import.raw.get("GifHotkeyModifiers"),
+        import.raw.get("GifHotkeyKey"),
+    );
+
     settings
 }
 
@@ -521,6 +533,41 @@ fn legacy_non_empty_string(value: Option<&Value>) -> Option<String> {
         .map(str::to_string)
 }
 
+fn legacy_hotkey(modifiers: Option<&Value>, key: Option<&Value>) -> Option<String> {
+    let modifiers = modifiers.and_then(Value::as_u64)? as u32;
+    let key = key.and_then(Value::as_u64)? as u32;
+    if modifiers == 0 || key == 0 {
+        return None;
+    }
+
+    let mut parts = Vec::new();
+    if modifiers & 0x0002 != 0 {
+        parts.push("Ctrl".to_string());
+    }
+    if modifiers & 0x0001 != 0 {
+        parts.push("Alt".to_string());
+    }
+    if modifiers & 0x0004 != 0 {
+        parts.push("Shift".to_string());
+    }
+    if modifiers & 0x0008 != 0 {
+        parts.push("Win".to_string());
+    }
+    parts.push(legacy_virtual_key_name(key)?);
+    Some(parts.join("+"))
+}
+
+fn legacy_virtual_key_name(key: u32) -> Option<String> {
+    match key {
+        0xC0 => Some("`".into()),
+        0x70..=0x87 => Some(format!("F{}", key - 0x70 + 1)),
+        value if (0x30..=0x39).contains(&value) || (0x41..=0x5A).contains(&value) => {
+            char::from_u32(value).map(|value| value.to_string())
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -569,7 +616,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}","RecordingFormat":2,"RecordingQuality":1,"RecordingFps":60,"GifFps":24,"RecordMicrophone":true,"RecordDesktopAudio":false,"MicrophoneDeviceId":"mic-1","DesktopAudioDeviceId":"desktop-1"}"#,
+            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}","RecordingFormat":2,"RecordingQuality":1,"RecordingFps":60,"GifFps":24,"RecordMicrophone":true,"RecordDesktopAudio":false,"MicrophoneDeviceId":"mic-1","DesktopAudioDeviceId":"desktop-1","HotkeyModifiers":5,"HotkeyKey":67,"GifHotkeyModifiers":1,"GifHotkeyKey":82}"#,
         )
         .expect("write test settings");
 
@@ -598,6 +645,8 @@ mod tests {
             settings.desktop_audio_device_id.as_deref(),
             Some("desktop-1")
         );
+        assert_eq!(settings.capture_hotkey, "Alt+Shift+C");
+        assert_eq!(settings.recording_hotkey.as_deref(), Some("Alt+R"));
     }
 
     #[test]
@@ -650,6 +699,25 @@ mod tests {
         assert_eq!(settings.gif_fps, 1);
         assert_eq!(settings.microphone_device_id, None);
         assert_eq!(settings.desktop_audio_device_id.as_deref(), Some("device"));
+    }
+
+    #[test]
+    fn skips_disabled_or_unknown_legacy_hotkeys() {
+        let import = super::LegacySettingsImport {
+            source_path: PathBuf::from("settings.json"),
+            top_level_key_count: 4,
+            raw: serde_json::json!({
+                "HotkeyModifiers": 0,
+                "HotkeyKey": 0,
+                "GifHotkeyModifiers": 1,
+                "GifHotkeyKey": 999
+            }),
+        };
+
+        let settings = import_app_settings(&import);
+
+        assert_eq!(settings.capture_hotkey, "Alt+`");
+        assert_eq!(settings.recording_hotkey, None);
     }
 
     #[test]

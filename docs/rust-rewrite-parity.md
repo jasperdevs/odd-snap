@@ -30,6 +30,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import existing image/media history from the current SQLite history database or legacy JSON indexes when no Rust history file exists.
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
 - Windows can parse, register, listen for, and unregister process-local global hotkeys.
+- Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
 - Rust FFmpeg discovery also checks bundled executable and legacy AppData locations before PATH.
 - Rust startup can import legacy recording format, quality, FPS, and audio-device preferences.
