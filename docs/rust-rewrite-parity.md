@@ -31,6 +31,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
 - Windows can parse, register, listen for, and unregister process-local global hotkeys.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
+- Rust FFmpeg discovery also checks bundled executable and legacy AppData locations before PATH.
 - Rust startup can import legacy recording format, quality, FPS, and audio-device preferences.
 - Rust core can build format-specific FFmpeg output arguments for GIF, MP4, WebM, and MKV recording targets.
 - Windows has a Rust platform service boundary for starting/stopping FFmpeg-backed desktop video recordings from the GPUI shell.

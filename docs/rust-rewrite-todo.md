@@ -77,6 +77,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Region GIF recording.
 - [ ] Region MP4/WebM recording.
 - [x] FFmpeg discovery.
+- [x] Bundled/AppData FFmpeg discovery parity before PATH fallback.
 - [x] Rust recording settings import and FFmpeg output argument model.
 - [ ] Microphone recording.
 - [ ] System audio recording where supported.

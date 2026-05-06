@@ -64,15 +64,62 @@ pub fn build_recording_output_args(request: &FfmpegRecordingRequest) -> Vec<Stri
 }
 
 pub fn discover_ffmpeg_tools() -> Option<FfmpegTools> {
-    let path_var = std::env::var_os("PATH")?;
-    discover_ffmpeg_tools_in_path(&path_var.to_string_lossy(), std::env::consts::EXE_SUFFIX)
+    let path_var = std::env::var_os("PATH").unwrap_or_default();
+    discover_ffmpeg_tools_in_locations(
+        &path_var.to_string_lossy(),
+        std::env::consts::EXE_SUFFIX,
+        default_ffmpeg_candidate_directories(),
+    )
 }
 
 pub fn discover_ffmpeg_tools_in_path(path_var: &str, exe_suffix: &str) -> Option<FfmpegTools> {
-    let ffmpeg = find_executable_in_path(path_var, executable_name("ffmpeg", exe_suffix))?;
-    let ffprobe = find_executable_in_path(path_var, executable_name("ffprobe", exe_suffix));
+    discover_ffmpeg_tools_in_locations(path_var, exe_suffix, [])
+}
+
+pub fn discover_ffmpeg_tools_in_locations(
+    path_var: &str,
+    exe_suffix: &str,
+    candidate_directories: impl IntoIterator<Item = PathBuf>,
+) -> Option<FfmpegTools> {
+    let ffmpeg_name = executable_name("ffmpeg", exe_suffix);
+    let ffprobe_name = executable_name("ffprobe", exe_suffix);
+    let candidate_directories: Vec<PathBuf> = candidate_directories.into_iter().collect();
+    let ffmpeg = find_executable_in_directories(
+        candidate_directories.iter().map(PathBuf::as_path),
+        &ffmpeg_name,
+    )
+    .or_else(|| find_executable_in_path(path_var, &ffmpeg_name))?;
+    let ffprobe = ffmpeg
+        .parent()
+        .and_then(|directory| find_executable_in_directories([directory], &ffprobe_name))
+        .or_else(|| {
+            find_executable_in_directories(
+                candidate_directories.iter().map(PathBuf::as_path),
+                &ffprobe_name,
+            )
+        })
+        .or_else(|| find_executable_in_path(path_var, &ffprobe_name));
 
     Some(FfmpegTools { ffmpeg, ffprobe })
+}
+
+fn default_ffmpeg_candidate_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(directory) = current_exe.parent() {
+            directories.push(directory.to_path_buf());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            directories.push(PathBuf::from(appdata).join("OddSnap"));
+        }
+    }
+
+    directories
 }
 
 fn executable_name(name: &'static str, exe_suffix: &str) -> String {
@@ -83,9 +130,19 @@ fn executable_name(name: &'static str, exe_suffix: &str) -> String {
     }
 }
 
-fn find_executable_in_path(path_var: &str, executable: String) -> Option<PathBuf> {
+fn find_executable_in_path(path_var: &str, executable: &str) -> Option<PathBuf> {
     std::env::split_paths(path_var)
-        .map(|directory| directory.join(&executable))
+        .map(|directory| directory.join(executable))
+        .find(|candidate| is_file(candidate))
+}
+
+fn find_executable_in_directories<'a>(
+    directories: impl IntoIterator<Item = &'a Path>,
+    executable: &str,
+) -> Option<PathBuf> {
+    directories
+        .into_iter()
+        .map(|directory| directory.join(executable))
         .find(|candidate| is_file(candidate))
 }
 
@@ -101,7 +158,8 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        build_recording_output_args, discover_ffmpeg_tools_in_path, FfmpegRecordingRequest,
+        build_recording_output_args, discover_ffmpeg_tools_in_locations,
+        discover_ffmpeg_tools_in_path, FfmpegRecordingRequest,
     };
     use crate::{RecordingFormat, RecordingQuality};
 
@@ -148,6 +206,35 @@ mod tests {
 
         assert_eq!(tools.ffmpeg, ffmpeg);
         assert_eq!(tools.ffprobe, None);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn discovery_prefers_candidate_directory_and_uses_neighboring_ffprobe() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-ffmpeg-candidate-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let bundled = root.join("bundled");
+        let path_bin = root.join("path");
+        fs::create_dir_all(&bundled).expect("create bundled dir");
+        fs::create_dir_all(&path_bin).expect("create path dir");
+        let suffix = std::env::consts::EXE_SUFFIX;
+        let bundled_ffmpeg = bundled.join(format!("ffmpeg{suffix}"));
+        let bundled_ffprobe = bundled.join(format!("ffprobe{suffix}"));
+        let path_ffmpeg = path_bin.join(format!("ffmpeg{suffix}"));
+        fs::write(&bundled_ffmpeg, b"bundled ffmpeg").expect("write bundled ffmpeg");
+        fs::write(&bundled_ffprobe, b"bundled ffprobe").expect("write bundled ffprobe");
+        fs::write(&path_ffmpeg, b"path ffmpeg").expect("write path ffmpeg");
+        let path_var = std::env::join_paths([path_bin.as_path()])
+            .expect("join PATH")
+            .to_string_lossy()
+            .to_string();
+
+        let tools = discover_ffmpeg_tools_in_locations(&path_var, suffix, [bundled.clone()])
+            .expect("discover bundled ffmpeg");
+
+        assert_eq!(tools.ffmpeg, bundled_ffmpeg);
+        assert_eq!(tools.ffprobe, Some(bundled_ffprobe));
         let _ = fs::remove_dir_all(root);
     }
 
