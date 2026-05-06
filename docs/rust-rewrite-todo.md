@@ -88,7 +88,8 @@ Keep it updated whenever a rewrite milestone lands.
 
 ## Milestone 6 - Migration And Parity Closure
 
-- [ ] Import existing settings.
+- [x] Import existing save directory/history/copy settings into Rust settings.
+- [ ] Import all existing settings.
 - [ ] Import existing history.
 - [ ] Import existing media metadata where practical.
 - [ ] Windows full parity verification.

@@ -2,6 +2,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use oddsnap_core::AppSettings;
 use serde_json::Value;
 use thiserror::Error;
 
@@ -101,12 +102,41 @@ pub fn read_legacy_settings(
     })
 }
 
+pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
+    let mut settings = AppSettings::default();
+
+    if let Some(save_directory) = import.raw.get("SaveDirectory").and_then(Value::as_str) {
+        if !save_directory.trim().is_empty() {
+            settings.capture_output_directory = Some(PathBuf::from(save_directory));
+        }
+    }
+
+    if let Some(save_history) = import.raw.get("SaveHistory").and_then(Value::as_bool) {
+        settings.save_history = save_history;
+    }
+
+    if let Some(after_capture) = import.raw.get("AfterCapture") {
+        settings.copy_captures_to_clipboard = legacy_after_capture_copies(after_capture);
+    }
+
+    settings
+}
+
+fn legacy_after_capture_copies(value: &Value) -> bool {
+    match value {
+        Value::Number(number) => number.as_u64().is_none_or(|index| index != 2),
+        Value::String(name) => !name.eq_ignore_ascii_case("PreviewOnly"),
+        _ => AppSettings::default().copy_captures_to_clipboard,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{read_legacy_settings, LegacyOddSnapPaths};
+    use super::{import_app_settings, read_legacy_settings, LegacyOddSnapPaths};
 
     #[test]
     fn builds_paths_from_roaming_directory() {
@@ -133,5 +163,45 @@ mod tests {
 
         assert_eq!(imported.top_level_key_count, 2);
         assert_eq!(imported.raw["SaveToFile"], true);
+    }
+
+    #[test]
+    fn imports_core_rust_settings_from_legacy_settings() {
+        let path = std::env::temp_dir().join(format!(
+            "oddsnap-settings-import-{}.json",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should be after unix epoch")
+                .as_nanos()
+        ));
+        fs::write(
+            &path,
+            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2}"#,
+        )
+        .expect("write test settings");
+
+        let imported = read_legacy_settings(&path).expect("read legacy settings");
+        let settings = import_app_settings(&imported);
+        fs::remove_file(&path).expect("remove test settings");
+
+        assert_eq!(
+            settings.capture_output_directory.as_deref(),
+            Some(std::path::Path::new("C:\\Users\\test\\Pictures\\OddSnap"))
+        );
+        assert!(!settings.save_history);
+        assert!(!settings.copy_captures_to_clipboard);
+    }
+
+    #[test]
+    fn imports_string_after_capture_copy_modes() {
+        let import = super::LegacySettingsImport {
+            source_path: PathBuf::from("settings.json"),
+            top_level_key_count: 1,
+            raw: serde_json::json!({"AfterCapture":"PreviewAndCopy"}),
+        };
+
+        let settings = import_app_settings(&import);
+
+        assert!(settings.copy_captures_to_clipboard);
     }
 }

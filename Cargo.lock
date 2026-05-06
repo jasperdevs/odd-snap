@@ -3463,6 +3463,7 @@ dependencies = [
  "gpui",
  "gpui_platform",
  "oddsnap-core",
+ "oddsnap-migrate",
  "oddsnap-platform",
  "oddsnap-platform-linux",
  "oddsnap-platform-macos",
@@ -3482,6 +3483,7 @@ dependencies = [
 name = "oddsnap-migrate"
 version = "0.1.0"
 dependencies = [
+ "oddsnap-core",
  "serde_json",
  "thiserror 2.0.18",
 ]

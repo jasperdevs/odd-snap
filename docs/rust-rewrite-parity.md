@@ -24,6 +24,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS and Linux adapters expose explicit pending capture/window/clipboard service implementations instead of missing trait surfaces.
 - Windows monitor enumeration now reports real display entries with DPI-derived scale percentages.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
+- Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
 
 ## Current Non-Parity State
 

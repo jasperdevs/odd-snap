@@ -88,8 +88,12 @@ impl OddSnapRustApp {
         let capabilities = platform.capabilities().items;
         let settings_store = SettingsStore::new(default_settings_path());
         let settings_path = settings_store.path().display().to_string();
+        let migration_status = import_legacy_settings_if_needed(&settings_store);
         let (settings, capture_status) = match settings_store.load_or_default() {
-            Ok(settings) => (settings, "No capture run in this session.".into()),
+            Ok(settings) => (
+                settings,
+                migration_status.unwrap_or_else(|| "No capture run in this session.".into()),
+            ),
             Err(error) => (
                 AppSettings::default(),
                 format!("Settings load failed, using defaults: {error}"),
@@ -118,6 +122,24 @@ impl OddSnapRustApp {
 
     fn focus_handle(&self, _: &App) -> gpui::FocusHandle {
         self.focus_handle.clone()
+    }
+}
+
+fn import_legacy_settings_if_needed(settings_store: &SettingsStore) -> Option<String> {
+    if settings_store.path().exists() {
+        return None;
+    }
+
+    let legacy_paths = oddsnap_migrate::LegacyOddSnapPaths::from_current_environment()?;
+    let imported = oddsnap_migrate::read_legacy_settings(&legacy_paths.settings_path).ok()?;
+    let settings = oddsnap_migrate::import_app_settings(&imported);
+
+    match settings_store.save(&settings) {
+        Ok(()) => Some(format!(
+            "Imported legacy settings from {}.",
+            imported.source_path.display()
+        )),
+        Err(error) => Some(format!("Legacy settings import failed: {error}")),
     }
 }
 

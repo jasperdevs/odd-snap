@@ -15,6 +15,7 @@ anyhow.workspace = true
 gpui.workspace = true
 gpui_platform.workspace = true
 oddsnap-core = { path = "../oddsnap-core" }
+oddsnap-migrate = { path = "../oddsnap-migrate" }
 oddsnap-platform = { path = "../oddsnap-platform" }
 oddsnap-platform-linux = { path = "../oddsnap-platform-linux" }
 oddsnap-platform-macos = { path = "../oddsnap-platform-macos" }
