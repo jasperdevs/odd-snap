@@ -29,7 +29,8 @@ Keep it updated whenever a rewrite milestone lands.
 ## Milestone 2 - Platform Risk Proofs
 
 - [ ] Windows tray icon.
-- [ ] Windows global hotkey.
+- [x] Windows global hotkey registration foundation.
+- [ ] Windows global hotkey event loop integration.
 - [ ] Windows topmost transparent overlay.
 - [ ] Windows screenshot exclusion.
 - [x] Windows monitor enumeration.

@@ -26,6 +26,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
+- Windows can parse and register process-local global hotkeys, with listener integration still pending.
 
 ## Current Non-Parity State
 

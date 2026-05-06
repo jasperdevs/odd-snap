@@ -1,7 +1,8 @@
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, MonitorInfo,
-    PlatformAdapter, PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
+    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, HotkeyService,
+    MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService, WindowInfo,
+    WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -35,6 +36,12 @@ use windows::Win32::System::Ole::{CF_DIB, CF_UNICODETEXT};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE_DPI};
 #[cfg(target_os = "windows")]
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    RegisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN,
+};
+#[cfg(all(target_os = "windows", test))]
+use windows::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
     SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
@@ -42,6 +49,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 #[derive(Debug, Default)]
 pub struct WindowsPlatform;
+
+#[cfg(target_os = "windows")]
+const CAPTURE_HOTKEY_ID: i32 = 0x0dd5;
 
 impl PlatformAdapter for WindowsPlatform {
     fn name(&self) -> &'static str {
@@ -72,7 +82,10 @@ impl PlatformAdapter for WindowsPlatform {
                     PlatformCapability::ScreenshotExclusion,
                     CapabilityState::Planned,
                 ),
-                (PlatformCapability::GlobalHotkeys, CapabilityState::Planned),
+                (
+                    PlatformCapability::GlobalHotkeys,
+                    CapabilityState::InProgress,
+                ),
                 (PlatformCapability::Tray, CapabilityState::Planned),
                 (PlatformCapability::Clipboard, CapabilityState::InProgress),
                 (PlatformCapability::FileDialogs, CapabilityState::Planned),
@@ -168,6 +181,105 @@ impl ClipboardTextService for WindowsPlatform {
             ))
         }
     }
+}
+
+impl HotkeyService for WindowsPlatform {
+    fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            let (modifiers, key) = parse_hotkey_accelerator(accelerator)?;
+            register_windows_hotkey(CAPTURE_HOTKEY_ID, modifiers, key)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = accelerator;
+            Err(PlatformError::Unsupported(
+                "Windows global hotkey registration is only available on Windows",
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn register_windows_hotkey(
+    id: i32,
+    modifiers: HOT_KEY_MODIFIERS,
+    key: u32,
+) -> Result<(), PlatformError> {
+    unsafe { RegisterHotKey(None, id, modifiers | MOD_NOREPEAT, key) }
+        .map_err(|error| PlatformError::Failed(format!("RegisterHotKey failed: {error}")))
+}
+
+#[cfg(all(target_os = "windows", test))]
+fn unregister_windows_hotkey(id: i32) -> Result<(), PlatformError> {
+    unsafe { UnregisterHotKey(None, id) }
+        .map_err(|error| PlatformError::Failed(format!("UnregisterHotKey failed: {error}")))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_hotkey_accelerator(accelerator: &str) -> Result<(HOT_KEY_MODIFIERS, u32), PlatformError> {
+    let mut modifiers = HOT_KEY_MODIFIERS(0);
+    let mut key = None;
+
+    for raw_part in accelerator.split('+') {
+        let part = raw_part.trim();
+        if part.is_empty() {
+            continue;
+        }
+
+        match part.to_ascii_lowercase().as_str() {
+            "alt" => modifiers |= MOD_ALT,
+            "ctrl" | "control" => modifiers |= MOD_CONTROL,
+            "shift" => modifiers |= MOD_SHIFT,
+            "win" | "windows" | "super" => modifiers |= MOD_WIN,
+            _ => {
+                if key.replace(parse_virtual_key(part)?).is_some() {
+                    return Err(PlatformError::Failed(
+                        "hotkey accelerator has more than one key".into(),
+                    ));
+                }
+            }
+        }
+    }
+
+    let key =
+        key.ok_or_else(|| PlatformError::Failed("hotkey accelerator is missing a key".into()))?;
+    if modifiers.0 == 0 {
+        return Err(PlatformError::Failed(
+            "hotkey accelerator must include at least one modifier".into(),
+        ));
+    }
+
+    Ok((modifiers, key))
+}
+
+#[cfg(target_os = "windows")]
+fn parse_virtual_key(key: &str) -> Result<u32, PlatformError> {
+    let upper = key.trim().to_ascii_uppercase();
+    if upper == "`" || upper == "BACKTICK" || upper == "OEM_3" {
+        return Ok(0xC0);
+    }
+
+    if let Some(number) = upper.strip_prefix('F') {
+        if let Ok(index) = number.parse::<u32>() {
+            if (1..=24).contains(&index) {
+                return Ok(0x70 + index - 1);
+            }
+        }
+    }
+
+    let mut chars = upper.chars();
+    let Some(character) = chars.next() else {
+        return Err(PlatformError::Failed("hotkey key is empty".into()));
+    };
+    if chars.next().is_none() && character.is_ascii_alphanumeric() {
+        return Ok(character as u32);
+    }
+
+    Err(PlatformError::Failed(format!(
+        "unsupported hotkey key: {key}"
+    )))
 }
 
 #[cfg(target_os = "windows")]
@@ -714,6 +826,10 @@ mod tests {
             capabilities.state(PlatformCapability::WindowCapture),
             CapabilityState::InProgress
         );
+        assert_eq!(
+            capabilities.state(PlatformCapability::GlobalHotkeys),
+            CapabilityState::InProgress
+        );
     }
 
     #[test]
@@ -736,6 +852,23 @@ mod tests {
         assert_eq!(super::dpi_to_scale_percent(96), 100);
         assert_eq!(super::dpi_to_scale_percent(120), 125);
         assert_eq!(super::dpi_to_scale_percent(144), 150);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parse_hotkey_accelerator_supports_legacy_default() {
+        let (modifiers, key) = super::parse_hotkey_accelerator("Alt+`").expect("parse hotkey");
+
+        assert!(modifiers.contains(windows::Win32::UI::Input::KeyboardAndMouse::MOD_ALT));
+        assert_eq!(key, 0xC0);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parse_hotkey_accelerator_rejects_modifierless_keys() {
+        let error = super::parse_hotkey_accelerator("F24").expect_err("missing modifier");
+
+        assert!(error.to_string().contains("modifier"));
     }
 
     #[test]
@@ -856,6 +989,17 @@ mod tests {
         adapter
             .copy_text_to_clipboard("OddSnap Rust clipboard smoke")
             .expect("copy text");
+    }
+
+    #[test]
+    #[ignore = "registers and unregisters a process-local Windows global hotkey"]
+    #[cfg(target_os = "windows")]
+    fn windows_hotkey_can_register_and_unregister() {
+        let (modifiers, key) =
+            super::parse_hotkey_accelerator("Alt+Shift+F24").expect("parse hotkey");
+
+        super::register_windows_hotkey(0x0dd6, modifiers, key).expect("register hotkey");
+        super::unregister_windows_hotkey(0x0dd6).expect("unregister hotkey");
     }
 
     #[test]

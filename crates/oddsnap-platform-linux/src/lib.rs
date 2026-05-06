@@ -2,8 +2,9 @@ use std::path::Path;
 
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, MonitorInfo,
-    PlatformAdapter, PlatformError, ScreenCaptureService, WindowInfo, WindowPickerService,
+    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, HotkeyService,
+    MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService, WindowInfo,
+    WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -87,11 +88,21 @@ impl ClipboardTextService for LinuxPlatform {
     }
 }
 
+impl HotkeyService for LinuxPlatform {
+    fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError> {
+        let _ = accelerator;
+        Err(PlatformError::Unsupported(
+            "Linux global hotkey registration is not implemented yet",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use oddsnap_core::NativeMaterial;
     use oddsnap_platform::{
-        ClipboardImageService, ClipboardTextService, PlatformAdapter, ScreenCaptureService,
+        ClipboardImageService, ClipboardTextService, HotkeyService, PlatformAdapter,
+        ScreenCaptureService,
     };
 
     use super::LinuxPlatform;
@@ -133,6 +144,17 @@ mod tests {
         let error = adapter
             .copy_text_to_clipboard("capture text")
             .expect_err("Linux text clipboard pending");
+
+        assert!(error.to_string().contains("not implemented yet"));
+    }
+
+    #[test]
+    fn linux_hotkey_service_is_explicitly_unimplemented() {
+        let adapter = LinuxPlatform;
+
+        let error = adapter
+            .register_capture_hotkey("Alt+`")
+            .expect_err("Linux hotkey pending");
 
         assert!(error.to_string().contains("not implemented yet"));
     }
