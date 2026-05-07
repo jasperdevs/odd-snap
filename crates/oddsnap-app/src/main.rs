@@ -44,6 +44,7 @@ use oddsnap_platform::{
 };
 
 mod actions;
+mod annotation_compositor;
 mod annotation_workspace;
 mod hotkeys;
 mod image_search;

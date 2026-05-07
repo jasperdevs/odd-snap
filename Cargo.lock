@@ -3934,6 +3934,7 @@ dependencies = [
  "global-hotkey",
  "gpui",
  "gpui_platform",
+ "image",
  "oddsnap-core",
  "oddsnap-migrate",
  "oddsnap-platform",
