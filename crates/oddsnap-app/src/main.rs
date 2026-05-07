@@ -144,6 +144,21 @@ struct ImportedHotkeyAccelerators<'a> {
     ai_redirect: Option<&'a str>,
 }
 
+impl<'a> ImportedHotkeyAccelerators<'a> {
+    fn pending_tool_hotkey(self, tool: PendingTool) -> Option<&'a str> {
+        match tool {
+            PendingTool::Ocr => self.ocr,
+            PendingTool::Scan => self.scan,
+            PendingTool::Sticker => self.sticker,
+            PendingTool::Upscale => self.upscale,
+            PendingTool::Center => self.center,
+            PendingTool::Ruler => self.ruler,
+            PendingTool::ScrollCapture => self.scroll_capture,
+            PendingTool::AiRedirect => self.ai_redirect,
+        }
+    }
+}
+
 #[cfg(any(test, not(target_os = "windows")))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CrossPlatformHotkeyEvent {
@@ -160,6 +175,102 @@ enum CrossPlatformHotkeyEvent {
     Ruler,
     ScrollCapture,
     AiRedirect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PendingTool {
+    Ocr,
+    Scan,
+    Sticker,
+    Upscale,
+    Center,
+    Ruler,
+    ScrollCapture,
+    AiRedirect,
+}
+
+impl PendingTool {
+    const ALL: [Self; 8] = [
+        Self::Ocr,
+        Self::Scan,
+        Self::Sticker,
+        Self::Upscale,
+        Self::Center,
+        Self::Ruler,
+        Self::ScrollCapture,
+        Self::AiRedirect,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Ocr => "OCR",
+            Self::Scan => "Scan",
+            Self::Sticker => "Sticker",
+            Self::Upscale => "Upscale",
+            Self::Center => "Center",
+            Self::Ruler => "Ruler",
+            Self::ScrollCapture => "Scroll capture",
+            Self::AiRedirect => "AI redirect",
+        }
+    }
+
+    fn hotkey_summary_label(self) -> &'static str {
+        match self {
+            Self::Ocr => "OCR",
+            Self::Scan => "scan",
+            Self::Sticker => "sticker",
+            Self::Upscale => "upscale",
+            Self::Center => "center",
+            Self::Ruler => "ruler",
+            Self::ScrollCapture => "scroll-capture",
+            Self::AiRedirect => "AI redirect",
+        }
+    }
+
+    fn parity_item(self) -> &'static str {
+        match self {
+            Self::Ocr => "OCR",
+            Self::Scan => "scan",
+            Self::Sticker => "sticker/background removal",
+            Self::Upscale => "upscale",
+            Self::Center => "center selection",
+            Self::Ruler => "ruler",
+            Self::ScrollCapture => "scroll capture",
+            Self::AiRedirect => "AI redirect",
+        }
+    }
+
+    fn default_capture_mode(self) -> Option<DefaultCaptureMode> {
+        match self {
+            Self::Ocr => Some(DefaultCaptureMode::Ocr),
+            Self::Scan => Some(DefaultCaptureMode::Scan),
+            Self::Sticker => Some(DefaultCaptureMode::Sticker),
+            Self::Upscale => Some(DefaultCaptureMode::Upscale),
+            Self::Center => Some(DefaultCaptureMode::Center),
+            Self::Ruler => Some(DefaultCaptureMode::Ruler),
+            Self::ScrollCapture | Self::AiRedirect => None,
+        }
+    }
+
+    fn from_default_capture_mode(mode: DefaultCaptureMode) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|tool| tool.default_capture_mode() == Some(mode))
+    }
+
+    #[cfg(any(test, not(target_os = "windows")))]
+    fn cross_platform_hotkey_event(self) -> CrossPlatformHotkeyEvent {
+        match self {
+            Self::Ocr => CrossPlatformHotkeyEvent::Ocr,
+            Self::Scan => CrossPlatformHotkeyEvent::Scan,
+            Self::Sticker => CrossPlatformHotkeyEvent::Sticker,
+            Self::Upscale => CrossPlatformHotkeyEvent::Upscale,
+            Self::Center => CrossPlatformHotkeyEvent::Center,
+            Self::Ruler => CrossPlatformHotkeyEvent::Ruler,
+            Self::ScrollCapture => CrossPlatformHotkeyEvent::ScrollCapture,
+            Self::AiRedirect => CrossPlatformHotkeyEvent::AiRedirect,
+        }
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1394,8 +1505,8 @@ impl OddSnapRustApp {
                 self.capture_status = format!("{trigger} received.");
                 self.run_color_picker();
             }
-            DefaultCaptureAction::Pending { label, parity_item } => {
-                self.capture_status = pending_default_capture_status(trigger, label, parity_item);
+            DefaultCaptureAction::Pending(tool) => {
+                self.capture_status = pending_default_capture_status(trigger, tool);
             }
         }
     }
@@ -1687,30 +1798,28 @@ impl OddSnapRustApp {
                 self.run_color_picker();
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Ocr => {
-                self.capture_status = pending_tool_hotkey_status("OCR", "OCR");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Ocr);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Scan => {
-                self.capture_status = pending_tool_hotkey_status("Scan", "scan");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Scan);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Sticker => {
-                self.capture_status =
-                    pending_tool_hotkey_status("Sticker", "sticker/background removal");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Sticker);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Upscale => {
-                self.capture_status = pending_tool_hotkey_status("Upscale", "upscale");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Upscale);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Center => {
-                self.capture_status = pending_tool_hotkey_status("Center", "center selection");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Center);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Ruler => {
-                self.capture_status = pending_tool_hotkey_status("Ruler", "ruler");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Ruler);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::ScrollCapture => {
-                self.capture_status =
-                    pending_tool_hotkey_status("Scroll capture", "scroll capture");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::ScrollCapture);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::AiRedirect => {
-                self.capture_status = pending_tool_hotkey_status("AI redirect", "AI redirect");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::AiRedirect);
             }
         }
     }
@@ -1738,30 +1847,28 @@ impl OddSnapRustApp {
                 self.run_color_picker();
             }
             CrossPlatformHotkeyEvent::Ocr => {
-                self.capture_status = pending_tool_hotkey_status("OCR", "OCR");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Ocr);
             }
             CrossPlatformHotkeyEvent::Scan => {
-                self.capture_status = pending_tool_hotkey_status("Scan", "scan");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Scan);
             }
             CrossPlatformHotkeyEvent::Sticker => {
-                self.capture_status =
-                    pending_tool_hotkey_status("Sticker", "sticker/background removal");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Sticker);
             }
             CrossPlatformHotkeyEvent::Upscale => {
-                self.capture_status = pending_tool_hotkey_status("Upscale", "upscale");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Upscale);
             }
             CrossPlatformHotkeyEvent::Center => {
-                self.capture_status = pending_tool_hotkey_status("Center", "center selection");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Center);
             }
             CrossPlatformHotkeyEvent::Ruler => {
-                self.capture_status = pending_tool_hotkey_status("Ruler", "ruler");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::Ruler);
             }
             CrossPlatformHotkeyEvent::ScrollCapture => {
-                self.capture_status =
-                    pending_tool_hotkey_status("Scroll capture", "scroll capture");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::ScrollCapture);
             }
             CrossPlatformHotkeyEvent::AiRedirect => {
-                self.capture_status = pending_tool_hotkey_status("AI redirect", "AI redirect");
+                self.capture_status = pending_tool_hotkey_status(PendingTool::AiRedirect);
             }
         }
     }
@@ -1786,14 +1893,16 @@ impl OddSnapRustApp {
                 self.toggle_recording(RecordingTarget::FullScreen);
             }
             oddsnap_platform_windows::WindowsTrayEvent::Ocr => {
-                self.capture_status = "Tray text capture is pending Rust OCR parity.".into();
+                self.capture_status =
+                    pending_tool_trigger_status("Tray text capture", PendingTool::Ocr);
             }
             oddsnap_platform_windows::WindowsTrayEvent::ColorPicker => {
                 self.capture_status = "Tray color picker received.".into();
                 self.run_color_picker();
             }
             oddsnap_platform_windows::WindowsTrayEvent::ScrollCapture => {
-                self.capture_status = "Tray scroll capture is pending Rust overlay parity.".into();
+                self.capture_status =
+                    pending_tool_trigger_status("Tray scroll capture", PendingTool::ScrollCapture);
             }
             oddsnap_platform_windows::WindowsTrayEvent::Settings => {
                 self.tray_status = "Tray settings command focused the Rust window.".into();
@@ -1830,15 +1939,18 @@ impl OddSnapRustApp {
                 self.toggle_recording(RecordingTarget::FullScreen);
             }
             oddsnap_platform_macos::MacosTrayEvent::Ocr => {
-                self.capture_status = "Menu bar text capture is pending Rust OCR parity.".into();
+                self.capture_status =
+                    pending_tool_trigger_status("Menu bar text capture", PendingTool::Ocr);
             }
             oddsnap_platform_macos::MacosTrayEvent::ColorPicker => {
                 self.capture_status = "Menu bar color picker received.".into();
                 self.run_color_picker();
             }
             oddsnap_platform_macos::MacosTrayEvent::ScrollCapture => {
-                self.capture_status =
-                    "Menu bar scroll capture is pending Rust overlay parity.".into();
+                self.capture_status = pending_tool_trigger_status(
+                    "Menu bar scroll capture",
+                    PendingTool::ScrollCapture,
+                );
             }
             oddsnap_platform_macos::MacosTrayEvent::Settings => {
                 self.tray_status = "Menu bar settings command focused the Rust window.".into();
@@ -2337,29 +2449,10 @@ fn cross_platform_hotkey_registrations(
     if let Some(picker) = non_empty_hotkey(accelerators.picker) {
         registrations.push((picker, CrossPlatformHotkeyEvent::ColorPicker));
     }
-    if let Some(ocr) = non_empty_hotkey(accelerators.ocr) {
-        registrations.push((ocr, CrossPlatformHotkeyEvent::Ocr));
-    }
-    if let Some(scan) = non_empty_hotkey(accelerators.scan) {
-        registrations.push((scan, CrossPlatformHotkeyEvent::Scan));
-    }
-    if let Some(sticker) = non_empty_hotkey(accelerators.sticker) {
-        registrations.push((sticker, CrossPlatformHotkeyEvent::Sticker));
-    }
-    if let Some(upscale) = non_empty_hotkey(accelerators.upscale) {
-        registrations.push((upscale, CrossPlatformHotkeyEvent::Upscale));
-    }
-    if let Some(center) = non_empty_hotkey(accelerators.center) {
-        registrations.push((center, CrossPlatformHotkeyEvent::Center));
-    }
-    if let Some(ruler) = non_empty_hotkey(accelerators.ruler) {
-        registrations.push((ruler, CrossPlatformHotkeyEvent::Ruler));
-    }
-    if let Some(scroll_capture) = non_empty_hotkey(accelerators.scroll_capture) {
-        registrations.push((scroll_capture, CrossPlatformHotkeyEvent::ScrollCapture));
-    }
-    if let Some(ai_redirect) = non_empty_hotkey(accelerators.ai_redirect) {
-        registrations.push((ai_redirect, CrossPlatformHotkeyEvent::AiRedirect));
+    for tool in PendingTool::ALL {
+        if let Some(accelerator) = non_empty_hotkey(accelerators.pending_tool_hotkey(tool)) {
+            registrations.push((accelerator, tool.cross_platform_hotkey_event()));
+        }
     }
     registrations
 }
@@ -2385,26 +2478,26 @@ fn validate_unique_hotkey_bindings(
     accelerators: ImportedHotkeyAccelerators<'_>,
 ) -> Result<(), String> {
     let mut seen = std::collections::HashMap::<String, &'static str>::new();
-    for (accelerator, label) in [
-        Some((accelerators.capture, "capture")),
-        non_empty_hotkey(accelerators.recording).map(|accelerator| (accelerator, "recording")),
-        non_empty_hotkey(accelerators.fullscreen).map(|accelerator| (accelerator, "full-screen")),
-        non_empty_hotkey(accelerators.active_window)
-            .map(|accelerator| (accelerator, "active-window")),
-        non_empty_hotkey(accelerators.picker).map(|accelerator| (accelerator, "color-picker")),
-        non_empty_hotkey(accelerators.ocr).map(|accelerator| (accelerator, "OCR")),
-        non_empty_hotkey(accelerators.scan).map(|accelerator| (accelerator, "scan")),
-        non_empty_hotkey(accelerators.sticker).map(|accelerator| (accelerator, "sticker")),
-        non_empty_hotkey(accelerators.upscale).map(|accelerator| (accelerator, "upscale")),
-        non_empty_hotkey(accelerators.center).map(|accelerator| (accelerator, "center")),
-        non_empty_hotkey(accelerators.ruler).map(|accelerator| (accelerator, "ruler")),
-        non_empty_hotkey(accelerators.scroll_capture)
-            .map(|accelerator| (accelerator, "scroll-capture")),
-        non_empty_hotkey(accelerators.ai_redirect).map(|accelerator| (accelerator, "AI redirect")),
-    ]
-    .into_iter()
-    .flatten()
-    {
+    let mut bindings = vec![(accelerators.capture, "capture")];
+    if let Some(recording) = non_empty_hotkey(accelerators.recording) {
+        bindings.push((recording, "recording"));
+    }
+    if let Some(fullscreen) = non_empty_hotkey(accelerators.fullscreen) {
+        bindings.push((fullscreen, "full-screen"));
+    }
+    if let Some(active_window) = non_empty_hotkey(accelerators.active_window) {
+        bindings.push((active_window, "active-window"));
+    }
+    if let Some(picker) = non_empty_hotkey(accelerators.picker) {
+        bindings.push((picker, "color-picker"));
+    }
+    for tool in PendingTool::ALL {
+        if let Some(accelerator) = non_empty_hotkey(accelerators.pending_tool_hotkey(tool)) {
+            bindings.push((accelerator, tool.hotkey_summary_label()));
+        }
+    }
+
+    for (accelerator, label) in bindings {
         let normalized = normalize_hotkey_for_duplicate_check(accelerator);
         if let Some(previous) = seen.insert(normalized, label) {
             return Err(format!(
@@ -2528,29 +2621,10 @@ fn hotkey_status_summary(accelerators: ImportedHotkeyAccelerators<'_>) -> String
     if let Some(picker) = accelerators.picker {
         parts.push(format!("{picker} color-picker"));
     }
-    if let Some(ocr) = accelerators.ocr {
-        parts.push(format!("{ocr} OCR"));
-    }
-    if let Some(scan) = accelerators.scan {
-        parts.push(format!("{scan} scan"));
-    }
-    if let Some(sticker) = accelerators.sticker {
-        parts.push(format!("{sticker} sticker"));
-    }
-    if let Some(upscale) = accelerators.upscale {
-        parts.push(format!("{upscale} upscale"));
-    }
-    if let Some(center) = accelerators.center {
-        parts.push(format!("{center} center"));
-    }
-    if let Some(ruler) = accelerators.ruler {
-        parts.push(format!("{ruler} ruler"));
-    }
-    if let Some(scroll_capture) = accelerators.scroll_capture {
-        parts.push(format!("{scroll_capture} scroll-capture"));
-    }
-    if let Some(ai_redirect) = accelerators.ai_redirect {
-        parts.push(format!("{ai_redirect} AI redirect"));
+    for tool in PendingTool::ALL {
+        if let Some(accelerator) = accelerators.pending_tool_hotkey(tool) {
+            parts.push(format!("{accelerator} {}", tool.hotkey_summary_label()));
+        }
     }
     format!("Hotkeys: {}.", parts.join(", "))
 }
@@ -2806,10 +2880,7 @@ fn recording_audio_request_for_host(_: &AppSettings) -> (bool, bool, Option<&'st
 enum DefaultCaptureAction {
     Capture(CaptureMode),
     ColorPicker,
-    Pending {
-        label: &'static str,
-        parity_item: &'static str,
-    },
+    Pending(PendingTool),
 }
 
 fn default_capture_action(default_mode: DefaultCaptureMode) -> DefaultCaptureAction {
@@ -2820,30 +2891,15 @@ fn default_capture_action(default_mode: DefaultCaptureMode) -> DefaultCaptureAct
         DefaultCaptureMode::Fullscreen => DefaultCaptureAction::Capture(CaptureMode::FullScreen),
         DefaultCaptureMode::Rectangle => DefaultCaptureAction::Capture(CaptureMode::Rectangle),
         DefaultCaptureMode::ColorPicker => DefaultCaptureAction::ColorPicker,
-        DefaultCaptureMode::Ocr => DefaultCaptureAction::Pending {
-            label: "OCR",
-            parity_item: "OCR",
-        },
-        DefaultCaptureMode::Scan => DefaultCaptureAction::Pending {
-            label: "Scan",
-            parity_item: "scan",
-        },
-        DefaultCaptureMode::Sticker => DefaultCaptureAction::Pending {
-            label: "Sticker",
-            parity_item: "sticker/background removal",
-        },
-        DefaultCaptureMode::Upscale => DefaultCaptureAction::Pending {
-            label: "Upscale",
-            parity_item: "upscale",
-        },
-        DefaultCaptureMode::Center => DefaultCaptureAction::Pending {
-            label: "Center",
-            parity_item: "center selection",
-        },
-        DefaultCaptureMode::Ruler => DefaultCaptureAction::Pending {
-            label: "Ruler",
-            parity_item: "ruler",
-        },
+        DefaultCaptureMode::Ocr
+        | DefaultCaptureMode::Scan
+        | DefaultCaptureMode::Sticker
+        | DefaultCaptureMode::Upscale
+        | DefaultCaptureMode::Center
+        | DefaultCaptureMode::Ruler => DefaultCaptureAction::Pending(
+            PendingTool::from_default_capture_mode(default_mode)
+                .expect("advanced default capture mode has pending tool spec"),
+        ),
     }
 }
 
@@ -2945,12 +3001,23 @@ fn copy_image_to_host_clipboard(path: &Path) -> Result<(), oddsnap_platform::Pla
     }
 }
 
-fn pending_tool_hotkey_status(label: &str, parity_item: &str) -> String {
-    format!("{label} hotkey received; Rust {parity_item} parity is pending.")
+fn pending_tool_hotkey_status(tool: PendingTool) -> String {
+    pending_tool_trigger_status(&format!("{} hotkey", tool.label()), tool)
 }
 
-fn pending_default_capture_status(trigger: &str, label: &str, parity_item: &str) -> String {
-    format!("{trigger} received; default capture mode '{label}' needs Rust {parity_item} parity.")
+fn pending_tool_trigger_status(trigger: &str, tool: PendingTool) -> String {
+    format!(
+        "{trigger} received; Rust {} parity is pending.",
+        tool.parity_item()
+    )
+}
+
+fn pending_default_capture_status(trigger: &str, tool: PendingTool) -> String {
+    format!(
+        "{trigger} received; default capture mode '{}' needs Rust {} parity.",
+        tool.label(),
+        tool.parity_item()
+    )
 }
 
 fn on_off(value: bool) -> &'static str {
@@ -3053,24 +3120,17 @@ mod tests {
             DefaultCaptureAction::ColorPicker
         ));
 
-        for (mode, label, parity_item) in [
-            (DefaultCaptureMode::Ocr, "OCR", "OCR"),
-            (DefaultCaptureMode::Scan, "Scan", "scan"),
-            (
-                DefaultCaptureMode::Sticker,
-                "Sticker",
-                "sticker/background removal",
-            ),
-            (DefaultCaptureMode::Upscale, "Upscale", "upscale"),
-            (DefaultCaptureMode::Center, "Center", "center selection"),
-            (DefaultCaptureMode::Ruler, "Ruler", "ruler"),
+        for (mode, tool) in [
+            (DefaultCaptureMode::Ocr, PendingTool::Ocr),
+            (DefaultCaptureMode::Scan, PendingTool::Scan),
+            (DefaultCaptureMode::Sticker, PendingTool::Sticker),
+            (DefaultCaptureMode::Upscale, PendingTool::Upscale),
+            (DefaultCaptureMode::Center, PendingTool::Center),
+            (DefaultCaptureMode::Ruler, PendingTool::Ruler),
         ] {
             assert!(matches!(
                 default_capture_action(mode),
-                DefaultCaptureAction::Pending {
-                    label: pending_label,
-                    parity_item: pending_parity_item,
-                } if pending_label == label && pending_parity_item == parity_item
+                DefaultCaptureAction::Pending(pending_tool) if pending_tool == tool
             ));
         }
     }
@@ -3078,8 +3138,40 @@ mod tests {
     #[test]
     fn pending_default_capture_status_is_explicit() {
         assert_eq!(
-            pending_default_capture_status("Capture hotkey", "OCR", "OCR"),
+            pending_default_capture_status("Capture hotkey", PendingTool::Ocr),
             "Capture hotkey received; default capture mode 'OCR' needs Rust OCR parity."
+        );
+    }
+
+    #[test]
+    fn pending_tool_registry_covers_imported_tool_surface() {
+        assert_eq!(
+            PendingTool::ALL
+                .iter()
+                .map(|tool| tool.hotkey_summary_label())
+                .collect::<Vec<_>>(),
+            vec![
+                "OCR",
+                "scan",
+                "sticker",
+                "upscale",
+                "center",
+                "ruler",
+                "scroll-capture",
+                "AI redirect"
+            ]
+        );
+        assert_eq!(
+            PendingTool::from_default_capture_mode(DefaultCaptureMode::Sticker),
+            Some(PendingTool::Sticker)
+        );
+        assert_eq!(
+            PendingTool::from_default_capture_mode(DefaultCaptureMode::Fullscreen),
+            None
+        );
+        assert_eq!(
+            pending_tool_hotkey_status(PendingTool::Sticker),
+            "Sticker hotkey received; Rust sticker/background removal parity is pending."
         );
     }
 

@@ -71,6 +71,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS/Linux hotkey events route to the same GPUI actions as Windows for default capture, recording, full-screen capture, active-window capture, and color picker, with still-pending platform actions reporting their existing unsupported status.
 - Imported OCR hotkeys are registered and routed on Windows/macOS/Linux startup; they currently report pending Rust OCR parity instead of being silently dropped.
 - Imported scan, sticker, upscale, center, ruler, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; they currently report explicit pending parity statuses instead of being silently dropped.
+- Pending advanced tool metadata is centralized in the Rust app registry for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
 - Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.
 - macOS can install a menu bar status item with the legacy menu commands, dispatch menu bar capture/recording/settings/history/quit events into GPUI, and update the recording menu label.

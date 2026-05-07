@@ -39,6 +39,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows imported color-picker hotkey routing.
 - [x] Imported OCR hotkey routing reports pending OCR parity instead of being dropped.
 - [x] Imported scan/sticker/upscale/center/ruler/scroll/AI hotkey routing reports pending parity instead of being dropped.
+- [x] Pending advanced tool metadata is centralized for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - [x] Duplicate imported hotkeys are rejected before platform registration.
 - [x] Windows topmost transparent overlay window foundation.
 - [x] Windows screenshot exclusion service foundation.
