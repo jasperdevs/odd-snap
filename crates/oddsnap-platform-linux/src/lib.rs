@@ -683,6 +683,13 @@ impl oddsnap_platform::VideoRecordingHandle for LinuxVideoRecordingHandle {
     }
 
     fn cancel(&mut self) {
+        self.cancel_process_and_outputs();
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxVideoRecordingHandle {
+    fn cancel_process_and_outputs(&mut self) {
         if let Some(mut child) = self.child.take() {
             let _ = child.kill();
             let _ = child.wait();
@@ -698,7 +705,7 @@ impl oddsnap_platform::VideoRecordingHandle for LinuxVideoRecordingHandle {
 impl Drop for LinuxVideoRecordingHandle {
     fn drop(&mut self) {
         if self.child.is_some() {
-            self.cancel();
+            self.cancel_process_and_outputs();
         }
     }
 }

@@ -37,6 +37,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows dedicated full-screen and active-window hotkey routing.
 - [x] Windows imported color-picker hotkey routing.
 - [x] Imported OCR hotkey routing reports pending OCR parity instead of being dropped.
+- [x] Imported scan/sticker/upscale/center/ruler/scroll/AI hotkey routing reports pending parity instead of being dropped.
 - [x] Duplicate imported hotkeys are rejected before platform registration.
 - [x] Windows topmost transparent overlay window foundation.
 - [x] Windows screenshot exclusion service foundation.
@@ -153,6 +154,6 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Windows full parity verification.
 - [ ] macOS full parity verification.
 - [ ] Linux full parity verification.
-- [x] CI-only Rust rewrite matrix runs fmt/check/test/clippy/build on Windows, macOS, and Ubuntu.
+- [x] CI-only Rust rewrite matrix runs fmt/check/test/clippy/build on Windows, Ubuntu, latest Apple Silicon macOS, and Intel macOS compatibility.
 - [x] Rust packaging readiness notes document current non-release boundary and host dependency caveats.
 - [ ] Release decision document.

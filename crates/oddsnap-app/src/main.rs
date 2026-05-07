@@ -118,6 +118,23 @@ struct RecordingStart {
     note: Option<&'static str>,
 }
 
+#[derive(Clone, Copy)]
+struct ImportedHotkeyAccelerators<'a> {
+    capture: &'a str,
+    recording: Option<&'a str>,
+    fullscreen: Option<&'a str>,
+    active_window: Option<&'a str>,
+    picker: Option<&'a str>,
+    ocr: Option<&'a str>,
+    scan: Option<&'a str>,
+    sticker: Option<&'a str>,
+    upscale: Option<&'a str>,
+    center: Option<&'a str>,
+    ruler: Option<&'a str>,
+    scroll_capture: Option<&'a str>,
+    ai_redirect: Option<&'a str>,
+}
+
 #[cfg(not(target_os = "windows"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CrossPlatformHotkeyEvent {
@@ -127,6 +144,13 @@ enum CrossPlatformHotkeyEvent {
     ActiveWindowCapture,
     ColorPicker,
     Ocr,
+    Scan,
+    Sticker,
+    Upscale,
+    Center,
+    Ruler,
+    ScrollCapture,
+    AiRedirect,
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -230,15 +254,26 @@ impl OddSnapRustApp {
             }
             None => "FFmpeg: not found on PATH".into(),
         };
-        let (hotkey_status, hotkey_listener, hotkey_events) = start_capture_hotkey_listener(
-            &settings.capture_hotkey,
-            settings.recording_hotkey.as_deref(),
-            settings.fullscreen_hotkey.as_deref(),
-            settings.active_window_hotkey.as_deref(),
-            settings.picker_hotkey.as_deref(),
-            settings.ocr_hotkey.as_deref(),
-        );
+        let imported_hotkeys = ImportedHotkeyAccelerators {
+            capture: &settings.capture_hotkey,
+            recording: settings.recording_hotkey.as_deref(),
+            fullscreen: settings.fullscreen_hotkey.as_deref(),
+            active_window: settings.active_window_hotkey.as_deref(),
+            picker: settings.picker_hotkey.as_deref(),
+            ocr: settings.ocr_hotkey.as_deref(),
+            scan: settings.scan_hotkey.as_deref(),
+            sticker: settings.sticker_hotkey.as_deref(),
+            upscale: settings.upscale_hotkey.as_deref(),
+            center: settings.center_hotkey.as_deref(),
+            ruler: settings.ruler_hotkey.as_deref(),
+            scroll_capture: settings.scroll_capture_hotkey.as_deref(),
+            ai_redirect: settings.ai_redirect_hotkey.as_deref(),
+        };
+        let (hotkey_status, hotkey_listener, hotkey_events) =
+            start_capture_hotkey_listener(imported_hotkeys);
         let (tray_status, tray_icon, tray_events) = start_tray_icon();
+        #[cfg(not(target_os = "windows"))]
+        let _ = &tray_icon;
 
         let app = Self {
             platform_name: platform.name().into(),
@@ -1520,7 +1555,30 @@ impl OddSnapRustApp {
                 self.run_color_picker();
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Ocr => {
-                self.capture_status = "OCR hotkey received; Rust OCR parity is pending.".into();
+                self.capture_status = pending_tool_hotkey_status("OCR", "OCR");
+            }
+            oddsnap_platform_windows::WindowsHotkeyEvent::Scan => {
+                self.capture_status = pending_tool_hotkey_status("Scan", "scan");
+            }
+            oddsnap_platform_windows::WindowsHotkeyEvent::Sticker => {
+                self.capture_status =
+                    pending_tool_hotkey_status("Sticker", "sticker/background removal");
+            }
+            oddsnap_platform_windows::WindowsHotkeyEvent::Upscale => {
+                self.capture_status = pending_tool_hotkey_status("Upscale", "upscale");
+            }
+            oddsnap_platform_windows::WindowsHotkeyEvent::Center => {
+                self.capture_status = pending_tool_hotkey_status("Center", "center selection");
+            }
+            oddsnap_platform_windows::WindowsHotkeyEvent::Ruler => {
+                self.capture_status = pending_tool_hotkey_status("Ruler", "ruler");
+            }
+            oddsnap_platform_windows::WindowsHotkeyEvent::ScrollCapture => {
+                self.capture_status =
+                    pending_tool_hotkey_status("Scroll capture", "scroll capture");
+            }
+            oddsnap_platform_windows::WindowsHotkeyEvent::AiRedirect => {
+                self.capture_status = pending_tool_hotkey_status("AI redirect", "AI redirect");
             }
         }
     }
@@ -1549,7 +1607,30 @@ impl OddSnapRustApp {
                 self.run_color_picker();
             }
             CrossPlatformHotkeyEvent::Ocr => {
-                self.capture_status = "OCR hotkey received; Rust OCR parity is pending.".into();
+                self.capture_status = pending_tool_hotkey_status("OCR", "OCR");
+            }
+            CrossPlatformHotkeyEvent::Scan => {
+                self.capture_status = pending_tool_hotkey_status("Scan", "scan");
+            }
+            CrossPlatformHotkeyEvent::Sticker => {
+                self.capture_status =
+                    pending_tool_hotkey_status("Sticker", "sticker/background removal");
+            }
+            CrossPlatformHotkeyEvent::Upscale => {
+                self.capture_status = pending_tool_hotkey_status("Upscale", "upscale");
+            }
+            CrossPlatformHotkeyEvent::Center => {
+                self.capture_status = pending_tool_hotkey_status("Center", "center selection");
+            }
+            CrossPlatformHotkeyEvent::Ruler => {
+                self.capture_status = pending_tool_hotkey_status("Ruler", "ruler");
+            }
+            CrossPlatformHotkeyEvent::ScrollCapture => {
+                self.capture_status =
+                    pending_tool_hotkey_status("Scroll capture", "scroll capture");
+            }
+            CrossPlatformHotkeyEvent::AiRedirect => {
+                self.capture_status = pending_tool_hotkey_status("AI redirect", "AI redirect");
             }
         }
     }
@@ -1708,7 +1789,7 @@ impl OddSnapRustApp {
         };
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     fn start_recording_with_adapter<T>(
         &self,
         adapter: T,
@@ -1938,47 +2019,37 @@ impl OddSnapRustApp {
 
 #[cfg(target_os = "windows")]
 fn start_capture_hotkey_listener(
-    accelerator: &str,
-    recording_accelerator: Option<&str>,
-    fullscreen_accelerator: Option<&str>,
-    active_window_accelerator: Option<&str>,
-    picker_accelerator: Option<&str>,
-    ocr_accelerator: Option<&str>,
+    accelerators: ImportedHotkeyAccelerators<'_>,
 ) -> (
     String,
     Option<oddsnap_platform_windows::WindowsHotkeyListener>,
     Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsHotkeyEvent>>,
 ) {
-    if let Err(error) = validate_unique_hotkey_bindings(
-        accelerator,
-        recording_accelerator,
-        fullscreen_accelerator,
-        active_window_accelerator,
-        picker_accelerator,
-        ocr_accelerator,
-    ) {
+    if let Err(error) = validate_unique_hotkey_bindings(accelerators) {
         return (format!("Hotkey listener unavailable: {error}"), None, None);
     }
 
     let (sender, receiver) = std::sync::mpsc::channel();
     match oddsnap_platform_windows::start_oddsnap_hotkey_listener(
-        accelerator,
-        recording_accelerator,
-        fullscreen_accelerator,
-        active_window_accelerator,
-        picker_accelerator,
-        ocr_accelerator,
+        oddsnap_platform_windows::WindowsHotkeyAccelerators {
+            capture: accelerators.capture,
+            recording: accelerators.recording,
+            fullscreen: accelerators.fullscreen,
+            active_window: accelerators.active_window,
+            picker: accelerators.picker,
+            ocr: accelerators.ocr,
+            scan: accelerators.scan,
+            sticker: accelerators.sticker,
+            upscale: accelerators.upscale,
+            center: accelerators.center,
+            ruler: accelerators.ruler,
+            scroll_capture: accelerators.scroll_capture,
+            ai_redirect: accelerators.ai_redirect,
+        },
         sender,
     ) {
         Ok(listener) => (
-            hotkey_status_summary(
-                accelerator,
-                recording_accelerator,
-                fullscreen_accelerator,
-                active_window_accelerator,
-                picker_accelerator,
-                ocr_accelerator,
-            ),
+            hotkey_status_summary(accelerators),
             Some(listener),
             Some(receiver),
         ),
@@ -1988,45 +2059,19 @@ fn start_capture_hotkey_listener(
 
 #[cfg(not(target_os = "windows"))]
 fn start_capture_hotkey_listener(
-    accelerator: &str,
-    recording_accelerator: Option<&str>,
-    fullscreen_accelerator: Option<&str>,
-    active_window_accelerator: Option<&str>,
-    picker_accelerator: Option<&str>,
-    ocr_accelerator: Option<&str>,
+    accelerators: ImportedHotkeyAccelerators<'_>,
 ) -> (
     String,
     Option<CrossPlatformHotkeyListener>,
     Option<std::sync::mpsc::Receiver<CrossPlatformHotkeyEvent>>,
 ) {
-    if let Err(error) = validate_unique_hotkey_bindings(
-        accelerator,
-        recording_accelerator,
-        fullscreen_accelerator,
-        active_window_accelerator,
-        picker_accelerator,
-        ocr_accelerator,
-    ) {
+    if let Err(error) = validate_unique_hotkey_bindings(accelerators) {
         return (format!("Hotkey listener unavailable: {error}"), None, None);
     }
 
-    match start_cross_platform_hotkey_listener(
-        accelerator,
-        recording_accelerator,
-        fullscreen_accelerator,
-        active_window_accelerator,
-        picker_accelerator,
-        ocr_accelerator,
-    ) {
+    match start_cross_platform_hotkey_listener(accelerators) {
         Ok((listener, receiver)) => (
-            cross_platform_hotkey_status_summary(
-                accelerator,
-                recording_accelerator,
-                fullscreen_accelerator,
-                active_window_accelerator,
-                picker_accelerator,
-                ocr_accelerator,
-            ),
+            cross_platform_hotkey_status_summary(accelerators),
             Some(listener),
             Some(receiver),
         ),
@@ -2036,12 +2081,7 @@ fn start_capture_hotkey_listener(
 
 #[cfg(not(target_os = "windows"))]
 fn start_cross_platform_hotkey_listener(
-    accelerator: &str,
-    recording_accelerator: Option<&str>,
-    fullscreen_accelerator: Option<&str>,
-    active_window_accelerator: Option<&str>,
-    picker_accelerator: Option<&str>,
-    ocr_accelerator: Option<&str>,
+    accelerators: ImportedHotkeyAccelerators<'_>,
 ) -> Result<
     (
         CrossPlatformHotkeyListener,
@@ -2052,21 +2092,42 @@ fn start_cross_platform_hotkey_listener(
     #[cfg(target_os = "linux")]
     validate_linux_hotkey_session()?;
 
-    let mut registrations = vec![(accelerator, CrossPlatformHotkeyEvent::Capture)];
-    if let Some(recording) = non_empty_hotkey(recording_accelerator) {
+    let mut registrations = vec![(accelerators.capture, CrossPlatformHotkeyEvent::Capture)];
+    if let Some(recording) = non_empty_hotkey(accelerators.recording) {
         registrations.push((recording, CrossPlatformHotkeyEvent::Recording));
     }
-    if let Some(fullscreen) = non_empty_hotkey(fullscreen_accelerator) {
+    if let Some(fullscreen) = non_empty_hotkey(accelerators.fullscreen) {
         registrations.push((fullscreen, CrossPlatformHotkeyEvent::FullScreenCapture));
     }
-    if let Some(active_window) = non_empty_hotkey(active_window_accelerator) {
+    if let Some(active_window) = non_empty_hotkey(accelerators.active_window) {
         registrations.push((active_window, CrossPlatformHotkeyEvent::ActiveWindowCapture));
     }
-    if let Some(picker) = non_empty_hotkey(picker_accelerator) {
+    if let Some(picker) = non_empty_hotkey(accelerators.picker) {
         registrations.push((picker, CrossPlatformHotkeyEvent::ColorPicker));
     }
-    if let Some(ocr) = non_empty_hotkey(ocr_accelerator) {
+    if let Some(ocr) = non_empty_hotkey(accelerators.ocr) {
         registrations.push((ocr, CrossPlatformHotkeyEvent::Ocr));
+    }
+    if let Some(scan) = non_empty_hotkey(accelerators.scan) {
+        registrations.push((scan, CrossPlatformHotkeyEvent::Scan));
+    }
+    if let Some(sticker) = non_empty_hotkey(accelerators.sticker) {
+        registrations.push((sticker, CrossPlatformHotkeyEvent::Sticker));
+    }
+    if let Some(upscale) = non_empty_hotkey(accelerators.upscale) {
+        registrations.push((upscale, CrossPlatformHotkeyEvent::Upscale));
+    }
+    if let Some(center) = non_empty_hotkey(accelerators.center) {
+        registrations.push((center, CrossPlatformHotkeyEvent::Center));
+    }
+    if let Some(ruler) = non_empty_hotkey(accelerators.ruler) {
+        registrations.push((ruler, CrossPlatformHotkeyEvent::Ruler));
+    }
+    if let Some(scroll_capture) = non_empty_hotkey(accelerators.scroll_capture) {
+        registrations.push((scroll_capture, CrossPlatformHotkeyEvent::ScrollCapture));
+    }
+    if let Some(ai_redirect) = non_empty_hotkey(accelerators.ai_redirect) {
+        registrations.push((ai_redirect, CrossPlatformHotkeyEvent::AiRedirect));
     }
 
     let mut id_to_event = std::collections::HashMap::new();
@@ -2131,21 +2192,25 @@ fn non_empty_hotkey(value: Option<&str>) -> Option<&str> {
 }
 
 fn validate_unique_hotkey_bindings(
-    capture: &str,
-    recording: Option<&str>,
-    fullscreen: Option<&str>,
-    active_window: Option<&str>,
-    picker: Option<&str>,
-    ocr: Option<&str>,
+    accelerators: ImportedHotkeyAccelerators<'_>,
 ) -> Result<(), String> {
     let mut seen = std::collections::HashMap::<String, &'static str>::new();
     for (accelerator, label) in [
-        Some((capture, "capture")),
-        non_empty_hotkey(recording).map(|accelerator| (accelerator, "recording")),
-        non_empty_hotkey(fullscreen).map(|accelerator| (accelerator, "full-screen")),
-        non_empty_hotkey(active_window).map(|accelerator| (accelerator, "active-window")),
-        non_empty_hotkey(picker).map(|accelerator| (accelerator, "color-picker")),
-        non_empty_hotkey(ocr).map(|accelerator| (accelerator, "OCR")),
+        Some((accelerators.capture, "capture")),
+        non_empty_hotkey(accelerators.recording).map(|accelerator| (accelerator, "recording")),
+        non_empty_hotkey(accelerators.fullscreen).map(|accelerator| (accelerator, "full-screen")),
+        non_empty_hotkey(accelerators.active_window)
+            .map(|accelerator| (accelerator, "active-window")),
+        non_empty_hotkey(accelerators.picker).map(|accelerator| (accelerator, "color-picker")),
+        non_empty_hotkey(accelerators.ocr).map(|accelerator| (accelerator, "OCR")),
+        non_empty_hotkey(accelerators.scan).map(|accelerator| (accelerator, "scan")),
+        non_empty_hotkey(accelerators.sticker).map(|accelerator| (accelerator, "sticker")),
+        non_empty_hotkey(accelerators.upscale).map(|accelerator| (accelerator, "upscale")),
+        non_empty_hotkey(accelerators.center).map(|accelerator| (accelerator, "center")),
+        non_empty_hotkey(accelerators.ruler).map(|accelerator| (accelerator, "ruler")),
+        non_empty_hotkey(accelerators.scroll_capture)
+            .map(|accelerator| (accelerator, "scroll-capture")),
+        non_empty_hotkey(accelerators.ai_redirect).map(|accelerator| (accelerator, "AI redirect")),
     ]
     .into_iter()
     .flatten()
@@ -2206,15 +2271,8 @@ fn linux_hotkey_session_error(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn cross_platform_hotkey_status_summary(
-    capture: &str,
-    recording: Option<&str>,
-    fullscreen: Option<&str>,
-    active_window: Option<&str>,
-    picker: Option<&str>,
-    ocr: Option<&str>,
-) -> String {
-    let status = hotkey_status_summary(capture, recording, fullscreen, active_window, picker, ocr);
+fn cross_platform_hotkey_status_summary(accelerators: ImportedHotkeyAccelerators<'_>) -> String {
+    let status = hotkey_status_summary(accelerators);
     #[cfg(target_os = "linux")]
     {
         let mut status = status;
@@ -2249,29 +2307,43 @@ fn start_tray_icon() -> (String, Option<()>, Option<()>) {
     ("Tray: pending on this platform.".into(), None, None)
 }
 
-fn hotkey_status_summary(
-    capture: &str,
-    recording: Option<&str>,
-    fullscreen: Option<&str>,
-    active_window: Option<&str>,
-    picker: Option<&str>,
-    ocr: Option<&str>,
-) -> String {
-    let mut parts = vec![format!("{capture} capture")];
-    if let Some(recording) = recording {
+fn hotkey_status_summary(accelerators: ImportedHotkeyAccelerators<'_>) -> String {
+    let mut parts = vec![format!("{} capture", accelerators.capture)];
+    if let Some(recording) = accelerators.recording {
         parts.push(format!("{recording} recording"));
     }
-    if let Some(fullscreen) = fullscreen {
+    if let Some(fullscreen) = accelerators.fullscreen {
         parts.push(format!("{fullscreen} full-screen"));
     }
-    if let Some(active_window) = active_window {
+    if let Some(active_window) = accelerators.active_window {
         parts.push(format!("{active_window} active-window"));
     }
-    if let Some(picker) = picker {
+    if let Some(picker) = accelerators.picker {
         parts.push(format!("{picker} color-picker"));
     }
-    if let Some(ocr) = ocr {
+    if let Some(ocr) = accelerators.ocr {
         parts.push(format!("{ocr} OCR"));
+    }
+    if let Some(scan) = accelerators.scan {
+        parts.push(format!("{scan} scan"));
+    }
+    if let Some(sticker) = accelerators.sticker {
+        parts.push(format!("{sticker} sticker"));
+    }
+    if let Some(upscale) = accelerators.upscale {
+        parts.push(format!("{upscale} upscale"));
+    }
+    if let Some(center) = accelerators.center {
+        parts.push(format!("{center} center"));
+    }
+    if let Some(ruler) = accelerators.ruler {
+        parts.push(format!("{ruler} ruler"));
+    }
+    if let Some(scroll_capture) = accelerators.scroll_capture {
+        parts.push(format!("{scroll_capture} scroll-capture"));
+    }
+    if let Some(ai_redirect) = accelerators.ai_redirect {
+        parts.push(format!("{ai_redirect} AI redirect"));
     }
     format!("Hotkeys: {}.", parts.join(", "))
 }
@@ -2571,6 +2643,10 @@ fn copy_text_to_host_clipboard(text: &str) -> Result<(), oddsnap_platform::Platf
     }
 }
 
+fn pending_tool_hotkey_status(label: &str, parity_item: &str) -> String {
+    format!("{label} hotkey received; Rust {parity_item} parity is pending.")
+}
+
 fn on_off(value: bool) -> &'static str {
     if value {
         "on"
@@ -2659,28 +2735,42 @@ mod tests {
     #[test]
     fn hotkey_status_lists_dedicated_capture_hotkeys() {
         assert_eq!(
-            hotkey_status_summary(
-                "Alt+Shift+S",
-                Some("Alt+Shift+R"),
-                Some("Alt+Shift+F"),
-                Some("Alt+Shift+A"),
-                Some("Alt+Shift+C"),
-                Some("Alt+Shift+O")
-            ),
-            "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window, Alt+Shift+C color-picker, Alt+Shift+O OCR."
+            hotkey_status_summary(ImportedHotkeyAccelerators {
+                capture: "Alt+Shift+S",
+                recording: Some("Alt+Shift+R"),
+                fullscreen: Some("Alt+Shift+F"),
+                active_window: Some("Alt+Shift+A"),
+                picker: Some("Alt+Shift+C"),
+                ocr: Some("Alt+Shift+O"),
+                scan: Some("Alt+Shift+N"),
+                sticker: Some("Alt+Shift+T"),
+                upscale: Some("Alt+Shift+U"),
+                center: Some("Alt+Shift+E"),
+                ruler: Some("Alt+Shift+L"),
+                scroll_capture: Some("Alt+Shift+P"),
+                ai_redirect: Some("Alt+Shift+I"),
+            }),
+            "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window, Alt+Shift+C color-picker, Alt+Shift+O OCR, Alt+Shift+N scan, Alt+Shift+T sticker, Alt+Shift+U upscale, Alt+Shift+E center, Alt+Shift+L ruler, Alt+Shift+P scroll-capture, Alt+Shift+I AI redirect."
         );
     }
 
     #[test]
     fn duplicate_hotkeys_are_rejected_before_registration() {
-        let error = validate_unique_hotkey_bindings(
-            "Alt+Shift+S",
-            Some(" Shift + S + Alt "),
-            Some("Alt+Shift+F"),
-            None,
-            None,
-            None,
-        )
+        let error = validate_unique_hotkey_bindings(ImportedHotkeyAccelerators {
+            capture: "Alt+Shift+S",
+            recording: Some(" Shift + S + Alt "),
+            fullscreen: Some("Alt+Shift+F"),
+            active_window: None,
+            picker: None,
+            ocr: None,
+            scan: None,
+            sticker: None,
+            upscale: None,
+            center: None,
+            ruler: None,
+            scroll_capture: None,
+            ai_redirect: None,
+        })
         .expect_err("duplicate rejected");
 
         assert_eq!(

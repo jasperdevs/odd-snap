@@ -66,6 +66,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Linux startup now refuses Wayland/headless global-hotkey registration with an explicit status instead of silently trying the X11-only path.
 - macOS/Linux hotkey events route to the same GPUI actions as Windows for default capture, recording, full-screen capture, active-window capture, and color picker, with still-pending platform actions reporting their existing unsupported status.
 - Imported OCR hotkeys are registered and routed on Windows/macOS/Linux startup; they currently report pending Rust OCR parity instead of being silently dropped.
+- Imported scan, sticker, upscale, center, ruler, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; they currently report explicit pending parity statuses instead of being silently dropped.
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
 - Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.

@@ -113,6 +113,36 @@ const PICKER_HOTKEY_ID: i32 = 0x0dda;
 #[cfg(target_os = "windows")]
 const OCR_HOTKEY_ID: i32 = 0x0ddb;
 #[cfg(target_os = "windows")]
+const SCAN_HOTKEY_ID: i32 = 0x0ddc;
+#[cfg(target_os = "windows")]
+const STICKER_HOTKEY_ID: i32 = 0x0ddd;
+#[cfg(target_os = "windows")]
+const UPSCALE_HOTKEY_ID: i32 = 0x0dde;
+#[cfg(target_os = "windows")]
+const CENTER_HOTKEY_ID: i32 = 0x0ddf;
+#[cfg(target_os = "windows")]
+const RULER_HOTKEY_ID: i32 = 0x0de0;
+#[cfg(target_os = "windows")]
+const SCROLL_CAPTURE_HOTKEY_ID: i32 = 0x0de1;
+#[cfg(target_os = "windows")]
+const AI_REDIRECT_HOTKEY_ID: i32 = 0x0de2;
+#[cfg(target_os = "windows")]
+const ALL_HOTKEY_IDS: [i32; 13] = [
+    CAPTURE_HOTKEY_ID,
+    RECORDING_HOTKEY_ID,
+    FULLSCREEN_HOTKEY_ID,
+    ACTIVE_WINDOW_HOTKEY_ID,
+    PICKER_HOTKEY_ID,
+    OCR_HOTKEY_ID,
+    SCAN_HOTKEY_ID,
+    STICKER_HOTKEY_ID,
+    UPSCALE_HOTKEY_ID,
+    CENTER_HOTKEY_ID,
+    RULER_HOTKEY_ID,
+    SCROLL_CAPTURE_HOTKEY_ID,
+    AI_REDIRECT_HOTKEY_ID,
+];
+#[cfg(target_os = "windows")]
 const HOTKEY_STOP_MESSAGE: u32 = WM_APP + 0x0dd5;
 #[cfg(target_os = "windows")]
 const TRAY_ICON_ID: u32 = 0x0dd5;
@@ -159,6 +189,13 @@ pub enum WindowsHotkeyEvent {
     ActiveWindowCapture,
     ColorPicker,
     Ocr,
+    Scan,
+    Sticker,
+    Upscale,
+    Center,
+    Ruler,
+    ScrollCapture,
+    AiRedirect,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -171,6 +208,24 @@ pub enum WindowsTrayEvent {
     Settings,
     History,
     Quit,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone, Copy)]
+pub struct WindowsHotkeyAccelerators<'a> {
+    pub capture: &'a str,
+    pub recording: Option<&'a str>,
+    pub fullscreen: Option<&'a str>,
+    pub active_window: Option<&'a str>,
+    pub picker: Option<&'a str>,
+    pub ocr: Option<&'a str>,
+    pub scan: Option<&'a str>,
+    pub sticker: Option<&'a str>,
+    pub upscale: Option<&'a str>,
+    pub center: Option<&'a str>,
+    pub ruler: Option<&'a str>,
+    pub scroll_capture: Option<&'a str>,
+    pub ai_redirect: Option<&'a str>,
 }
 
 #[cfg(target_os = "windows")]
@@ -724,44 +779,88 @@ pub fn start_capture_and_recording_hotkey_listener(
     events: Sender<WindowsHotkeyEvent>,
 ) -> Result<WindowsHotkeyListener, PlatformError> {
     start_oddsnap_hotkey_listener(
-        capture_accelerator,
-        recording_accelerator,
-        None,
-        None,
-        None,
-        None,
+        WindowsHotkeyAccelerators {
+            capture: capture_accelerator,
+            recording: recording_accelerator,
+            fullscreen: None,
+            active_window: None,
+            picker: None,
+            ocr: None,
+            scan: None,
+            sticker: None,
+            upscale: None,
+            center: None,
+            ruler: None,
+            scroll_capture: None,
+            ai_redirect: None,
+        },
         events,
     )
 }
 
 #[cfg(target_os = "windows")]
 pub fn start_oddsnap_hotkey_listener(
-    capture_accelerator: &str,
-    recording_accelerator: Option<&str>,
-    fullscreen_accelerator: Option<&str>,
-    active_window_accelerator: Option<&str>,
-    picker_accelerator: Option<&str>,
-    ocr_accelerator: Option<&str>,
+    accelerators: WindowsHotkeyAccelerators<'_>,
     events: Sender<WindowsHotkeyEvent>,
 ) -> Result<WindowsHotkeyListener, PlatformError> {
-    let capture = parse_hotkey_accelerator(capture_accelerator)?;
-    let recording = recording_accelerator
+    let capture = parse_hotkey_accelerator(accelerators.capture)?;
+    let recording = accelerators
+        .recording
         .filter(|accelerator| !accelerator.trim().is_empty())
         .map(parse_hotkey_accelerator)
         .transpose()?;
-    let fullscreen = fullscreen_accelerator
+    let fullscreen = accelerators
+        .fullscreen
         .filter(|accelerator| !accelerator.trim().is_empty())
         .map(parse_hotkey_accelerator)
         .transpose()?;
-    let active_window = active_window_accelerator
+    let active_window = accelerators
+        .active_window
         .filter(|accelerator| !accelerator.trim().is_empty())
         .map(parse_hotkey_accelerator)
         .transpose()?;
-    let picker = picker_accelerator
+    let picker = accelerators
+        .picker
         .filter(|accelerator| !accelerator.trim().is_empty())
         .map(parse_hotkey_accelerator)
         .transpose()?;
-    let ocr = ocr_accelerator
+    let ocr = accelerators
+        .ocr
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let scan = accelerators
+        .scan
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let sticker = accelerators
+        .sticker
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let upscale = accelerators
+        .upscale
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let center = accelerators
+        .center
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let ruler = accelerators
+        .ruler
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let scroll_capture = accelerators
+        .scroll_capture
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let ai_redirect = accelerators
+        .ai_redirect
         .filter(|accelerator| !accelerator.trim().is_empty())
         .map(parse_hotkey_accelerator)
         .transpose()?;
@@ -772,6 +871,13 @@ pub fn start_oddsnap_hotkey_listener(
         active_window,
         picker,
         ocr,
+        scan,
+        sticker,
+        upscale,
+        center,
+        ruler,
+        scroll_capture,
+        ai_redirect,
     };
     let (started_sender, started_receiver) = mpsc::sync_channel(1);
     let join_handle = thread::spawn(move || {
@@ -1693,6 +1799,13 @@ struct WindowsHotkeyRegistrations {
     active_window: Option<(HOT_KEY_MODIFIERS, u32)>,
     picker: Option<(HOT_KEY_MODIFIERS, u32)>,
     ocr: Option<(HOT_KEY_MODIFIERS, u32)>,
+    scan: Option<(HOT_KEY_MODIFIERS, u32)>,
+    sticker: Option<(HOT_KEY_MODIFIERS, u32)>,
+    upscale: Option<(HOT_KEY_MODIFIERS, u32)>,
+    center: Option<(HOT_KEY_MODIFIERS, u32)>,
+    ruler: Option<(HOT_KEY_MODIFIERS, u32)>,
+    scroll_capture: Option<(HOT_KEY_MODIFIERS, u32)>,
+    ai_redirect: Option<(HOT_KEY_MODIFIERS, u32)>,
 }
 
 #[cfg(target_os = "windows")]
@@ -1754,13 +1867,56 @@ fn run_hotkey_message_loop(
     }
     if let Some((modifiers, key)) = registrations.ocr {
         if let Err(error) = register_windows_hotkey(OCR_HOTKEY_ID, modifiers, key) {
-            unregister_registered_hotkeys(&[
-                CAPTURE_HOTKEY_ID,
-                RECORDING_HOTKEY_ID,
-                FULLSCREEN_HOTKEY_ID,
-                ACTIVE_WINDOW_HOTKEY_ID,
-                PICKER_HOTKEY_ID,
-            ]);
+            unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = registrations.scan {
+        if let Err(error) = register_windows_hotkey(SCAN_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = registrations.sticker {
+        if let Err(error) = register_windows_hotkey(STICKER_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = registrations.upscale {
+        if let Err(error) = register_windows_hotkey(UPSCALE_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = registrations.center {
+        if let Err(error) = register_windows_hotkey(CENTER_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = registrations.ruler {
+        if let Err(error) = register_windows_hotkey(RULER_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = registrations.scroll_capture {
+        if let Err(error) = register_windows_hotkey(SCROLL_CAPTURE_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = registrations.ai_redirect {
+        if let Err(error) = register_windows_hotkey(AI_REDIRECT_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
             let _ = started_sender.send(Err(error.to_string()));
             return;
         }
@@ -1798,19 +1954,33 @@ fn run_hotkey_message_loop(
                 WPARAM(value) if value == OCR_HOTKEY_ID as usize => {
                     let _ = events.send(WindowsHotkeyEvent::Ocr);
                 }
+                WPARAM(value) if value == SCAN_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::Scan);
+                }
+                WPARAM(value) if value == STICKER_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::Sticker);
+                }
+                WPARAM(value) if value == UPSCALE_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::Upscale);
+                }
+                WPARAM(value) if value == CENTER_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::Center);
+                }
+                WPARAM(value) if value == RULER_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::Ruler);
+                }
+                WPARAM(value) if value == SCROLL_CAPTURE_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::ScrollCapture);
+                }
+                WPARAM(value) if value == AI_REDIRECT_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::AiRedirect);
+                }
                 _ => {}
             }
         }
     }
 
-    unregister_registered_hotkeys(&[
-        CAPTURE_HOTKEY_ID,
-        RECORDING_HOTKEY_ID,
-        FULLSCREEN_HOTKEY_ID,
-        ACTIVE_WINDOW_HOTKEY_ID,
-        PICKER_HOTKEY_ID,
-        OCR_HOTKEY_ID,
-    ]);
+    unregister_registered_hotkeys(&ALL_HOTKEY_IDS);
 }
 
 #[cfg(target_os = "windows")]
@@ -3292,12 +3462,21 @@ mod tests {
         let _guard = hotkey_test_lock();
         let (sender, receiver) = mpsc::channel();
         let listener = super::start_oddsnap_hotkey_listener(
-            "Alt+Shift+F21",
-            None,
-            Some("Alt+Shift+F22"),
-            Some("Alt+Shift+F23"),
-            Some("Alt+Shift+F24"),
-            Some("Ctrl+Shift+F24"),
+            super::WindowsHotkeyAccelerators {
+                capture: "Alt+Shift+F21",
+                recording: None,
+                fullscreen: Some("Alt+Shift+F22"),
+                active_window: Some("Alt+Shift+F23"),
+                picker: Some("Alt+Shift+F24"),
+                ocr: Some("Ctrl+Shift+F24"),
+                scan: Some("Ctrl+Alt+Shift+F21"),
+                sticker: None,
+                upscale: None,
+                center: None,
+                ruler: None,
+                scroll_capture: None,
+                ai_redirect: Some("Ctrl+Alt+Shift+F22"),
+            },
             sender,
         )
         .expect("listener");
@@ -3330,6 +3509,20 @@ mod tests {
                 LPARAM(0),
             )
             .expect("post ocr hotkey message");
+            PostThreadMessageW(
+                listener.thread_id(),
+                WM_HOTKEY,
+                WPARAM(super::SCAN_HOTKEY_ID as usize),
+                LPARAM(0),
+            )
+            .expect("post scan hotkey message");
+            PostThreadMessageW(
+                listener.thread_id(),
+                WM_HOTKEY,
+                WPARAM(super::AI_REDIRECT_HOTKEY_ID as usize),
+                LPARAM(0),
+            )
+            .expect("post AI redirect hotkey message");
         }
 
         let first = receiver
@@ -3344,11 +3537,19 @@ mod tests {
         let fourth = receiver
             .recv_timeout(Duration::from_secs(2))
             .expect("receive OCR event");
+        let fifth = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("receive scan event");
+        let sixth = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("receive AI redirect event");
 
         assert_eq!(first, super::WindowsHotkeyEvent::FullScreenCapture);
         assert_eq!(second, super::WindowsHotkeyEvent::ActiveWindowCapture);
         assert_eq!(third, super::WindowsHotkeyEvent::ColorPicker);
         assert_eq!(fourth, super::WindowsHotkeyEvent::Ocr);
+        assert_eq!(fifth, super::WindowsHotkeyEvent::Scan);
+        assert_eq!(sixth, super::WindowsHotkeyEvent::AiRedirect);
     }
 
     #[test]

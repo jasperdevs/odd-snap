@@ -50,6 +50,17 @@ spctl --assess --type execute --verbose dist/macos/OddSnap.app
 xcrun stapler validate dist/macos/OddSnap.app
 ```
 
+## Local device smoke
+
+Run the unsigned package smoke first on a current Apple Silicon Mac:
+
+```sh
+scripts/macos/package-oddsnap-rust.sh --unsigned
+open dist/macos/OddSnap.app
+```
+
+After opening the bundled app, verify full-screen capture, rectangle capture, active-window capture, color picker, recording start/stop, and every configured hotkey on Apple Silicon macOS. Repeat on Intel macOS only for compatibility validation.
+
 ## Current Rust-port implications
 
 - The current macOS capture path shells out to `screencapture`, so permission failures should point users to Screen & System Audio Recording.

@@ -12,7 +12,7 @@ The Rust rewrite workflow is CI-only and should prove:
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo build -p oddsnap-app --bin oddsnap-rust`
 
-The matrix runs on Windows, Ubuntu, latest Apple Silicon macOS, and Intel macOS compatibility runners so platform-specific `cfg` paths are compiled on native runners instead of relying on weak cross-compilation from Windows.
+The matrix runs on Windows, Ubuntu, primary Apple Silicon macOS (`macos-26`), and Intel macOS compatibility (`macos-26-intel`) runners so platform-specific `cfg` paths are compiled on native runners instead of relying on weak cross-compilation from Windows.
 
 ## Linux runner dependencies
 
