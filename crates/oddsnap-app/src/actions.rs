@@ -183,6 +183,7 @@ impl PendingTool {
 pub(crate) enum DefaultCaptureAction {
     Capture(CaptureMode),
     ColorPicker,
+    Ocr,
     Pending(PendingTool),
 }
 
@@ -194,8 +195,8 @@ pub(crate) fn default_capture_action(default_mode: DefaultCaptureMode) -> Defaul
         DefaultCaptureMode::Fullscreen => DefaultCaptureAction::Capture(CaptureMode::FullScreen),
         DefaultCaptureMode::Rectangle => DefaultCaptureAction::Capture(CaptureMode::Rectangle),
         DefaultCaptureMode::ColorPicker => DefaultCaptureAction::ColorPicker,
-        DefaultCaptureMode::Ocr
-        | DefaultCaptureMode::Scan
+        DefaultCaptureMode::Ocr => DefaultCaptureAction::Ocr,
+        DefaultCaptureMode::Scan
         | DefaultCaptureMode::Sticker
         | DefaultCaptureMode::Upscale
         | DefaultCaptureMode::Center

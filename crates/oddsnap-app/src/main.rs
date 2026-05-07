@@ -1875,12 +1875,11 @@ impl OddSnapRustApp {
                 self.capture_status = format!("{trigger} received.");
                 self.run_color_picker();
             }
+            DefaultCaptureAction::Ocr => {
+                self.run_ocr_capture(trigger);
+            }
             DefaultCaptureAction::Pending(tool) => {
-                if tool == PendingTool::Ocr {
-                    self.run_ocr_capture(trigger);
-                } else {
-                    self.capture_status = pending_default_capture_status(trigger, tool);
-                }
+                self.capture_status = pending_default_capture_status(trigger, tool);
             }
         }
     }
@@ -4600,9 +4599,12 @@ mod tests {
             default_capture_action(DefaultCaptureMode::ColorPicker),
             DefaultCaptureAction::ColorPicker
         ));
+        assert!(matches!(
+            default_capture_action(DefaultCaptureMode::Ocr),
+            DefaultCaptureAction::Ocr
+        ));
 
         for (mode, tool) in [
-            (DefaultCaptureMode::Ocr, PendingTool::Ocr),
             (DefaultCaptureMode::Scan, PendingTool::Scan),
             (DefaultCaptureMode::Sticker, PendingTool::Sticker),
             (DefaultCaptureMode::Upscale, PendingTool::Upscale),
@@ -4619,8 +4621,8 @@ mod tests {
     #[test]
     fn pending_default_capture_status_is_explicit() {
         assert_eq!(
-            pending_default_capture_status("Capture hotkey", PendingTool::Ocr),
-            "Capture hotkey received; default capture mode 'OCR' needs Rust OCR parity."
+            pending_default_capture_status("Capture hotkey", PendingTool::Scan),
+            "Capture hotkey received; default capture mode 'Scan' needs Rust scan parity."
         );
     }
 
