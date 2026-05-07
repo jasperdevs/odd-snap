@@ -114,6 +114,81 @@ impl ImageSearchUiState {
     }
 }
 
+#[derive(Default)]
+pub(crate) struct ImageSearchOcrHydrationSummary {
+    pub(crate) attempted: usize,
+    pub(crate) indexed: usize,
+    pub(crate) empty: usize,
+    pub(crate) failed: usize,
+    pub(crate) skipped: usize,
+}
+
+#[derive(Debug, Default, Clone)]
+pub(crate) struct ImageSearchReindexQueueState {
+    pub(crate) active: bool,
+    pub(crate) cancel_requested: bool,
+    pub(crate) total: usize,
+    pub(crate) processed: usize,
+    pub(crate) indexed: usize,
+    pub(crate) empty: usize,
+    pub(crate) failed: usize,
+    pub(crate) skipped: usize,
+    pub(crate) current_file: Option<String>,
+}
+
+impl ImageSearchReindexQueueState {
+    pub(crate) fn start(total: usize) -> Self {
+        Self {
+            active: total > 0,
+            total,
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn request_cancel(&mut self) {
+        if self.active {
+            self.cancel_requested = true;
+        }
+    }
+
+    pub(crate) fn finish(&mut self) {
+        self.active = false;
+        self.cancel_requested = false;
+        self.current_file = None;
+    }
+
+    pub(crate) fn apply_summary(&mut self, summary: &ImageSearchOcrHydrationSummary) {
+        self.processed = self.processed.saturating_add(summary.attempted);
+        self.indexed = self.indexed.saturating_add(summary.indexed);
+        self.empty = self.empty.saturating_add(summary.empty);
+        self.failed = self.failed.saturating_add(summary.failed);
+        self.skipped = self.skipped.saturating_add(summary.skipped);
+    }
+
+    pub(crate) fn detail_text(&self) -> String {
+        if !self.active && self.total == 0 {
+            return "Reindex queue idle.".into();
+        }
+
+        let state = if self.cancel_requested {
+            "canceling"
+        } else if self.active {
+            "running"
+        } else {
+            "done"
+        };
+        let current = self
+            .current_file
+            .as_deref()
+            .filter(|file| !file.is_empty())
+            .unwrap_or("none");
+        format!(
+            "Reindex {state}: {}/{} processed, {} text, {} empty, {} failed, {} skipped; current {current}.",
+            self.processed, self.total, self.indexed, self.empty, self.failed, self.skipped
+        )
+    }
+}
+
 pub(crate) trait ImageSearchItem: Clone {
     fn file_path(&self) -> &str;
     fn file_name(&self) -> &str;

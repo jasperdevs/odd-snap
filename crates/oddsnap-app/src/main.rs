@@ -56,6 +56,7 @@ use actions::{
     default_capture_action, pending_tool_hotkey_status, pending_tool_trigger_status, CaptureMode,
     DefaultCaptureAction, PendingTool, RecordingTarget, SettingsAction,
 };
+use image_search::{ImageSearchOcrHydrationSummary, ImageSearchReindexQueueState};
 use media_history::{filtered_capture_history, HistoryKindFilter, HistoryUploadFilter};
 use processed_preview::ProcessedResultPreviewWindow;
 
@@ -194,72 +195,6 @@ struct CaptureRunResult {
     original_preview_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Default, Clone)]
-struct ImageSearchReindexQueueState {
-    active: bool,
-    cancel_requested: bool,
-    total: usize,
-    processed: usize,
-    indexed: usize,
-    empty: usize,
-    failed: usize,
-    skipped: usize,
-    current_file: Option<String>,
-}
-
-impl ImageSearchReindexQueueState {
-    fn start(total: usize) -> Self {
-        Self {
-            active: total > 0,
-            total,
-            ..Self::default()
-        }
-    }
-
-    fn request_cancel(&mut self) {
-        if self.active {
-            self.cancel_requested = true;
-        }
-    }
-
-    fn finish(&mut self) {
-        self.active = false;
-        self.cancel_requested = false;
-        self.current_file = None;
-    }
-
-    fn apply_summary(&mut self, summary: &ImageSearchOcrHydrationSummary) {
-        self.processed = self.processed.saturating_add(summary.attempted);
-        self.indexed = self.indexed.saturating_add(summary.indexed);
-        self.empty = self.empty.saturating_add(summary.empty);
-        self.failed = self.failed.saturating_add(summary.failed);
-        self.skipped = self.skipped.saturating_add(summary.skipped);
-    }
-
-    fn detail_text(&self) -> String {
-        if !self.active && self.total == 0 {
-            return "Reindex queue idle.".into();
-        }
-
-        let state = if self.cancel_requested {
-            "canceling"
-        } else if self.active {
-            "running"
-        } else {
-            "done"
-        };
-        let current = self
-            .current_file
-            .as_deref()
-            .filter(|file| !file.is_empty())
-            .unwrap_or("none");
-        format!(
-            "Reindex {state}: {}/{} processed, {} text, {} empty, {} failed, {} skipped; current {current}.",
-            self.processed, self.total, self.indexed, self.empty, self.failed, self.skipped
-        )
-    }
-}
-
 #[derive(Clone, Copy)]
 pub(crate) enum ProcessedCaptureTool {
     Sticker,
@@ -381,15 +316,6 @@ struct RecordingStart {
     height: u32,
     target: RecordingTarget,
     note: Option<&'static str>,
-}
-
-#[derive(Default)]
-struct ImageSearchOcrHydrationSummary {
-    attempted: usize,
-    indexed: usize,
-    empty: usize,
-    failed: usize,
-    skipped: usize,
 }
 
 #[derive(Clone, Copy)]
