@@ -117,6 +117,7 @@ struct OddSnapRustApp {
     capture_history: Vec<CaptureHistoryEntry>,
     color_history: Vec<ColorHistoryEntry>,
     ocr_history: Vec<OcrHistoryEntry>,
+    latest_ocr_result: Option<String>,
     image_search: image_search::ImageSearchUiState,
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
@@ -296,6 +297,7 @@ impl OddSnapRustApp {
             history_entries_to_capture_history(history_index.clone(), &image_search_index);
         let color_history = history_entries_to_color_history(history_index.clone());
         let ocr_history = history_entries_to_ocr_history(history_index);
+        let latest_ocr_result = ocr_history.first().map(|entry| entry.text.clone());
         let permission_status = host_permission_status();
         let media_status = match discover_ffmpeg_tools() {
             Some(tools) => {
@@ -356,6 +358,7 @@ impl OddSnapRustApp {
             capture_history,
             color_history,
             ocr_history,
+            latest_ocr_result,
             image_search: image_search::ImageSearchUiState::new(),
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
@@ -885,6 +888,10 @@ impl OddSnapRustApp {
             }
         }
 
+        if let Some(text) = self.latest_ocr_result.as_ref() {
+            body = body.child(self.ocr_result_panel(cx, text));
+        }
+
         body = body.child(div().text_size(px(13.0)).child("Recent captures"));
         if self.settings.show_image_search_bar {
             body = body.child(self.image_search_bar(cx));
@@ -1118,6 +1125,34 @@ impl OddSnapRustApp {
                     .child(SharedString::from(
                         self.image_search.status_text(&self.settings, match_count),
                     )),
+            )
+    }
+
+    fn ocr_result_panel(&self, cx: &mut Context<Self>, text: &str) -> impl IntoElement {
+        ui::surface_style(div())
+            .flex()
+            .flex_col()
+            .gap(px(7.0))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_size(px(13.0)).child("OCR result"))
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(8.0))
+                            .child(self.copy_ocr_text_button(cx, text.to_string()))
+                            .child(self.translate_ocr_text_button(cx, text.to_string())),
+                    ),
+            )
+            .child(
+                div()
+                    .line_clamp(8)
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::BODY_TEXT))
+                    .child(SharedString::from(text.to_string())),
             )
     }
 
@@ -1816,6 +1851,7 @@ impl OddSnapRustApp {
             .err()
             .map(|error| error.to_string());
         let char_count = text.chars().count();
+        self.latest_ocr_result = Some(text.clone());
         let history_status = self.save_ocr_history(text);
         Ok(match copy_error {
             Some(error) => format!(
