@@ -512,7 +512,14 @@ pub struct OneDriveCurlUploadPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GoogleDriveCurlUploadPlan {
+    pub kind: GoogleDriveUploadPlanKind,
     pub upload: CurlUploadRequest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GoogleDriveUploadPlanKind {
+    Multipart,
+    Resumable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -832,9 +839,7 @@ pub fn build_google_drive_curl_upload_plan(
     let metadata = std::fs::metadata(file_path)
         .map_err(|error| format!("Google Drive upload could not read file metadata: {error}"))?;
     if metadata.len() > 5 * MIB {
-        return Err(
-            "Google Drive resumable uploads over 5MB are pending in the Rust backend.".into(),
-        );
+        return build_google_drive_resumable_session_plan(file_path, settings, metadata.len());
     }
     let boundary = "oddsnap-rust-drive-boundary";
     let body = google_drive_multipart_body(file_path, settings, boundary)?;
@@ -859,7 +864,82 @@ pub fn build_google_drive_curl_upload_plan(
         stdin_body: Some(body),
         success_url: None,
     };
-    Ok(GoogleDriveCurlUploadPlan { upload })
+    Ok(GoogleDriveCurlUploadPlan {
+        kind: GoogleDriveUploadPlanKind::Multipart,
+        upload,
+    })
+}
+
+fn build_google_drive_resumable_session_plan(
+    file_path: &Path,
+    settings: &UploadSettings,
+    file_size: u64,
+) -> Result<GoogleDriveCurlUploadPlan, String> {
+    let token = settings.google_drive_access_token.trim();
+    let metadata = google_drive_metadata(file_path, settings)?.to_string();
+    let upload = CurlUploadRequest {
+        destination: UploadDestination::GoogleDrive,
+        provider_name: UploadDestination::GoogleDrive.display_name(),
+        program: "curl".into(),
+        args: curl_base_args()
+            .into_iter()
+            .chain([
+                "--dump-header".into(),
+                "-".into(),
+                "--request".into(),
+                "POST".into(),
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "--header".into(),
+                format!("X-Upload-Content-Type: {}", upload_content_type(file_path)),
+                "--header".into(),
+                format!("X-Upload-Content-Length: {file_size}"),
+                "--header".into(),
+                "Content-Type: application/json; charset=UTF-8".into(),
+                "--data-binary".into(),
+                "@-".into(),
+                "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id"
+                    .into(),
+            ])
+            .collect(),
+        stdin_body: Some(metadata.into_bytes()),
+        success_url: None,
+    };
+    Ok(GoogleDriveCurlUploadPlan {
+        kind: GoogleDriveUploadPlanKind::Resumable,
+        upload,
+    })
+}
+
+pub fn build_google_drive_resumable_upload_request(
+    session_url: &str,
+    file_path: &Path,
+) -> Result<CurlUploadRequest, String> {
+    let session_url = session_url.trim();
+    if !(session_url.starts_with("https://") || session_url.starts_with("http://")) {
+        return Err("Google Drive upload session URL was not usable.".into());
+    }
+    let body = std::fs::read(file_path)
+        .map_err(|error| format!("Google Drive resumable upload could not read file: {error}"))?;
+    Ok(CurlUploadRequest {
+        destination: UploadDestination::GoogleDrive,
+        provider_name: UploadDestination::GoogleDrive.display_name(),
+        program: "curl".into(),
+        args: curl_base_args()
+            .into_iter()
+            .chain([
+                "--request".into(),
+                "PUT".into(),
+                "--header".into(),
+                format!("Content-Type: {}", upload_content_type(file_path)),
+                "--data-binary".into(),
+                "@-".into(),
+                session_url.into(),
+            ])
+            .collect(),
+        stdin_body: Some(body),
+        success_url: None,
+    })
 }
 
 pub fn build_google_drive_permission_request(
@@ -1403,6 +1483,19 @@ pub fn parse_google_drive_upload_file_id(output: &str) -> Result<String, String>
         .ok_or_else(|| "Google Drive returned no file ID.".into())
 }
 
+pub fn parse_google_drive_resumable_session_output(output: &str) -> Result<String, String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if !(200..300).contains(&status_code) {
+        return Err(build_upload_error(
+            "Google Drive upload session",
+            status_code,
+            body,
+        ));
+    }
+    google_drive_location_header(body)
+        .ok_or_else(|| "Google Drive did not return an upload session URL.".into())
+}
+
 pub fn parse_google_drive_permission_output(
     output: &str,
     file_id: &str,
@@ -1762,14 +1855,9 @@ fn google_drive_multipart_body(
     settings: &UploadSettings,
     boundary: &str,
 ) -> Result<Vec<u8>, String> {
-    let file_name = upload_file_name(file_path)?;
     let file_body = std::fs::read(file_path)
         .map_err(|error| format!("Google Drive upload could not read file: {error}"))?;
-    let mut metadata = serde_json::json!({ "name": file_name });
-    let folder = settings.google_drive_folder_id.trim();
-    if !folder.is_empty() {
-        metadata["parents"] = serde_json::json!([folder]);
-    }
+    let metadata = google_drive_metadata(file_path, settings)?;
 
     let mut body = Vec::new();
     body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
@@ -1786,11 +1874,37 @@ fn google_drive_multipart_body(
     Ok(body)
 }
 
+fn google_drive_metadata(file_path: &Path, settings: &UploadSettings) -> Result<Value, String> {
+    let file_name = upload_file_name(file_path)?;
+    let mut metadata = serde_json::json!({ "name": file_name });
+    let folder = settings.google_drive_folder_id.trim();
+    if !folder.is_empty() {
+        metadata["parents"] = serde_json::json!([folder]);
+    }
+    Ok(metadata)
+}
+
 fn google_drive_file_url(file_id: &str) -> String {
     format!(
         "https://drive.google.com/file/d/{}/view",
         percent_encode_path_component(file_id.trim())
     )
+}
+
+fn google_drive_location_header(output_with_headers: &str) -> Option<String> {
+    output_with_headers.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if name.trim().eq_ignore_ascii_case("location") {
+            let value = value.trim();
+            if value.starts_with("https://") || value.starts_with("http://") {
+                Some(value.into())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    })
 }
 
 fn upload_content_type(file_path: &Path) -> &'static str {
@@ -2901,6 +3015,7 @@ mod tests {
         };
         let plan = build_google_drive_curl_upload_plan(&path, &settings).expect("build drive plan");
 
+        assert_eq!(plan.kind, GoogleDriveUploadPlanKind::Multipart);
         assert!(plan
             .upload
             .args
@@ -2924,6 +3039,53 @@ mod tests {
             .expect("utf8 permission body");
         assert!(body.contains("\"role\":\"reader\""));
         assert!(body.contains("\"type\":\"anyone\""));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn builds_google_drive_resumable_upload_plan_for_large_files() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-drive-resumable-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let path = root.join("large.mp4");
+        fs::write(&path, vec![0_u8; (5 * MIB + 1) as usize]).expect("write upload file");
+
+        let settings = UploadSettings {
+            google_drive_access_token: "drive-token".into(),
+            ..UploadSettings::default()
+        };
+        let plan = build_google_drive_curl_upload_plan(&path, &settings)
+            .expect("build resumable drive plan");
+
+        assert_eq!(plan.kind, GoogleDriveUploadPlanKind::Resumable);
+        assert!(plan.upload.args.contains(&"--dump-header".into()));
+        assert!(plan
+            .upload
+            .args
+            .contains(&"X-Upload-Content-Type: video/mp4".into()));
+        assert!(plan
+            .upload
+            .args
+            .contains(&format!("X-Upload-Content-Length: {}", 5 * MIB + 1)));
+        assert!(plan.upload.args.contains(
+            &"https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id"
+                .into()
+        ));
+
+        let resumable = build_google_drive_resumable_upload_request(
+            "https://upload.example.test/session",
+            &path,
+        )
+        .expect("build upload request");
+        assert!(resumable.args.contains(&"PUT".into()));
+        assert!(resumable.args.contains(&"Content-Type: video/mp4".into()));
+        assert!(resumable
+            .args
+            .contains(&"https://upload.example.test/session".into()));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -3071,6 +3233,13 @@ mod tests {
             )
             .expect("parse drive file id"),
             "drive-file-id"
+        );
+        assert_eq!(
+            parse_google_drive_resumable_session_output(
+                "HTTP/2 200\r\nLocation: https://upload.example.test/session\r\n\r\n\n200",
+            )
+            .expect("parse drive session location"),
+            "https://upload.example.test/session"
         );
         assert_eq!(
             parse_google_drive_permission_output(

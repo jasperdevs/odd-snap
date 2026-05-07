@@ -2928,8 +2928,22 @@ fn run_google_drive_curl_upload(
 ) -> Result<oddsnap_core::UploadSuccess, String> {
     let plan = oddsnap_core::build_google_drive_curl_upload_plan(path, settings)?;
     let (upload_stdout, upload_stderr) = run_curl_request(&plan.upload)?;
-    let file_id = oddsnap_core::parse_google_drive_upload_file_id(&upload_stdout)
-        .map_err(|error| append_curl_stderr(error, &upload_stderr))?;
+    let file_id = match plan.kind {
+        oddsnap_core::GoogleDriveUploadPlanKind::Multipart => {
+            oddsnap_core::parse_google_drive_upload_file_id(&upload_stdout)
+                .map_err(|error| append_curl_stderr(error, &upload_stderr))?
+        }
+        oddsnap_core::GoogleDriveUploadPlanKind::Resumable => {
+            let session_url =
+                oddsnap_core::parse_google_drive_resumable_session_output(&upload_stdout)
+                    .map_err(|error| append_curl_stderr(error, &upload_stderr))?;
+            let resumable =
+                oddsnap_core::build_google_drive_resumable_upload_request(&session_url, path)?;
+            let (resumable_stdout, resumable_stderr) = run_curl_request(&resumable)?;
+            oddsnap_core::parse_google_drive_upload_file_id(&resumable_stdout)
+                .map_err(|error| append_curl_stderr(error, &resumable_stderr))?
+        }
+    };
     let permission = oddsnap_core::build_google_drive_permission_request(&file_id, settings)?;
     let (permission_stdout, permission_stderr) = run_curl_request(&permission)?;
     oddsnap_core::parse_google_drive_permission_output(&permission_stdout, &file_id)

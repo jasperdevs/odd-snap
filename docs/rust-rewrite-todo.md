@@ -170,8 +170,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed Immich uploads with imported base URL/API key settings and legacy multipart metadata fields.
 - [x] Curl-backed Dropbox upload/share-link flow with imported access token/path-prefix settings and existing-link fallback.
 - [x] Curl-backed OneDrive upload/create-link flow with imported access token/folder settings.
-- [x] Curl-backed Google Drive multipart upload/permission flow for files up to 5MB with imported access token/folder settings.
-- [ ] Google Drive resumable uploads for files over 5MB.
+- [x] Curl-backed Google Drive multipart/resumable upload and permission flow with imported access token/folder settings.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.
