@@ -249,6 +249,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Preserve legacy advanced settings for OCR, translation, uploads, image search, tools, toast timing, styling, and custom hotkeys.
 - [x] Migration tests cover all dedicated legacy hotkey modifier/key remaps into Rust accelerator strings.
 - [x] Preserve legacy last capture mode and toast button layout metadata in Rust settings.
+- [x] Migration tests pin weak-but-intentional legacy mappings for toast layout, open-with key casing, unsupported hotkeys, and enum-ish settings.
 - [ ] Import all existing settings.
 - [x] Import existing history.
 - [x] Import existing color history.

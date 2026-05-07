@@ -1574,6 +1574,65 @@ mod tests {
     }
 
     #[test]
+    fn pins_weak_legacy_settings_mappings_without_dropping_raw_intent() {
+        let import = super::LegacySettingsImport {
+            source_path: PathBuf::from("settings.json"),
+            top_level_key_count: 10,
+            raw: serde_json::json!({
+                "ToastButtons": {
+                    "ShowClose": false,
+                    "CloseSlot": 5,
+                    "ShowPin": true,
+                    "PinSlot": 1,
+                    "ShowAiRedirect": true,
+                    "AiRedirectSlot": 4
+                },
+                "OpenWithApps": {
+                    "Paint": "mspaint.exe",
+                    "paint": "classic-paint.exe",
+                    "Empty": ""
+                },
+                "HotkeyModifiers": 1,
+                "HotkeyKey": 999,
+                "WindowDetection": 2,
+                "CaptureDockSide": " Bottom ",
+                "ScrollingCaptureMode": 1,
+                "CenterSelectionAspectRatio": " Square ",
+                "HistoryRetention": 2,
+                "ImageUploadDestination": " Catbox "
+            }),
+        };
+
+        let settings = import_app_settings(&import);
+        let toast_buttons = settings
+            .toast_button_layout
+            .as_ref()
+            .expect("toast button layout should preserve raw legacy object");
+
+        assert_eq!(toast_buttons["ShowClose"], false);
+        assert_eq!(toast_buttons["CloseSlot"], 5);
+        assert_eq!(toast_buttons["ShowAiRedirect"], true);
+        assert_eq!(toast_buttons["AiRedirectSlot"], 4);
+        assert_eq!(settings.open_with_apps.len(), 2);
+        assert_eq!(
+            settings.open_with_apps.get("Paint").map(String::as_str),
+            Some("mspaint.exe")
+        );
+        assert_eq!(
+            settings.open_with_apps.get("paint").map(String::as_str),
+            Some("classic-paint.exe")
+        );
+        assert!(!settings.open_with_apps.contains_key("Empty"));
+        assert_eq!(settings.capture_hotkey, "Alt+`");
+        assert_eq!(settings.window_detection, "2");
+        assert_eq!(settings.capture_dock_side, "Bottom");
+        assert_eq!(settings.scrolling_capture_mode, "1");
+        assert_eq!(settings.center_selection_aspect_ratio, "Square");
+        assert_eq!(settings.history_retention, "2");
+        assert_eq!(settings.image_upload_destination, "Catbox");
+    }
+
+    #[test]
     fn imports_capture_preference_numbers_and_clamps_ui_values() {
         let import = super::LegacySettingsImport {
             source_path: PathBuf::from("settings.json"),
