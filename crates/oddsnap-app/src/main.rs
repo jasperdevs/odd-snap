@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use gpui::prelude::FluentBuilder;
@@ -18,16 +18,17 @@ use gpui::{
 };
 use gpui_platform::application;
 use oddsnap_core::{
-    build_available_capture_path, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
-    default_history_path, default_image_search_index_path, default_settings_path,
-    discover_ffmpeg_tools, format_file_name_template, history_entry_can_be_image_indexed,
-    image_search_record_matches_history_entry, pending_image_search_record_from_history_entry,
-    retain_indexed_image_paths, upsert_image_search_record, AiChatProvider, AppSettings,
-    CapabilityState, CaptureImageFormat, ColorHistoryEntry, DefaultCaptureMode,
-    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
-    ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchSources,
-    OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore,
-    TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
+    apply_image_search_ocr_error, apply_image_search_ocr_success, build_available_capture_path,
+    build_video_thumbnail_args, build_video_thumbnail_fallback_args, default_history_path,
+    default_image_search_index_path, default_settings_path, discover_ffmpeg_tools,
+    format_file_name_template, history_entry_can_be_image_indexed,
+    image_search_record_matches_history_entry, image_search_record_needs_ocr,
+    pending_image_search_record_from_history_entry, retain_indexed_image_paths,
+    upsert_image_search_record, AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat,
+    ColorHistoryEntry, DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex,
+    HistoryKind, HistoryStore, ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore,
+    ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
+    SettingsStore, TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
@@ -195,6 +196,15 @@ struct RecordingStart {
     height: u32,
     target: RecordingTarget,
     note: Option<&'static str>,
+}
+
+#[derive(Default)]
+struct ImageSearchOcrHydrationSummary {
+    attempted: usize,
+    indexed: usize,
+    empty: usize,
+    failed: usize,
+    skipped: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -1050,6 +1060,7 @@ impl OddSnapRustApp {
                         ),
                         SettingsAction::ToggleImageSearchDiagnostics,
                     ))
+                    .child(self.image_search_index_ocr_button(cx))
                     .child(self.settings_button(
                         cx,
                         "image-search-hide-button",
@@ -1211,6 +1222,19 @@ impl OddSnapRustApp {
                 this.apply_settings_action(action);
                 cx.notify();
             }))
+    }
+
+    fn image_search_index_ocr_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("image-search-index-ocr-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Index OCR")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.hydrate_image_search_ocr();
+            cx.notify();
+        }))
     }
 
     fn open_history_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
@@ -1941,6 +1965,92 @@ impl OddSnapRustApp {
             Ok(()) => format!("{message}."),
             Err(error) => format!("Settings save failed: {error}"),
         };
+    }
+
+    fn hydrate_image_search_ocr(&mut self) {
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.hydrate_image_search_ocr_with_adapter(&adapter)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.hydrate_image_search_ocr_with_adapter(&adapter)
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.hydrate_image_search_ocr_with_adapter(&adapter)
+        };
+
+        self.capture_status = match result {
+            Ok(summary) => image_search_ocr_hydration_status(&summary),
+            Err(error) => format!("Image OCR indexing failed: {error}"),
+        };
+    }
+
+    fn hydrate_image_search_ocr_with_adapter<T>(
+        &mut self,
+        adapter: &T,
+    ) -> Result<ImageSearchOcrHydrationSummary, String>
+    where
+        T: OcrTextService,
+    {
+        let mut index = self
+            .image_search_index_store
+            .load_or_default()
+            .map_err(|error| error.to_string())?;
+        let now = app_unix_millis_now();
+        let mut summary = ImageSearchOcrHydrationSummary::default();
+
+        for record in &mut index.records {
+            if !image_search_record_needs_ocr(record, now) {
+                summary.skipped += 1;
+                continue;
+            }
+
+            summary.attempted += 1;
+            record.ocr_language_tag = self.settings.ocr_language_tag.clone();
+            if !record.file_path.exists() {
+                apply_image_search_ocr_error(record, "indexed image file no longer exists", now);
+                summary.failed += 1;
+                continue;
+            }
+
+            match adapter.recognize_text(OcrTextRequest {
+                image_path: record.file_path.clone(),
+                language_tag: record.ocr_language_tag.clone(),
+            }) {
+                Ok(result) => {
+                    let text = result.text.trim().to_string();
+                    if text.is_empty() {
+                        summary.empty += 1;
+                    } else {
+                        summary.indexed += 1;
+                    }
+                    apply_image_search_ocr_success(record, text, result.engine_id, now);
+                }
+                Err(error) => {
+                    apply_image_search_ocr_error(record, error.to_string(), now);
+                    summary.failed += 1;
+                }
+            }
+        }
+
+        self.image_search_index_store
+            .save(&index)
+            .map_err(|error| error.to_string())?;
+        self.image_search_index_status = image_search_index_status(&index);
+
+        let history_index = self
+            .history_store
+            .load_or_default()
+            .map_err(|error| error.to_string())?;
+        self.refresh_capture_history(history_index);
+        Ok(summary)
     }
 
     fn open_history_path(&mut self, path: PathBuf) {
@@ -3371,6 +3481,20 @@ fn image_search_index_status_with_counts(
     }
 }
 
+fn image_search_ocr_hydration_status(summary: &ImageSearchOcrHydrationSummary) -> String {
+    if summary.attempted == 0 {
+        return format!(
+            "Image OCR index already current; {} records skipped.",
+            summary.skipped
+        );
+    }
+
+    format!(
+        "Image OCR index refreshed: {} with text, {} empty, {} failed, {} skipped.",
+        summary.indexed, summary.empty, summary.failed, summary.skipped
+    )
+}
+
 fn file_name_for_path(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
@@ -3821,6 +3945,13 @@ fn stable_text_key(text: &str) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{hash:016x}")
+}
+
+fn app_unix_millis_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64)
+        .unwrap_or_default()
 }
 
 fn run_ffmpeg_thumbnail(ffmpeg: &Path, args: Vec<String>, output_path: &Path) -> bool {

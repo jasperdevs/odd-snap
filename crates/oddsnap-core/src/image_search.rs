@@ -185,6 +185,51 @@ pub fn image_search_record_matches_history_entry(
         && record.last_write_time_unix_ms > 0
 }
 
+pub fn image_search_record_needs_ocr(record: &ImageSearchIndexRecord, now_unix_ms: u64) -> bool {
+    if record.ocr_completed && record.ocr_state == ImageSearchOcrState::Indexed {
+        return false;
+    }
+
+    record.next_ocr_retry_unix_ms == 0 || record.next_ocr_retry_unix_ms <= now_unix_ms
+}
+
+pub fn apply_image_search_ocr_success(
+    record: &mut ImageSearchIndexRecord,
+    text: impl Into<String>,
+    engine_id: impl Into<String>,
+    indexed_at_unix_ms: u64,
+) {
+    record.ocr_text = text.into();
+    record.ocr_engine_id = engine_id.into();
+    record.ocr_completed = true;
+    record.ocr_state = ImageSearchOcrState::Indexed;
+    record.ocr_retry_count = 0;
+    record.next_ocr_retry_unix_ms = 0;
+    record.indexed_at_unix_ms = indexed_at_unix_ms;
+    record.last_error.clear();
+}
+
+pub fn apply_image_search_ocr_error(
+    record: &mut ImageSearchIndexRecord,
+    error: impl Into<String>,
+    indexed_at_unix_ms: u64,
+) {
+    record.ocr_completed = false;
+    record.ocr_retry_count = record.ocr_retry_count.saturating_add(1);
+    record.ocr_state = if record.ocr_retry_count >= 3 {
+        ImageSearchOcrState::Failed
+    } else {
+        ImageSearchOcrState::RetryableError
+    };
+    record.next_ocr_retry_unix_ms = if record.ocr_state == ImageSearchOcrState::Failed {
+        0
+    } else {
+        indexed_at_unix_ms.saturating_add(5 * 60 * 1000)
+    };
+    record.indexed_at_unix_ms = indexed_at_unix_ms;
+    record.last_error = error.into();
+}
+
 pub fn pending_image_search_record_from_history_entry(
     entry: &HistoryEntry,
     ocr_language_tag: &str,
@@ -904,5 +949,46 @@ mod tests {
         assert!(history_entry_can_be_image_indexed(&entry));
         assert!(image_search_record_matches_history_entry(&record, &entry));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn image_search_ocr_success_marks_record_searchable() {
+        let mut record = indexed_record();
+        record.ocr_completed = false;
+        record.ocr_state = ImageSearchOcrState::Pending;
+        record.ocr_text.clear();
+        record.ocr_engine_id = "pending".into();
+
+        apply_image_search_ocr_success(&mut record, "Settings window", "tesseract-cli", 42);
+
+        assert!(record.ocr_completed);
+        assert_eq!(record.ocr_state, ImageSearchOcrState::Indexed);
+        assert_eq!(record.ocr_retry_count, 0);
+        assert_eq!(record.next_ocr_retry_unix_ms, 0);
+        assert_eq!(record.ocr_text, "Settings window");
+        assert_eq!(record.ocr_engine_id, "tesseract-cli");
+        assert_eq!(record.indexed_at_unix_ms, 42);
+        assert!(record.last_error.is_empty());
+    }
+
+    #[test]
+    fn image_search_ocr_error_retries_then_fails() {
+        let mut record = indexed_record();
+        record.ocr_completed = false;
+        record.ocr_state = ImageSearchOcrState::Pending;
+
+        apply_image_search_ocr_error(&mut record, "missing engine", 100);
+        assert_eq!(record.ocr_retry_count, 1);
+        assert_eq!(record.ocr_state, ImageSearchOcrState::RetryableError);
+        assert_eq!(record.next_ocr_retry_unix_ms, 300100);
+        assert!(image_search_record_needs_ocr(&record, 300100));
+
+        apply_image_search_ocr_error(&mut record, "still missing", 200);
+        apply_image_search_ocr_error(&mut record, "still missing", 300);
+
+        assert_eq!(record.ocr_retry_count, 3);
+        assert_eq!(record.ocr_state, ImageSearchOcrState::Failed);
+        assert_eq!(record.next_ocr_retry_unix_ms, 0);
+        assert_eq!(record.last_error, "still missing");
     }
 }
