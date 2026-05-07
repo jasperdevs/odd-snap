@@ -267,8 +267,9 @@ fn run_linux_screenshot(
     }
 
     Err(PlatformError::Failed(format!(
-        "no Linux screenshot command succeeded: {}",
-        errors.join("; ")
+        "no Linux screenshot command succeeded: {}; {}",
+        errors.join("; "),
+        linux_capture_backend_status()
     )))
 }
 
@@ -330,6 +331,38 @@ fn linux_screenshot_commands(
             ),
         ],
     }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_capture_backend_status() -> String {
+    linux_capture_backend_plan(
+        std::env::var("XDG_SESSION_TYPE").ok().as_deref(),
+        std::env::var("DISPLAY").ok().as_deref(),
+        std::env::var("WAYLAND_DISPLAY").ok().as_deref(),
+    )
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_capture_backend_plan(
+    session_type: Option<&str>,
+    display: Option<&str>,
+    wayland_display: Option<&str>,
+) -> String {
+    let session_type = session_type.unwrap_or_default().trim();
+    let display = display.unwrap_or_default().trim();
+    let wayland_display = wayland_display.unwrap_or_default().trim();
+
+    if session_type.eq_ignore_ascii_case("wayland")
+        || (!wayland_display.is_empty() && display.is_empty())
+    {
+        return "Linux capture backend plan: Wayland uses grim/slurp first; desktop portal capture is still planned for environments without those tools.".into();
+    }
+
+    if !display.is_empty() {
+        return "Linux capture backend plan: X11 uses gnome-screenshot/spectacle/scrot for full screen, scrot for region fallback, and slop for interactive region selection.".into();
+    }
+
+    "Linux capture backend plan: no desktop session detected; install/use grim+slurp on Wayland or X11 screenshot tools with DISPLAY.".into()
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -1399,6 +1432,22 @@ mod tests {
                     "/tmp/oddsnap-test.png".into()
                 ]
             )
+        );
+    }
+
+    #[test]
+    fn linux_capture_backend_plan_reports_wayland_x11_and_headless_paths() {
+        assert_eq!(
+            super::linux_capture_backend_plan(Some("wayland"), Some(":1"), Some("wayland-0")),
+            "Linux capture backend plan: Wayland uses grim/slurp first; desktop portal capture is still planned for environments without those tools."
+        );
+        assert_eq!(
+            super::linux_capture_backend_plan(Some("x11"), Some(":0"), None),
+            "Linux capture backend plan: X11 uses gnome-screenshot/spectacle/scrot for full screen, scrot for region fallback, and slop for interactive region selection."
+        );
+        assert_eq!(
+            super::linux_capture_backend_plan(None, None, None),
+            "Linux capture backend plan: no desktop session detected; install/use grim+slurp on Wayland or X11 screenshot tools with DISPLAY."
         );
     }
 

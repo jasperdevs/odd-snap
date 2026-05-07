@@ -61,7 +61,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] macOS monitor enumeration foundation through AppKit/JXA.
 - [x] macOS active-window bounds discovery foundation through `osascript`/System Events.
 - [x] macOS native interactive rectangle/window selection foundation through `screencapture -i`.
-- [ ] Linux portal-aware screen capture plan.
+- [x] Linux portal-aware screen capture plan is explicit in screenshot failure status: Wayland prefers grim/slurp, X11 prefers established screenshot tools, and desktop portal capture remains the fallback plan for environments without those tools.
 - [x] Linux tray/appindicator status icon and menu foundation.
 - [x] Linux app-level X11 global hotkey listener foundation.
 - [x] Linux hotkey startup blocks Wayland/headless sessions with explicit guidance instead of attempting the X11 path.
