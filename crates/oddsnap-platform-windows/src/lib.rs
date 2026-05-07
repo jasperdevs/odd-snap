@@ -38,7 +38,15 @@ use std::{
 #[cfg(target_os = "windows")]
 use windows::core::PCWSTR;
 #[cfg(target_os = "windows")]
-use windows::core::{w, BOOL};
+use windows::core::{w, BOOL, HSTRING};
+#[cfg(target_os = "windows")]
+use windows::Globalization::Language;
+#[cfg(target_os = "windows")]
+use windows::Graphics::Imaging::BitmapDecoder;
+#[cfg(target_os = "windows")]
+use windows::Media::Ocr::OcrEngine;
+#[cfg(target_os = "windows")]
+use windows::Storage::{FileAccessMode, StorageFile};
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{
     COLORREF, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
@@ -497,7 +505,15 @@ impl OcrTextService for WindowsPlatform {
     fn recognize_text(&self, request: OcrTextRequest) -> Result<OcrTextResult, PlatformError> {
         #[cfg(target_os = "windows")]
         {
-            oddsnap_platform::recognize_text_with_tesseract(&request)
+            match recognize_text_with_windows_ocr(&request) {
+                Ok(result) => Ok(result),
+                Err(windows_error) => oddsnap_platform::recognize_text_with_tesseract(&request)
+                    .map_err(|tesseract_error| {
+                        PlatformError::Failed(format!(
+                            "Windows OCR failed: {windows_error}; tesseract fallback failed: {tesseract_error}"
+                        ))
+                    }),
+            }
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -508,6 +524,72 @@ impl OcrTextService for WindowsPlatform {
             ))
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn recognize_text_with_windows_ocr(
+    request: &OcrTextRequest,
+) -> Result<OcrTextResult, PlatformError> {
+    let file =
+        StorageFile::GetFileFromPathAsync(&HSTRING::from(request.image_path.display().to_string()))
+            .and_then(|operation| operation.get())
+            .map_err(|source| {
+                PlatformError::Failed(format!("failed to open image for Windows OCR: {source}"))
+            })?;
+    let stream = file
+        .OpenAsync(FileAccessMode::Read)
+        .and_then(|operation| operation.get())
+        .map_err(|source| {
+            PlatformError::Failed(format!("failed to read image for Windows OCR: {source}"))
+        })?;
+    let decoder = BitmapDecoder::CreateAsync(&stream)
+        .and_then(|operation| operation.get())
+        .map_err(|source| {
+            PlatformError::Failed(format!("failed to decode image for Windows OCR: {source}"))
+        })?;
+    let bitmap = decoder
+        .GetSoftwareBitmapAsync()
+        .and_then(|operation| operation.get())
+        .map_err(|source| {
+            PlatformError::Failed(format!("failed to build Windows OCR bitmap: {source}"))
+        })?;
+    let engine = windows_ocr_engine(&request.language_tag)?;
+    let result = engine
+        .RecognizeAsync(&bitmap)
+        .and_then(|operation| operation.get())
+        .map_err(|source| {
+            PlatformError::Failed(format!("Windows OCR recognition failed: {source}"))
+        })?;
+    let text = result
+        .Text()
+        .map_err(|source| {
+            PlatformError::Failed(format!("Windows OCR result read failed: {source}"))
+        })?
+        .to_string();
+
+    Ok(OcrTextResult {
+        text: text.trim().into(),
+        engine_id: "winocr-v1".into(),
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn windows_ocr_engine(language_tag: &str) -> Result<OcrEngine, PlatformError> {
+    let tag = language_tag.trim();
+    if !tag.is_empty() && !tag.eq_ignore_ascii_case("auto") {
+        if let Ok(language) = Language::CreateLanguage(&HSTRING::from(tag)) {
+            let supported = OcrEngine::IsLanguageSupported(&language).unwrap_or(false);
+            if supported {
+                if let Ok(engine) = OcrEngine::TryCreateFromLanguage(&language) {
+                    return Ok(engine);
+                }
+            }
+        }
+    }
+
+    OcrEngine::TryCreateFromUserProfileLanguages().map_err(|source| {
+        PlatformError::Failed(format!("Windows OCR engine unavailable: {source}"))
+    })
 }
 
 impl ColorPickerService for WindowsPlatform {

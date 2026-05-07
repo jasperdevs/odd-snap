@@ -149,8 +149,9 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] OCR.
 - [x] Core OCR line-layout text formatter ported from the legacy Windows OCR result flow.
 - [x] Cross-platform OCR service boundary and Tesseract CLI runtime foundation wired into OCR button, hotkey, tray/menu, and default-capture flow.
+- [x] Windows OCR adapter now tries native WinRT OCR before falling back to Tesseract.
 - [x] Rust OCR text history persistence and recent text copy actions.
-- [ ] Native Windows WinRT OCR, macOS Vision OCR, language discovery/install status, result window, translation actions, sound/toast polish, and production cleanup.
+- [ ] macOS Vision OCR, language discovery/install status, result window, translation polish, sound/toast polish, and production cleanup.
 - [ ] Translation.
 - [x] Core translation model, supported-language normalization, source/target resolution, and runtime configuration error rules ported from legacy.
 - [x] Google Translate API curl request/response path wired to recent OCR text rows when a migrated API key is present.

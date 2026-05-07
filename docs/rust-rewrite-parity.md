@@ -122,7 +122,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust can run the curl-backed Google Drive multipart/resumable upload and public-reader permission flow from imported access token/folder settings.
 - Rust preserves the legacy transfer.sh behavior as an explicit unavailable-provider error instead of attempting a broken public service.
 - Rust core now ports the legacy OCR line-layout formatter that orders recognized lines, preserves paragraph gaps, and retains indentation in copied/viewed text.
-- Rust now has a cross-platform OCR service boundary backed by a Tesseract CLI runtime foundation, with OCR button, hotkey, tray/menu, and default-capture routing plus persisted recent text history.
+- Rust now has a cross-platform OCR service boundary backed by native Windows WinRT OCR with Tesseract fallback and Tesseract CLI foundations on macOS/Linux, with OCR button, hotkey, tray/menu, and default-capture routing plus persisted recent text history.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Recent OCR text rows can run the Google Translate API path through curl when a migrated API key is present, then copy the translated text.
 - Rust core now ports the legacy image-search query matcher for normalization, file-name/OCR source filtering, scoring, exact-match behavior, and newest-first tie-breaking.
@@ -138,7 +138,7 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, native WinRT/Vision OCR engines, OCR result window, Argos/open-source local translation runtime execution, automatic OCR-backed image-search hydration/background workers/reindex progress, full history actions, local runtimes, release packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS Vision OCR, OCR result window, Argos/open-source local translation runtime execution, automatic OCR-backed image-search hydration/background workers/reindex progress, full history actions, local runtimes, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation, but scroll capture still reports pending status until that backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS and scroll capture still reports pending status until that backend lands.
