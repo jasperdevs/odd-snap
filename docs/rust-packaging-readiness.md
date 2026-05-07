@@ -26,6 +26,7 @@ Ubuntu runners need native desktop libraries before the GPUI app and future appi
 Current Linux runtime foundations also expect optional host tools for feature use:
 
 - still capture: `grim`, `gnome-screenshot`, `spectacle`, or `scrot`
+- region selection: `slurp` on Wayland or `slop` on X11
 - X11 active window and color picker: `xdotool`
 - X11 monitor geometry: `xrandr`
 - clipboard: `wl-copy`, `xclip`, or `xsel`

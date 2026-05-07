@@ -24,10 +24,10 @@ use oddsnap_core::{
     PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore,
 };
 use oddsnap_platform::{
-    default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRequest,
-    ClipboardImageService, ClipboardTextService, ColorPickerService, OverlayWindowRequest,
-    PlatformAdapter, RegionSelectionService, ScreenCaptureService, VideoRecordingHandle,
-    VideoRecordingRequest, VideoRecordingService, WindowPickerService,
+    default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
+    CaptureRequest, ClipboardImageService, ClipboardTextService, ColorPickerService,
+    OverlayWindowRequest, PlatformAdapter, RegionSelectionService, ScreenCaptureService,
+    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
 };
 
 fn main() {
@@ -1068,12 +1068,23 @@ impl OddSnapRustApp {
     {
         let capture = match mode {
             CaptureMode::Rectangle => {
-                let monitors = adapter.monitors()?;
-                let bounds = virtual_screen_region(&monitors).ok_or_else(|| {
-                    oddsnap_platform::PlatformError::Failed(
-                        "no monitors available for region selection".into(),
-                    )
-                })?;
+                let bounds = match adapter.monitors() {
+                    Ok(monitors) => virtual_screen_region(&monitors).ok_or_else(|| {
+                        oddsnap_platform::PlatformError::Failed(
+                            "no monitors available for region selection".into(),
+                        )
+                    })?,
+                    Err(error) if host_platform().name() == "Linux" => {
+                        let _ = error;
+                        CaptureRegion {
+                            x: 0,
+                            y: 0,
+                            width: 1,
+                            height: 1,
+                        }
+                    }
+                    Err(error) => return Err(error),
+                };
                 match adapter.select_region(OverlayWindowRequest {
                     bounds,
                     opacity: 24,

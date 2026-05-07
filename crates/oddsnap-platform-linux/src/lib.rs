@@ -36,7 +36,10 @@ impl PlatformAdapter for LinuxPlatform {
                     PlatformCapability::ScreenCapture,
                     CapabilityState::InProgress,
                 ),
-                (PlatformCapability::RegionOverlay, CapabilityState::Planned),
+                (
+                    PlatformCapability::RegionOverlay,
+                    CapabilityState::InProgress,
+                ),
                 (
                     PlatformCapability::WindowCapture,
                     CapabilityState::InProgress,
@@ -624,11 +627,95 @@ impl RegionSelectionService for LinuxPlatform {
         &self,
         request: OverlayWindowRequest,
     ) -> Result<Option<CaptureRegion>, PlatformError> {
-        let _ = request;
-        Err(PlatformError::Unsupported(
-            "Linux region selection is not implemented yet",
-        ))
+        #[cfg(target_os = "linux")]
+        {
+            run_linux_region_selection(&request)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "Linux region selection is only available on Linux",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn run_linux_region_selection(
+    request: &OverlayWindowRequest,
+) -> Result<Option<CaptureRegion>, PlatformError> {
+    let mut errors = Vec::new();
+
+    for (program, args) in linux_region_selection_commands(request) {
+        match Command::new(program).args(&args).output() {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if stdout.trim().is_empty() {
+                    return Ok(None);
+                }
+                return parse_linux_region_selection(stdout.trim()).map(Some);
+            }
+            Ok(output) => errors.push(format!("{program} exited with status {}", output.status)),
+            Err(error) => errors.push(format!("{program}: {error}")),
+        }
+    }
+
+    Err(PlatformError::Failed(format!(
+        "no Linux region selector command succeeded: {}",
+        errors.join("; ")
+    )))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_region_selection_commands(
+    request: &OverlayWindowRequest,
+) -> Vec<(&'static str, Vec<String>)> {
+    let prompt = if request.detect_windows {
+        "Select window or region"
+    } else {
+        "Select region"
+    };
+    vec![
+        ("slurp", vec!["-d".into(), "-p".into(), prompt.into()]),
+        ("slop", vec!["-f".into(), "%x,%y %wx%h".into()]),
+    ]
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_linux_region_selection(selection: &str) -> Result<CaptureRegion, PlatformError> {
+    let (origin, size) = selection
+        .trim()
+        .split_once(' ')
+        .ok_or_else(|| PlatformError::Failed("region selector output missing size".into()))?;
+    let (x, y) = origin
+        .split_once(',')
+        .ok_or_else(|| PlatformError::Failed("region selector output missing origin".into()))?;
+    let (width, height) = size
+        .split_once('x')
+        .ok_or_else(|| PlatformError::Failed("region selector output missing dimensions".into()))?;
+
+    let region = CaptureRegion {
+        x: x.trim().parse::<i32>().map_err(|source| {
+            PlatformError::Failed(format!("region selector reported invalid x: {source}"))
+        })?,
+        y: y.trim().parse::<i32>().map_err(|source| {
+            PlatformError::Failed(format!("region selector reported invalid y: {source}"))
+        })?,
+        width: width.trim().parse::<u32>().map_err(|source| {
+            PlatformError::Failed(format!("region selector reported invalid width: {source}"))
+        })?,
+        height: height.trim().parse::<u32>().map_err(|source| {
+            PlatformError::Failed(format!("region selector reported invalid height: {source}"))
+        })?,
+    };
+    if region.width == 0 || region.height == 0 {
+        return Err(PlatformError::Failed(
+            "region selector reported an empty region".into(),
+        ));
+    }
+    Ok(region)
 }
 
 #[cfg(test)]
@@ -684,6 +771,18 @@ mod tests {
             adapter
                 .capabilities()
                 .state(oddsnap_core::PlatformCapability::WindowCapture),
+            oddsnap_core::CapabilityState::InProgress
+        );
+    }
+
+    #[test]
+    fn linux_region_overlay_capability_is_in_progress() {
+        let adapter = LinuxPlatform;
+
+        assert_eq!(
+            adapter
+                .capabilities()
+                .state(oddsnap_core::PlatformCapability::RegionOverlay),
             oddsnap_core::CapabilityState::InProgress
         );
     }
@@ -1033,7 +1132,8 @@ mod tests {
     }
 
     #[test]
-    fn linux_region_selection_service_is_explicitly_unimplemented() {
+    #[cfg(not(target_os = "linux"))]
+    fn linux_region_selection_service_reports_wrong_host() {
         let adapter = LinuxPlatform;
         let error = match adapter.select_region(OverlayWindowRequest {
             bounds: oddsnap_platform::CaptureRegion {
@@ -1051,6 +1151,68 @@ mod tests {
             Err(error) => error,
         };
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on Linux"));
+    }
+
+    #[test]
+    fn linux_region_selection_parser_reads_slurp_geometry() {
+        assert_eq!(
+            super::parse_linux_region_selection("-10,20 300x400").expect("parse selector geometry"),
+            oddsnap_platform::CaptureRegion {
+                x: -10,
+                y: 20,
+                width: 300,
+                height: 400,
+            }
+        );
+    }
+
+    #[test]
+    fn linux_region_selection_parser_rejects_empty_geometry() {
+        let error = super::parse_linux_region_selection("10,20 0x400")
+            .expect_err("empty selector geometry rejected");
+
+        assert!(error.to_string().contains("empty region"));
+    }
+
+    #[test]
+    fn linux_region_selection_commands_include_wayland_and_x11_tools() {
+        let commands = super::linux_region_selection_commands(&OverlayWindowRequest {
+            bounds: oddsnap_platform::CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10,
+            },
+            opacity: 1,
+            click_through: false,
+            show_crosshair_guides: false,
+            detect_windows: true,
+        });
+
+        assert_eq!(commands[0].0, "slurp");
+        assert_eq!(commands[1].0, "slop");
+    }
+
+    #[test]
+    #[ignore = "opens an interactive local Linux region selector through slurp or slop"]
+    #[cfg(target_os = "linux")]
+    fn linux_region_selection_can_select_region() {
+        let adapter = LinuxPlatform;
+
+        let _ = adapter
+            .select_region(OverlayWindowRequest {
+                bounds: oddsnap_platform::CaptureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 1,
+                    height: 1,
+                },
+                opacity: 1,
+                click_through: false,
+                show_crosshair_guides: false,
+                detect_windows: false,
+            })
+            .expect("select region");
     }
 }

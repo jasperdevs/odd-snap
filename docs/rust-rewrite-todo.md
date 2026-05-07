@@ -54,6 +54,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Linux explicit unsupported capture/clipboard adapter surfaces.
 - [x] Linux X11 monitor enumeration foundation through `xrandr`.
 - [x] Linux command-backed still screenshot capture foundation.
+- [x] Linux command-backed interactive region selection foundation through `slurp`/`slop`.
 - [x] Linux X11 active-window discovery foundation through `xdotool`.
 - [x] Linux X11 color picker foundation through cursor coordinate screenshot sampling.
 

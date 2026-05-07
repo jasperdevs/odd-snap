@@ -19,6 +19,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS has command-backed active-window bounds discovery through `osascript`/System Events, so active-window capture can reuse the `screencapture -R` region path when Accessibility and Screen & System Audio Recording permissions are granted.
 - Linux has an X11 monitor-enumeration foundation through `xrandr --query`, including multi-monitor and negative-offset virtual desktop geometry.
 - Linux has command-backed still-capture foundations for common screenshot tools (`grim`, `gnome-screenshot`, `spectacle`, or `scrot`).
+- Linux has command-backed interactive region selection through `slurp` on Wayland and `slop` on X11; the GPUI Region action can fall back to those selectors even when `xrandr` monitor enumeration is unavailable.
 - Linux has an X11 active-window discovery foundation through `xdotool`; active-window capture can reuse the command-backed region screenshot path when `xdotool` and a screenshot backend are available.
 - Linux has an X11 color-picker foundation through `xdotool` cursor coordinates plus a 1x1 screenshot sample, and the GPUI color action routes to that adapter on Linux.
 - GPUI shell can invoke the Windows capture service through a local smoke action.
