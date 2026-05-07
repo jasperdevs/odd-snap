@@ -607,10 +607,77 @@ fn copy_text_to_macos_clipboard(text: &str) -> Result<(), PlatformError> {
 
 impl ColorPickerService for MacosPlatform {
     fn sample_cursor_color(&self) -> Result<ColorSample, PlatformError> {
-        Err(PlatformError::Unsupported(
-            "macOS color picker is not implemented yet",
-        ))
+        #[cfg(target_os = "macos")]
+        {
+            run_macos_color_picker()
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            Err(PlatformError::Unsupported(
+                "macOS color picker is only available on macOS",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn run_macos_color_picker() -> Result<ColorSample, PlatformError> {
+    let cursor = Command::new("osascript")
+        .args(macos_cursor_location_jxa_args())
+        .output()
+        .map_err(|source| PlatformError::Failed(format!("failed to start osascript: {source}")))?;
+    if !cursor.status.success() {
+        return Err(PlatformError::Failed(format!(
+            "osascript cursor location exited with status {}",
+            cursor.status
+        )));
+    }
+
+    let (x, y) = parse_macos_cursor_capture_location(&String::from_utf8_lossy(&cursor.stdout))?;
+    let capture = run_macos_screencapture(
+        Some(&CaptureRegion {
+            x,
+            y,
+            width: 1,
+            height: 1,
+        }),
+        false,
+    )?;
+    let sample = oddsnap_platform::image_file_top_left_color_sample(&capture.image_path);
+    let _ = fs::remove_file(capture.image_path);
+    sample
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_cursor_location_jxa_args() -> [&'static str; 4] {
+    [
+        "-l",
+        "JavaScript",
+        "-e",
+        "ObjC.import('AppKit'); const p = $.NSEvent.mouseLocation; const screens = $.NSScreen.screens; let selected = screens.objectAtIndex(0); for (let i = 0; i < screens.count; i++) { const screen = screens.objectAtIndex(i); const f = screen.frame; const minX = f.origin.x; const maxX = f.origin.x + f.size.width; const minY = f.origin.y; const maxY = f.origin.y + f.size.height; if (p.x >= minX && p.x < maxX && p.y >= minY && p.y < maxY) { selected = screen; break; } } const f = selected.frame; const x = Math.round(p.x); const y = Math.round((f.origin.y + f.size.height) - p.y); `${x},${y}`;",
+    ]
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_cursor_capture_location(output: &str) -> Result<(i32, i32), PlatformError> {
+    let (x, y) = output
+        .trim()
+        .split_once(',')
+        .ok_or_else(|| PlatformError::Failed("osascript cursor output missing comma".into()))?;
+
+    Ok((
+        x.trim().parse::<i32>().map_err(|source| {
+            PlatformError::Failed(format!(
+                "osascript cursor output reported invalid x: {source}"
+            ))
+        })?,
+        y.trim().parse::<i32>().map_err(|source| {
+            PlatformError::Failed(format!(
+                "osascript cursor output reported invalid y: {source}"
+            ))
+        })?,
+    ))
 }
 
 impl HotkeyService for MacosPlatform {
@@ -1032,14 +1099,51 @@ mod tests {
     }
 
     #[test]
-    fn macos_color_picker_service_is_explicitly_unimplemented() {
+    fn macos_color_picker_reports_wrong_host() {
         let adapter = MacosPlatform;
 
         let error = adapter
             .sample_cursor_color()
-            .expect_err("macOS color picker pending");
+            .expect_err("macOS color picker wrong host");
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on macOS"));
+    }
+
+    #[test]
+    fn macos_cursor_location_jxa_uses_appkit_mouse_location() {
+        let args = super::macos_cursor_location_jxa_args();
+
+        assert_eq!(args[0], "-l");
+        assert_eq!(args[1], "JavaScript");
+        assert!(args[3].contains("NSEvent.mouseLocation"));
+        assert!(args[3].contains("NSScreen.screens"));
+    }
+
+    #[test]
+    fn macos_cursor_location_parser_reads_capture_coordinates() {
+        assert_eq!(
+            super::parse_macos_cursor_capture_location("-10,42\n").expect("parse cursor location"),
+            (-10, 42)
+        );
+    }
+
+    #[test]
+    fn macos_cursor_location_parser_rejects_invalid_output() {
+        let error = super::parse_macos_cursor_capture_location("not-a-point")
+            .expect_err("invalid cursor location rejected");
+
+        assert!(error.to_string().contains("missing comma"));
+    }
+
+    #[test]
+    #[ignore = "samples one pixel at the local macOS cursor using AppKit and screencapture"]
+    #[cfg(target_os = "macos")]
+    fn macos_color_picker_can_sample_cursor_color() {
+        let adapter = MacosPlatform;
+
+        adapter
+            .sample_cursor_color()
+            .expect("sample cursor color through macOS backend");
     }
 
     #[test]

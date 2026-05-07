@@ -35,6 +35,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS can copy saved image captures to the system clipboard through `sips` TIFF normalization plus AppleScript clipboard data.
 - macOS and Linux have command-backed text clipboard adapters for copied links and color/history text.
 - Windows can sample the cursor pixel color, format it as OddSnap-compatible hex, and copy it to the clipboard from the GPUI shell or tray color picker command.
+- macOS can sample the cursor pixel color through AppKit/JXA cursor coordinates plus a 1x1 `screencapture` sample, and the GPUI color action routes to that adapter on macOS.
 - Rust history stores recent color picks separately from file-backed media history and exposes recent-color copy actions in the GPUI shell.
 - Shared capture persistence can save generated captures into a stable output directory.
 - GPUI shell exposes full-screen and active-window capture smoke controls with a local recent-captures list.

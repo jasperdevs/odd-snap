@@ -87,6 +87,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows text clipboard foundation.
 - [x] macOS/Linux command-backed text clipboard foundation.
 - [x] Windows cursor color sampling and clipboard copy foundation.
+- [x] macOS cursor color sampling and clipboard copy foundation.
+- [x] Linux cursor color sampling and clipboard copy foundation.
 - [x] Rust color history persistence and recent-color copy actions.
 - [x] Cross-platform image clipboard foundation.
 - [x] Cross-platform text clipboard.
