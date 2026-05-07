@@ -94,6 +94,21 @@ struct ActiveRecording {
 }
 
 #[derive(Clone, Copy)]
+enum RecordingTarget {
+    FullScreen,
+    ActiveWindow,
+}
+
+impl RecordingTarget {
+    fn label(self) -> &'static str {
+        match self {
+            Self::FullScreen => "desktop",
+            Self::ActiveWindow => "active window",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 enum CaptureMode {
     FullScreen,
     ActiveWindow,
@@ -337,7 +352,8 @@ impl OddSnapRustApp {
                                 "capture-window-button",
                                 CaptureMode::ActiveWindow,
                             ))
-                            .child(self.recording_button(cx)),
+                            .child(self.recording_button(cx))
+                            .child(self.recording_target_button(cx)),
                     ),
             )
             .child(
@@ -734,7 +750,34 @@ impl OddSnapRustApp {
             .child(label)
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
-                this.toggle_recording();
+                this.toggle_recording(RecordingTarget::FullScreen);
+                cx.notify();
+            }))
+    }
+
+    fn recording_target_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let label = if self.active_recording.is_some() {
+            "Window busy"
+        } else {
+            "Record window"
+        };
+
+        div()
+            .id("recording-window-button")
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(rgb(0x4f4436))
+            .bg(rgb(0x31281f))
+            .hover(|this| this.bg(rgb(0x3d3124)))
+            .px(px(10.0))
+            .py(px(6.0))
+            .text_size(px(11.0))
+            .child(label)
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                if this.active_recording.is_none() {
+                    this.start_recording(RecordingTarget::ActiveWindow);
+                }
                 cx.notify();
             }))
     }
@@ -906,7 +949,7 @@ impl OddSnapRustApp {
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Recording => {
                 self.recording_status = "Recording hotkey received.".into();
-                self.toggle_recording();
+                self.toggle_recording(RecordingTarget::FullScreen);
             }
         }
     }
@@ -949,24 +992,29 @@ impl OddSnapRustApp {
         )
     }
 
-    fn toggle_recording(&mut self) {
+    fn toggle_recording(&mut self, target: RecordingTarget) {
         if self.active_recording.is_some() {
             self.stop_recording();
         } else {
-            self.start_recording();
+            self.start_recording(target);
         }
     }
 
-    fn start_recording(&mut self) {
+    fn start_recording(&mut self, target: RecordingTarget) {
         #[cfg(target_os = "windows")]
         let result = (|| {
             let adapter = oddsnap_platform_windows::WindowsPlatform;
-            let monitors = adapter.monitors()?;
-            let region = virtual_screen_region(&monitors).ok_or_else(|| {
-                oddsnap_platform::PlatformError::Failed(
-                    "no monitors available for recording".into(),
-                )
-            })?;
+            let region = match target {
+                RecordingTarget::FullScreen => {
+                    let monitors = adapter.monitors()?;
+                    virtual_screen_region(&monitors).ok_or_else(|| {
+                        oddsnap_platform::PlatformError::Failed(
+                            "no monitors available for recording".into(),
+                        )
+                    })?
+                }
+                RecordingTarget::ActiveWindow => adapter.active_window()?.bounds,
+            };
             let output_path = self.recording_destination(region.width, region.height);
             let fps = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
                 self.settings.gif_fps
@@ -984,26 +1032,26 @@ impl OddSnapRustApp {
                 microphone_device_id: self.settings.microphone_device_id.clone(),
                 desktop_audio_device_id: self.settings.desktop_audio_device_id.clone(),
             })?;
-            Ok::<_, oddsnap_platform::PlatformError>((handle, region.width, region.height))
+            Ok::<_, oddsnap_platform::PlatformError>((handle, region.width, region.height, target))
         })();
 
         #[cfg(not(target_os = "windows"))]
         let result: Result<
-            (Box<dyn VideoRecordingHandle>, u32, u32),
+            (Box<dyn VideoRecordingHandle>, u32, u32, RecordingTarget),
             oddsnap_platform::PlatformError,
         > = Err(oddsnap_platform::PlatformError::Unsupported(
             "desktop recording is not implemented on this platform yet",
         ));
 
         self.recording_status = match result {
-            Ok((handle, width, height)) => {
+            Ok((handle, width, height, target)) => {
                 let path = handle.output_path().display().to_string();
                 self.active_recording = Some(ActiveRecording {
                     handle,
                     width,
                     height,
                 });
-                format!("Recording started: {path}")
+                format!("Recording {} started: {path}", target.label())
             }
             Err(error) => format!("Recording failed to start: {error}"),
         };
@@ -1480,5 +1528,11 @@ mod tests {
             assert_eq!(program, "xdg-open");
             assert_eq!(args, vec!["."]);
         }
+    }
+
+    #[test]
+    fn recording_target_labels_are_stable() {
+        assert_eq!(RecordingTarget::FullScreen.label(), "desktop");
+        assert_eq!(RecordingTarget::ActiveWindow.label(), "active window");
     }
 }

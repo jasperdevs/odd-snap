@@ -45,6 +45,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust core can build format-specific FFmpeg output arguments for GIF, MP4, WebM, and MKV recording targets.
 - Windows has a Rust platform service boundary for starting/stopping FFmpeg-backed desktop video recordings from the GPUI shell.
 - Windows FFmpeg recording requests can carry capture-region bounds into `gdigrab` offset/video-size arguments.
+- GPUI can start active-window recording through the explicit-region FFmpeg path.
 - Rust recording history can store FFmpeg-generated JPG thumbnails for saved GIF/video entries.
 - GPUI can persistently cycle implemented recording preferences for format and quality.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.

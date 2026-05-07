@@ -82,7 +82,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows FFmpeg-backed desktop video recording start/stop foundation.
 - [x] Windows FFmpeg recording can target an explicit capture region.
 - [ ] Region GIF recording.
-- [ ] Region MP4/WebM recording.
+- [x] GPUI active-window recording uses the explicit-region FFmpeg path.
+- [ ] Freeform region MP4/WebM recording.
 - [x] FFmpeg discovery.
 - [x] Bundled/AppData FFmpeg discovery parity before PATH fallback.
 - [x] Rust recording settings import and FFmpeg output argument model.
