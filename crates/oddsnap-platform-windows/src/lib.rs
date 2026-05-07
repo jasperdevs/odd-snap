@@ -111,6 +111,8 @@ const ACTIVE_WINDOW_HOTKEY_ID: i32 = 0x0dd9;
 #[cfg(target_os = "windows")]
 const PICKER_HOTKEY_ID: i32 = 0x0dda;
 #[cfg(target_os = "windows")]
+const OCR_HOTKEY_ID: i32 = 0x0ddb;
+#[cfg(target_os = "windows")]
 const HOTKEY_STOP_MESSAGE: u32 = WM_APP + 0x0dd5;
 #[cfg(target_os = "windows")]
 const TRAY_ICON_ID: u32 = 0x0dd5;
@@ -156,6 +158,7 @@ pub enum WindowsHotkeyEvent {
     FullScreenCapture,
     ActiveWindowCapture,
     ColorPicker,
+    Ocr,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -726,6 +729,7 @@ pub fn start_capture_and_recording_hotkey_listener(
         None,
         None,
         None,
+        None,
         events,
     )
 }
@@ -737,6 +741,7 @@ pub fn start_oddsnap_hotkey_listener(
     fullscreen_accelerator: Option<&str>,
     active_window_accelerator: Option<&str>,
     picker_accelerator: Option<&str>,
+    ocr_accelerator: Option<&str>,
     events: Sender<WindowsHotkeyEvent>,
 ) -> Result<WindowsHotkeyListener, PlatformError> {
     let capture = parse_hotkey_accelerator(capture_accelerator)?;
@@ -756,17 +761,21 @@ pub fn start_oddsnap_hotkey_listener(
         .filter(|accelerator| !accelerator.trim().is_empty())
         .map(parse_hotkey_accelerator)
         .transpose()?;
+    let ocr = ocr_accelerator
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let registrations = WindowsHotkeyRegistrations {
+        capture,
+        recording,
+        fullscreen,
+        active_window,
+        picker,
+        ocr,
+    };
     let (started_sender, started_receiver) = mpsc::sync_channel(1);
     let join_handle = thread::spawn(move || {
-        run_hotkey_message_loop(
-            capture,
-            recording,
-            fullscreen,
-            active_window,
-            picker,
-            events,
-            started_sender,
-        );
+        run_hotkey_message_loop(registrations, events, started_sender);
     });
 
     match started_receiver.recv() {
@@ -1676,12 +1685,19 @@ fn copy_wide_truncated(value: &str, destination: &mut [u16]) {
 }
 
 #[cfg(target_os = "windows")]
-fn run_hotkey_message_loop(
+#[derive(Clone, Copy, Debug)]
+struct WindowsHotkeyRegistrations {
     capture: (HOT_KEY_MODIFIERS, u32),
     recording: Option<(HOT_KEY_MODIFIERS, u32)>,
     fullscreen: Option<(HOT_KEY_MODIFIERS, u32)>,
     active_window: Option<(HOT_KEY_MODIFIERS, u32)>,
     picker: Option<(HOT_KEY_MODIFIERS, u32)>,
+    ocr: Option<(HOT_KEY_MODIFIERS, u32)>,
+}
+
+#[cfg(target_os = "windows")]
+fn run_hotkey_message_loop(
+    registrations: WindowsHotkeyRegistrations,
     events: Sender<WindowsHotkeyEvent>,
     started_sender: mpsc::SyncSender<Result<u32, String>>,
 ) {
@@ -1691,25 +1707,29 @@ fn run_hotkey_message_loop(
         let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
     }
 
-    if let Err(error) = register_windows_hotkey(CAPTURE_HOTKEY_ID, capture.0, capture.1) {
+    if let Err(error) = register_windows_hotkey(
+        CAPTURE_HOTKEY_ID,
+        registrations.capture.0,
+        registrations.capture.1,
+    ) {
         let _ = started_sender.send(Err(error.to_string()));
         return;
     }
-    if let Some((modifiers, key)) = recording {
+    if let Some((modifiers, key)) = registrations.recording {
         if let Err(error) = register_windows_hotkey(RECORDING_HOTKEY_ID, modifiers, key) {
             unregister_registered_hotkeys(&[CAPTURE_HOTKEY_ID]);
             let _ = started_sender.send(Err(error.to_string()));
             return;
         }
     }
-    if let Some((modifiers, key)) = fullscreen {
+    if let Some((modifiers, key)) = registrations.fullscreen {
         if let Err(error) = register_windows_hotkey(FULLSCREEN_HOTKEY_ID, modifiers, key) {
             unregister_registered_hotkeys(&[CAPTURE_HOTKEY_ID, RECORDING_HOTKEY_ID]);
             let _ = started_sender.send(Err(error.to_string()));
             return;
         }
     }
-    if let Some((modifiers, key)) = active_window {
+    if let Some((modifiers, key)) = registrations.active_window {
         if let Err(error) = register_windows_hotkey(ACTIVE_WINDOW_HOTKEY_ID, modifiers, key) {
             unregister_registered_hotkeys(&[
                 CAPTURE_HOTKEY_ID,
@@ -1720,13 +1740,26 @@ fn run_hotkey_message_loop(
             return;
         }
     }
-    if let Some((modifiers, key)) = picker {
+    if let Some((modifiers, key)) = registrations.picker {
         if let Err(error) = register_windows_hotkey(PICKER_HOTKEY_ID, modifiers, key) {
             unregister_registered_hotkeys(&[
                 CAPTURE_HOTKEY_ID,
                 RECORDING_HOTKEY_ID,
                 FULLSCREEN_HOTKEY_ID,
                 ACTIVE_WINDOW_HOTKEY_ID,
+            ]);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = registrations.ocr {
+        if let Err(error) = register_windows_hotkey(OCR_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&[
+                CAPTURE_HOTKEY_ID,
+                RECORDING_HOTKEY_ID,
+                FULLSCREEN_HOTKEY_ID,
+                ACTIVE_WINDOW_HOTKEY_ID,
+                PICKER_HOTKEY_ID,
             ]);
             let _ = started_sender.send(Err(error.to_string()));
             return;
@@ -1762,6 +1795,9 @@ fn run_hotkey_message_loop(
                 WPARAM(value) if value == PICKER_HOTKEY_ID as usize => {
                     let _ = events.send(WindowsHotkeyEvent::ColorPicker);
                 }
+                WPARAM(value) if value == OCR_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::Ocr);
+                }
                 _ => {}
             }
         }
@@ -1773,6 +1809,7 @@ fn run_hotkey_message_loop(
         FULLSCREEN_HOTKEY_ID,
         ACTIVE_WINDOW_HOTKEY_ID,
         PICKER_HOTKEY_ID,
+        OCR_HOTKEY_ID,
     ]);
 }
 
@@ -3244,6 +3281,7 @@ mod tests {
             Some("Alt+Shift+F22"),
             Some("Alt+Shift+F23"),
             Some("Alt+Shift+F24"),
+            Some("Ctrl+Shift+F24"),
             sender,
         )
         .expect("listener");
@@ -3269,6 +3307,13 @@ mod tests {
                 LPARAM(0),
             )
             .expect("post picker hotkey message");
+            PostThreadMessageW(
+                listener.thread_id(),
+                WM_HOTKEY,
+                WPARAM(super::OCR_HOTKEY_ID as usize),
+                LPARAM(0),
+            )
+            .expect("post ocr hotkey message");
         }
 
         let first = receiver
@@ -3280,10 +3325,14 @@ mod tests {
         let third = receiver
             .recv_timeout(Duration::from_secs(2))
             .expect("receive color-picker event");
+        let fourth = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("receive OCR event");
 
         assert_eq!(first, super::WindowsHotkeyEvent::FullScreenCapture);
         assert_eq!(second, super::WindowsHotkeyEvent::ActiveWindowCapture);
         assert_eq!(third, super::WindowsHotkeyEvent::ColorPicker);
+        assert_eq!(fourth, super::WindowsHotkeyEvent::Ocr);
     }
 
     #[test]

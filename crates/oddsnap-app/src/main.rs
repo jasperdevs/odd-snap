@@ -126,6 +126,7 @@ enum CrossPlatformHotkeyEvent {
     FullScreenCapture,
     ActiveWindowCapture,
     ColorPicker,
+    Ocr,
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -235,6 +236,7 @@ impl OddSnapRustApp {
             settings.fullscreen_hotkey.as_deref(),
             settings.active_window_hotkey.as_deref(),
             settings.picker_hotkey.as_deref(),
+            settings.ocr_hotkey.as_deref(),
         );
         let (tray_status, tray_icon, tray_events) = start_tray_icon();
 
@@ -1517,6 +1519,9 @@ impl OddSnapRustApp {
                 self.capture_status = "Color-picker hotkey received.".into();
                 self.run_color_picker();
             }
+            oddsnap_platform_windows::WindowsHotkeyEvent::Ocr => {
+                self.capture_status = "OCR hotkey received; Rust OCR parity is pending.".into();
+            }
         }
     }
 
@@ -1542,6 +1547,9 @@ impl OddSnapRustApp {
             CrossPlatformHotkeyEvent::ColorPicker => {
                 self.capture_status = "Color-picker hotkey received.".into();
                 self.run_color_picker();
+            }
+            CrossPlatformHotkeyEvent::Ocr => {
+                self.capture_status = "OCR hotkey received; Rust OCR parity is pending.".into();
             }
         }
     }
@@ -1935,6 +1943,7 @@ fn start_capture_hotkey_listener(
     fullscreen_accelerator: Option<&str>,
     active_window_accelerator: Option<&str>,
     picker_accelerator: Option<&str>,
+    ocr_accelerator: Option<&str>,
 ) -> (
     String,
     Option<oddsnap_platform_windows::WindowsHotkeyListener>,
@@ -1947,6 +1956,7 @@ fn start_capture_hotkey_listener(
         fullscreen_accelerator,
         active_window_accelerator,
         picker_accelerator,
+        ocr_accelerator,
         sender,
     ) {
         Ok(listener) => (
@@ -1956,6 +1966,7 @@ fn start_capture_hotkey_listener(
                 fullscreen_accelerator,
                 active_window_accelerator,
                 picker_accelerator,
+                ocr_accelerator,
             ),
             Some(listener),
             Some(receiver),
@@ -1971,6 +1982,7 @@ fn start_capture_hotkey_listener(
     fullscreen_accelerator: Option<&str>,
     active_window_accelerator: Option<&str>,
     picker_accelerator: Option<&str>,
+    ocr_accelerator: Option<&str>,
 ) -> (
     String,
     Option<CrossPlatformHotkeyListener>,
@@ -1982,6 +1994,7 @@ fn start_capture_hotkey_listener(
         fullscreen_accelerator,
         active_window_accelerator,
         picker_accelerator,
+        ocr_accelerator,
     ) {
         Ok((listener, receiver)) => (
             cross_platform_hotkey_status_summary(
@@ -1990,6 +2003,7 @@ fn start_capture_hotkey_listener(
                 fullscreen_accelerator,
                 active_window_accelerator,
                 picker_accelerator,
+                ocr_accelerator,
             ),
             Some(listener),
             Some(receiver),
@@ -2005,6 +2019,7 @@ fn start_cross_platform_hotkey_listener(
     fullscreen_accelerator: Option<&str>,
     active_window_accelerator: Option<&str>,
     picker_accelerator: Option<&str>,
+    ocr_accelerator: Option<&str>,
 ) -> Result<
     (
         CrossPlatformHotkeyListener,
@@ -2027,6 +2042,9 @@ fn start_cross_platform_hotkey_listener(
     }
     if let Some(picker) = non_empty_hotkey(picker_accelerator) {
         registrations.push((picker, CrossPlatformHotkeyEvent::ColorPicker));
+    }
+    if let Some(ocr) = non_empty_hotkey(ocr_accelerator) {
+        registrations.push((ocr, CrossPlatformHotkeyEvent::Ocr));
     }
 
     let mut id_to_event = std::collections::HashMap::new();
@@ -2133,8 +2151,9 @@ fn cross_platform_hotkey_status_summary(
     fullscreen: Option<&str>,
     active_window: Option<&str>,
     picker: Option<&str>,
+    ocr: Option<&str>,
 ) -> String {
-    let status = hotkey_status_summary(capture, recording, fullscreen, active_window, picker);
+    let status = hotkey_status_summary(capture, recording, fullscreen, active_window, picker, ocr);
     #[cfg(target_os = "linux")]
     {
         let mut status = status;
@@ -2175,6 +2194,7 @@ fn hotkey_status_summary(
     fullscreen: Option<&str>,
     active_window: Option<&str>,
     picker: Option<&str>,
+    ocr: Option<&str>,
 ) -> String {
     let mut parts = vec![format!("{capture} capture")];
     if let Some(recording) = recording {
@@ -2188,6 +2208,9 @@ fn hotkey_status_summary(
     }
     if let Some(picker) = picker {
         parts.push(format!("{picker} color-picker"));
+    }
+    if let Some(ocr) = ocr {
+        parts.push(format!("{ocr} OCR"));
     }
     format!("Hotkeys: {}.", parts.join(", "))
 }
@@ -2580,9 +2603,10 @@ mod tests {
                 Some("Alt+Shift+R"),
                 Some("Alt+Shift+F"),
                 Some("Alt+Shift+A"),
-                Some("Alt+Shift+C")
+                Some("Alt+Shift+C"),
+                Some("Alt+Shift+O")
             ),
-            "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window, Alt+Shift+C color-picker."
+            "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window, Alt+Shift+C color-picker, Alt+Shift+O OCR."
         );
     }
 
