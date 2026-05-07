@@ -107,7 +107,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust recording history can store FFmpeg-generated JPG thumbnails for saved GIF/video entries.
 - FFmpeg-generated recording thumbnails must be readable image files before they are attached to history entries.
 - GPUI can persistently cycle implemented recording preferences for format and quality.
-- GPUI history rows show media kind and legacy upload metadata, can copy saved file paths, can copy saved image captures back to the system clipboard, and can copy or open stored upload links.
+- GPUI history rows show media kind and legacy upload metadata, can open saved media files, can reveal saved files, can copy saved file paths, can copy saved image captures back to the system clipboard, and can copy or open stored upload links.
 - GPUI history rows can remove entries from the persisted Rust history index without deleting the original media file.
 - GPUI history rows can manually retry upload using the current upload destination and persist the new upload URL/error.
 - GPUI media history rows can be filtered by kind and upload state, with empty states reflecting the active filters.

@@ -146,6 +146,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Basic persisted media history index.
 - [x] GPUI history rows show media kind and legacy upload metadata, with upload-link copy action.
 - [x] GPUI history rows can open stored upload links through the platform browser opener.
+- [x] GPUI history rows can open saved media files through the platform file opener.
 - [x] GPUI history rows can copy saved file paths and image captures.
 - [x] GPUI history rows can remove entries from the persisted Rust history index without deleting media files.
 - [x] GPUI history rows can manually retry uploads with the current upload destination.

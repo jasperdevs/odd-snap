@@ -1540,6 +1540,7 @@ impl OddSnapRustApp {
                             .flex()
                             .flex_wrap()
                             .gap(px(8.0))
+                            .child(self.open_history_file_button(cx, entry.path.clone()))
                             .child(self.open_history_button(cx, entry.path.clone()))
                             .child(self.copy_history_path_button(cx, entry.path.clone()))
                             .when(entry.kind == HistoryKind::Image, |row| {
@@ -2061,10 +2062,23 @@ impl OddSnapRustApp {
             div().id(SharedString::from(format!("open-history-{path}"))),
             ui::ButtonVariant::History,
         )
-        .child("Open")
+        .child("Reveal")
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.open_history_path(PathBuf::from(&path));
+            cx.notify();
+        }))
+    }
+
+    fn open_history_file_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
+        ui::action_button_style(
+            div().id(SharedString::from(format!("open-history-file-{path}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Open")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.open_history_file(PathBuf::from(&path));
             cx.notify();
         }))
     }
@@ -3944,6 +3958,13 @@ impl OddSnapRustApp {
         self.capture_status = match reveal_history_path(&path) {
             Ok(action) => format!("{action} {}.", path.display()),
             Err(error) => format!("Open failed: {error}"),
+        };
+    }
+
+    fn open_history_file(&mut self, path: PathBuf) {
+        self.capture_status = match open_file_path(&path) {
+            Ok(()) => format!("Opened {}.", path.display()),
+            Err(error) => format!("Open file failed: {error}"),
         };
     }
 
@@ -6583,6 +6604,40 @@ fn reveal_file_command(path: &Path) -> (&'static str, Vec<String>, RevealAction)
     }
 }
 
+fn open_file_command(path: &Path) -> (&'static str, Vec<String>) {
+    #[cfg(target_os = "windows")]
+    {
+        ("explorer.exe", vec![path.display().to_string()])
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        ("open", vec![path.display().to_string()])
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        ("xdg-open", vec![path.display().to_string()])
+    }
+}
+
+fn open_file_path(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!("{} does not exist", path.display()));
+    }
+
+    let (program, args) = open_file_command(path);
+    let status = Command::new(program)
+        .args(args)
+        .status()
+        .map_err(|error| format!("failed to run {program}: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{program} exited with status {status}"))
+    }
+}
+
 fn reveal_history_path(path: &Path) -> Result<&'static str, String> {
     if !path.exists() {
         return Err(format!("{} does not exist", path.display()));
@@ -7058,6 +7113,34 @@ mod tests {
             assert_eq!(program, "xdg-open");
             assert_eq!(args, vec!["/tmp/captures"]);
             assert_eq!(action, RevealAction::OpenContainingFolder);
+        }
+    }
+
+    #[test]
+    fn builds_history_open_file_command_for_current_platform() {
+        #[cfg(target_os = "windows")]
+        let path = PathBuf::from(r"C:\captures\OddSnap.png");
+        #[cfg(not(target_os = "windows"))]
+        let path = PathBuf::from("/tmp/captures/OddSnap.png");
+
+        let (program, args) = open_file_command(&path);
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(program, "explorer.exe");
+            assert_eq!(args, vec![r"C:\captures\OddSnap.png"]);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(program, "open");
+            assert_eq!(args, vec!["/tmp/captures/OddSnap.png"]);
+        }
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            assert_eq!(program, "xdg-open");
+            assert_eq!(args, vec!["/tmp/captures/OddSnap.png"]);
         }
     }
 
