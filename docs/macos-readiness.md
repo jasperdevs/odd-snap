@@ -67,6 +67,7 @@ After opening the bundled app, verify full-screen capture, rectangle capture, ac
 - Active-window detection shells out to System Events, so the signed app bundle needs the Apple Events usage string in `packaging/macos/Info.plist` and the Apple Events entitlement in `packaging/macos/OddSnap.entitlements`.
 - Microphone recording needs `NSMicrophoneUsageDescription`; system audio recording is still pending.
 - Global hotkeys currently use the app-level `global-hotkey` foundation, not a finished macOS platform service, and need real-device validation on macOS before this can be marked fully available.
+- The menu bar status item foundation uses the Rust tray/menu bridge and needs real-device validation on Apple Silicon macOS before it can be marked fully available.
 - No release, tag, notarized artifact, or PR is part of this branch-local work.
 
 ## Apple references

@@ -85,6 +85,8 @@ struct OddSnapRustApp {
     _hotkey_listener: Option<CrossPlatformHotkeyListener>,
     #[cfg(target_os = "windows")]
     tray_icon: Option<oddsnap_platform_windows::WindowsTrayIcon>,
+    #[cfg(target_os = "macos")]
+    tray_icon: Option<oddsnap_platform_macos::MacosTrayIcon>,
 }
 
 struct CaptureHistoryEntry {
@@ -135,7 +137,7 @@ struct ImportedHotkeyAccelerators<'a> {
     ai_redirect: Option<&'a str>,
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(any(test, not(target_os = "windows")))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CrossPlatformHotkeyEvent {
     Capture,
@@ -272,7 +274,7 @@ impl OddSnapRustApp {
         let (hotkey_status, hotkey_listener, hotkey_events) =
             start_capture_hotkey_listener(imported_hotkeys);
         let (tray_status, tray_icon, tray_events) = start_tray_icon();
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
         let _ = &tray_icon;
 
         let app = Self {
@@ -301,6 +303,8 @@ impl OddSnapRustApp {
             #[cfg(not(target_os = "windows"))]
             _hotkey_listener: hotkey_listener,
             #[cfg(target_os = "windows")]
+            tray_icon,
+            #[cfg(target_os = "macos")]
             tray_icon,
         };
 
@@ -1528,8 +1532,33 @@ impl OddSnapRustApp {
         .detach();
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     fn start_tray_event_pump(&self, _: Option<()>, _: &mut Context<Self>) {}
+
+    #[cfg(target_os = "macos")]
+    fn start_tray_event_pump(
+        &self,
+        receiver: Option<std::sync::mpsc::Receiver<oddsnap_platform_macos::MacosTrayEvent>>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(receiver) = receiver else {
+            return;
+        };
+
+        cx.spawn(async move |this, cx| loop {
+            while let Ok(event) = receiver.try_recv() {
+                let _ = this.update(cx, |app, cx| {
+                    app.handle_tray_event(event, cx);
+                    cx.notify();
+                });
+            }
+
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(100))
+                .await;
+        })
+        .detach();
+    }
 
     #[cfg(target_os = "windows")]
     fn handle_hotkey_event(&mut self, event: oddsnap_platform_windows::WindowsHotkeyEvent) {
@@ -1680,6 +1709,52 @@ impl OddSnapRustApp {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    fn handle_tray_event(
+        &mut self,
+        event: oddsnap_platform_macos::MacosTrayEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            oddsnap_platform_macos::MacosTrayEvent::Capture => {
+                if self.active_recording.is_some() {
+                    self.recording_status = "Menu bar stop recording received.".into();
+                    self.stop_recording();
+                } else {
+                    self.capture_status = "Menu bar capture received.".into();
+                    self.run_capture(hotkey_capture_mode(self.settings.default_capture_mode));
+                }
+            }
+            oddsnap_platform_macos::MacosTrayEvent::ToggleRecording => {
+                self.recording_status = "Menu bar recording command received.".into();
+                self.toggle_recording(RecordingTarget::FullScreen);
+            }
+            oddsnap_platform_macos::MacosTrayEvent::Ocr => {
+                self.capture_status = "Menu bar text capture is pending Rust OCR parity.".into();
+            }
+            oddsnap_platform_macos::MacosTrayEvent::ColorPicker => {
+                self.capture_status = "Menu bar color picker received.".into();
+                self.run_color_picker();
+            }
+            oddsnap_platform_macos::MacosTrayEvent::ScrollCapture => {
+                self.capture_status =
+                    "Menu bar scroll capture is pending Rust overlay parity.".into();
+            }
+            oddsnap_platform_macos::MacosTrayEvent::Settings => {
+                self.tray_status = "Menu bar settings command focused the Rust window.".into();
+                cx.activate(true);
+            }
+            oddsnap_platform_macos::MacosTrayEvent::History => {
+                self.tray_status = "Menu bar history command focused recent captures.".into();
+                cx.activate(true);
+            }
+            oddsnap_platform_macos::MacosTrayEvent::Quit => {
+                self.tray_status = "Menu bar quit requested.".into();
+                cx.quit();
+            }
+        }
+    }
+
     fn capture_output_directory(&self) -> std::path::PathBuf {
         self.settings
             .capture_output_directory_or(default_capture_directory())
@@ -1736,6 +1811,14 @@ impl OddSnapRustApp {
             if let Some(tray_icon) = &self.tray_icon {
                 if let Err(error) = tray_icon.set_recording_state(self.active_recording.is_some()) {
                     self.tray_status = format!("Tray recording state update failed: {error}");
+                }
+            }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(tray_icon) = &self.tray_icon {
+                if let Err(error) = tray_icon.set_recording_state(self.active_recording.is_some()) {
+                    self.tray_status = format!("Menu bar recording state update failed: {error}");
                 }
             }
         }
@@ -2092,44 +2175,7 @@ fn start_cross_platform_hotkey_listener(
     #[cfg(target_os = "linux")]
     validate_linux_hotkey_session()?;
 
-    let mut registrations = vec![(accelerators.capture, CrossPlatformHotkeyEvent::Capture)];
-    if let Some(recording) = non_empty_hotkey(accelerators.recording) {
-        registrations.push((recording, CrossPlatformHotkeyEvent::Recording));
-    }
-    if let Some(fullscreen) = non_empty_hotkey(accelerators.fullscreen) {
-        registrations.push((fullscreen, CrossPlatformHotkeyEvent::FullScreenCapture));
-    }
-    if let Some(active_window) = non_empty_hotkey(accelerators.active_window) {
-        registrations.push((active_window, CrossPlatformHotkeyEvent::ActiveWindowCapture));
-    }
-    if let Some(picker) = non_empty_hotkey(accelerators.picker) {
-        registrations.push((picker, CrossPlatformHotkeyEvent::ColorPicker));
-    }
-    if let Some(ocr) = non_empty_hotkey(accelerators.ocr) {
-        registrations.push((ocr, CrossPlatformHotkeyEvent::Ocr));
-    }
-    if let Some(scan) = non_empty_hotkey(accelerators.scan) {
-        registrations.push((scan, CrossPlatformHotkeyEvent::Scan));
-    }
-    if let Some(sticker) = non_empty_hotkey(accelerators.sticker) {
-        registrations.push((sticker, CrossPlatformHotkeyEvent::Sticker));
-    }
-    if let Some(upscale) = non_empty_hotkey(accelerators.upscale) {
-        registrations.push((upscale, CrossPlatformHotkeyEvent::Upscale));
-    }
-    if let Some(center) = non_empty_hotkey(accelerators.center) {
-        registrations.push((center, CrossPlatformHotkeyEvent::Center));
-    }
-    if let Some(ruler) = non_empty_hotkey(accelerators.ruler) {
-        registrations.push((ruler, CrossPlatformHotkeyEvent::Ruler));
-    }
-    if let Some(scroll_capture) = non_empty_hotkey(accelerators.scroll_capture) {
-        registrations.push((scroll_capture, CrossPlatformHotkeyEvent::ScrollCapture));
-    }
-    if let Some(ai_redirect) = non_empty_hotkey(accelerators.ai_redirect) {
-        registrations.push((ai_redirect, CrossPlatformHotkeyEvent::AiRedirect));
-    }
-
+    let registrations = cross_platform_hotkey_registrations(accelerators);
     let mut id_to_event = std::collections::HashMap::new();
     let mut hotkeys = Vec::new();
     for (accelerator, event) in registrations {
@@ -2172,6 +2218,50 @@ fn start_cross_platform_hotkey_listener(
         },
         event_receiver,
     ))
+}
+
+#[cfg(any(test, not(target_os = "windows")))]
+fn cross_platform_hotkey_registrations(
+    accelerators: ImportedHotkeyAccelerators<'_>,
+) -> Vec<(&str, CrossPlatformHotkeyEvent)> {
+    let mut registrations = vec![(accelerators.capture, CrossPlatformHotkeyEvent::Capture)];
+    if let Some(recording) = non_empty_hotkey(accelerators.recording) {
+        registrations.push((recording, CrossPlatformHotkeyEvent::Recording));
+    }
+    if let Some(fullscreen) = non_empty_hotkey(accelerators.fullscreen) {
+        registrations.push((fullscreen, CrossPlatformHotkeyEvent::FullScreenCapture));
+    }
+    if let Some(active_window) = non_empty_hotkey(accelerators.active_window) {
+        registrations.push((active_window, CrossPlatformHotkeyEvent::ActiveWindowCapture));
+    }
+    if let Some(picker) = non_empty_hotkey(accelerators.picker) {
+        registrations.push((picker, CrossPlatformHotkeyEvent::ColorPicker));
+    }
+    if let Some(ocr) = non_empty_hotkey(accelerators.ocr) {
+        registrations.push((ocr, CrossPlatformHotkeyEvent::Ocr));
+    }
+    if let Some(scan) = non_empty_hotkey(accelerators.scan) {
+        registrations.push((scan, CrossPlatformHotkeyEvent::Scan));
+    }
+    if let Some(sticker) = non_empty_hotkey(accelerators.sticker) {
+        registrations.push((sticker, CrossPlatformHotkeyEvent::Sticker));
+    }
+    if let Some(upscale) = non_empty_hotkey(accelerators.upscale) {
+        registrations.push((upscale, CrossPlatformHotkeyEvent::Upscale));
+    }
+    if let Some(center) = non_empty_hotkey(accelerators.center) {
+        registrations.push((center, CrossPlatformHotkeyEvent::Center));
+    }
+    if let Some(ruler) = non_empty_hotkey(accelerators.ruler) {
+        registrations.push((ruler, CrossPlatformHotkeyEvent::Ruler));
+    }
+    if let Some(scroll_capture) = non_empty_hotkey(accelerators.scroll_capture) {
+        registrations.push((scroll_capture, CrossPlatformHotkeyEvent::ScrollCapture));
+    }
+    if let Some(ai_redirect) = non_empty_hotkey(accelerators.ai_redirect) {
+        registrations.push((ai_redirect, CrossPlatformHotkeyEvent::AiRedirect));
+    }
+    registrations
 }
 
 #[cfg(any(test, not(target_os = "windows")))]
@@ -2302,7 +2392,24 @@ fn start_tray_icon() -> (
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+fn start_tray_icon() -> (
+    String,
+    Option<oddsnap_platform_macos::MacosTrayIcon>,
+    Option<std::sync::mpsc::Receiver<oddsnap_platform_macos::MacosTrayEvent>>,
+) {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    match oddsnap_platform_macos::start_oddsnap_tray_icon(sender) {
+        Ok(tray_icon) => (
+            "Menu bar: macOS status item ready.".into(),
+            Some(tray_icon),
+            Some(receiver),
+        ),
+        Err(error) => (format!("Menu bar unavailable: {error}"), None, None),
+    }
+}
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 fn start_tray_icon() -> (String, Option<()>, Option<()>) {
     ("Tray: pending on this platform.".into(), None, None)
 }
@@ -2791,6 +2898,44 @@ mod tests {
         let error = parse_cross_platform_hotkey("S").expect_err("modifierless hotkey rejected");
 
         assert!(error.contains("must include a modifier"));
+    }
+
+    #[test]
+    fn cross_platform_hotkey_registrations_include_imported_tool_hotkeys() {
+        let registrations = cross_platform_hotkey_registrations(ImportedHotkeyAccelerators {
+            capture: "Alt+Shift+S",
+            recording: Some("Alt+Shift+R"),
+            fullscreen: Some("Alt+Shift+F"),
+            active_window: Some("Alt+Shift+A"),
+            picker: Some("Alt+Shift+C"),
+            ocr: Some("Alt+Shift+O"),
+            scan: Some("Alt+Shift+N"),
+            sticker: Some("Alt+Shift+T"),
+            upscale: Some("Alt+Shift+U"),
+            center: Some("Alt+Shift+E"),
+            ruler: Some("Alt+Shift+L"),
+            scroll_capture: Some("Alt+Shift+P"),
+            ai_redirect: Some("Alt+Shift+I"),
+        });
+
+        assert_eq!(
+            registrations,
+            vec![
+                ("Alt+Shift+S", CrossPlatformHotkeyEvent::Capture),
+                ("Alt+Shift+R", CrossPlatformHotkeyEvent::Recording),
+                ("Alt+Shift+F", CrossPlatformHotkeyEvent::FullScreenCapture),
+                ("Alt+Shift+A", CrossPlatformHotkeyEvent::ActiveWindowCapture),
+                ("Alt+Shift+C", CrossPlatformHotkeyEvent::ColorPicker),
+                ("Alt+Shift+O", CrossPlatformHotkeyEvent::Ocr),
+                ("Alt+Shift+N", CrossPlatformHotkeyEvent::Scan),
+                ("Alt+Shift+T", CrossPlatformHotkeyEvent::Sticker),
+                ("Alt+Shift+U", CrossPlatformHotkeyEvent::Upscale),
+                ("Alt+Shift+E", CrossPlatformHotkeyEvent::Center),
+                ("Alt+Shift+L", CrossPlatformHotkeyEvent::Ruler),
+                ("Alt+Shift+P", CrossPlatformHotkeyEvent::ScrollCapture),
+                ("Alt+Shift+I", CrossPlatformHotkeyEvent::AiRedirect),
+            ]
+        );
     }
 
     #[test]

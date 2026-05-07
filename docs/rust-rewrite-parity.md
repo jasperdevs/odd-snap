@@ -69,6 +69,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Imported scan, sticker, upscale, center, ruler, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; they currently report explicit pending parity statuses instead of being silently dropped.
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
 - Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.
+- macOS can install a menu bar status item with the legacy menu commands, dispatch menu bar capture/recording/settings/history/quit events into GPUI, and update the recording menu label.
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.
 - GPUI capture smoke honors the imported capture delay and surfaces imported capture UX preferences.
 - GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
@@ -98,6 +99,7 @@ The Rust rewrite must not replace the current app until this document and the li
 The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present, but the Rust menu still routes text capture and scroll capture to pending-status messages until those feature backends land.
+The macOS menu bar foundation is present, but it still needs real-device validation on Apple Silicon macOS and routes text capture and scroll capture to pending-status messages until those feature backends land.
 The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, or sound/toast polish.
 The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair/window-detection feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, or annotation tools.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.

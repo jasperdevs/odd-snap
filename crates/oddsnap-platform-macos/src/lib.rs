@@ -5,7 +5,8 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
     process::{Child, Command, Stdio},
-    thread,
+    sync::mpsc::{self, Sender},
+    thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -22,6 +23,48 @@ use oddsnap_platform::{
 
 #[derive(Debug, Default)]
 pub struct MacosPlatform;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacosTrayEvent {
+    Capture,
+    Ocr,
+    ColorPicker,
+    ToggleRecording,
+    ScrollCapture,
+    Settings,
+    History,
+    Quit,
+}
+
+#[cfg(target_os = "macos")]
+pub struct MacosTrayIcon {
+    _tray_icon: tray_icon::TrayIcon,
+    record_item: tray_icon::menu::MenuItem,
+    stop_sender: Sender<()>,
+    join_handle: Option<JoinHandle<()>>,
+}
+
+#[cfg(target_os = "macos")]
+impl MacosTrayIcon {
+    pub fn set_recording_state(&self, is_recording: bool) -> Result<(), PlatformError> {
+        self.record_item.set_text(if is_recording {
+            "Stop recording"
+        } else {
+            "Record"
+        });
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for MacosTrayIcon {
+    fn drop(&mut self) {
+        let _ = self.stop_sender.send(());
+        if let Some(join_handle) = self.join_handle.take() {
+            let _ = join_handle.join();
+        }
+    }
+}
 
 impl MacosPlatform {
     pub fn capture_interactive_selection(
@@ -73,7 +116,7 @@ impl PlatformAdapter for MacosPlatform {
                     PlatformCapability::GlobalHotkeys,
                     CapabilityState::InProgress,
                 ),
-                (PlatformCapability::Tray, CapabilityState::Planned),
+                (PlatformCapability::Tray, CapabilityState::InProgress),
                 (PlatformCapability::Clipboard, CapabilityState::InProgress),
                 (PlatformCapability::FileDialogs, CapabilityState::Planned),
                 (
@@ -689,6 +732,92 @@ impl HotkeyService for MacosPlatform {
         Err(PlatformError::Unsupported(
             "macOS global hotkey registration is not implemented yet",
         ))
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn start_oddsnap_tray_icon(
+    events: Sender<MacosTrayEvent>,
+) -> Result<MacosTrayIcon, PlatformError> {
+    use tray_icon::{
+        menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
+        TrayIconBuilder,
+    };
+
+    let screenshot = MenuItem::with_id("screenshot", "Screenshot", true, None);
+    let ocr = MenuItem::with_id("ocr", "Text capture", true, None);
+    let color_picker = MenuItem::with_id("color-picker", "Color picker", true, None);
+    let record = MenuItem::with_id("record", "Record", true, None);
+    let scroll_capture = MenuItem::with_id("scroll-capture", "Scroll capture", true, None);
+    let settings = MenuItem::with_id("settings", "Settings", true, None);
+    let history = MenuItem::with_id("history", "History", true, None);
+    let quit = MenuItem::with_id("quit", "Quit", true, None);
+    let separator_one = PredefinedMenuItem::separator();
+    let separator_two = PredefinedMenuItem::separator();
+
+    let menu = Menu::new();
+    menu.append_items(&[
+        &screenshot,
+        &ocr,
+        &color_picker,
+        &record,
+        &scroll_capture,
+        &separator_one,
+        &settings,
+        &history,
+        &separator_two,
+        &quit,
+    ])
+    .map_err(|error| PlatformError::Failed(format!("failed to build macOS tray menu: {error}")))?;
+
+    let tray_icon = TrayIconBuilder::new()
+        .with_title("OddSnap")
+        .with_tooltip("OddSnap")
+        .with_menu(Box::new(menu))
+        .with_menu_on_left_click(true)
+        .with_menu_on_right_click(true)
+        .build()
+        .map_err(|error| {
+            PlatformError::Failed(format!("failed to create macOS tray icon: {error}"))
+        })?;
+
+    let (stop_sender, stop_receiver) = mpsc::channel();
+    let menu_receiver = MenuEvent::receiver().clone();
+    let join_handle = thread::spawn(move || loop {
+        if stop_receiver.try_recv().is_ok() {
+            break;
+        }
+
+        match menu_receiver.recv_timeout(Duration::from_millis(50)) {
+            Ok(event) => {
+                if let Some(mapped) = macos_tray_event_for_menu_id(event.id().as_ref()) {
+                    let _ = events.send(mapped);
+                }
+            }
+            Err(_) => {}
+        }
+    });
+
+    Ok(MacosTrayIcon {
+        _tray_icon: tray_icon,
+        record_item: record,
+        stop_sender,
+        join_handle: Some(join_handle),
+    })
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_tray_event_for_menu_id(id: &str) -> Option<MacosTrayEvent> {
+    match id {
+        "screenshot" => Some(MacosTrayEvent::Capture),
+        "ocr" => Some(MacosTrayEvent::Ocr),
+        "color-picker" => Some(MacosTrayEvent::ColorPicker),
+        "record" => Some(MacosTrayEvent::ToggleRecording),
+        "scroll-capture" => Some(MacosTrayEvent::ScrollCapture),
+        "settings" => Some(MacosTrayEvent::Settings),
+        "history" => Some(MacosTrayEvent::History),
+        "quit" => Some(MacosTrayEvent::Quit),
+        _ => None,
     }
 }
 
@@ -1443,6 +1572,43 @@ mod tests {
             .expect_err("macOS hotkey pending");
 
         assert!(error.to_string().contains("not implemented yet"));
+    }
+
+    #[test]
+    fn macos_tray_menu_ids_map_to_expected_events() {
+        assert_eq!(
+            super::macos_tray_event_for_menu_id("screenshot"),
+            Some(super::MacosTrayEvent::Capture)
+        );
+        assert_eq!(
+            super::macos_tray_event_for_menu_id("ocr"),
+            Some(super::MacosTrayEvent::Ocr)
+        );
+        assert_eq!(
+            super::macos_tray_event_for_menu_id("color-picker"),
+            Some(super::MacosTrayEvent::ColorPicker)
+        );
+        assert_eq!(
+            super::macos_tray_event_for_menu_id("record"),
+            Some(super::MacosTrayEvent::ToggleRecording)
+        );
+        assert_eq!(
+            super::macos_tray_event_for_menu_id("scroll-capture"),
+            Some(super::MacosTrayEvent::ScrollCapture)
+        );
+        assert_eq!(
+            super::macos_tray_event_for_menu_id("settings"),
+            Some(super::MacosTrayEvent::Settings)
+        );
+        assert_eq!(
+            super::macos_tray_event_for_menu_id("history"),
+            Some(super::MacosTrayEvent::History)
+        );
+        assert_eq!(
+            super::macos_tray_event_for_menu_id("quit"),
+            Some(super::MacosTrayEvent::Quit)
+        );
+        assert_eq!(super::macos_tray_event_for_menu_id("missing"), None);
     }
 
     #[test]

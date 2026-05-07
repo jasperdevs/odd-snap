@@ -10,5 +10,8 @@ rust-version.workspace = true
 oddsnap-core = { path = "../oddsnap-core" }
 oddsnap-platform = { path = "../oddsnap-platform" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+tray-icon = { version = "0.23.1", default-features = false }
+
 [lints]
 workspace = true
