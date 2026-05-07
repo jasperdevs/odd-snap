@@ -248,6 +248,7 @@ impl UploadDestination {
                 | Self::Sftp
                 | Self::GitHub
                 | Self::Immich
+                | Self::Dropbox
         )
     }
 }
@@ -496,6 +497,13 @@ pub struct CurlUploadRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DropboxCurlUploadPlan {
+    pub upload: CurlUploadRequest,
+    pub create_shared_link: CurlUploadRequest,
+    pub list_shared_links: CurlUploadRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UploadSuccess {
     pub url: String,
     pub provider_name: String,
@@ -656,6 +664,74 @@ pub fn build_curl_upload_request(
     build_curl_upload_request_with_settings(destination, file_path, &UploadSettings::default())
 }
 
+pub fn build_dropbox_curl_upload_plan(
+    file_path: &Path,
+    settings: &UploadSettings,
+) -> Result<DropboxCurlUploadPlan, String> {
+    let token = settings.dropbox_access_token.trim();
+    if token.is_empty() {
+        return Err(missing_upload_setting("Dropbox access token"));
+    }
+    let upload_path = dropbox_upload_path(file_path, settings)?;
+    let file_body = std::fs::read(file_path)
+        .map_err(|error| format!("Dropbox upload could not read file: {error}"))?;
+
+    let upload_api_arg = serde_json::json!({
+        "path": upload_path.as_str(),
+        "mode": "add",
+        "autorename": true,
+        "mute": false,
+    })
+    .to_string();
+    let upload = CurlUploadRequest {
+        destination: UploadDestination::Dropbox,
+        provider_name: UploadDestination::Dropbox.display_name(),
+        program: "curl".into(),
+        args: curl_base_args()
+            .into_iter()
+            .chain([
+                "--request".into(),
+                "POST".into(),
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "--header".into(),
+                format!("Dropbox-API-Arg: {upload_api_arg}"),
+                "--header".into(),
+                "Content-Type: application/octet-stream".into(),
+                "--data-binary".into(),
+                "@-".into(),
+                "https://content.dropboxapi.com/2/files/upload".into(),
+            ])
+            .collect(),
+        stdin_body: Some(file_body),
+        success_url: None,
+    };
+
+    let create_body = serde_json::json!({ "path": upload_path.as_str() }).to_string();
+    let create_shared_link = dropbox_json_request(
+        token,
+        "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings",
+        create_body,
+    );
+
+    let list_body = serde_json::json!({
+        "path": upload_path.as_str(),
+        "direct_only": true,
+    })
+    .to_string();
+    let list_shared_links = dropbox_json_request(
+        token,
+        "https://api.dropboxapi.com/2/sharing/list_shared_links",
+        list_body,
+    );
+
+    Ok(DropboxCurlUploadPlan {
+        upload,
+        create_shared_link,
+        list_shared_links,
+    })
+}
+
 pub fn build_curl_upload_request_with_settings(
     destination: UploadDestination,
     file_path: &Path,
@@ -668,15 +744,7 @@ pub fn build_curl_upload_request_with_settings(
         ));
     }
 
-    let mut args = vec![
-        "--silent".into(),
-        "--show-error".into(),
-        "--location".into(),
-        "--max-time".into(),
-        "120".into(),
-        "--write-out".into(),
-        "\n%{http_code}".into(),
-    ];
+    let mut args = curl_base_args();
     let mut stdin_body = None;
     let mut success_url = None;
 
@@ -1004,6 +1072,9 @@ pub fn build_curl_upload_request_with_settings(
                 endpoint,
             ]);
         }
+        UploadDestination::Dropbox => {
+            return Err("Dropbox uploads use the multi-step Rust curl backend.".into());
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -1061,6 +1132,50 @@ pub fn parse_curl_upload_output_with_success_url(
         }
         Err(error) => Err(error),
     }
+}
+
+pub fn parse_dropbox_upload_ack(output: &str) -> Result<(), String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if (200..300).contains(&status_code) {
+        Ok(())
+    } else {
+        Err(build_upload_error("Dropbox", status_code, body))
+    }
+}
+
+pub fn parse_dropbox_shared_link_output(output: &str) -> Result<UploadSuccess, String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if !(200..300).contains(&status_code) {
+        return Err(build_upload_error("Dropbox", status_code, body));
+    }
+    parse_dropbox_shared_link_body(body)
+}
+
+pub fn parse_dropbox_list_shared_links_output(output: &str) -> Result<UploadSuccess, String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if !(200..300).contains(&status_code) {
+        return Err(build_upload_error("Dropbox", status_code, body));
+    }
+    let node: Value = serde_json::from_str(body)
+        .map_err(|error| format!("Dropbox returned invalid JSON: {error}"))?;
+    let url = node
+        .get("links")
+        .and_then(Value::as_array)
+        .and_then(|links| links.first())
+        .and_then(|link| link.get("url"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Dropbox returned no shared link.".to_string())?;
+    dropbox_upload_success(url)
+}
+
+pub fn dropbox_shared_link_already_exists(output: &str) -> bool {
+    let Ok((body, status_code)) = split_curl_body_and_status(output) else {
+        return false;
+    };
+    if (200..300).contains(&status_code) {
+        return false;
+    }
+    body.contains("shared_link_already_exists")
 }
 
 pub fn parse_upload_response(
@@ -1325,6 +1440,18 @@ fn curl_file_form(field_name: &str, file_path: &Path) -> String {
     format!("{field_name}=@{}", file_path.display())
 }
 
+fn curl_base_args() -> Vec<String> {
+    vec![
+        "--silent".into(),
+        "--show-error".into(),
+        "--location".into(),
+        "--max-time".into(),
+        "120".into(),
+        "--write-out".into(),
+        "\n%{http_code}".into(),
+    ]
+}
+
 fn upload_file_name(file_path: &Path) -> Result<String, String> {
     file_path
         .file_name()
@@ -1336,6 +1463,40 @@ fn upload_file_name(file_path: &Path) -> Result<String, String> {
 
 fn append_url_path(base_url: &str, file_name: &str) -> String {
     append_url_path_segments(base_url, [file_name])
+}
+
+fn dropbox_json_request(token: &str, url: &str, body: String) -> CurlUploadRequest {
+    CurlUploadRequest {
+        destination: UploadDestination::Dropbox,
+        provider_name: UploadDestination::Dropbox.display_name(),
+        program: "curl".into(),
+        args: curl_base_args()
+            .into_iter()
+            .chain([
+                "--request".into(),
+                "POST".into(),
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "--header".into(),
+                "Content-Type: application/json".into(),
+                "--data-binary".into(),
+                "@-".into(),
+                url.into(),
+            ])
+            .collect(),
+        stdin_body: Some(body.into_bytes()),
+        success_url: None,
+    }
+}
+
+fn dropbox_upload_path(file_path: &Path, settings: &UploadSettings) -> Result<String, String> {
+    let file_name = upload_file_name(file_path)?;
+    let prefix = settings.dropbox_path_prefix.trim().trim_matches('/');
+    Ok(if prefix.is_empty() {
+        format!("/{file_name}")
+    } else {
+        format!("/{prefix}/{file_name}")
+    })
 }
 
 fn append_url_path_segments<'a>(
@@ -1634,6 +1795,34 @@ fn parse_plain_url(provider_name: &str, value: &str) -> Result<String, String> {
         Err(format!("{provider_name} did not return a link."))
     } else {
         Err(format!("{provider_name} error: {url}"))
+    }
+}
+
+fn parse_dropbox_shared_link_body(body: &str) -> Result<UploadSuccess, String> {
+    let node: Value = serde_json::from_str(body)
+        .map_err(|error| format!("Dropbox returned invalid JSON: {error}"))?;
+    let url = node
+        .get("url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "Dropbox returned no shared link.".to_string())?;
+    dropbox_upload_success(url)
+}
+
+fn dropbox_upload_success(url: &str) -> Result<UploadSuccess, String> {
+    parse_plain_url("Dropbox", &dropbox_raw_url(url)).map(|url| UploadSuccess {
+        url,
+        provider_name: UploadDestination::Dropbox.display_name(),
+    })
+}
+
+fn dropbox_raw_url(url: &str) -> String {
+    let trimmed = url.trim();
+    if let Some(prefix) = trimmed.strip_suffix("?dl=0") {
+        format!("{prefix}?raw=1")
+    } else if let Some(prefix) = trimmed.strip_suffix("&dl=0") {
+        format!("{prefix}&raw=1")
+    } else {
+        trimmed.into()
     }
 }
 
@@ -2302,6 +2491,48 @@ mod tests {
     }
 
     #[test]
+    fn builds_dropbox_curl_upload_plan_with_link_fallback_request() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-dropbox-upload-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let path = root.join("capture.png");
+        fs::write(&path, b"png").expect("write upload file");
+
+        let plan = build_dropbox_curl_upload_plan(
+            &path,
+            &UploadSettings {
+                dropbox_access_token: "dropbox-token".into(),
+                dropbox_path_prefix: "OddSnap/Captures".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build dropbox plan");
+
+        assert!(plan
+            .upload
+            .args
+            .contains(&"Authorization: Bearer dropbox-token".into()));
+        assert!(plan
+            .upload
+            .args
+            .iter()
+            .any(|arg| arg.contains("\"path\":\"/OddSnap/Captures/capture.png\"")));
+        assert_eq!(plan.upload.stdin_body.as_deref(), Some(b"png".as_slice()));
+        assert!(plan.create_shared_link.args.contains(
+            &"https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings".into()
+        ));
+        assert!(plan
+            .list_shared_links
+            .args
+            .contains(&"https://api.dropboxapi.com/2/sharing/list_shared_links".into()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn parses_upload_responses_for_public_hosts() {
         assert_eq!(
             parse_upload_response(
@@ -2395,6 +2626,29 @@ mod tests {
             .url,
             "https://immich.example.test/photos/asset-id"
         );
+
+        assert_eq!(
+            parse_dropbox_shared_link_output(
+                r#"{"url":"https://www.dropbox.com/s/abc/capture.png?dl=0"}
+200"#,
+            )
+            .expect("parse dropbox link")
+            .url,
+            "https://www.dropbox.com/s/abc/capture.png?raw=1"
+        );
+        assert_eq!(
+            parse_dropbox_list_shared_links_output(
+                r#"{"links":[{"url":"https://www.dropbox.com/s/abc/capture.png?dl=0"}]}
+200"#,
+            )
+            .expect("parse dropbox existing link")
+            .url,
+            "https://www.dropbox.com/s/abc/capture.png?raw=1"
+        );
+        assert!(dropbox_shared_link_already_exists(
+            r#"{"error":{".tag":"shared_link_already_exists"}}
+409"#
+        ));
 
         assert_eq!(
             parse_upload_response(UploadDestination::Catbox, "https://files.catbox.moe/a.png")

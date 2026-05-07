@@ -2863,8 +2863,46 @@ fn run_curl_upload(
     path: &Path,
     settings: &UploadSettings,
 ) -> Result<oddsnap_core::UploadSuccess, String> {
+    if destination == UploadDestination::Dropbox {
+        return run_dropbox_curl_upload(path, settings);
+    }
+
     let request =
         oddsnap_core::build_curl_upload_request_with_settings(destination, path, settings)?;
+    let (stdout, stderr) = run_curl_request(&request)?;
+
+    oddsnap_core::parse_curl_upload_output_with_success_url(
+        request.destination,
+        &stdout,
+        settings,
+        request.success_url.as_deref(),
+    )
+    .map_err(|error| append_curl_stderr(error, &stderr))
+}
+
+fn run_dropbox_curl_upload(
+    path: &Path,
+    settings: &UploadSettings,
+) -> Result<oddsnap_core::UploadSuccess, String> {
+    let plan = oddsnap_core::build_dropbox_curl_upload_plan(path, settings)?;
+
+    let (upload_stdout, upload_stderr) = run_curl_request(&plan.upload)?;
+    oddsnap_core::parse_dropbox_upload_ack(&upload_stdout)
+        .map_err(|error| append_curl_stderr(error, &upload_stderr))?;
+
+    let (link_stdout, link_stderr) = run_curl_request(&plan.create_shared_link)?;
+    match oddsnap_core::parse_dropbox_shared_link_output(&link_stdout) {
+        Ok(success) => Ok(success),
+        Err(_) if oddsnap_core::dropbox_shared_link_already_exists(&link_stdout) => {
+            let (list_stdout, list_stderr) = run_curl_request(&plan.list_shared_links)?;
+            oddsnap_core::parse_dropbox_list_shared_links_output(&list_stdout)
+                .map_err(|list_error| append_curl_stderr(list_error, &list_stderr))
+        }
+        Err(error) => Err(append_curl_stderr(error, &link_stderr)),
+    }
+}
+
+fn run_curl_request(request: &oddsnap_core::CurlUploadRequest) -> Result<(String, String), String> {
     let mut command = Command::new(&request.program);
     command.args(&request.args);
     if request.stdin_body.is_some() {
@@ -2919,20 +2957,16 @@ fn run_curl_upload(
         });
     }
 
-    oddsnap_core::parse_curl_upload_output_with_success_url(
-        request.destination,
-        &stdout,
-        settings,
-        request.success_url.as_deref(),
-    )
-    .map_err(|error| {
-        let stderr = stderr.trim();
-        if stderr.is_empty() {
-            error
-        } else {
-            format!("{error}; curl: {stderr}")
-        }
-    })
+    Ok((stdout.into(), stderr.into()))
+}
+
+fn append_curl_stderr(error: String, stderr: &str) -> String {
+    let stderr = stderr.trim();
+    if stderr.is_empty() {
+        error
+    } else {
+        format!("{error}; curl: {stderr}")
+    }
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
