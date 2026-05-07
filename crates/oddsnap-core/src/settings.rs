@@ -1,9 +1,11 @@
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 
 use crate::DEFAULT_FILE_NAME_TEMPLATE;
@@ -223,6 +225,114 @@ pub struct AppSettings {
     pub default_capture_mode: DefaultCaptureMode,
     #[serde(default)]
     pub toast_position: ToastPosition,
+    #[serde(default)]
+    pub ocr_hotkey: Option<String>,
+    #[serde(default)]
+    pub picker_hotkey: Option<String>,
+    #[serde(default)]
+    pub scan_hotkey: Option<String>,
+    #[serde(default)]
+    pub sticker_hotkey: Option<String>,
+    #[serde(default)]
+    pub upscale_hotkey: Option<String>,
+    #[serde(default)]
+    pub center_hotkey: Option<String>,
+    #[serde(default)]
+    pub fullscreen_hotkey: Option<String>,
+    #[serde(default)]
+    pub active_window_hotkey: Option<String>,
+    #[serde(default)]
+    pub ruler_hotkey: Option<String>,
+    #[serde(default)]
+    pub scroll_capture_hotkey: Option<String>,
+    #[serde(default)]
+    pub ai_redirect_hotkey: Option<String>,
+    #[serde(default = "default_ocr_language_tag")]
+    pub ocr_language_tag: String,
+    #[serde(default)]
+    pub ocr_model_quality: u32,
+    #[serde(default = "default_auto_language")]
+    pub ocr_default_translate_from: String,
+    #[serde(default = "default_auto_language")]
+    pub ocr_default_translate_to: String,
+    #[serde(default)]
+    pub google_translate_api_key: Option<String>,
+    #[serde(default)]
+    pub translation_runtime_installed: bool,
+    #[serde(default = "default_translation_model")]
+    pub translation_model: u32,
+    #[serde(default = "default_annotation_stroke_shadow")]
+    pub annotation_stroke_shadow: bool,
+    #[serde(default = "default_save_to_file")]
+    pub save_to_file: bool,
+    #[serde(default)]
+    pub ask_for_file_name_on_save: bool,
+    #[serde(default)]
+    pub style_screenshots: bool,
+    #[serde(default)]
+    pub add_screenshot_shadow: bool,
+    #[serde(default)]
+    pub add_screenshot_stroke: bool,
+    #[serde(default)]
+    pub capture_max_long_edge: u32,
+    #[serde(default = "default_window_detection")]
+    pub window_detection: String,
+    #[serde(default = "default_capture_dock_side")]
+    pub capture_dock_side: String,
+    #[serde(default = "default_scrolling_capture_mode")]
+    pub scrolling_capture_mode: String,
+    #[serde(default = "default_interface_language")]
+    pub interface_language: String,
+    #[serde(default)]
+    pub compress_history: bool,
+    #[serde(default)]
+    pub has_completed_setup: bool,
+    #[serde(default = "default_center_selection_aspect_ratio")]
+    pub center_selection_aspect_ratio: String,
+    #[serde(default = "default_show_tool_number_badges")]
+    pub show_tool_number_badges: bool,
+    #[serde(default = "default_history_retention")]
+    pub history_retention: String,
+    #[serde(default = "default_image_search_sources")]
+    pub image_search_sources: u32,
+    #[serde(default = "default_show_image_search_bar")]
+    pub show_image_search_bar: bool,
+    #[serde(default)]
+    pub image_search_exact_match: bool,
+    #[serde(default)]
+    pub show_image_search_diagnostics: bool,
+    #[serde(default = "default_auto_index_images")]
+    pub auto_index_images: bool,
+    #[serde(default = "default_auto_upload_screenshots")]
+    pub auto_upload_screenshots: bool,
+    #[serde(default)]
+    pub auto_upload_gifs: bool,
+    #[serde(default)]
+    pub auto_upload_videos: bool,
+    #[serde(default = "default_image_upload_destination")]
+    pub image_upload_destination: String,
+    #[serde(default)]
+    pub image_upload_settings: Option<Value>,
+    #[serde(default)]
+    pub sticker_upload_settings: Option<Value>,
+    #[serde(default)]
+    pub upscale_upload_settings: Option<Value>,
+    #[serde(default = "default_toast_duration_seconds")]
+    pub toast_duration_seconds: f64,
+    #[serde(default)]
+    pub toast_fade_out_enabled: bool,
+    #[serde(default = "default_toast_fade_out_seconds")]
+    pub toast_fade_out_seconds: f64,
+    #[serde(default)]
+    pub auto_pin_previews: bool,
+    #[serde(default)]
+    pub open_with_apps: BTreeMap<String, String>,
+    #[serde(default = "default_sound_pack")]
+    pub sound_pack: String,
+    #[serde(default)]
+    pub enabled_tools: Option<Vec<String>>,
+    #[serde(default)]
+    pub tool_hotkeys: BTreeMap<String, Vec<u32>>,
 }
 
 impl Default for AppSettings {
@@ -258,6 +368,60 @@ impl Default for AppSettings {
             detect_windows: default_detect_windows(),
             default_capture_mode: DefaultCaptureMode::Rectangle,
             toast_position: ToastPosition::Right,
+            ocr_hotkey: None,
+            picker_hotkey: None,
+            scan_hotkey: None,
+            sticker_hotkey: None,
+            upscale_hotkey: None,
+            center_hotkey: None,
+            fullscreen_hotkey: None,
+            active_window_hotkey: None,
+            ruler_hotkey: None,
+            scroll_capture_hotkey: None,
+            ai_redirect_hotkey: None,
+            ocr_language_tag: default_ocr_language_tag(),
+            ocr_model_quality: 0,
+            ocr_default_translate_from: default_auto_language(),
+            ocr_default_translate_to: default_auto_language(),
+            google_translate_api_key: None,
+            translation_runtime_installed: false,
+            translation_model: default_translation_model(),
+            annotation_stroke_shadow: default_annotation_stroke_shadow(),
+            save_to_file: default_save_to_file(),
+            ask_for_file_name_on_save: false,
+            style_screenshots: false,
+            add_screenshot_shadow: false,
+            add_screenshot_stroke: false,
+            capture_max_long_edge: 0,
+            window_detection: default_window_detection(),
+            capture_dock_side: default_capture_dock_side(),
+            scrolling_capture_mode: default_scrolling_capture_mode(),
+            interface_language: default_interface_language(),
+            compress_history: false,
+            has_completed_setup: false,
+            center_selection_aspect_ratio: default_center_selection_aspect_ratio(),
+            show_tool_number_badges: default_show_tool_number_badges(),
+            history_retention: default_history_retention(),
+            image_search_sources: default_image_search_sources(),
+            show_image_search_bar: default_show_image_search_bar(),
+            image_search_exact_match: false,
+            show_image_search_diagnostics: false,
+            auto_index_images: default_auto_index_images(),
+            auto_upload_screenshots: default_auto_upload_screenshots(),
+            auto_upload_gifs: false,
+            auto_upload_videos: false,
+            image_upload_destination: default_image_upload_destination(),
+            image_upload_settings: None,
+            sticker_upload_settings: None,
+            upscale_upload_settings: None,
+            toast_duration_seconds: default_toast_duration_seconds(),
+            toast_fade_out_enabled: false,
+            toast_fade_out_seconds: default_toast_fade_out_seconds(),
+            auto_pin_previews: false,
+            open_with_apps: BTreeMap::new(),
+            sound_pack: default_sound_pack(),
+            enabled_tools: None,
+            tool_hotkeys: BTreeMap::new(),
         }
     }
 }
@@ -329,6 +493,86 @@ fn default_overlay_capture_all_monitors() -> bool {
 
 fn default_detect_windows() -> bool {
     true
+}
+
+fn default_ocr_language_tag() -> String {
+    "auto".into()
+}
+
+fn default_auto_language() -> String {
+    "auto".into()
+}
+
+fn default_translation_model() -> u32 {
+    2
+}
+
+fn default_annotation_stroke_shadow() -> bool {
+    true
+}
+
+fn default_save_to_file() -> bool {
+    true
+}
+
+fn default_window_detection() -> String {
+    "WindowOnly".into()
+}
+
+fn default_capture_dock_side() -> String {
+    "Top".into()
+}
+
+fn default_scrolling_capture_mode() -> String {
+    "Automatic".into()
+}
+
+fn default_interface_language() -> String {
+    "auto".into()
+}
+
+fn default_center_selection_aspect_ratio() -> String {
+    "Free".into()
+}
+
+fn default_show_tool_number_badges() -> bool {
+    true
+}
+
+fn default_history_retention() -> String {
+    "Never".into()
+}
+
+fn default_image_search_sources() -> u32 {
+    3
+}
+
+fn default_show_image_search_bar() -> bool {
+    true
+}
+
+fn default_auto_index_images() -> bool {
+    true
+}
+
+fn default_auto_upload_screenshots() -> bool {
+    true
+}
+
+fn default_image_upload_destination() -> String {
+    "None".into()
+}
+
+fn default_toast_duration_seconds() -> f64 {
+    2.5
+}
+
+fn default_toast_fade_out_seconds() -> f64 {
+    1.0
+}
+
+fn default_sound_pack() -> String {
+    "Default".into()
 }
 
 #[derive(Debug, Clone)]
@@ -477,6 +721,27 @@ mod tests {
         assert!(settings.detect_windows);
         assert_eq!(settings.default_capture_mode, DefaultCaptureMode::Rectangle);
         assert_eq!(settings.toast_position, ToastPosition::Right);
+        assert_eq!(settings.ocr_language_tag, "auto");
+        assert_eq!(settings.ocr_default_translate_from, "auto");
+        assert_eq!(settings.ocr_default_translate_to, "auto");
+        assert_eq!(settings.translation_model, 2);
+        assert!(settings.annotation_stroke_shadow);
+        assert!(settings.save_to_file);
+        assert_eq!(settings.window_detection, "WindowOnly");
+        assert_eq!(settings.capture_dock_side, "Top");
+        assert_eq!(settings.scrolling_capture_mode, "Automatic");
+        assert_eq!(settings.interface_language, "auto");
+        assert_eq!(settings.center_selection_aspect_ratio, "Free");
+        assert!(settings.show_tool_number_badges);
+        assert_eq!(settings.history_retention, "Never");
+        assert_eq!(settings.image_search_sources, 3);
+        assert!(settings.show_image_search_bar);
+        assert!(settings.auto_index_images);
+        assert!(settings.auto_upload_screenshots);
+        assert_eq!(settings.image_upload_destination, "None");
+        assert_eq!(settings.toast_duration_seconds, 2.5);
+        assert_eq!(settings.toast_fade_out_seconds, 1.0);
+        assert_eq!(settings.sound_pack, "Default");
         assert!(settings.capture_output_directory.is_none());
     }
 
@@ -530,6 +795,7 @@ mod tests {
             detect_windows: false,
             default_capture_mode: DefaultCaptureMode::ActiveWindow,
             toast_position: ToastPosition::TopRight,
+            ..AppSettings::default()
         };
 
         store.save(&settings).expect("save settings");
@@ -551,6 +817,34 @@ mod tests {
         let loaded = store.load_or_default().expect("load defaults");
 
         assert_eq!(loaded, AppSettings::default());
+    }
+
+    #[test]
+    fn advanced_settings_round_trip_json() {
+        let mut settings = AppSettings {
+            ocr_hotkey: Some("Alt+Shift+O".into()),
+            ocr_language_tag: "en-US".into(),
+            translation_model: 1,
+            image_upload_destination: "Imgur".into(),
+            image_upload_settings: Some(serde_json::json!({"ClientId": "abc"})),
+            enabled_tools: Some(vec!["rect".into(), "ocr".into()]),
+            ..AppSettings::default()
+        };
+        settings
+            .open_with_apps
+            .insert("paint".into(), "mspaint.exe".into());
+        settings.tool_hotkeys.insert("arrow".into(), vec![0, 49]);
+
+        let json = serde_json::to_string(&settings).expect("serialize settings");
+        let loaded: AppSettings = serde_json::from_str(&json).expect("deserialize settings");
+
+        assert_eq!(loaded, settings);
+        assert_eq!(
+            loaded
+                .image_upload_settings
+                .expect("image upload settings should round trip")["ClientId"],
+            "abc"
+        );
     }
 
     #[test]

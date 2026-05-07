@@ -108,6 +108,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 - [x] Import existing save directory/history/copy/image-format/save-naming/recording settings into Rust settings.
 - [x] Import legacy capture UX preferences: delay, cursor, magnifier, crosshair, UI scale, toast position, default mode, startup/update toggles.
+- [x] Preserve legacy advanced settings for OCR, translation, uploads, image search, tools, toast timing, styling, and custom hotkeys.
 - [ ] Import all existing settings.
 - [x] Import existing history.
 - [ ] Import existing media metadata where practical.

@@ -383,6 +383,12 @@ impl OddSnapRustApp {
                 div()
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(self.advanced_settings_summary())),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(format!(
                         "Image format: {} · JPEG quality {}",
                         self.settings.capture_image_format.label(),
@@ -1059,6 +1065,30 @@ impl OddSnapRustApp {
             on_off(self.settings.show_capture_magnifier),
             self.settings.toast_position.label(),
             self.settings.ui_scale
+        )
+    }
+
+    fn advanced_settings_summary(&self) -> String {
+        let upload = if self.settings.auto_upload_screenshots
+            || self.settings.auto_upload_gifs
+            || self.settings.auto_upload_videos
+        {
+            format!("upload {}", self.settings.image_upload_destination)
+        } else {
+            "upload off".into()
+        };
+        let enabled_tools = self
+            .settings
+            .enabled_tools
+            .as_ref()
+            .map_or("all tools".into(), |tools| format!("{} tools", tools.len()));
+        format!(
+            "Advanced prefs: OCR {} · translate model {} · {} · {} · {} custom hotkeys",
+            self.settings.ocr_language_tag,
+            self.settings.translation_model,
+            upload,
+            enabled_tools,
+            self.settings.tool_hotkeys.len()
         )
     }
 

@@ -309,6 +309,261 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
         settings.toast_position = legacy_toast_position(toast_position);
     }
 
+    settings.ocr_hotkey = legacy_hotkey(
+        import.raw.get("OcrHotkeyModifiers"),
+        import.raw.get("OcrHotkeyKey"),
+    );
+    settings.picker_hotkey = legacy_hotkey(
+        import.raw.get("PickerHotkeyModifiers"),
+        import.raw.get("PickerHotkeyKey"),
+    );
+    settings.scan_hotkey = legacy_hotkey(
+        import.raw.get("ScanHotkeyModifiers"),
+        import.raw.get("ScanHotkeyKey"),
+    );
+    settings.sticker_hotkey = legacy_hotkey(
+        import.raw.get("StickerHotkeyModifiers"),
+        import.raw.get("StickerHotkeyKey"),
+    );
+    settings.upscale_hotkey = legacy_hotkey(
+        import.raw.get("UpscaleHotkeyModifiers"),
+        import.raw.get("UpscaleHotkeyKey"),
+    );
+    settings.center_hotkey = legacy_hotkey(
+        import.raw.get("CenterHotkeyModifiers"),
+        import.raw.get("CenterHotkeyKey"),
+    );
+    settings.fullscreen_hotkey = legacy_hotkey(
+        import.raw.get("FullscreenHotkeyModifiers"),
+        import.raw.get("FullscreenHotkeyKey"),
+    );
+    settings.active_window_hotkey = legacy_hotkey(
+        import.raw.get("ActiveWindowHotkeyModifiers"),
+        import.raw.get("ActiveWindowHotkeyKey"),
+    );
+    settings.ruler_hotkey = legacy_hotkey(
+        import.raw.get("RulerHotkeyModifiers"),
+        import.raw.get("RulerHotkeyKey"),
+    );
+    settings.scroll_capture_hotkey = legacy_hotkey(
+        import.raw.get("ScrollCaptureHotkeyModifiers"),
+        import.raw.get("ScrollCaptureHotkeyKey"),
+    );
+    settings.ai_redirect_hotkey = legacy_hotkey(
+        import.raw.get("AiRedirectHotkeyModifiers"),
+        import.raw.get("AiRedirectHotkeyKey"),
+    );
+
+    import_string(
+        &import.raw,
+        "OcrLanguageTag",
+        &mut settings.ocr_language_tag,
+    );
+    import_u32(
+        &import.raw,
+        "OcrModelQuality",
+        &mut settings.ocr_model_quality,
+    );
+    import_string(
+        &import.raw,
+        "OcrDefaultTranslateFrom",
+        &mut settings.ocr_default_translate_from,
+    );
+    import_string(
+        &import.raw,
+        "OcrDefaultTranslateTo",
+        &mut settings.ocr_default_translate_to,
+    );
+    settings.google_translate_api_key =
+        legacy_non_empty_string(import.raw.get("GoogleTranslateApiKey"));
+    import_bool(
+        &import.raw,
+        "TranslationRuntimeInstalled",
+        &mut settings.translation_runtime_installed,
+    );
+    import_u32(
+        &import.raw,
+        "TranslationModel",
+        &mut settings.translation_model,
+    );
+    import_bool(
+        &import.raw,
+        "AnnotationStrokeShadow",
+        &mut settings.annotation_stroke_shadow,
+    );
+    import_bool(&import.raw, "SaveToFile", &mut settings.save_to_file);
+    import_bool(
+        &import.raw,
+        "AskForFileNameOnSave",
+        &mut settings.ask_for_file_name_on_save,
+    );
+    import_bool(
+        &import.raw,
+        "StyleScreenshots",
+        &mut settings.style_screenshots,
+    );
+    import_bool(
+        &import.raw,
+        "AddScreenshotShadow",
+        &mut settings.add_screenshot_shadow,
+    );
+    import_bool(
+        &import.raw,
+        "AddScreenshotStroke",
+        &mut settings.add_screenshot_stroke,
+    );
+    import_u32(
+        &import.raw,
+        "CaptureMaxLongEdge",
+        &mut settings.capture_max_long_edge,
+    );
+    import_enumish_string(
+        &import.raw,
+        "WindowDetection",
+        &mut settings.window_detection,
+    );
+    import_enumish_string(
+        &import.raw,
+        "CaptureDockSide",
+        &mut settings.capture_dock_side,
+    );
+    import_enumish_string(
+        &import.raw,
+        "ScrollingCaptureMode",
+        &mut settings.scrolling_capture_mode,
+    );
+    import_string(
+        &import.raw,
+        "InterfaceLanguage",
+        &mut settings.interface_language,
+    );
+    import_bool(
+        &import.raw,
+        "CompressHistory",
+        &mut settings.compress_history,
+    );
+    import_bool(
+        &import.raw,
+        "HasCompletedSetup",
+        &mut settings.has_completed_setup,
+    );
+    import_enumish_string(
+        &import.raw,
+        "CenterSelectionAspectRatio",
+        &mut settings.center_selection_aspect_ratio,
+    );
+    import_bool(
+        &import.raw,
+        "ShowToolNumberBadges",
+        &mut settings.show_tool_number_badges,
+    );
+    import_enumish_string(
+        &import.raw,
+        "HistoryRetention",
+        &mut settings.history_retention,
+    );
+    import_u32(
+        &import.raw,
+        "ImageSearchSources",
+        &mut settings.image_search_sources,
+    );
+    import_bool(
+        &import.raw,
+        "ShowImageSearchBar",
+        &mut settings.show_image_search_bar,
+    );
+    import_bool(
+        &import.raw,
+        "ImageSearchExactMatch",
+        &mut settings.image_search_exact_match,
+    );
+    import_bool(
+        &import.raw,
+        "ShowImageSearchDiagnostics",
+        &mut settings.show_image_search_diagnostics,
+    );
+    import_bool(
+        &import.raw,
+        "AutoIndexImages",
+        &mut settings.auto_index_images,
+    );
+    import_bool(
+        &import.raw,
+        "AutoUploadScreenshots",
+        &mut settings.auto_upload_screenshots,
+    );
+    import_bool(
+        &import.raw,
+        "AutoUploadGifs",
+        &mut settings.auto_upload_gifs,
+    );
+    import_bool(
+        &import.raw,
+        "AutoUploadVideos",
+        &mut settings.auto_upload_videos,
+    );
+    import_enumish_string(
+        &import.raw,
+        "ImageUploadDestination",
+        &mut settings.image_upload_destination,
+    );
+    settings.image_upload_settings = import.raw.get("ImageUploadSettings").cloned();
+    settings.sticker_upload_settings = import.raw.get("StickerUploadSettings").cloned();
+    settings.upscale_upload_settings = import.raw.get("UpscaleUploadSettings").cloned();
+    import_f64(
+        &import.raw,
+        "ToastDurationSeconds",
+        &mut settings.toast_duration_seconds,
+    );
+    import_bool(
+        &import.raw,
+        "ToastFadeOutEnabled",
+        &mut settings.toast_fade_out_enabled,
+    );
+    import_f64(
+        &import.raw,
+        "ToastFadeOutSeconds",
+        &mut settings.toast_fade_out_seconds,
+    );
+    import_bool(
+        &import.raw,
+        "AutoPinPreviews",
+        &mut settings.auto_pin_previews,
+    );
+    if let Some(open_with_apps) = import.raw.get("OpenWithApps").and_then(Value::as_object) {
+        settings.open_with_apps = open_with_apps
+            .iter()
+            .filter_map(|(key, value)| {
+                value
+                    .as_str()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|value| (key.clone(), value.to_string()))
+            })
+            .collect();
+    }
+    import_enumish_string(&import.raw, "SoundPack", &mut settings.sound_pack);
+    if let Some(enabled_tools) = import.raw.get("EnabledTools").and_then(Value::as_array) {
+        let tools: Vec<String> = enabled_tools
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::trim)
+            .filter(|tool| !tool.is_empty())
+            .map(str::to_string)
+            .collect();
+        settings.enabled_tools = Some(tools);
+    }
+    if let Some(tool_hotkeys) = import.raw.get("ToolHotkeys").and_then(Value::as_object) {
+        settings.tool_hotkeys = tool_hotkeys
+            .iter()
+            .filter_map(|(tool, value)| {
+                let values = value.as_array()?;
+                let modifiers = values.first()?.as_u64()? as u32;
+                let key = values.get(1)?.as_u64()? as u32;
+                Some((tool.clone(), vec![modifiers, key]))
+            })
+            .collect();
+    }
+
     settings
 }
 
@@ -605,6 +860,42 @@ fn legacy_non_empty_string(value: Option<&Value>) -> Option<String> {
         .map(str::to_string)
 }
 
+fn import_bool(raw: &Value, key: &str, destination: &mut bool) {
+    if let Some(value) = raw.get(key).and_then(Value::as_bool) {
+        *destination = value;
+    }
+}
+
+fn import_string(raw: &Value, key: &str, destination: &mut String) {
+    if let Some(value) = legacy_non_empty_string(raw.get(key)) {
+        *destination = value;
+    }
+}
+
+fn import_enumish_string(raw: &Value, key: &str, destination: &mut String) {
+    match raw.get(key) {
+        Some(Value::String(value)) if !value.trim().is_empty() => {
+            *destination = value.trim().to_string();
+        }
+        Some(Value::Number(number)) => {
+            *destination = number.to_string();
+        }
+        _ => {}
+    }
+}
+
+fn import_u32(raw: &Value, key: &str, destination: &mut u32) {
+    if let Some(value) = raw.get(key).and_then(Value::as_u64) {
+        *destination = value.min(u32::MAX as u64) as u32;
+    }
+}
+
+fn import_f64(raw: &Value, key: &str, destination: &mut f64) {
+    if let Some(value) = raw.get(key).and_then(Value::as_f64) {
+        *destination = value;
+    }
+}
+
 fn legacy_hotkey(modifiers: Option<&Value>, key: Option<&Value>) -> Option<String> {
     let modifiers = modifiers.and_then(Value::as_u64)? as u32;
     let key = key.and_then(Value::as_u64)? as u32;
@@ -877,6 +1168,140 @@ mod tests {
         assert_eq!(settings.ui_scale, 1.4);
         assert_eq!(settings.default_capture_mode, DefaultCaptureMode::Center);
         assert_eq!(settings.toast_position, ToastPosition::TopLeft);
+    }
+
+    #[test]
+    fn imports_advanced_legacy_settings_without_dropping_feature_configuration() {
+        let import = super::LegacySettingsImport {
+            source_path: PathBuf::from("settings.json"),
+            top_level_key_count: 20,
+            raw: serde_json::from_str(
+                r#"{
+                    "OcrHotkeyModifiers": 5,
+                    "OcrHotkeyKey": 79,
+                    "PickerHotkeyModifiers": 1,
+                    "PickerHotkeyKey": 67,
+                    "StickerHotkeyModifiers": 1,
+                    "StickerHotkeyKey": 83,
+                    "AiRedirectHotkeyModifiers": 1,
+                    "AiRedirectHotkeyKey": 65,
+                    "OcrLanguageTag": "en-US",
+                    "OcrModelQuality": 1,
+                    "OcrDefaultTranslateFrom": "en",
+                    "OcrDefaultTranslateTo": "es",
+                    "GoogleTranslateApiKey": "key",
+                    "TranslationRuntimeInstalled": true,
+                    "TranslationModel": 1,
+                    "AnnotationStrokeShadow": false,
+                    "StyleScreenshots": true,
+                    "AddScreenshotShadow": true,
+                    "AddScreenshotStroke": true,
+                    "CaptureMaxLongEdge": 1440,
+                    "WindowDetection": "Off",
+                    "CaptureDockSide": "Bottom",
+                    "ScrollingCaptureMode": "Manual",
+                    "InterfaceLanguage": "fr",
+                    "CompressHistory": true,
+                    "HasCompletedSetup": true,
+                    "CenterSelectionAspectRatio": "Widescreen16x9",
+                    "ShowToolNumberBadges": false,
+                    "HistoryRetention": "ThirtyDays",
+                    "ImageSearchSources": 1,
+                    "ShowImageSearchBar": false,
+                    "ImageSearchExactMatch": true,
+                    "ShowImageSearchDiagnostics": true,
+                    "AutoIndexImages": false,
+                    "AutoUploadScreenshots": false,
+                    "AutoUploadGifs": true,
+                    "AutoUploadVideos": true,
+                    "ImageUploadDestination": "Imgur",
+                    "ImageUploadSettings": {"ClientId": "cid"},
+                    "StickerUploadSettings": {"RuntimeInstalled": true},
+                    "UpscaleUploadSettings": {"Scale": 4},
+                    "ToastDurationSeconds": 4.5,
+                    "ToastFadeOutEnabled": true,
+                    "ToastFadeOutSeconds": 2.0,
+                    "AutoPinPreviews": true,
+                    "OpenWithApps": {"paint": "mspaint.exe"},
+                    "SoundPack": "Soft",
+                    "EnabledTools": ["rect", "ocr", "sticker"],
+                    "ToolHotkeys": {"arrow": [0, 49]}
+                }"#,
+            )
+            .expect("parse advanced settings fixture"),
+        };
+
+        let settings = import_app_settings(&import);
+
+        assert_eq!(settings.ocr_hotkey.as_deref(), Some("Alt+Shift+O"));
+        assert_eq!(settings.picker_hotkey.as_deref(), Some("Alt+C"));
+        assert_eq!(settings.sticker_hotkey.as_deref(), Some("Alt+S"));
+        assert_eq!(settings.ai_redirect_hotkey.as_deref(), Some("Alt+A"));
+        assert_eq!(settings.ocr_language_tag, "en-US");
+        assert_eq!(settings.ocr_model_quality, 1);
+        assert_eq!(settings.ocr_default_translate_from, "en");
+        assert_eq!(settings.ocr_default_translate_to, "es");
+        assert_eq!(settings.google_translate_api_key.as_deref(), Some("key"));
+        assert!(settings.translation_runtime_installed);
+        assert_eq!(settings.translation_model, 1);
+        assert!(!settings.annotation_stroke_shadow);
+        assert!(settings.style_screenshots);
+        assert!(settings.add_screenshot_shadow);
+        assert!(settings.add_screenshot_stroke);
+        assert_eq!(settings.capture_max_long_edge, 1440);
+        assert_eq!(settings.window_detection, "Off");
+        assert_eq!(settings.capture_dock_side, "Bottom");
+        assert_eq!(settings.scrolling_capture_mode, "Manual");
+        assert_eq!(settings.interface_language, "fr");
+        assert!(settings.compress_history);
+        assert!(settings.has_completed_setup);
+        assert_eq!(settings.center_selection_aspect_ratio, "Widescreen16x9");
+        assert!(!settings.show_tool_number_badges);
+        assert_eq!(settings.history_retention, "ThirtyDays");
+        assert_eq!(settings.image_search_sources, 1);
+        assert!(!settings.show_image_search_bar);
+        assert!(settings.image_search_exact_match);
+        assert!(settings.show_image_search_diagnostics);
+        assert!(!settings.auto_index_images);
+        assert!(!settings.auto_upload_screenshots);
+        assert!(settings.auto_upload_gifs);
+        assert!(settings.auto_upload_videos);
+        assert_eq!(settings.image_upload_destination, "Imgur");
+        assert_eq!(
+            settings
+                .image_upload_settings
+                .as_ref()
+                .expect("image upload settings should import")["ClientId"],
+            "cid"
+        );
+        assert_eq!(
+            settings
+                .sticker_upload_settings
+                .as_ref()
+                .expect("sticker upload settings should import")["RuntimeInstalled"],
+            true
+        );
+        assert_eq!(
+            settings
+                .upscale_upload_settings
+                .as_ref()
+                .expect("upscale upload settings should import")["Scale"],
+            4
+        );
+        assert_eq!(settings.toast_duration_seconds, 4.5);
+        assert!(settings.toast_fade_out_enabled);
+        assert_eq!(settings.toast_fade_out_seconds, 2.0);
+        assert!(settings.auto_pin_previews);
+        assert_eq!(
+            settings.open_with_apps.get("paint").map(String::as_str),
+            Some("mspaint.exe")
+        );
+        assert_eq!(settings.sound_pack, "Soft");
+        assert_eq!(
+            settings.enabled_tools.as_deref(),
+            Some(["rect".to_string(), "ocr".to_string(), "sticker".to_string()].as_slice())
+        );
+        assert_eq!(settings.tool_hotkeys.get("arrow"), Some(&vec![0, 49]));
     }
 
     #[test]
