@@ -1,6 +1,10 @@
 use oddsnap_core::HistoryKind;
 
-use crate::CaptureHistoryEntry;
+use crate::{history_kind_label, CaptureHistoryEntry};
+
+pub(crate) const DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT: usize = 6;
+const MEDIA_HISTORY_VISIBLE_INCREMENT: usize = 12;
+pub(crate) const IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT: usize = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum HistoryKindFilter {
@@ -113,4 +117,128 @@ pub(crate) fn filtered_capture_history(
         .filter(|entry| kind_filter.matches(entry.kind) && upload_filter.matches(entry))
         .cloned()
         .collect()
+}
+
+pub(crate) fn next_media_history_visible_limit(current: usize, total: usize) -> usize {
+    current
+        .max(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT)
+        .saturating_add(MEDIA_HISTORY_VISIBLE_INCREMENT)
+        .min(total.max(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT))
+}
+
+pub(crate) fn media_history_detail_line(entry: &CaptureHistoryEntry, now_ms: u64) -> String {
+    format!(
+        "{} · {} · {}x{} · {} · {}",
+        history_kind_label(entry.kind),
+        entry.mode.label(),
+        entry.width,
+        entry.height,
+        format_storage_size(entry.file_size_bytes),
+        format_history_age(entry.captured_at_unix_ms, now_ms)
+    )
+}
+
+pub(crate) fn media_history_count_text(
+    visible_count: usize,
+    total_count: usize,
+    total_bytes: u64,
+    filter_active: bool,
+) -> String {
+    let size = format_storage_size(total_bytes);
+    if filter_active {
+        format!("{visible_count} of {total_count} rows before search · {size}")
+    } else {
+        format!("{visible_count} rows before search · {size}")
+    }
+}
+
+fn format_storage_size(bytes: u64) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = KIB * 1024.0;
+    const GIB: f64 = MIB * 1024.0;
+
+    let bytes_f = bytes as f64;
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes_f < MIB {
+        format!("{:.1} KB", bytes_f / KIB)
+    } else if bytes_f < GIB {
+        format!("{:.1} MB", bytes_f / MIB)
+    } else {
+        format!("{:.1} GB", bytes_f / GIB)
+    }
+}
+
+fn format_history_age(captured_at_unix_ms: u64, now_ms: u64) -> String {
+    if captured_at_unix_ms == 0 {
+        return "this session".into();
+    }
+
+    let elapsed_seconds = now_ms.saturating_sub(captured_at_unix_ms) / 1000;
+    if elapsed_seconds < 60 {
+        "just now".into()
+    } else if elapsed_seconds < 60 * 60 {
+        let minutes = elapsed_seconds / 60;
+        format!("{minutes}m ago")
+    } else if elapsed_seconds < 60 * 60 * 24 {
+        let hours = elapsed_seconds / (60 * 60);
+        format!("{hours}h ago")
+    } else if elapsed_seconds < 60 * 60 * 24 * 7 {
+        let days = elapsed_seconds / (60 * 60 * 24);
+        format!("{days}d ago")
+    } else {
+        "older".into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::CaptureMode;
+
+    #[test]
+    fn media_history_visible_limit_expands_without_shrinking_below_default() {
+        assert_eq!(
+            next_media_history_visible_limit(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT, 40),
+            18
+        );
+        assert_eq!(next_media_history_visible_limit(18, 20), 20);
+        assert_eq!(next_media_history_visible_limit(2, 4), 6);
+    }
+
+    #[test]
+    fn media_history_detail_text_uses_index_metadata() {
+        let entry = CaptureHistoryEntry {
+            mode: CaptureMode::FullScreen,
+            kind: HistoryKind::Image,
+            path: "capture.png".into(),
+            file_name: "capture.png".into(),
+            preview_path: None,
+            width: 10,
+            height: 10,
+            file_size_bytes: 1024,
+            captured_at_unix_ms: 1,
+            image_search_ocr_text: String::new(),
+            image_search_record: None,
+            upload_url: None,
+            upload_provider: None,
+            upload_error: None,
+        };
+
+        assert_eq!(
+            media_history_detail_line(&entry, 60_000),
+            "Image · Full screen · 10x10 · 1.0 KB · just now"
+        );
+        assert_eq!(
+            media_history_count_text(3, 9, 3 * 1024 * 1024, true),
+            "3 of 9 rows before search · 3.0 MB"
+        );
+        assert_eq!(
+            media_history_count_text(9, 9, 0, false),
+            "9 rows before search · 0 B"
+        );
+        assert_eq!(format_storage_size(1024 * 1024 * 3), "3.0 MB");
+        assert_eq!(format_history_age(0, 60_000), "this session");
+        assert_eq!(format_history_age(1, 60_000 * 10), "9m ago");
+    }
 }

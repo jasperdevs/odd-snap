@@ -67,7 +67,11 @@ use hotkeys::{
 };
 use hotkeys::{start_capture_hotkey_listener, ImportedHotkeyAccelerators};
 use image_search::{ImageSearchOcrHydrationSummary, ImageSearchReindexQueueState};
-use media_history::{filtered_capture_history, HistoryKindFilter, HistoryUploadFilter};
+use media_history::{
+    filtered_capture_history, media_history_count_text, media_history_detail_line,
+    next_media_history_visible_limit, HistoryKindFilter, HistoryUploadFilter,
+    DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT, IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT,
+};
 use processed_preview::ProcessedResultPreviewWindow;
 
 #[cfg(any(target_os = "windows", test))]
@@ -79,10 +83,6 @@ const MACOS_MENU_BAR_FOUNDATION_STATUS: &str =
 #[cfg(target_os = "linux")]
 const LINUX_TRAY_FOUNDATION_STATUS: &str =
     "Tray: Linux appindicator/status icon foundation active; OCR wired, scroll capture still pending.";
-
-const DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT: usize = 6;
-const MEDIA_HISTORY_VISIBLE_INCREMENT: usize = 12;
-const IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT: usize = 20;
 
 fn main() {
     application().run(|cx: &mut App| {
@@ -5739,71 +5739,6 @@ fn history_upload_summary(entry: &CaptureHistoryEntry) -> String {
     "No upload link".into()
 }
 
-fn media_history_detail_line(entry: &CaptureHistoryEntry, now_ms: u64) -> String {
-    format!(
-        "{} · {} · {}x{} · {} · {}",
-        history_kind_label(entry.kind),
-        entry.mode.label(),
-        entry.width,
-        entry.height,
-        format_storage_size(entry.file_size_bytes),
-        format_history_age(entry.captured_at_unix_ms, now_ms)
-    )
-}
-
-fn media_history_count_text(
-    visible_count: usize,
-    total_count: usize,
-    total_bytes: u64,
-    filter_active: bool,
-) -> String {
-    let size = format_storage_size(total_bytes);
-    if filter_active {
-        format!("{visible_count} of {total_count} rows before search · {size}")
-    } else {
-        format!("{visible_count} rows before search · {size}")
-    }
-}
-
-fn format_storage_size(bytes: u64) -> String {
-    const KIB: f64 = 1024.0;
-    const MIB: f64 = KIB * 1024.0;
-    const GIB: f64 = MIB * 1024.0;
-
-    let bytes_f = bytes as f64;
-    if bytes < 1024 {
-        format!("{bytes} B")
-    } else if bytes_f < MIB {
-        format!("{:.1} KB", bytes_f / KIB)
-    } else if bytes_f < GIB {
-        format!("{:.1} MB", bytes_f / MIB)
-    } else {
-        format!("{:.1} GB", bytes_f / GIB)
-    }
-}
-
-fn format_history_age(captured_at_unix_ms: u64, now_ms: u64) -> String {
-    if captured_at_unix_ms == 0 {
-        return "this session".into();
-    }
-
-    let elapsed_seconds = now_ms.saturating_sub(captured_at_unix_ms) / 1000;
-    if elapsed_seconds < 60 {
-        "just now".into()
-    } else if elapsed_seconds < 60 * 60 {
-        let minutes = elapsed_seconds / 60;
-        format!("{minutes}m ago")
-    } else if elapsed_seconds < 60 * 60 * 24 {
-        let hours = elapsed_seconds / (60 * 60);
-        format!("{hours}h ago")
-    } else if elapsed_seconds < 60 * 60 * 24 * 7 {
-        let days = elapsed_seconds / (60 * 60 * 24);
-        format!("{days}d ago")
-    } else {
-        "older".into()
-    }
-}
-
 fn newest_history_image_path(history: &[CaptureHistoryEntry]) -> Option<PathBuf> {
     history
         .iter()
@@ -6581,13 +6516,6 @@ fn next_toast_duration_seconds(seconds: f64) -> f64 {
     } else {
         1.5
     }
-}
-
-fn next_media_history_visible_limit(current: usize, total: usize) -> usize {
-    current
-        .max(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT)
-        .saturating_add(MEDIA_HISTORY_VISIBLE_INCREMENT)
-        .min(total.max(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT))
 }
 
 fn next_recording_format(format: RecordingFormat) -> RecordingFormat {
@@ -7408,21 +7336,6 @@ mod tests {
             "Upload pending: Rust upload backend for Catbox is pending."
         );
         assert_eq!(history_kind_label(HistoryKind::Sticker), "Sticker");
-        assert_eq!(
-            media_history_detail_line(&entry, 60_000),
-            "Image · Full screen · 10x10 · 1.0 KB · just now"
-        );
-        assert_eq!(
-            media_history_count_text(3, 9, 3 * 1024 * 1024, true),
-            "3 of 9 rows before search · 3.0 MB"
-        );
-        assert_eq!(
-            media_history_count_text(9, 9, 0, false),
-            "9 rows before search · 0 B"
-        );
-        assert_eq!(format_storage_size(1024 * 1024 * 3), "3.0 MB");
-        assert_eq!(format_history_age(0, 60_000), "this session");
-        assert_eq!(format_history_age(1, 60_000 * 10), "9m ago");
     }
 
     #[test]
