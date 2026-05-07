@@ -26,6 +26,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Launch the GPUI shell on Windows.
 - [x] Wire GPUI shell smoke button to Windows capture service.
 - [x] Centralize initial GPUI skin tokens and reusable panel/button chrome for easier feature-panel additions.
+- [x] Document GPUI feature-extension boundaries in `docs/rust-gpui-architecture.md`.
 
 ## Milestone 2 - Platform Risk Proofs
 
