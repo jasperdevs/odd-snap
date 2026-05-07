@@ -58,6 +58,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows active-window capture foundation.
 - [ ] Cross-platform window capture.
 - [ ] Production region selection overlay.
+- [x] Windows primitive drag region selection capture path.
 - [ ] Crosshair guides.
 - [ ] Magnifier.
 - [ ] Annotation drawing.

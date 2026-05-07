@@ -5,9 +5,9 @@ use oddsnap_core::{
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
     HotkeyService, MonitorInfo, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter,
-    PlatformError, RegionOverlayService, ScreenCaptureService, ScreenshotExclusionService,
-    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult, VideoRecordingService,
-    WindowInfo, WindowPickerService,
+    PlatformError, RegionOverlayService, RegionSelectionService, ScreenCaptureService,
+    ScreenshotExclusionService, VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult,
+    VideoRecordingService, WindowInfo, WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -64,7 +64,8 @@ use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForSystem, MDT_EFFECTIVE
 use windows::Win32::UI::Input::KeyboardAndMouse::UnregisterHotKey;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    RegisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN,
+    RegisterHotKey, ReleaseCapture, SetCapture, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL,
+    MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, VK_ESCAPE,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Shell::{
@@ -76,15 +77,15 @@ use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
     DispatchMessageW, DrawIconEx, GetCursorInfo, GetCursorPos, GetForegroundWindow, GetIconInfo,
     GetMessageW, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, LoadIconW,
-    PeekMessageW, PostThreadMessageW, RegisterClassW, SetForegroundWindow,
+    PeekMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassW, SetForegroundWindow,
     SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowPos, ShowWindow, TrackPopupMenu,
     TranslateMessage, CURSORINFO, CURSOR_SHOWING, DI_NORMAL, HMENU, HWND_MESSAGE, HWND_TOPMOST,
     ICONINFO, IDI_APPLICATION, LWA_ALPHA, MF_SEPARATOR, MF_STRING, MSG, PM_NOREMOVE,
     SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE,
     SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOW, TPM_LEFTALIGN, TPM_RETURNCMD,
     WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY, WINDOW_EX_STYLE, WM_APP, WM_HOTKEY,
-    WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_OVERLAPPED, WS_POPUP,
+    WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_OVERLAPPED, WS_POPUP,
 };
 
 #[derive(Debug, Default)]
@@ -124,6 +125,15 @@ const TRAY_MENU_SETTINGS_ID: usize = 0x1006;
 const TRAY_MENU_HISTORY_ID: usize = 0x1007;
 #[cfg(target_os = "windows")]
 const TRAY_MENU_QUIT_ID: usize = 0x1008;
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Clone)]
+struct WindowsRegionSelectionState {
+    bounds: CaptureRegion,
+    start: Option<(i32, i32)>,
+    current: Option<(i32, i32)>,
+    result: Option<Option<CaptureRegion>>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowsHotkeyEvent {
@@ -452,6 +462,26 @@ impl RegionOverlayService for WindowsPlatform {
     }
 }
 
+impl RegionSelectionService for WindowsPlatform {
+    fn select_region(
+        &self,
+        request: OverlayWindowRequest,
+    ) -> Result<Option<CaptureRegion>, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            select_windows_region(request)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "Windows region selection is only available on Windows",
+            ))
+        }
+    }
+}
+
 impl HotkeyService for WindowsPlatform {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError> {
         #[cfg(target_os = "windows")]
@@ -751,6 +781,9 @@ static TRAY_EVENT_SENDERS: OnceLock<Mutex<HashMap<isize, Sender<WindowsTrayEvent
     OnceLock::new();
 #[cfg(target_os = "windows")]
 static TRAY_RECORDING_STATES: OnceLock<Mutex<HashMap<isize, bool>>> = OnceLock::new();
+#[cfg(target_os = "windows")]
+static REGION_SELECTION_STATES: OnceLock<Mutex<HashMap<isize, WindowsRegionSelectionState>>> =
+    OnceLock::new();
 
 #[cfg(target_os = "windows")]
 fn tray_event_senders() -> &'static Mutex<HashMap<isize, Sender<WindowsTrayEvent>>> {
@@ -765,6 +798,11 @@ fn hwnd_key(hwnd: HWND) -> isize {
 #[cfg(target_os = "windows")]
 fn tray_recording_states() -> &'static Mutex<HashMap<isize, bool>> {
     TRAY_RECORDING_STATES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(target_os = "windows")]
+fn region_selection_states() -> &'static Mutex<HashMap<isize, WindowsRegionSelectionState>> {
+    REGION_SELECTION_STATES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 #[cfg(target_os = "windows")]
@@ -940,6 +978,263 @@ fn create_windows_overlay_window(
 
     Ok(WindowsOverlayWindow {
         hwnd: hwnd.0 as isize,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn select_windows_region(
+    mut request: OverlayWindowRequest,
+) -> Result<Option<CaptureRegion>, PlatformError> {
+    if request.bounds.width == 0 || request.bounds.height == 0 {
+        return Err(PlatformError::Failed(
+            "selection bounds must be non-empty".into(),
+        ));
+    }
+    request.click_through = false;
+
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let join_handle = thread::spawn(move || {
+        let result = run_region_selection_loop(request).map_err(|error| error.to_string());
+        let _ = sender.send(result);
+    });
+
+    let result = receiver
+        .recv()
+        .map_err(|error| {
+            PlatformError::Failed(format!("region selection did not finish: {error}"))
+        })?
+        .map_err(PlatformError::Failed);
+    let _ = join_handle.join();
+    result
+}
+
+#[cfg(target_os = "windows")]
+fn run_region_selection_loop(
+    request: OverlayWindowRequest,
+) -> Result<Option<CaptureRegion>, PlatformError> {
+    let hwnd = create_region_selection_window(&request)?;
+    if let Ok(mut states) = region_selection_states().lock() {
+        states.insert(
+            hwnd_key(hwnd),
+            WindowsRegionSelectionState {
+                bounds: request.bounds.clone(),
+                start: None,
+                current: None,
+                result: None,
+            },
+        );
+    }
+
+    let mut message = MSG::default();
+    loop {
+        let status = unsafe { GetMessageW(&mut message, None, 0, 0) };
+        if status.0 <= 0 {
+            break;
+        }
+        unsafe {
+            let _ = TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+
+    let result = region_selection_states()
+        .lock()
+        .ok()
+        .and_then(|mut states| states.remove(&hwnd_key(hwnd)))
+        .and_then(|state| state.result)
+        .flatten();
+    unsafe {
+        let _ = DestroyWindow(hwnd);
+    }
+    Ok(result)
+}
+
+#[cfg(target_os = "windows")]
+fn create_region_selection_window(request: &OverlayWindowRequest) -> Result<HWND, PlatformError> {
+    let class_name = wide_null("OddSnapRustRegionSelectionWindow");
+    let module = unsafe { GetModuleHandleW(None) }
+        .map_err(|error| PlatformError::Failed(format!("GetModuleHandleW failed: {error}")))?;
+    let instance = HINSTANCE(module.0);
+    let window_class = WNDCLASSW {
+        lpfnWndProc: Some(region_selection_window_proc),
+        hInstance: instance,
+        lpszClassName: PCWSTR(class_name.as_ptr()),
+        ..Default::default()
+    };
+    unsafe {
+        let _ = RegisterClassW(&window_class);
+    }
+
+    let hwnd = unsafe {
+        CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+            PCWSTR(class_name.as_ptr()),
+            w!("OddSnap Rust Region Selection"),
+            WS_POPUP,
+            request.bounds.x,
+            request.bounds.y,
+            request.bounds.width as i32,
+            request.bounds.height as i32,
+            None,
+            None,
+            Some(instance),
+            None,
+        )
+        .map_err(|error| PlatformError::Failed(format!("CreateWindowExW failed: {error}")))?
+    };
+
+    let setup_result = (|| {
+        unsafe {
+            SetLayeredWindowAttributes(hwnd, COLORREF(0), request.opacity, LWA_ALPHA).map_err(
+                |error| {
+                    PlatformError::Failed(format!("SetLayeredWindowAttributes failed: {error}"))
+                },
+            )?;
+            SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE).map_err(|error| {
+                PlatformError::Failed(format!("SetWindowDisplayAffinity failed: {error}"))
+            })?;
+            SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+            )
+            .map_err(|error| PlatformError::Failed(format!("SetWindowPos failed: {error}")))?;
+            let _ = ShowWindow(hwnd, SW_SHOW);
+        }
+        Ok::<(), PlatformError>(())
+    })();
+
+    if let Err(error) = setup_result {
+        let _ = unsafe { DestroyWindow(hwnd) };
+        return Err(error);
+    }
+
+    Ok(hwnd)
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn region_selection_window_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    match message {
+        WM_LBUTTONDOWN => {
+            let point = selection_lparam_point(lparam);
+            update_region_selection_state(hwnd, |state| {
+                let point = clamp_selection_point(point, &state.bounds);
+                state.start = Some(point);
+                state.current = Some(point);
+            });
+            unsafe {
+                let _ = SetCapture(hwnd);
+            }
+            LRESULT(0)
+        }
+        WM_MOUSEMOVE => {
+            let point = selection_lparam_point(lparam);
+            update_region_selection_state(hwnd, |state| {
+                if state.start.is_some() {
+                    state.current = Some(clamp_selection_point(point, &state.bounds));
+                }
+            });
+            LRESULT(0)
+        }
+        WM_LBUTTONUP => {
+            let point = selection_lparam_point(lparam);
+            update_region_selection_state(hwnd, |state| {
+                let point = clamp_selection_point(point, &state.bounds);
+                state.current = Some(point);
+                state.result = Some(match (state.start, state.current) {
+                    (Some(start), Some(end)) => {
+                        selection_region_from_points(&state.bounds, start, end)
+                    }
+                    _ => None,
+                });
+            });
+            unsafe {
+                let _ = ReleaseCapture();
+                PostQuitMessage(0);
+            }
+            LRESULT(0)
+        }
+        WM_RBUTTONUP => {
+            cancel_region_selection(hwnd);
+            LRESULT(0)
+        }
+        WM_KEYDOWN if wparam.0 == VK_ESCAPE.0 as usize => {
+            cancel_region_selection(hwnd);
+            LRESULT(0)
+        }
+        _ => unsafe { DefWindowProcW(hwnd, message, wparam, lparam) },
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn cancel_region_selection(hwnd: HWND) {
+    update_region_selection_state(hwnd, |state| {
+        state.result = Some(None);
+    });
+    unsafe {
+        let _ = ReleaseCapture();
+        PostQuitMessage(0);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn update_region_selection_state(
+    hwnd: HWND,
+    update: impl FnOnce(&mut WindowsRegionSelectionState),
+) {
+    if let Ok(mut states) = region_selection_states().lock() {
+        if let Some(state) = states.get_mut(&hwnd_key(hwnd)) {
+            update(state);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn selection_lparam_point(lparam: LPARAM) -> (i32, i32) {
+    let value = lparam.0 as u32;
+    let x = (value as u16 as i16) as i32;
+    let y = ((value >> 16) as u16 as i16) as i32;
+    (x, y)
+}
+
+#[cfg(target_os = "windows")]
+fn clamp_selection_point(point: (i32, i32), bounds: &CaptureRegion) -> (i32, i32) {
+    (
+        point.0.clamp(0, bounds.width as i32),
+        point.1.clamp(0, bounds.height as i32),
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn selection_region_from_points(
+    bounds: &CaptureRegion,
+    start: (i32, i32),
+    end: (i32, i32),
+) -> Option<CaptureRegion> {
+    let left = start.0.min(end.0);
+    let top = start.1.min(end.1);
+    let right = start.0.max(end.0);
+    let bottom = start.1.max(end.1);
+    let width = u32::try_from(right - left).ok()?;
+    let height = u32::try_from(bottom - top).ok()?;
+    if width == 0 || height == 0 {
+        return None;
+    }
+
+    Some(CaptureRegion {
+        x: bounds.x.saturating_add(left),
+        y: bounds.y.saturating_add(top),
+        width,
+        height,
     })
 }
 
@@ -1955,8 +2250,8 @@ mod tests {
     #[cfg(target_os = "windows")]
     use oddsnap_platform::ScreenshotExclusionService;
     use oddsnap_platform::{
-        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, VideoRecordingRequest,
-        VideoRecordingService,
+        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
+        VideoRecordingRequest, VideoRecordingService,
     };
     #[cfg(target_os = "windows")]
     use windows::core::w;
@@ -2062,6 +2357,53 @@ mod tests {
             click_through: true,
         }) {
             Ok(_) => panic!("empty overlay should fail"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("non-empty"));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn region_selection_normalizes_drag_points_into_virtual_screen_region() {
+        let bounds = oddsnap_platform::CaptureRegion {
+            x: -120,
+            y: 40,
+            width: 800,
+            height: 600,
+        };
+
+        let region =
+            super::selection_region_from_points(&bounds, (220, 180), (20, 30)).expect("selection");
+
+        assert_eq!(
+            region,
+            oddsnap_platform::CaptureRegion {
+                x: -100,
+                y: 70,
+                width: 200,
+                height: 150,
+            }
+        );
+        assert!(super::selection_region_from_points(&bounds, (10, 10), (10, 20)).is_none());
+        assert_eq!(super::clamp_selection_point((-10, 700), &bounds), (0, 600));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn region_selection_rejects_empty_bounds() {
+        let adapter = WindowsPlatform;
+        let error = match adapter.select_region(OverlayWindowRequest {
+            bounds: oddsnap_platform::CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 0,
+            },
+            opacity: 24,
+            click_through: false,
+        }) {
+            Ok(_) => panic!("empty selection bounds should fail"),
             Err(error) => error,
         };
 

@@ -25,8 +25,9 @@ use oddsnap_core::{
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRequest,
-    ClipboardImageService, ClipboardTextService, PlatformAdapter, ScreenCaptureService,
-    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
+    ClipboardImageService, ClipboardTextService, OverlayWindowRequest, PlatformAdapter,
+    RegionSelectionService, ScreenCaptureService, VideoRecordingHandle, VideoRecordingRequest,
+    VideoRecordingService, WindowPickerService,
 };
 
 fn main() {
@@ -118,6 +119,7 @@ impl RecordingTarget {
 
 #[derive(Clone, Copy)]
 enum CaptureMode {
+    Rectangle,
     FullScreen,
     ActiveWindow,
 }
@@ -134,6 +136,7 @@ enum SettingsAction {
 impl CaptureMode {
     fn label(self) -> &'static str {
         match self {
+            Self::Rectangle => "Rectangle",
             Self::FullScreen => "Full screen",
             Self::ActiveWindow => "Active window",
         }
@@ -357,6 +360,11 @@ impl OddSnapRustApp {
                         div()
                             .flex()
                             .gap(px(8.0))
+                            .child(self.capture_button(
+                                cx,
+                                "capture-region-button",
+                                CaptureMode::Rectangle,
+                            ))
                             .child(self.capture_button(
                                 cx,
                                 "capture-full-button",
@@ -851,9 +859,30 @@ impl OddSnapRustApp {
 
         let platform = host_platform();
         #[cfg(target_os = "windows")]
-        let result = {
+        let result = (|| {
             let adapter = oddsnap_platform_windows::WindowsPlatform;
             let capture = match mode {
+                CaptureMode::Rectangle => {
+                    let monitors = adapter.monitors()?;
+                    let bounds = virtual_screen_region(&monitors).ok_or_else(|| {
+                        oddsnap_platform::PlatformError::Failed(
+                            "no monitors available for region selection".into(),
+                        )
+                    })?;
+                    match adapter.select_region(OverlayWindowRequest {
+                        bounds,
+                        opacity: 24,
+                        click_through: false,
+                    })? {
+                        Some(region) => adapter.capture_region_with_options(CaptureRequest {
+                            region,
+                            include_cursor: self.settings.show_cursor,
+                        }),
+                        None => Err(oddsnap_platform::PlatformError::Failed(
+                            "region selection canceled".into(),
+                        )),
+                    }
+                }
                 CaptureMode::FullScreen => {
                     adapter.capture_all_screens_with_cursor(self.settings.show_cursor)
                 }
@@ -877,7 +906,7 @@ impl OddSnapRustApp {
                 }
                 Ok(saved)
             })
-        };
+        })();
 
         #[cfg(not(target_os = "windows"))]
         let result = Err(oddsnap_platform::PlatformError::Unsupported(
@@ -1663,8 +1692,8 @@ fn hotkey_capture_mode(default_mode: DefaultCaptureMode) -> CaptureMode {
     match default_mode {
         DefaultCaptureMode::ActiveWindow => CaptureMode::ActiveWindow,
         DefaultCaptureMode::Fullscreen => CaptureMode::FullScreen,
-        DefaultCaptureMode::Rectangle
-        | DefaultCaptureMode::ColorPicker
+        DefaultCaptureMode::Rectangle => CaptureMode::Rectangle,
+        DefaultCaptureMode::ColorPicker
         | DefaultCaptureMode::Ocr
         | DefaultCaptureMode::Scan
         | DefaultCaptureMode::Sticker
@@ -1765,7 +1794,7 @@ mod tests {
         ));
         assert!(matches!(
             hotkey_capture_mode(DefaultCaptureMode::Rectangle),
-            CaptureMode::FullScreen
+            CaptureMode::Rectangle
         ));
     }
 

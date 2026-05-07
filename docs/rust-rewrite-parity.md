@@ -16,7 +16,9 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
 - GPUI shell can invoke the Windows capture service through a local smoke action.
 - Shared capture trait can capture the full virtual screen by reusing monitor enumeration and region capture.
+- GPUI exposes rectangle, full-screen, and active-window capture actions instead of mapping rectangle capture to full-screen.
 - Windows can detect active-window bounds and capture that window through the shared capture service.
+- Windows can run a primitive native drag-selection loop and capture the selected region through the shared capture pipeline.
 - Windows can copy generated BMP captures to the system clipboard as image data.
 - Shared capture persistence can save generated captures into a stable output directory.
 - GPUI shell exposes full-screen and active-window capture smoke controls with a local recent-captures list.
@@ -61,5 +63,5 @@ The Rust rewrite must not replace the current app until this document and the li
 
 The rewrite does not yet implement the full production capture overlay, annotation, region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, packaging, or update behavior.
 The Windows tray foundation is present, but the Rust menu still routes text capture, color picker, and scroll capture to pending-status messages until those feature backends land.
-The Windows overlay foundation proves native window lifecycle only; production selection, crosshair, magnifier, toolbar, hit testing, and annotation are still pending.
+The Windows overlay foundation proves native window lifecycle only; the current region selector is primitive and does not yet include the production screenshot-backed overlay, crosshair, magnifier, toolbar, snap-to-window behavior, or annotation tools.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.

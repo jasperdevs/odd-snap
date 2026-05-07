@@ -164,6 +164,13 @@ pub trait RegionOverlayService: Send + Sync {
     ) -> Result<Box<dyn OverlayWindowHandle>, PlatformError>;
 }
 
+pub trait RegionSelectionService: Send + Sync {
+    fn select_region(
+        &self,
+        request: OverlayWindowRequest,
+    ) -> Result<Option<CaptureRegion>, PlatformError>;
+}
+
 pub fn default_capture_directory() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
