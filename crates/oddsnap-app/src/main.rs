@@ -2447,7 +2447,8 @@ fn start_tray_icon() -> (
     let (sender, receiver) = std::sync::mpsc::channel();
     match oddsnap_platform_windows::start_oddsnap_tray_icon(sender) {
         Ok(tray_icon) => (
-            "Tray: Windows icon and menu ready.".into(),
+            "Tray: Windows icon and menu foundation active; OCR and scroll capture still pending."
+                .into(),
             Some(tray_icon),
             Some(receiver),
         ),
@@ -2464,7 +2465,8 @@ fn start_tray_icon() -> (
     let (sender, receiver) = std::sync::mpsc::channel();
     match oddsnap_platform_macos::start_oddsnap_tray_icon(sender) {
         Ok(tray_icon) => (
-            "Menu bar: macOS status item ready.".into(),
+            "Menu bar: macOS status item foundation active; OCR and scroll capture still pending."
+                .into(),
             Some(tray_icon),
             Some(receiver),
         ),
