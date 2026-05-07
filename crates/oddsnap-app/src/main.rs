@@ -24,15 +24,15 @@ use oddsnap_core::{
     default_settings_path, discover_ffmpeg_tools, format_file_name_template,
     history_entry_can_be_image_indexed, humanize_barcode_format,
     image_search_record_matches_history_entry, image_search_record_needs_ocr,
-    orphan_video_thumbnail_paths, pending_image_search_record_from_history_entry,
-    retain_indexed_image_paths, upsert_image_search_record, AiChatProvider, AppSettings,
-    CapabilityState, CaptureImageFormat, CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode,
-    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
-    ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchOcrState,
-    ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
-    ScrollingCaptureMode, SettingsStore, StickerProvider, StickerSettings, TranslationModel,
-    UpdatePlatform, UploadDestination, UploadPreflight, UploadSettings, UpscaleProvider,
-    UpscaleSettings, LATEST_RELEASE_API_URL, RELEASES_PAGE_URL, SUPPORTED_TRANSLATION_LANGUAGES,
+    pending_image_search_record_from_history_entry, retain_indexed_image_paths,
+    upsert_image_search_record, AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat,
+    CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry,
+    HistoryIndex, HistoryKind, HistoryStore, ImageSearchIndex, ImageSearchIndexRecord,
+    ImageSearchIndexStore, ImageSearchOcrState, ImageSearchSources, OcrHistoryEntry,
+    PlatformCapability, RecordingFormat, RecordingQuality, ScrollingCaptureMode, SettingsStore,
+    StickerProvider, StickerSettings, TranslationModel, UpdatePlatform, UploadDestination,
+    UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings, LATEST_RELEASE_API_URL,
+    RELEASES_PAGE_URL, SUPPORTED_TRANSLATION_LANGUAGES,
 };
 use oddsnap_platform::{
     default_capture_directory, image_file_dimensions, persist_capture_to_path_as,
@@ -69,11 +69,11 @@ use hotkeys::{
 use hotkeys::{start_capture_hotkey_listener, ImportedHotkeyAccelerators};
 use image_search::{ImageSearchOcrHydrationSummary, ImageSearchReindexQueueState};
 use media_history::{
-    add_selected_history_paths, filtered_capture_history, history_selection_contains,
-    media_history_count_text, media_history_detail_line, media_history_group_label,
-    next_media_history_visible_limit, retain_selected_history_paths, toggle_selected_history_path,
-    HistoryKindFilter, HistoryUploadFilter, DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT,
-    IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT,
+    add_selected_history_paths, cleanup_orphan_video_thumbnails, filtered_capture_history,
+    history_selection_contains, media_history_count_text, media_history_detail_line,
+    media_history_group_label, next_media_history_visible_limit, retain_selected_history_paths,
+    toggle_selected_history_path, HistoryKindFilter, HistoryUploadFilter,
+    DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT, IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT,
 };
 use processed_preview::ProcessedResultPreviewWindow;
 
@@ -6817,57 +6817,6 @@ fn video_thumbnail_path(history_store: &HistoryStore, media_path: &Path) -> Opti
     Some(directory.join(format!("{}.jpg", stable_path_key(media_path))))
 }
 
-fn cleanup_orphan_video_thumbnails(
-    history_store: &HistoryStore,
-    index: &HistoryIndex,
-) -> Result<usize, String> {
-    let candidates = managed_video_thumbnail_candidates(history_store)?;
-    let orphan_paths = orphan_video_thumbnail_paths(index, candidates);
-    let mut removed = 0usize;
-    for path in orphan_paths {
-        match fs::remove_file(&path) {
-            Ok(()) => removed += 1,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(format!("failed to remove {}: {error}", path.display()));
-            }
-        }
-    }
-    Ok(removed)
-}
-
-fn managed_video_thumbnail_candidates(
-    history_store: &HistoryStore,
-) -> Result<Vec<PathBuf>, String> {
-    let Some(directory) = history_store
-        .path()
-        .parent()
-        .map(|parent| parent.join("thumbs"))
-    else {
-        return Ok(Vec::new());
-    };
-    if !directory.exists() {
-        return Ok(Vec::new());
-    }
-
-    let entries = fs::read_dir(&directory)
-        .map_err(|error| format!("failed to read {}: {error}", directory.display()))?;
-    let mut candidates = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|error| {
-            format!(
-                "failed to inspect thumbnail in {}: {error}",
-                directory.display()
-            )
-        })?;
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("jpg") {
-            candidates.push(path);
-        }
-    }
-    Ok(candidates)
-}
-
 fn stable_path_key(path: &Path) -> String {
     let mut hash = 0xcbf29ce484222325u64;
     for byte in path.display().to_string().to_ascii_lowercase().bytes() {
@@ -7954,58 +7903,6 @@ mod tests {
         );
         first.path = " ".into();
         assert_eq!(history_paths_text(&[first]), None);
-    }
-
-    #[test]
-    fn cleanup_orphan_video_thumbnails_only_removes_unreferenced_jpgs() {
-        let root = std::env::temp_dir().join(format!(
-            "oddsnap-video-thumb-cleanup-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&root);
-        let thumbs = root.join("thumbs");
-        fs::create_dir_all(&thumbs).expect("create thumbnail dir");
-
-        let live = thumbs.join("live.jpg");
-        let orphan = thumbs.join("orphan.jpg");
-        let non_jpg = thumbs.join("notes.txt");
-        fs::write(&live, b"live").expect("write live thumb");
-        fs::write(&orphan, b"orphan").expect("write orphan thumb");
-        fs::write(&non_jpg, b"keep").expect("write non-jpg");
-
-        let store = HistoryStore::new(root.join("rust-history.json"));
-        let index = HistoryIndex {
-            entries: vec![HistoryEntry {
-                file_path: root.join("clip.mp4"),
-                file_name: "clip.mp4".into(),
-                captured_at_unix_ms: 1,
-                width: 10,
-                height: 10,
-                file_size_bytes: 10,
-                kind: HistoryKind::Video,
-                upload_url: None,
-                upload_provider: None,
-                upload_error: None,
-                thumbnail_path: Some(live.clone()),
-            }],
-            ..HistoryIndex::default()
-        };
-
-        assert_eq!(
-            managed_video_thumbnail_candidates(&store)
-                .expect("list managed thumbnails")
-                .len(),
-            2
-        );
-        assert_eq!(
-            cleanup_orphan_video_thumbnails(&store, &index).expect("cleanup thumbnails"),
-            1
-        );
-        assert!(live.exists());
-        assert!(!orphan.exists());
-        assert!(non_jpg.exists());
-
-        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

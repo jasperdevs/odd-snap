@@ -1,4 +1,9 @@
-use oddsnap_core::HistoryKind;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
+use oddsnap_core::{orphan_video_thumbnail_paths, HistoryIndex, HistoryKind, HistoryStore};
 
 use crate::{history_kind_label, CaptureHistoryEntry};
 
@@ -213,6 +218,63 @@ pub(crate) fn media_history_count_text(
     }
 }
 
+pub(crate) fn cleanup_orphan_video_thumbnails(
+    history_store: &HistoryStore,
+    index: &HistoryIndex,
+) -> Result<usize, String> {
+    let candidates = managed_video_thumbnail_candidates(history_store)?;
+    let orphan_paths = orphan_video_thumbnail_paths(index, candidates);
+    let mut removed = 0usize;
+    for path in orphan_paths {
+        match fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!("failed to remove {}: {error}", path.display()));
+            }
+        }
+    }
+    Ok(removed)
+}
+
+pub(crate) fn managed_video_thumbnail_candidates(
+    history_store: &HistoryStore,
+) -> Result<Vec<PathBuf>, String> {
+    let Some(directory) = history_store
+        .path()
+        .parent()
+        .map(|parent| parent.join("thumbs"))
+    else {
+        return Ok(Vec::new());
+    };
+    if !directory.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = fs::read_dir(&directory)
+        .map_err(|error| format!("failed to read {}: {error}", directory.display()))?;
+    let mut candidates = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "failed to inspect thumbnail in {}: {error}",
+                directory.display()
+            )
+        })?;
+        let path = entry.path();
+        if is_managed_video_thumbnail_path(&path) {
+            candidates.push(path);
+        }
+    }
+    Ok(candidates)
+}
+
+fn is_managed_video_thumbnail_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("jpg"))
+}
+
 fn format_storage_size(bytes: u64) -> String {
     const KIB: f64 = 1024.0;
     const MIB: f64 = KIB * 1024.0;
@@ -338,5 +400,57 @@ mod tests {
 
         retain_selected_history_paths(&mut selected_paths, &["three.png".into()]);
         assert_eq!(selected_paths, vec!["three.png"]);
+    }
+
+    #[test]
+    fn cleanup_orphan_video_thumbnails_only_removes_unreferenced_jpgs() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-video-thumb-cleanup-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let thumbs = root.join("thumbs");
+        fs::create_dir_all(&thumbs).expect("create thumbnail dir");
+
+        let live = thumbs.join("live.jpg");
+        let orphan = thumbs.join("orphan.JPG");
+        let non_jpg = thumbs.join("notes.txt");
+        fs::write(&live, b"live").expect("write live thumb");
+        fs::write(&orphan, b"orphan").expect("write orphan thumb");
+        fs::write(&non_jpg, b"keep").expect("write non-jpg");
+
+        let store = HistoryStore::new(root.join("rust-history.json"));
+        let index = HistoryIndex {
+            entries: vec![oddsnap_core::HistoryEntry {
+                file_path: root.join("clip.mp4"),
+                file_name: "clip.mp4".into(),
+                captured_at_unix_ms: 1,
+                width: 10,
+                height: 10,
+                file_size_bytes: 10,
+                kind: HistoryKind::Video,
+                upload_url: None,
+                upload_provider: None,
+                upload_error: None,
+                thumbnail_path: Some(live.clone()),
+            }],
+            ..HistoryIndex::default()
+        };
+
+        assert_eq!(
+            managed_video_thumbnail_candidates(&store)
+                .expect("list managed thumbnails")
+                .len(),
+            2
+        );
+        assert_eq!(
+            cleanup_orphan_video_thumbnails(&store, &index).expect("cleanup thumbnails"),
+            1
+        );
+        assert!(live.exists());
+        assert!(!orphan.exists());
+        assert!(non_jpg.exists());
+
+        let _ = fs::remove_dir_all(root);
     }
 }
