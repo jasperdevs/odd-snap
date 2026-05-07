@@ -745,6 +745,21 @@ struct MacosVideoRecordingHandle {
 }
 
 #[cfg(target_os = "macos")]
+impl MacosVideoRecordingHandle {
+    fn cancel_process_and_outputs(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        if let Some(thread) = self.stderr_thread.take() {
+            let _ = thread.join();
+        }
+        let _ = fs::remove_file(&self.temp_output_path);
+        let _ = fs::remove_file(&self.output_path);
+    }
+}
+
+#[cfg(target_os = "macos")]
 impl oddsnap_platform::VideoRecordingHandle for MacosVideoRecordingHandle {
     fn output_path(&self) -> &Path {
         &self.output_path
@@ -794,15 +809,7 @@ impl oddsnap_platform::VideoRecordingHandle for MacosVideoRecordingHandle {
     }
 
     fn cancel(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        if let Some(thread) = self.stderr_thread.take() {
-            let _ = thread.join();
-        }
-        let _ = fs::remove_file(&self.temp_output_path);
-        let _ = fs::remove_file(&self.output_path);
+        self.cancel_process_and_outputs();
     }
 }
 
@@ -810,7 +817,7 @@ impl oddsnap_platform::VideoRecordingHandle for MacosVideoRecordingHandle {
 impl Drop for MacosVideoRecordingHandle {
     fn drop(&mut self) {
         if self.child.is_some() {
-            self.cancel();
+            self.cancel_process_and_outputs();
         }
     }
 }
