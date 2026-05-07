@@ -6,6 +6,7 @@ The Rust rewrite must not replace the current app until this document and the li
 
 - Rust workspace exists in the rewrite worktree.
 - GPUI app shell builds and launches on Windows.
+- GPUI shell has initial skin tokens and reusable panel/button chrome so new feature panels do not need to copy raw visual constants.
 - Platform adapters exist for Windows, macOS, and Linux.
 - Native UI intent is represented in code:
   - Windows: WinUI 3 aligned.

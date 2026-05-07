@@ -31,6 +31,8 @@ use oddsnap_platform::{
     VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
 };
 
+mod ui;
+
 #[cfg(any(target_os = "windows", test))]
 const WINDOWS_TRAY_FOUNDATION_STATUS: &str =
     "Tray: Windows icon and menu foundation active; OCR and scroll capture still pending.";
@@ -40,7 +42,11 @@ const MACOS_MENU_BAR_FOUNDATION_STATUS: &str =
 
 fn main() {
     application().run(|cx: &mut App| {
-        let bounds = Bounds::centered(None, size(px(1120.0), px(720.0)), cx);
+        let bounds = Bounds::centered(
+            None,
+            size(px(ui::skin::WINDOW_WIDTH), px(ui::skin::WINDOW_HEIGHT)),
+            cx,
+        );
         let window = cx
             .open_window(
                 WindowOptions {
@@ -53,7 +59,10 @@ fn main() {
                     window_background: WindowBackgroundAppearance::Transparent,
                     window_decorations: Some(WindowDecorations::Client),
                     app_id: Some("dev.jasper.oddsnap.rust".into()),
-                    window_min_size: Some(size(px(880.0), px(560.0))),
+                    window_min_size: Some(size(
+                        px(ui::skin::MIN_WINDOW_WIDTH),
+                        px(ui::skin::MIN_WINDOW_HEIGHT),
+                    )),
                     ..Default::default()
                 },
                 |_, cx| cx.new(OddSnapRustApp::new),
@@ -551,8 +560,8 @@ impl Render for OddSnapRustApp {
             .flex()
             .flex_col()
             .size_full()
-            .bg(rgb(0x101114))
-            .text_color(rgb(0xf4f6f8))
+            .bg(ui::skin::color(ui::skin::APP_BG))
+            .text_color(ui::skin::color(ui::skin::APP_TEXT))
             .font_family("Segoe UI")
             .child(
                 div()
@@ -562,7 +571,7 @@ impl Render for OddSnapRustApp {
                     .h(px(54.0))
                     .px(px(18.0))
                     .border_b_1()
-                    .border_color(rgb(0x24272d))
+                    .border_color(ui::skin::color(ui::skin::HEADER_BORDER))
                     .child(
                         div()
                             .flex()
@@ -571,7 +580,7 @@ impl Render for OddSnapRustApp {
                             .child(
                                 div()
                                     .text_size(px(11.0))
-                                    .text_color(rgb(0xaab0ba))
+                                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                                     .child("GPUI rewrite foundation"),
                             ),
                     )
@@ -579,7 +588,7 @@ impl Render for OddSnapRustApp {
                         div()
                             .rounded(px(8.0))
                             .border_1()
-                            .border_color(rgb(0x343842))
+                            .border_color(ui::skin::color(0x343842))
                             .px(px(10.0))
                             .py(px(5.0))
                             .text_size(px(12.0))
@@ -600,16 +609,11 @@ impl Render for OddSnapRustApp {
 
 impl OddSnapRustApp {
     fn capture_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut body = div()
+        let mut body = ui::panel_style(div())
             .flex()
             .flex_col()
             .gap(px(9.0))
             .flex_1()
-            .rounded(px(8.0))
-            .border_1()
-            .border_color(rgb(0x272b33))
-            .bg(rgb(0x17191f))
-            .p(px(16.0))
             .child(
                 div()
                     .flex()
@@ -644,31 +648,31 @@ impl OddSnapRustApp {
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xc6ccd6))
+                    .text_color(ui::skin::color(ui::skin::BODY_TEXT))
                     .child(SharedString::from(self.native_ui_goal.clone())),
             )
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child("Windows: WinUI 3 aligned; macOS: Liquid Glass aligned; Linux: freedesktop adaptive."),
             )
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(format!("Settings: {}", self.settings_path))),
             )
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(format!("History: {}", self.history_path))),
             )
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(format!(
                         "Output: {}",
                         self.capture_output_directory().display()
@@ -677,19 +681,19 @@ impl OddSnapRustApp {
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(self.capture_preferences_summary())),
             )
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(self.advanced_settings_summary())),
             )
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(format!(
                         "Image format: {} · JPEG quality {}",
                         self.settings.capture_image_format.label(),
@@ -699,7 +703,7 @@ impl OddSnapRustApp {
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(format!(
                         "File naming: {}{}",
                         self.settings.file_name_template,
@@ -713,7 +717,7 @@ impl OddSnapRustApp {
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0xaab0ba))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(self.media_status.clone())),
             )
             .child(
@@ -846,13 +850,9 @@ impl OddSnapRustApp {
                     ))),
             )
             .child(
-                div()
-                    .rounded(px(6.0))
-                    .bg(rgb(0x1d2027))
-                    .px(px(10.0))
-                    .py(px(8.0))
+                ui::surface_style(div())
                     .text_size(px(12.0))
-                    .text_color(rgb(0xd8dde6))
+                    .text_color(ui::skin::color(ui::skin::BRIGHT_TEXT))
                     .child(SharedString::from(self.capture_status.clone())),
             );
 
@@ -1003,16 +1003,11 @@ impl OddSnapRustApp {
     }
 
     fn capability_panel(&self) -> impl IntoElement {
-        let mut body = div()
+        let mut body = ui::panel_style(div())
             .flex()
             .flex_col()
             .gap(px(8.0))
             .flex_1()
-            .rounded(px(8.0))
-            .border_1()
-            .border_color(rgb(0x272b33))
-            .bg(rgb(0x17191f))
-            .p(px(16.0))
             .child(
                 div()
                     .flex()
@@ -1060,16 +1055,7 @@ impl OddSnapRustApp {
         element_id: &'static str,
         mode: CaptureMode,
     ) -> impl IntoElement {
-        div()
-            .id(element_id)
-            .rounded(px(7.0))
-            .border_1()
-            .border_color(rgb(0x4a5262))
-            .bg(rgb(0x242936))
-            .hover(|this| this.bg(rgb(0x303746)))
-            .px(px(10.0))
-            .py(px(6.0))
-            .text_size(px(11.0))
+        ui::action_button_style(div().id(element_id), ui::ButtonVariant::Capture)
             .child(mode.label())
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
@@ -1079,16 +1065,7 @@ impl OddSnapRustApp {
     }
 
     fn color_picker_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .id("color-picker-button")
-            .rounded(px(7.0))
-            .border_1()
-            .border_color(rgb(0x4a5262))
-            .bg(rgb(0x242936))
-            .hover(|this| this.bg(rgb(0x303746)))
-            .px(px(10.0))
-            .py(px(6.0))
-            .text_size(px(11.0))
+        ui::action_button_style(div().id("color-picker-button"), ui::ButtonVariant::Capture)
             .child("Color")
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
@@ -1104,16 +1081,7 @@ impl OddSnapRustApp {
         label: String,
         action: SettingsAction,
     ) -> impl IntoElement {
-        div()
-            .id(element_id)
-            .rounded(px(7.0))
-            .border_1()
-            .border_color(rgb(0x3d4654))
-            .bg(rgb(0x202631))
-            .hover(|this| this.bg(rgb(0x2a3240)))
-            .px(px(10.0))
-            .py(px(6.0))
-            .text_size(px(11.0))
+        ui::action_button_style(div().id(element_id), ui::ButtonVariant::Setting)
             .child(SharedString::from(label))
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
@@ -1123,103 +1091,68 @@ impl OddSnapRustApp {
     }
 
     fn open_history_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
-        div()
-            .id(SharedString::from(format!("open-history-{path}")))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(rgb(0x354052))
-            .bg(rgb(0x202733))
-            .hover(|this| this.bg(rgb(0x2a3342)))
-            .px(px(8.0))
-            .py(px(4.0))
-            .text_size(px(11.0))
-            .text_color(rgb(0xd8dde6))
-            .child("Open")
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.open_history_path(PathBuf::from(&path));
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id(SharedString::from(format!("open-history-{path}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Open")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.open_history_path(PathBuf::from(&path));
+            cx.notify();
+        }))
     }
 
     fn copy_history_path_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
-        div()
-            .id(SharedString::from(format!("copy-history-path-{path}")))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(rgb(0x354052))
-            .bg(rgb(0x202733))
-            .hover(|this| this.bg(rgb(0x2a3342)))
-            .px(px(8.0))
-            .py(px(4.0))
-            .text_size(px(11.0))
-            .text_color(rgb(0xd8dde6))
-            .child("Copy path")
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.copy_history_path(path.clone());
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id(SharedString::from(format!("copy-history-path-{path}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy path")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_history_path(path.clone());
+            cx.notify();
+        }))
     }
 
     fn copy_history_image_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
-        div()
-            .id(SharedString::from(format!("copy-history-image-{path}")))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(rgb(0x354052))
-            .bg(rgb(0x202733))
-            .hover(|this| this.bg(rgb(0x2a3342)))
-            .px(px(8.0))
-            .py(px(4.0))
-            .text_size(px(11.0))
-            .text_color(rgb(0xd8dde6))
-            .child("Copy image")
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.copy_history_image(PathBuf::from(&path));
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id(SharedString::from(format!("copy-history-image-{path}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy image")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_history_image(PathBuf::from(&path));
+            cx.notify();
+        }))
     }
 
     fn copy_upload_url_button(&self, cx: &mut Context<Self>, url: String) -> impl IntoElement {
-        div()
-            .id(SharedString::from(format!("copy-upload-{url}")))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(rgb(0x354052))
-            .bg(rgb(0x202733))
-            .hover(|this| this.bg(rgb(0x2a3342)))
-            .px(px(8.0))
-            .py(px(4.0))
-            .text_size(px(11.0))
-            .text_color(rgb(0xd8dde6))
-            .child("Copy link")
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.copy_history_upload_url(url.clone());
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id(SharedString::from(format!("copy-upload-{url}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy link")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_history_upload_url(url.clone());
+            cx.notify();
+        }))
     }
 
     fn open_upload_url_button(&self, cx: &mut Context<Self>, url: String) -> impl IntoElement {
-        div()
-            .id(SharedString::from(format!("open-upload-{url}")))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(rgb(0x354052))
-            .bg(rgb(0x202733))
-            .hover(|this| this.bg(rgb(0x2a3342)))
-            .px(px(8.0))
-            .py(px(4.0))
-            .text_size(px(11.0))
-            .text_color(rgb(0xd8dde6))
-            .child("Open link")
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.open_history_upload_url(url.clone());
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id(SharedString::from(format!("open-upload-{url}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Open link")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.open_history_upload_url(url.clone());
+            cx.notify();
+        }))
     }
 
     fn retry_upload_button(
@@ -1228,63 +1161,42 @@ impl OddSnapRustApp {
         path: String,
         kind: HistoryKind,
     ) -> impl IntoElement {
-        div()
-            .id(SharedString::from(format!("retry-upload-{path}")))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(rgb(0x354052))
-            .bg(rgb(0x202733))
-            .hover(|this| this.bg(rgb(0x2a3342)))
-            .px(px(8.0))
-            .py(px(4.0))
-            .text_size(px(11.0))
-            .text_color(rgb(0xd8dde6))
-            .child("Upload")
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.retry_history_upload(PathBuf::from(&path), kind);
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id(SharedString::from(format!("retry-upload-{path}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Upload")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.retry_history_upload(PathBuf::from(&path), kind);
+            cx.notify();
+        }))
     }
 
     fn remove_history_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
-        div()
-            .id(SharedString::from(format!("remove-history-{path}")))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(rgb(0x354052))
-            .bg(rgb(0x202733))
-            .hover(|this| this.bg(rgb(0x2a3342)))
-            .px(px(8.0))
-            .py(px(4.0))
-            .text_size(px(11.0))
-            .text_color(rgb(0xd8dde6))
-            .child("Remove")
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.remove_history_entry(path.clone());
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id(SharedString::from(format!("remove-history-{path}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Remove")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.remove_history_entry(path.clone());
+            cx.notify();
+        }))
     }
 
     fn copy_color_hex_button(&self, cx: &mut Context<Self>, hex: String) -> impl IntoElement {
-        div()
-            .id(SharedString::from(format!("copy-color-{hex}")))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(rgb(0x354052))
-            .bg(rgb(0x202733))
-            .hover(|this| this.bg(rgb(0x2a3342)))
-            .px(px(8.0))
-            .py(px(4.0))
-            .text_size(px(11.0))
-            .text_color(rgb(0xd8dde6))
-            .child("Copy")
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.copy_color_history_hex(hex.clone());
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id(SharedString::from(format!("copy-color-{hex}"))),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_color_history_hex(hex.clone());
+            cx.notify();
+        }))
     }
 
     fn recording_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1294,22 +1206,16 @@ impl OddSnapRustApp {
             "Start recording"
         };
 
-        div()
-            .id("recording-toggle-button")
-            .rounded(px(7.0))
-            .border_1()
-            .border_color(rgb(0x5a3d45))
-            .bg(rgb(0x3a2229))
-            .hover(|this| this.bg(rgb(0x4a2a33)))
-            .px(px(10.0))
-            .py(px(6.0))
-            .text_size(px(11.0))
-            .child(label)
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                this.toggle_recording(RecordingTarget::FullScreen);
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id("recording-toggle-button"),
+            ui::ButtonVariant::Recording,
+        )
+        .child(label)
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.toggle_recording(RecordingTarget::FullScreen);
+            cx.notify();
+        }))
     }
 
     fn recording_target_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1319,24 +1225,18 @@ impl OddSnapRustApp {
             "Record window"
         };
 
-        div()
-            .id("recording-window-button")
-            .rounded(px(7.0))
-            .border_1()
-            .border_color(rgb(0x4f4436))
-            .bg(rgb(0x31281f))
-            .hover(|this| this.bg(rgb(0x3d3124)))
-            .px(px(10.0))
-            .py(px(6.0))
-            .text_size(px(11.0))
-            .child(label)
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                if this.active_recording.is_none() {
-                    this.start_recording(RecordingTarget::ActiveWindow);
-                }
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id("recording-window-button"),
+            ui::ButtonVariant::RecordingSecondary,
+        )
+        .child(label)
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            if this.active_recording.is_none() {
+                this.start_recording(RecordingTarget::ActiveWindow);
+            }
+            cx.notify();
+        }))
     }
 
     fn recording_region_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1346,24 +1246,18 @@ impl OddSnapRustApp {
             "Record region"
         };
 
-        div()
-            .id("recording-region-button")
-            .rounded(px(7.0))
-            .border_1()
-            .border_color(rgb(0x4f4436))
-            .bg(rgb(0x31281f))
-            .hover(|this| this.bg(rgb(0x3d3124)))
-            .px(px(10.0))
-            .py(px(6.0))
-            .text_size(px(11.0))
-            .child(label)
-            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
-                cx.stop_propagation();
-                if this.active_recording.is_none() {
-                    this.start_recording(RecordingTarget::Region);
-                }
-                cx.notify();
-            }))
+        ui::action_button_style(
+            div().id("recording-region-button"),
+            ui::ButtonVariant::RecordingSecondary,
+        )
+        .child(label)
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            if this.active_recording.is_none() {
+                this.start_recording(RecordingTarget::Region);
+            }
+            cx.notify();
+        }))
     }
 
     fn run_capture(&mut self, mode: CaptureMode) {

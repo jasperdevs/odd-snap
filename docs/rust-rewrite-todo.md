@@ -25,6 +25,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Verify `cargo test --workspace`.
 - [x] Launch the GPUI shell on Windows.
 - [x] Wire GPUI shell smoke button to Windows capture service.
+- [x] Centralize initial GPUI skin tokens and reusable panel/button chrome for easier feature-panel additions.
 
 ## Milestone 2 - Platform Risk Proofs
 
