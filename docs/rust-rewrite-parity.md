@@ -126,6 +126,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Recent OCR text rows can run the Google Translate API path through curl when a migrated API key is present, then copy the translated text.
 - Recent OCR text rows can run Argos Translate through the Python-backed legacy language-pack install/translate script when the runtime is marked installed.
+- Recent OCR text rows can run the open-source local M2M100/CTranslate2 translation path through the existing legacy runtime files when that runtime is marked installed.
 - Rust core now ports the legacy image-search query matcher for normalization, file-name/OCR source filtering, scoring, exact-match behavior, and newest-first tie-breaking.
 - Rust core now ports the legacy image-search index record metadata, OCR status labels, diagnostics text, and match-source descriptions for file-name versus OCR matches.
 - GPUI advanced settings summary now reports translated source/target languages, translation model labels, and image-search source/exact-match state through shared Rust core rules instead of exposing raw legacy numeric values.
@@ -139,7 +140,7 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS Vision OCR, OCR result window, open-source local translation runtime execution, automatic OCR-backed image-search hydration/background workers/reindex progress, full history actions, local runtimes, release packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS Vision OCR, OCR result window, automatic OCR-backed image-search hydration/background workers/reindex progress, full history actions, local runtime install/uninstall management, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation, but scroll capture still reports pending status until that backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS and scroll capture still reports pending status until that backend lands.
