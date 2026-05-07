@@ -61,6 +61,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           command -v ffmpeg
+          command -v curl
           command -v gnome-screenshot
           command -v grim
           command -v scrot
@@ -71,6 +72,8 @@ jobs:
           command -v xdotool
           command -v xrandr
           command -v xsel
+      - name: Check upload command coverage
+        run: curl --version
       - name: Validate macOS package metadata
         if: runner.os == 'macOS'
         run: plutil -lint packaging/macos/Info.plist packaging/macos/OddSnap.entitlements

@@ -219,6 +219,18 @@ impl UploadDestination {
             _ => None,
         }
     }
+
+    pub fn curl_upload_supported(&self) -> bool {
+        matches!(
+            self,
+            Self::Catbox
+                | Self::Litterbox
+                | Self::FileIo
+                | Self::Uguu
+                | Self::TmpFiles
+                | Self::Gofile
+        )
+    }
 }
 
 impl fmt::Display for UploadDestination {
@@ -454,6 +466,20 @@ pub enum UploadPreflight {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurlUploadRequest {
+    pub destination: UploadDestination,
+    pub provider_name: String,
+    pub program: String,
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadSuccess {
+    pub url: String,
+    pub provider_name: String,
+}
+
 impl UploadPreflight {
     pub fn provider_name(&self) -> Option<&str> {
         match self {
@@ -550,6 +576,182 @@ pub fn normalize_ai_chat_upload_destination(destination: UploadDestination) -> U
     }
 }
 
+pub fn temporary_host_fallbacks() -> &'static [UploadDestination] {
+    &[
+        UploadDestination::Litterbox,
+        UploadDestination::TmpFiles,
+        UploadDestination::Uguu,
+        UploadDestination::Gofile,
+        UploadDestination::Catbox,
+    ]
+}
+
+pub fn build_curl_upload_request(
+    destination: UploadDestination,
+    file_path: &Path,
+) -> Result<CurlUploadRequest, String> {
+    if !destination.curl_upload_supported() {
+        return Err(format!(
+            "{} upload is not implemented in the Rust curl backend yet.",
+            destination.display_name()
+        ));
+    }
+
+    let mut args = vec![
+        "--silent".into(),
+        "--show-error".into(),
+        "--location".into(),
+        "--max-time".into(),
+        "120".into(),
+        "--write-out".into(),
+        "\n%{http_code}".into(),
+    ];
+
+    match destination {
+        UploadDestination::Catbox => {
+            args.extend([
+                "-F".into(),
+                "reqtype=fileupload".into(),
+                "-F".into(),
+                curl_file_form("fileToUpload", file_path),
+                "https://catbox.moe/user/api.php".into(),
+            ]);
+        }
+        UploadDestination::Litterbox => {
+            args.extend([
+                "-F".into(),
+                "reqtype=fileupload".into(),
+                "-F".into(),
+                "time=72h".into(),
+                "-F".into(),
+                curl_file_form("fileToUpload", file_path),
+                "https://litterbox.catbox.moe/resources/internals/api.php".into(),
+            ]);
+        }
+        UploadDestination::FileIo => {
+            args.extend([
+                "-F".into(),
+                curl_file_form("file", file_path),
+                "https://file.io".into(),
+            ]);
+        }
+        UploadDestination::Uguu => {
+            args.extend([
+                "-F".into(),
+                curl_file_form("files[]", file_path),
+                "https://uguu.se/upload?output=text".into(),
+            ]);
+        }
+        UploadDestination::TmpFiles => {
+            args.extend([
+                "-F".into(),
+                curl_file_form("file", file_path),
+                "https://tmpfiles.org/api/v1/upload".into(),
+            ]);
+        }
+        UploadDestination::Gofile => {
+            args.extend([
+                "-F".into(),
+                curl_file_form("file", file_path),
+                "https://upload.gofile.io/uploadfile".into(),
+            ]);
+        }
+        _ => unreachable!("unsupported destinations returned early"),
+    }
+
+    Ok(CurlUploadRequest {
+        provider_name: destination.display_name(),
+        program: "curl".into(),
+        args,
+        destination,
+    })
+}
+
+pub fn parse_curl_upload_output(
+    destination: UploadDestination,
+    output: &str,
+) -> Result<UploadSuccess, String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if !(200..300).contains(&status_code) {
+        return Err(build_upload_error(
+            &destination.display_name(),
+            status_code,
+            body,
+        ));
+    }
+
+    parse_upload_response(destination, body)
+}
+
+pub fn parse_upload_response(
+    destination: UploadDestination,
+    body: &str,
+) -> Result<UploadSuccess, String> {
+    let provider_name = destination.display_name();
+    match destination {
+        UploadDestination::Catbox | UploadDestination::Litterbox | UploadDestination::Uguu => {
+            parse_plain_url(&provider_name, body).map(|url| UploadSuccess { url, provider_name })
+        }
+        UploadDestination::FileIo => {
+            let node: Value = serde_json::from_str(body)
+                .map_err(|error| format!("file.io returned invalid JSON: {error}"))?;
+            if node
+                .get("success")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                let url = node
+                    .get("link")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "file.io did not return a usable link.".to_string())?;
+                return parse_plain_url("file.io", url)
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+            Err(json_error_message("file.io", &node))
+        }
+        UploadDestination::TmpFiles => {
+            let node: Value = serde_json::from_str(body)
+                .map_err(|error| format!("tmpfiles.org returned invalid JSON: {error}"))?;
+            let page_url = node
+                .get("data")
+                .and_then(|data| data.get("url"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| json_error_message("tmpfiles.org", &node))?;
+            let url = tmpfiles_download_url(page_url)
+                .ok_or_else(|| "tmpfiles.org did not return a usable link.".to_string())?;
+            Ok(UploadSuccess { url, provider_name })
+        }
+        UploadDestination::Gofile => {
+            let node: Value = serde_json::from_str(body)
+                .map_err(|error| format!("Gofile returned invalid JSON: {error}"))?;
+            let status = node.get("status").and_then(Value::as_str).unwrap_or("");
+            let data = node.get("data");
+            let url = data
+                .and_then(|data| data.get("downloadPage"))
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    data.and_then(|data| data.get("directLink"))
+                        .and_then(Value::as_str)
+                })
+                .or_else(|| {
+                    data.and_then(|data| data.get("link"))
+                        .and_then(Value::as_str)
+                });
+            if status.eq_ignore_ascii_case("ok") {
+                if let Some(url) = url {
+                    return parse_plain_url("Gofile", url)
+                        .map(|url| UploadSuccess { url, provider_name });
+                }
+            }
+            Err(json_error_message("Gofile", &node))
+        }
+        _ => Err(format!(
+            "{} upload is not implemented in the Rust curl backend yet.",
+            provider_name
+        )),
+    }
+}
+
 pub fn build_google_lens_url(image_url: &str) -> Result<String, String> {
     if !(image_url.starts_with("http://") || image_url.starts_with("https://")) {
         return Err("Google Lens needs an absolute image URL.".into());
@@ -602,6 +804,86 @@ fn percent_encode_url(value: &str) -> String {
             }
         })
         .collect()
+}
+
+fn curl_file_form(field_name: &str, file_path: &Path) -> String {
+    format!("{field_name}=@{}", file_path.display())
+}
+
+fn split_curl_body_and_status(output: &str) -> Result<(&str, u16), String> {
+    let trimmed = output.trim_end();
+    let Some((body, status)) = trimmed.rsplit_once('\n') else {
+        return Err("curl upload output did not include an HTTP status code.".into());
+    };
+    if status.len() != 3 || !status.chars().all(|character| character.is_ascii_digit()) {
+        return Err("curl upload output ended without a valid HTTP status code.".into());
+    }
+    let status_code = status
+        .parse::<u16>()
+        .map_err(|error| format!("curl upload status was not numeric: {error}"))?;
+    Ok((body.trim(), status_code))
+}
+
+fn parse_plain_url(provider_name: &str, value: &str) -> Result<String, String> {
+    let url = value.trim();
+    if url.starts_with("https://") || url.starts_with("http://") {
+        Ok(url.into())
+    } else if url.is_empty() {
+        Err(format!("{provider_name} did not return a link."))
+    } else {
+        Err(format!("{provider_name} error: {url}"))
+    }
+}
+
+fn tmpfiles_download_url(value: &str) -> Option<String> {
+    let url = value.trim();
+    let prefix = "https://tmpfiles.org/";
+    let path = url.strip_prefix(prefix)?;
+    if path.is_empty() {
+        None
+    } else if path.starts_with("dl/") {
+        Some(format!("{prefix}{path}"))
+    } else {
+        Some(format!("{prefix}dl/{path}"))
+    }
+}
+
+fn json_error_message(provider_name: &str, node: &Value) -> String {
+    node.get("error")
+        .and_then(|error| {
+            error
+                .get("message")
+                .and_then(Value::as_str)
+                .or_else(|| error.as_str())
+        })
+        .or_else(|| node.get("message").and_then(Value::as_str))
+        .or_else(|| {
+            node.get("data")
+                .and_then(|data| data.get("error"))
+                .and_then(Value::as_str)
+        })
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{provider_name} did not return a successful upload response."))
+}
+
+fn build_upload_error(provider_name: &str, status_code: u16, body: &str) -> String {
+    if status_code == 429 {
+        return format!("{provider_name} rate limit reached");
+    }
+
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        format!("{provider_name} upload failed with HTTP {status_code}")
+    } else if trimmed.starts_with('<') {
+        format!("{provider_name} returned an HTML error page (HTTP {status_code})")
+    } else {
+        let shortened: String = trimmed.chars().take(180).collect();
+        if shortened.len() == trimmed.len() {
+            trimmed.into()
+        } else {
+            format!("{shortened}...")
+        }
+    }
 }
 
 fn deserialize_ai_chat_provider<'de, D>(deserializer: D) -> Result<AiChatProvider, D::Error>
@@ -819,5 +1101,82 @@ mod tests {
             "https://lens.google.com/uploadbyurl?url=https%3A%2F%2Ffiles.example.test%2Fa%20b.png&hl=en&country=us"
         );
         assert!(build_google_lens_url("capture.png").is_err());
+    }
+
+    #[test]
+    fn builds_curl_upload_requests_for_public_hosts() {
+        let path = PathBuf::from("capture.png");
+        let catbox = build_curl_upload_request(UploadDestination::Catbox, &path)
+            .expect("build catbox request");
+
+        assert_eq!(catbox.program, "curl");
+        assert!(catbox.args.contains(&"reqtype=fileupload".into()));
+        assert!(catbox.args.contains(&"fileToUpload=@capture.png".into()));
+        assert!(catbox
+            .args
+            .contains(&"https://catbox.moe/user/api.php".into()));
+
+        let file_io =
+            build_curl_upload_request(UploadDestination::FileIo, &path).expect("build file.io");
+        assert!(file_io.args.contains(&"file=@capture.png".into()));
+        assert!(file_io.args.contains(&"https://file.io".into()));
+
+        assert!(build_curl_upload_request(UploadDestination::Imgur, &path).is_err());
+    }
+
+    #[test]
+    fn parses_upload_responses_for_public_hosts() {
+        assert_eq!(
+            parse_upload_response(UploadDestination::Catbox, "https://files.catbox.moe/a.png")
+                .expect("parse catbox")
+                .url,
+            "https://files.catbox.moe/a.png"
+        );
+
+        assert_eq!(
+            parse_upload_response(
+                UploadDestination::FileIo,
+                r#"{"success":true,"link":"https://file.io/abc"}"#,
+            )
+            .expect("parse file.io")
+            .url,
+            "https://file.io/abc"
+        );
+
+        assert_eq!(
+            parse_upload_response(
+                UploadDestination::TmpFiles,
+                r#"{"data":{"url":"https://tmpfiles.org/123/capture.png"}}"#,
+            )
+            .expect("parse tmpfiles")
+            .url,
+            "https://tmpfiles.org/dl/123/capture.png"
+        );
+
+        assert_eq!(
+            parse_upload_response(
+                UploadDestination::Gofile,
+                r#"{"status":"ok","data":{"downloadPage":"https://gofile.io/d/abc"}}"#,
+            )
+            .expect("parse gofile")
+            .url,
+            "https://gofile.io/d/abc"
+        );
+    }
+
+    #[test]
+    fn parses_curl_upload_output_status_suffix() {
+        let success = parse_curl_upload_output(
+            UploadDestination::Uguu,
+            "https://a.uguu.se/capture.png\n200",
+        )
+        .expect("parse curl output");
+        assert_eq!(success.url, "https://a.uguu.se/capture.png");
+
+        assert_eq!(
+            parse_curl_upload_output(UploadDestination::Catbox, "rate limited\n429")
+                .expect_err("status should fail"),
+            "Catbox rate limit reached"
+        );
     }
 }

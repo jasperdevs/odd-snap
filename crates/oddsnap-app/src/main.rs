@@ -114,6 +114,13 @@ struct CaptureRunResult {
     copy_error: Option<String>,
 }
 
+#[derive(Default)]
+struct UploadMetadata {
+    url: Option<String>,
+    provider: Option<String>,
+    error: Option<String>,
+}
+
 struct ActiveRecording {
     handle: Box<dyn VideoRecordingHandle>,
     width: u32,
@@ -2289,26 +2296,86 @@ impl OddSnapRustApp {
         )
     }
 
-    fn pending_upload_metadata(
+    fn upload_metadata(
         &self,
         kind: HistoryKind,
         path: &Path,
         use_ai_redirect: bool,
-    ) -> (Option<String>, Option<String>) {
+    ) -> UploadMetadata {
         match oddsnap_core::upload_preflight_for_media(&self.settings, kind, path, use_ai_redirect)
         {
-            UploadPreflight::Disabled => (None, None),
-            UploadPreflight::Ready { provider_name, .. } => (
-                Some(provider_name.clone()),
-                Some(format!(
-                    "pending: Rust upload backend for {provider_name} is pending; upload was not attempted."
-                )),
-            ),
+            UploadPreflight::Disabled => UploadMetadata::default(),
+            UploadPreflight::Ready {
+                destination,
+                provider_name,
+            } => self.run_upload(destination, provider_name, path),
             UploadPreflight::Blocked {
                 provider_name,
                 error,
                 ..
-            } => (Some(provider_name), Some(error)),
+            } => UploadMetadata {
+                provider: Some(provider_name),
+                error: Some(error),
+                ..UploadMetadata::default()
+            },
+        }
+    }
+
+    fn run_upload(
+        &self,
+        destination: UploadDestination,
+        provider_name: String,
+        path: &Path,
+    ) -> UploadMetadata {
+        if destination == UploadDestination::TempHosts {
+            return self.run_temporary_host_upload(path);
+        }
+
+        if !destination.curl_upload_supported() {
+            return UploadMetadata {
+                provider: Some(provider_name.clone()),
+                error: Some(format!(
+                    "pending: Rust upload backend for {provider_name} is pending; upload was not attempted."
+                )),
+                ..UploadMetadata::default()
+            };
+        }
+
+        match run_curl_upload(destination, path) {
+            Ok(success) => UploadMetadata {
+                url: Some(success.url),
+                provider: Some(success.provider_name),
+                error: None,
+            },
+            Err(error) => UploadMetadata {
+                provider: Some(provider_name),
+                error: Some(error),
+                ..UploadMetadata::default()
+            },
+        }
+    }
+
+    fn run_temporary_host_upload(&self, path: &Path) -> UploadMetadata {
+        let mut errors = Vec::new();
+        for destination in oddsnap_core::temporary_host_fallbacks() {
+            match run_curl_upload(destination.clone(), path) {
+                Ok(success) => {
+                    return UploadMetadata {
+                        url: Some(success.url),
+                        provider: Some(success.provider_name),
+                        error: None,
+                    };
+                }
+                Err(error) => {
+                    errors.push(format!("{}: {error}", destination.display_name()));
+                }
+            }
+        }
+
+        UploadMetadata {
+            provider: Some(UploadDestination::TempHosts.display_name()),
+            error: Some(errors.join(" | ")),
+            ..UploadMetadata::default()
         }
     }
 
@@ -2317,7 +2384,7 @@ impl OddSnapRustApp {
             let preview_path = create_video_thumbnail(&self.history_store, &path)
                 .or_else(|| preview_path_for_capture(&path));
             let kind = recording_history_kind(self.settings.recording_format);
-            let (upload_provider, upload_error) = self.pending_upload_metadata(kind, &path, false);
+            let upload = self.upload_metadata(kind, &path, false);
             self.capture_history.insert(
                 0,
                 CaptureHistoryEntry {
@@ -2327,9 +2394,9 @@ impl OddSnapRustApp {
                     preview_path,
                     width,
                     height,
-                    upload_url: None,
-                    upload_provider,
-                    upload_error,
+                    upload_url: upload.url,
+                    upload_provider: upload.provider,
+                    upload_error: upload.error,
                 },
             );
             self.capture_history.truncate(6);
@@ -2343,15 +2410,15 @@ impl OddSnapRustApp {
             Err(error) => return format!("; history failed: {error}"),
         };
         entry.thumbnail_path = thumbnail_path;
-        let (upload_provider, upload_error) =
-            self.pending_upload_metadata(kind, &entry.file_path, false);
-        entry.upload_provider = upload_provider;
-        entry.upload_error = upload_error;
+        let upload = self.upload_metadata(kind, &entry.file_path, false);
+        entry.upload_url = upload.url;
+        entry.upload_provider = upload.provider;
+        entry.upload_error = upload.error;
 
         match self.history_store.append_entry(entry) {
             Ok(index) => {
                 self.capture_history = history_entries_to_capture_history(index);
-                String::new()
+                upload_history_status(self.capture_history.first())
             }
             Err(error) => format!("; history failed: {error}"),
         }
@@ -2363,8 +2430,7 @@ impl OddSnapRustApp {
         mode: CaptureMode,
     ) -> String {
         if !self.settings.save_history {
-            let (upload_provider, upload_error) =
-                self.pending_upload_metadata(HistoryKind::Image, &capture.image_path, false);
+            let upload = self.upload_metadata(HistoryKind::Image, &capture.image_path, false);
             self.capture_history.insert(
                 0,
                 CaptureHistoryEntry {
@@ -2374,9 +2440,9 @@ impl OddSnapRustApp {
                     preview_path: preview_path_for_capture(&capture.image_path),
                     width: capture.region.width,
                     height: capture.region.height,
-                    upload_url: None,
-                    upload_provider,
-                    upload_error,
+                    upload_url: upload.url,
+                    upload_provider: upload.provider,
+                    upload_error: upload.error,
                 },
             );
             self.capture_history.truncate(6);
@@ -2392,15 +2458,15 @@ impl OddSnapRustApp {
             Ok(entry) => entry,
             Err(error) => return format!("; history failed: {error}"),
         };
-        let (upload_provider, upload_error) =
-            self.pending_upload_metadata(HistoryKind::Image, &entry.file_path, false);
-        entry.upload_provider = upload_provider;
-        entry.upload_error = upload_error;
+        let upload = self.upload_metadata(HistoryKind::Image, &entry.file_path, false);
+        entry.upload_url = upload.url;
+        entry.upload_provider = upload.provider;
+        entry.upload_error = upload.error;
 
         match self.history_store.append_entry(entry) {
             Ok(index) => {
                 self.capture_history = history_entries_to_capture_history(index);
-                String::new()
+                upload_history_status(self.capture_history.first())
             }
             Err(error) => format!("; history failed: {error}"),
         }
@@ -2803,8 +2869,82 @@ fn upload_settings_summary(settings: &AppSettings) -> String {
 
     match effective_destination.configuration_error(&upload_settings) {
         Some(error) => format!("upload {label} blocked ({error})"),
+        None if effective_destination == UploadDestination::TempHosts => {
+            format!("upload {label} configured")
+        }
+        None if effective_destination.curl_upload_supported() => format!("upload {label} ready"),
         None => format!("upload {label} configured; backend pending"),
     }
+}
+
+fn upload_history_status(entry: Option<&CaptureHistoryEntry>) -> String {
+    let Some(entry) = entry else {
+        return String::new();
+    };
+
+    if let Some(url) = entry.upload_url.as_deref().filter(|url| !url.is_empty()) {
+        let provider = entry
+            .upload_provider
+            .as_deref()
+            .filter(|provider| !provider.is_empty())
+            .unwrap_or("upload");
+        return format!("; uploaded to {provider}: {url}");
+    }
+
+    if let Some(error) = entry
+        .upload_error
+        .as_deref()
+        .filter(|error| !error.is_empty())
+    {
+        if let Some(pending) = error.strip_prefix("pending: ") {
+            return format!("; upload pending: {pending}");
+        }
+        return format!("; upload failed: {error}");
+    }
+
+    String::new()
+}
+
+fn run_curl_upload(
+    destination: UploadDestination,
+    path: &Path,
+) -> Result<oddsnap_core::UploadSuccess, String> {
+    let request = oddsnap_core::build_curl_upload_request(destination, path)?;
+    let output = Command::new(&request.program)
+        .args(&request.args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| {
+            format!(
+                "{} upload could not start curl: {error}",
+                request.provider_name
+            )
+        })?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() && stdout.trim().is_empty() {
+        let error = stderr.trim();
+        return Err(if error.is_empty() {
+            format!(
+                "{} upload failed before a response was returned.",
+                request.provider_name
+            )
+        } else {
+            error.into()
+        });
+    }
+
+    oddsnap_core::parse_curl_upload_output(request.destination, &stdout).map_err(|error| {
+        let stderr = stderr.trim();
+        if stderr.is_empty() {
+            error
+        } else {
+            format!("{error}; curl: {stderr}")
+        }
+    })
 }
 
 fn external_url_command(url: &str) -> (&'static str, Vec<String>) {
@@ -3634,9 +3774,39 @@ mod tests {
             auto_upload_screenshots: true,
             ..AppSettings::default()
         };
+        assert_eq!(upload_settings_summary(&configured), "upload Catbox ready");
+    }
+
+    #[test]
+    fn upload_history_status_reports_success_pending_and_failure() {
+        let mut entry = CaptureHistoryEntry {
+            mode: CaptureMode::FullScreen,
+            kind: HistoryKind::Image,
+            path: "capture.png".into(),
+            preview_path: None,
+            width: 10,
+            height: 10,
+            upload_url: Some("https://files.catbox.moe/capture.png".into()),
+            upload_provider: Some("Catbox".into()),
+            upload_error: None,
+        };
+
         assert_eq!(
-            upload_settings_summary(&configured),
-            "upload Catbox configured; backend pending"
+            upload_history_status(Some(&entry)),
+            "; uploaded to Catbox: https://files.catbox.moe/capture.png"
+        );
+
+        entry.upload_url = None;
+        entry.upload_error = Some("pending: Rust upload backend for Imgur is pending.".into());
+        assert_eq!(
+            upload_history_status(Some(&entry)),
+            "; upload pending: Rust upload backend for Imgur is pending."
+        );
+
+        entry.upload_error = Some("Catbox rate limit reached".into());
+        assert_eq!(
+            upload_history_status(Some(&entry)),
+            "; upload failed: Catbox rate limit reached"
         );
     }
 

@@ -100,6 +100,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI history rows can remove entries from the persisted Rust history index without deleting the original media file.
 - Imported AI Redirect hotkeys can open configured chat providers that do not require hosted-image upload, copying the newest saved image first; Google Lens remains blocked until hosted upload destination parity lands.
 - Rust preserves the legacy upload destination list, credential/HTTPS preflight rules, file-size limits, AI Redirect upload routing, and stores explicit upload pending/configuration errors in history instead of silently dropping auto-upload settings.
+- Rust can auto-upload saved media to curl-backed public hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and the temporary-host fallback chain, then persist the returned link in history.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.
 - GPUI shows the newest saved image capture as an inline preview when the file still exists.

@@ -148,6 +148,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Production color picker overlay polish.
 - [x] AI Redirect hotkey can open configured chat providers that do not require hosted-image upload and copies the newest saved image.
 - [x] Upload destination model, credential/HTTPS preflight, size limits, AI Redirect routing, and explicit history status for auto-upload attempts.
+- [x] Curl-backed public upload hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and temporary-host fallback.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.
