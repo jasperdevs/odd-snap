@@ -51,7 +51,7 @@ The repo now includes local-only macOS package scaffolding:
 - `packaging/macos/OddSnap.entitlements`
 - `scripts/macos/package-oddsnap-rust.sh`
 
-That script is intentionally not wired to publish artifacts. CI runs it only as an unsigned package smoke on the macOS lanes after the debug binary build, and the script rejects a binary that does not include the current Mac host architecture. Locally, it can build an unsigned `.app`/ZIP for smoke testing, or use `CODESIGN_IDENTITY` and `NOTARY_PROFILE` on a Mac when Developer ID signing and notarization are ready.
+That script is intentionally not wired to publish artifacts. CI runs it only as an unsigned package smoke on the macOS lanes after the debug binary build, and the script rejects a binary that does not include the current Mac host architecture. It also validates required macOS privacy strings and the Apple Events entitlement before the signing/notarization branch. Locally, it can build an unsigned `.app`/ZIP for smoke testing, or use `CODESIGN_IDENTITY` and `NOTARY_PROFILE` on a Mac when Developer ID signing and notarization are ready.
 
 ## Current release pipeline boundary
 

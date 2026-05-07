@@ -118,6 +118,30 @@ ERROR
   echo "binary architecture: ${binary_arches}; host architecture: ${host_arch}" >&2
 }
 
+verify_plist_string_key() {
+  local plist="$1"
+  local key="$2"
+  local value
+
+  value="$(/usr/libexec/PlistBuddy -c "Print :${key}" "$plist" 2>/dev/null || true)"
+  if [[ -z "$value" ]]; then
+    echo "missing or empty ${key} in ${plist}" >&2
+    exit 1
+  fi
+}
+
+verify_plist_bool_true_key() {
+  local plist="$1"
+  local key="$2"
+  local value
+
+  value="$(/usr/libexec/PlistBuddy -c "Print :${key}" "$plist" 2>/dev/null || true)"
+  if [[ "$value" != "true" ]]; then
+    echo "missing or false ${key} in ${plist}" >&2
+    exit 1
+  fi
+}
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
@@ -158,6 +182,9 @@ sed \
   "packaging/macos/Info.plist" > "${contents_path}/Info.plist"
 
 plutil -lint "${contents_path}/Info.plist" "packaging/macos/OddSnap.entitlements" >/dev/null
+verify_plist_string_key "${contents_path}/Info.plist" "NSAppleEventsUsageDescription"
+verify_plist_string_key "${contents_path}/Info.plist" "NSMicrophoneUsageDescription"
+verify_plist_bool_true_key "packaging/macos/OddSnap.entitlements" "com.apple.security.automation.apple-events"
 
 if [[ "$force_unsigned" -eq 0 && -n "${CODESIGN_IDENTITY:-}" ]]; then
   verify_codesign_identity "$CODESIGN_IDENTITY"

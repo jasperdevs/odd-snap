@@ -6,6 +6,7 @@ This is local planning only. Do not treat it as a release checklist until the Ru
 
 - Treat current Apple Silicon macOS as the primary Mac target. Intel Mac support is compatibility coverage, not the main optimization target.
 - The Rust CI macOS package smoke runs on the latest Apple Silicon lane first and repeats on Intel only as compatibility coverage; the local package script rejects a binary that does not include the current Mac host architecture.
+- The local macOS package script validates required privacy strings and the Apple Events entitlement before signing/notarization, so capture/active-window metadata drift fails during packaging smoke.
 - Screen capture and recording require macOS permission in System Settings > Privacy & Security > Screen & System Audio Recording.
 - Active-window capture requires Accessibility access in System Settings > Privacy & Security > Accessibility because the current foundation asks System Events for the front window bounds.
 - While running from a terminal or dev tool, macOS may grant the permission to the launcher instead of the final bundled app.
