@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
-use oddsnap_core::{hit_test_annotations, Annotation, AnnotationPoint, AnnotationRect};
+use oddsnap_core::{
+    hit_test_annotations, Annotation, AnnotationPoint, AnnotationRect, AnnotationToolGroup,
+    AppSettings, TOOL_DEFINITIONS,
+};
 
 const UNDO_LIMIT: usize = 100;
 
@@ -17,6 +20,100 @@ pub(crate) struct AnnotationWorkspace {
 struct AnnotationSnapshot {
     annotations: Vec<Annotation>,
     selected_index: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AnnotationToolbarTool {
+    pub(crate) id: &'static str,
+    pub(crate) label: &'static str,
+    pub(crate) hotkey: Option<(u32, u32)>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct AnnotationToolState {
+    active_tool_id: Option<String>,
+}
+
+impl AnnotationToolState {
+    pub(crate) fn new(settings: &AppSettings) -> Self {
+        let mut state = Self {
+            active_tool_id: Some("select".into()),
+        };
+        state.reconcile_with_settings(settings);
+        state
+    }
+
+    pub(crate) fn active_tool_id(&self) -> Option<&str> {
+        self.active_tool_id.as_deref()
+    }
+
+    pub(crate) fn select_tool(&mut self, tool_id: &str, settings: &AppSettings) -> bool {
+        let Some(tool) = annotation_toolbar_tools(settings)
+            .into_iter()
+            .find(|tool| tool.id.eq_ignore_ascii_case(tool_id))
+        else {
+            return false;
+        };
+
+        self.active_tool_id = Some(tool.id.into());
+        true
+    }
+
+    pub(crate) fn select_hotkey(
+        &mut self,
+        modifiers: u32,
+        key: u32,
+        settings: &AppSettings,
+    ) -> Option<&'static str> {
+        let visible_tool_ids = annotation_toolbar_tools(settings)
+            .into_iter()
+            .map(|tool| tool.id.to_string())
+            .collect::<Vec<_>>();
+        let tool_id = settings.find_annotation_tool_id(modifiers, key, Some(&visible_tool_ids))?;
+        self.active_tool_id = Some(tool_id.into());
+        Some(tool_id)
+    }
+
+    pub(crate) fn reconcile_with_settings(&mut self, settings: &AppSettings) {
+        let tools = annotation_toolbar_tools(settings);
+        if tools.is_empty() {
+            self.active_tool_id = None;
+            return;
+        }
+
+        let active_is_visible = self.active_tool_id.as_ref().is_some_and(|active| {
+            tools
+                .iter()
+                .any(|tool| tool.id.eq_ignore_ascii_case(active))
+        });
+        if !active_is_visible {
+            self.active_tool_id = Some(tools[0].id.into());
+        }
+    }
+}
+
+pub(crate) fn annotation_toolbar_tools(settings: &AppSettings) -> Vec<AnnotationToolbarTool> {
+    TOOL_DEFINITIONS
+        .iter()
+        .filter(|tool| tool.group == AnnotationToolGroup::Annotation)
+        .filter(|tool| {
+            settings.enabled_tools.as_ref().is_none_or(|enabled_tools| {
+                enabled_tools
+                    .iter()
+                    .any(|enabled_tool| enabled_tool.eq_ignore_ascii_case(tool.id))
+            })
+        })
+        .map(|tool| {
+            let hotkey = settings
+                .annotation_tool_hotkey(tool.id)
+                .filter(|(_, key)| *key != 0);
+            AnnotationToolbarTool {
+                id: tool.id,
+                label: tool.label,
+                hotkey,
+            }
+        })
+        .collect()
 }
 
 impl AnnotationWorkspace {
@@ -167,6 +264,63 @@ mod tests {
             blue: 0,
             alpha: 255,
         }
+    }
+
+    #[test]
+    fn toolbar_tools_are_annotation_only_and_follow_settings_visibility() {
+        let mut settings = AppSettings {
+            enabled_tools: Some(vec!["ocr".into(), "arrow".into(), "text".into()]),
+            ..AppSettings::default()
+        };
+        settings.tool_hotkeys.insert("arrow".into(), vec![2, 65]);
+        settings.tool_hotkeys.insert("text".into(), vec![0, 0]);
+
+        let tools = annotation_toolbar_tools(&settings);
+
+        assert_eq!(
+            tools
+                .iter()
+                .map(|tool| (tool.id, tool.label, tool.hotkey))
+                .collect::<Vec<_>>(),
+            vec![("arrow", "Arrow", Some((2, 65))), ("text", "Text", None)]
+        );
+    }
+
+    #[test]
+    fn tool_state_tracks_visible_tools_and_custom_hotkeys() {
+        let mut settings = AppSettings {
+            enabled_tools: Some(vec!["arrow".into(), "text".into()]),
+            ..AppSettings::default()
+        };
+        settings.tool_hotkeys.insert("arrow".into(), vec![2, 65]);
+
+        let mut state = AnnotationToolState::new(&settings);
+
+        assert_eq!(state.active_tool_id(), Some("arrow"));
+        assert_eq!(state.select_hotkey(2, 65, &settings), Some("arrow"));
+        assert_eq!(state.active_tool_id(), Some("arrow"));
+        assert!(state.select_tool("TEXT", &settings));
+        assert_eq!(state.active_tool_id(), Some("text"));
+        assert!(!state.select_tool("select", &settings));
+        assert_eq!(state.active_tool_id(), Some("text"));
+    }
+
+    #[test]
+    fn tool_state_clears_when_no_annotation_tools_are_visible() {
+        let settings = AppSettings {
+            enabled_tools: Some(vec!["ocr".into(), "picker".into()]),
+            ..AppSettings::default()
+        };
+
+        let mut state = AnnotationToolState::new(&settings);
+
+        assert_eq!(annotation_toolbar_tools(&settings), Vec::new());
+        assert_eq!(state.active_tool_id(), None);
+        assert_eq!(state.select_hotkey(0, 0x31, &settings), None);
+
+        state.select_tool("select", &AppSettings::default());
+        state.reconcile_with_settings(&settings);
+        assert_eq!(state.active_tool_id(), None);
     }
 
     #[test]
