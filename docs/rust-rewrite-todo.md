@@ -92,6 +92,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Magnifier.
 - [ ] Annotation drawing.
 - [x] Core annotation model, tool metadata, default annotation shortcuts, hit-testing, move, and scale geometry are ported into Rust core.
+- [x] Rust settings expose imported annotation tool visibility and custom annotation hotkeys through typed core helpers.
 - [x] Ruler foundation measures selected regions and copies pixel dimensions.
 - [x] Rust core scrolling-capture stitcher ports legacy overlap detection, duplicate filtering, automatic/manual frame acceptance, and session state tests.
 - [x] Shared save-to-file persistence helper.

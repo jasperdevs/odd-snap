@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::annotations::{
+    annotation_tool_hotkey, default_enabled_tool_ids, find_annotation_tool_id,
+};
 use crate::DEFAULT_FILE_NAME_TEMPLATE;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -439,6 +442,31 @@ impl AppSettings {
             .filter(|path| !path.as_os_str().is_empty())
             .unwrap_or(fallback)
     }
+
+    pub fn enabled_tool_count(&self) -> usize {
+        self.enabled_tools
+            .as_ref()
+            .map_or_else(|| default_enabled_tool_ids().len(), Vec::len)
+    }
+
+    pub fn annotation_tool_hotkey(&self, tool_id: &str) -> Option<(u32, u32)> {
+        annotation_tool_hotkey(tool_id, self.enabled_tools.as_deref(), &self.tool_hotkeys)
+    }
+
+    pub fn find_annotation_tool_id(
+        &self,
+        modifiers: u32,
+        key: u32,
+        visible_tool_ids: Option<&[String]>,
+    ) -> Option<&'static str> {
+        find_annotation_tool_id(
+            modifiers,
+            key,
+            visible_tool_ids,
+            self.enabled_tools.as_deref(),
+            &self.tool_hotkeys,
+        )
+    }
 }
 
 fn default_copy_captures_to_clipboard() -> bool {
@@ -855,6 +883,27 @@ mod tests {
                 .expect("image upload settings should round trip")["ClientId"],
             "abc"
         );
+    }
+
+    #[test]
+    fn settings_resolve_annotation_tool_visibility_and_hotkeys() {
+        let mut settings = AppSettings {
+            enabled_tools: Some(vec!["select".into(), "arrow".into()]),
+            ..AppSettings::default()
+        };
+        settings.tool_hotkeys.insert("arrow".into(), vec![2, 65]);
+
+        assert_eq!(settings.enabled_tool_count(), 2);
+        assert_eq!(settings.annotation_tool_hotkey("select"), Some((0, 0x31)));
+        assert_eq!(settings.annotation_tool_hotkey("arrow"), Some((2, 65)));
+        assert_eq!(settings.annotation_tool_hotkey("text"), Some((0, 0)));
+        assert_eq!(settings.find_annotation_tool_id(2, 65, None), Some("arrow"));
+        assert_eq!(
+            settings.find_annotation_tool_id(0, 0x31, Some(&["arrow".into()])),
+            None
+        );
+
+        assert!(AppSettings::default().enabled_tool_count() > settings.enabled_tool_count());
     }
 
     #[test]

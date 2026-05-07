@@ -6096,7 +6096,9 @@ fn advanced_settings_summary_text(settings: &AppSettings) -> String {
     let enabled_tools = settings
         .enabled_tools
         .as_ref()
-        .map_or("all tools".into(), |tools| format!("{} tools", tools.len()));
+        .map_or("all tools".into(), |_| {
+            format!("{} tools", settings.enabled_tool_count())
+        });
     let translation_model = TranslationModel::from_legacy_value(settings.translation_model);
     let translation_source = oddsnap_core::resolve_translation_source_language(Some(
         &settings.ocr_default_translate_from,

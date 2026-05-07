@@ -52,6 +52,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows primitive region selection now paints a cursor-following magnifier lens when the imported magnifier preference is enabled.
 - Windows center selection now uses the primitive native selector with symmetric drag around the starting point and imported aspect-ratio constraints; macOS/Linux center selection still need production overlay support.
 - Rust core now ports the legacy annotation model, annotation tool ordering, default in-overlay annotation shortcuts, hit-testing order, move behavior, and select-resize scaling rules as reusable platform-neutral logic.
+- Rust settings can resolve imported annotation tool visibility and custom in-overlay annotation hotkeys through typed core helpers instead of leaving them as raw migrated maps.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - Rust startup reports corrupt/unreadable Rust history instead of silently treating it as empty history.
 - GPUI recent-capture rows can reveal saved files through the host file browser on Windows/macOS, and open the containing folder on Linux where the generic `xdg-open` fallback cannot select a file.
