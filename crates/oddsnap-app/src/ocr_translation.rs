@@ -33,13 +33,15 @@ pub(crate) fn translate_ocr_text(
         .google_translate_api_key
         .as_deref()
         .filter(|key| !key.trim().is_empty());
+    let argos_ready = argos_runtime_installed();
+    let local_runtime_ready = open_source_local_runtime_installed();
 
     if let Some(error) = translation_configuration_error(
         &source,
         model,
         google_key.is_some(),
-        settings.translation_runtime_installed,
-        settings.translation_runtime_installed,
+        argos_ready,
+        local_runtime_ready,
     ) {
         return Err(error.into());
     }
@@ -122,6 +124,22 @@ fn run_argos_translate(text: &str, source: &str, target: &str) -> Result<String,
     } else {
         message.into()
     })
+}
+
+pub(crate) fn translation_runtime_status_summary(settings: &AppSettings) -> String {
+    let argos = if argos_runtime_installed() {
+        "Argos installed"
+    } else {
+        "Argos not installed"
+    };
+    let local = if open_source_local_runtime_installed() {
+        "local installed"
+    } else if settings.translation_runtime_installed {
+        "local marker stale"
+    } else {
+        "local not installed"
+    };
+    format!("Translation runtimes: {argos}; {local}")
 }
 
 fn run_open_source_local_translate(
@@ -223,6 +241,57 @@ fn has_open_source_local_runtime_files(paths: &OpenSourceLocalRuntimePaths) -> b
         && fs::read_to_string(&paths.runtime_version_path)
             .map(|version| version.trim() == OPEN_SOURCE_LOCAL_RUNTIME_VERSION)
             .unwrap_or(false)
+}
+
+fn open_source_local_runtime_installed() -> bool {
+    has_open_source_local_runtime_files(&open_source_local_runtime_paths())
+}
+
+fn argos_runtime_installed() -> bool {
+    fs::read_to_string(argos_runtime_marker_path())
+        .map(|marker| marker.trim() == ARGOS_TRANSLATE_PACKAGE)
+        .unwrap_or(false)
+}
+
+fn argos_runtime_marker_path() -> PathBuf {
+    argos_runtime_state_dir().join("runtime.marker")
+}
+
+fn argos_runtime_state_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return PathBuf::from(appdata).join("OddSnap").join("argos");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home)
+                .join("Library")
+                .join("Application Support")
+                .join("OddSnap")
+                .join("argos");
+        }
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        if let Some(data_home) = std::env::var_os("XDG_DATA_HOME") {
+            return PathBuf::from(data_home).join("oddsnap").join("argos");
+        }
+
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home)
+                .join(".local")
+                .join("share")
+                .join("oddsnap")
+                .join("argos");
+        }
+    }
+
+    std::env::temp_dir().join("OddSnap").join("argos")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -342,6 +411,7 @@ fn normalize_python_translation_error(stderr: &str, stdout: &str, fallback: &str
 }
 
 const OPEN_SOURCE_LOCAL_RUNTIME_VERSION: &str = "m2m100-418m-ct2-v2";
+const ARGOS_TRANSLATE_PACKAGE: &str = "argostranslate==1.11.0";
 
 const OPEN_SOURCE_LOCAL_TRANSLATE_SCRIPT: &str = r#"
 import sys

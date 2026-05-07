@@ -617,6 +617,14 @@ impl OddSnapRustApp {
                 div()
                     .text_size(px(12.0))
                     .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                    .child(SharedString::from(
+                        ocr_translation::translation_runtime_status_summary(&self.settings),
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(format!(
                         "Image format: {} · JPEG quality {}",
                         self.settings.capture_image_format.label(),

@@ -127,6 +127,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Recent OCR text rows can run the Google Translate API path through curl when a migrated API key is present, then copy the translated text.
 - Recent OCR text rows can run Argos Translate through the Python-backed legacy language-pack install/translate script when the runtime is marked installed.
 - Recent OCR text rows can run the open-source local M2M100/CTranslate2 translation path through the existing legacy runtime files when that runtime is marked installed.
+- Translation readiness now probes the Argos runtime marker and open-source local runtime files separately instead of treating one migrated runtime flag as both engines.
 - Rust core now ports the legacy image-search query matcher for normalization, file-name/OCR source filtering, scoring, exact-match behavior, and newest-first tie-breaking.
 - Rust core now ports the legacy image-search index record metadata, OCR status labels, diagnostics text, and match-source descriptions for file-name versus OCR matches.
 - GPUI advanced settings summary now reports translated source/target languages, translation model labels, and image-search source/exact-match state through shared Rust core rules instead of exposing raw legacy numeric values.
