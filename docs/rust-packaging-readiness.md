@@ -12,7 +12,7 @@ The Rust rewrite workflow is CI-only and should prove:
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo build -p oddsnap-app --bin oddsnap-rust`
 
-The matrix runs on Windows, macOS, and Ubuntu so platform-specific `cfg` paths are compiled on their native runners instead of relying on weak cross-compilation from Windows.
+The matrix runs on Windows, Ubuntu, latest Apple Silicon macOS, and Intel macOS compatibility runners so platform-specific `cfg` paths are compiled on native runners instead of relying on weak cross-compilation from Windows.
 
 ## Linux runner dependencies
 
@@ -39,6 +39,8 @@ macOS CI can compile and test command construction and parsers, but real capture
 
 - Screen & System Audio Recording for screenshot capture.
 - Accessibility for System Events active-window bounds.
+
+The primary macOS CI lane is latest Apple Silicon (`macos-26`). Intel macOS is kept as a compatibility lane (`macos-26-intel`), not the main product target. GitHub's hosted runner labels can move over time, so re-check the official runner table before release hardening.
 
 Distribution outside the Mac App Store still requires a Developer ID Application certificate, hardened runtime, notarization, and stapling. Those steps are documented in `docs/macos-readiness.md` and are not performed by this branch workflow.
 

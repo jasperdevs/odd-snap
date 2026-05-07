@@ -4,6 +4,7 @@ This is local planning only. Do not treat it as a release checklist until the Ru
 
 ## Local development
 
+- Treat current Apple Silicon macOS as the primary Mac target. Intel Mac support is compatibility coverage, not the main optimization target.
 - Screen capture and recording require macOS permission in System Settings > Privacy & Security > Screen & System Audio Recording.
 - While running from a terminal or dev tool, macOS may grant the permission to the launcher instead of the final bundled app.
 - After the app is bundled, re-check the bundled OddSnap app in the same settings pane.

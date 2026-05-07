@@ -19,12 +19,20 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.os }}
+    name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - name: Windows latest x64
+            os: windows-latest
+          - name: macOS latest Apple Silicon
+            os: macos-26
+          - name: macOS Intel compatibility
+            os: macos-26-intel
+          - name: Ubuntu latest x64
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
