@@ -2316,11 +2316,7 @@ impl OddSnapRustApp {
         if !self.settings.save_history {
             let preview_path = create_video_thumbnail(&self.history_store, &path)
                 .or_else(|| preview_path_for_capture(&path));
-            let kind = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
-                HistoryKind::Gif
-            } else {
-                HistoryKind::Video
-            };
+            let kind = recording_history_kind(self.settings.recording_format);
             let (upload_provider, upload_error) = self.pending_upload_metadata(kind, &path, false);
             self.capture_history.insert(
                 0,
@@ -2340,11 +2336,7 @@ impl OddSnapRustApp {
             return String::new();
         }
 
-        let kind = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
-            HistoryKind::Gif
-        } else {
-            HistoryKind::Video
-        };
+        let kind = recording_history_kind(self.settings.recording_format);
         let thumbnail_path = create_video_thumbnail(&self.history_store, &path);
         let mut entry = match HistoryEntry::from_capture_file(path, width, height, kind) {
             Ok(entry) => entry,
@@ -3005,6 +2997,13 @@ fn next_recording_quality(quality: RecordingQuality) -> RecordingQuality {
     }
 }
 
+fn recording_history_kind(format: RecordingFormat) -> HistoryKind {
+    match format {
+        RecordingFormat::Gif => HistoryKind::Gif,
+        RecordingFormat::Mp4 | RecordingFormat::WebM | RecordingFormat::Mkv => HistoryKind::Video,
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
     if settings.record_microphone || settings.record_desktop_audio {
@@ -3512,6 +3511,26 @@ mod tests {
     fn recording_target_labels_are_stable() {
         assert_eq!(RecordingTarget::FullScreen.label(), "desktop");
         assert_eq!(RecordingTarget::ActiveWindow.label(), "active window");
+    }
+
+    #[test]
+    fn recording_history_kind_matches_output_format() {
+        assert_eq!(
+            recording_history_kind(RecordingFormat::Gif),
+            HistoryKind::Gif
+        );
+        assert_eq!(
+            recording_history_kind(RecordingFormat::Mp4),
+            HistoryKind::Video
+        );
+        assert_eq!(
+            recording_history_kind(RecordingFormat::WebM),
+            HistoryKind::Video
+        );
+        assert_eq!(
+            recording_history_kind(RecordingFormat::Mkv),
+            HistoryKind::Video
+        );
     }
 
     #[test]

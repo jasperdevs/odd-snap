@@ -113,7 +113,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 ## Milestone 4 - Recording And Media
 
-- [ ] GIF recording.
+- [x] Desktop/window GIF recording through the shared FFmpeg recording path.
 - [x] Windows FFmpeg-backed desktop video recording start/stop foundation.
 - [x] Windows FFmpeg recording can target an explicit capture region.
 - [x] Windows recording falls back to video-only when imported audio settings are enabled.
@@ -122,7 +122,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Linux recording falls back to video-only when imported audio settings are enabled.
 - [x] macOS desktop video recording start/cancel/stop foundation through `screencapture` plus FFmpeg conversion.
 - [x] Recording handles fail explicitly when stop is called without a running process.
-- [ ] Region GIF recording.
+- [ ] Freeform region GIF recording.
 - [x] GPUI active-window recording uses the explicit-region FFmpeg path.
 - [ ] Freeform region MP4/WebM recording.
 - [x] FFmpeg discovery.
