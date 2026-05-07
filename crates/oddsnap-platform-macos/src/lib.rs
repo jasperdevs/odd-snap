@@ -648,7 +648,15 @@ impl OcrTextService for MacosPlatform {
     fn recognize_text(&self, request: OcrTextRequest) -> Result<OcrTextResult, PlatformError> {
         #[cfg(target_os = "macos")]
         {
-            oddsnap_platform::recognize_text_with_tesseract(&request)
+            match recognize_text_with_macos_vision(&request) {
+                Ok(result) => Ok(result),
+                Err(vision_error) => oddsnap_platform::recognize_text_with_tesseract(&request)
+                    .map_err(|tesseract_error| {
+                        PlatformError::Failed(format!(
+                            "macOS Vision OCR failed: {vision_error}; tesseract fallback failed: {tesseract_error}"
+                        ))
+                    }),
+            }
         }
 
         #[cfg(not(target_os = "macos"))]
@@ -660,6 +668,97 @@ impl OcrTextService for MacosPlatform {
         }
     }
 }
+
+#[cfg(target_os = "macos")]
+fn recognize_text_with_macos_vision(
+    request: &OcrTextRequest,
+) -> Result<OcrTextResult, PlatformError> {
+    let args = macos_vision_ocr_command_args(
+        &request.image_path.display().to_string(),
+        &request.language_tag,
+    );
+    let output = Command::new("swift")
+        .args(args)
+        .output()
+        .map_err(|source| {
+            PlatformError::Failed(format!("failed to start macOS Vision OCR: {source}"))
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let error = stderr.trim();
+        return Err(PlatformError::Failed(if error.is_empty() {
+            format!("macOS Vision OCR exited with status {}", output.status)
+        } else {
+            error.into()
+        }));
+    }
+
+    Ok(OcrTextResult {
+        text: String::from_utf8_lossy(&output.stdout)
+            .trim_end()
+            .to_string(),
+        engine_id: "macos-vision-v1".into(),
+    })
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_vision_ocr_command_args(image_path: &str, language_tag: &str) -> Vec<String> {
+    vec![
+        "-e".into(),
+        MACOS_VISION_OCR_SCRIPT.into(),
+        "--".into(),
+        image_path.into(),
+        language_tag.into(),
+    ]
+}
+
+#[cfg(any(target_os = "macos", test))]
+const MACOS_VISION_OCR_SCRIPT: &str = r#"
+import AppKit
+import Foundation
+import Vision
+
+let args = CommandLine.arguments
+guard args.count >= 3 else {
+    fputs("Vision OCR needs image path and language arguments.\n", stderr)
+    exit(2)
+}
+let imagePath = args[args.count - 2]
+let languageTag = args[args.count - 1].trimmingCharacters(in: .whitespacesAndNewlines)
+let imageUrl = URL(fileURLWithPath: imagePath)
+
+guard let image = NSImage(contentsOf: imageUrl) else {
+    fputs("Could not load image for Vision OCR.\n", stderr)
+    exit(2)
+}
+
+var proposedRect = CGRect(origin: .zero, size: image.size)
+guard let cgImage = image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) else {
+    fputs("Could not decode image for Vision OCR.\n", stderr)
+    exit(2)
+}
+
+let request = VNRecognizeTextRequest()
+request.recognitionLevel = .accurate
+request.usesLanguageCorrection = true
+if !languageTag.isEmpty && languageTag.lowercased() != "auto" {
+    request.recognitionLanguages = [languageTag]
+}
+
+let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+do {
+    try handler.perform([request])
+} catch {
+    fputs("Vision OCR failed: \(error.localizedDescription)\n", stderr)
+    exit(1)
+}
+
+let text = (request.results ?? [])
+    .compactMap { $0.topCandidates(1).first?.string }
+    .joined(separator: "\n")
+print(text)
+"#;
 
 #[cfg(target_os = "macos")]
 fn copy_text_to_macos_clipboard(text: &str) -> Result<(), PlatformError> {
@@ -1509,6 +1608,17 @@ mod tests {
             script,
             "set the clipboard to (read (POSIX file \"/tmp/odd\\\"snap.tiff\") as TIFF picture)"
         );
+    }
+
+    #[test]
+    fn macos_vision_ocr_command_uses_swift_script_and_arguments() {
+        let args = super::macos_vision_ocr_command_args("/tmp/capture.png", "en-US");
+
+        assert_eq!(args[0], "-e");
+        assert!(args[1].contains("VNRecognizeTextRequest"));
+        assert_eq!(args[2], "--");
+        assert_eq!(args[3], "/tmp/capture.png");
+        assert_eq!(args[4], "en-US");
     }
 
     #[test]
