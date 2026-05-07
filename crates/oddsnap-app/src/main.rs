@@ -183,6 +183,7 @@ impl image_search::ImageSearchItem for CaptureHistoryEntry {
 struct CaptureRunResult {
     capture: oddsnap_platform::CaptureResult,
     copy_error: Option<String>,
+    original_preview_path: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy)]
@@ -223,6 +224,14 @@ struct UploadMetadata {
 
 struct OcrResultWindow {
     text: String,
+    status: String,
+}
+
+struct ProcessedResultPreviewWindow {
+    tool: ProcessedCaptureTool,
+    provider_name: String,
+    original_path: Option<PathBuf>,
+    result_path: PathBuf,
     status: String,
 }
 
@@ -290,6 +299,217 @@ impl Render for OcrResultWindow {
                     .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(self.status.clone())),
             )
+    }
+}
+
+impl ProcessedResultPreviewWindow {
+    fn new(
+        tool: ProcessedCaptureTool,
+        provider_name: String,
+        original_path: Option<PathBuf>,
+        result_path: PathBuf,
+    ) -> Self {
+        Self {
+            tool,
+            provider_name,
+            original_path,
+            result_path,
+            status: format!("{} result ready.", tool.label()),
+        }
+    }
+
+    fn copy_result_image(&mut self) {
+        self.status = match copy_image_to_host_clipboard(&self.result_path) {
+            Ok(()) => format!("{} result copied.", self.tool.label()),
+            Err(error) => format!("Copy image failed: {error}"),
+        };
+    }
+
+    fn copy_result_path(&mut self) {
+        let path = self.result_path.display().to_string();
+        self.status = match copy_text_to_host_clipboard(&path) {
+            Ok(()) => "Result path copied.".into(),
+            Err(error) => format!("Copy path failed: {error}"),
+        };
+    }
+
+    fn reveal_result_path(&mut self) {
+        self.status = match reveal_history_path(&self.result_path) {
+            Ok(action) => format!("{action} {}.", self.result_path.display()),
+            Err(error) => format!("Open failed: {error}"),
+        };
+    }
+}
+
+impl Drop for ProcessedResultPreviewWindow {
+    fn drop(&mut self) {
+        if let Some(path) = self.original_path.as_ref() {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+impl Render for ProcessedResultPreviewWindow {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let title = format!("{} preview", self.tool.label());
+        let original_path = self.original_path.clone();
+        let result_path = self.result_path.clone();
+
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .gap(px(10.0))
+            .p(px(14.0))
+            .bg(ui::skin::color(ui::skin::APP_BG))
+            .text_color(ui::skin::color(ui::skin::BRIGHT_TEXT))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.0))
+                            .child(div().text_size(px(15.0)).child(SharedString::from(title)))
+                            .child(
+                                div()
+                                    .text_size(px(11.0))
+                                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                                    .child(SharedString::from(format!(
+                                        "Provider: {}",
+                                        self.provider_name
+                                    ))),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(8.0))
+                            .child(self.copy_result_image_button(cx))
+                            .child(self.copy_result_path_button(cx))
+                            .child(self.reveal_result_button(cx)),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .grid()
+                    .grid_cols(2)
+                    .gap(px(10.0))
+                    .child(self.preview_image_panel("Before", original_path))
+                    .child(self.preview_image_panel("After", Some(result_path))),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                    .child(SharedString::from(self.status.clone())),
+            )
+    }
+}
+
+impl ProcessedResultPreviewWindow {
+    fn preview_image_panel(&self, label: &'static str, path: Option<PathBuf>) -> impl IntoElement {
+        let path_missing = path.is_none();
+        let mut panel = div().flex().flex_col().gap(px(7.0)).min_w(px(0.0)).child(
+            div()
+                .text_size(px(11.0))
+                .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                .child(label),
+        );
+
+        panel = panel.child(
+            div()
+                .flex_1()
+                .min_h(px(0.0))
+                .rounded(px(6.0))
+                .border_1()
+                .border_color(rgb(0x2b3039))
+                .bg(rgb(0x0f1116))
+                .p(px(8.0))
+                .when_some(path, |this, path| {
+                    this.child(
+                        img(path)
+                            .size_full()
+                            .object_fit(ObjectFit::Contain)
+                            .with_loading(|| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .size_full()
+                                    .text_size(px(12.0))
+                                    .text_color(rgb(0x8b93a3))
+                                    .child("Loading preview")
+                                    .into_any_element()
+                            })
+                            .with_fallback(|| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .size_full()
+                                    .text_size(px(12.0))
+                                    .text_color(rgb(0x8b93a3))
+                                    .child("Preview unavailable")
+                                    .into_any_element()
+                            }),
+                    )
+                })
+                .when(path_missing, |this| {
+                    this.flex()
+                        .items_center()
+                        .justify_center()
+                        .text_size(px(12.0))
+                        .text_color(rgb(0x8b93a3))
+                        .child("Before preview unavailable")
+                }),
+        );
+
+        panel
+    }
+
+    fn copy_result_image_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("processed-preview-copy-image"),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy image")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_result_image();
+            cx.notify();
+        }))
+    }
+
+    fn copy_result_path_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("processed-preview-copy-path"),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy path")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_result_path();
+            cx.notify();
+        }))
+    }
+
+    fn reveal_result_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("processed-preview-reveal"),
+            ui::ButtonVariant::History,
+        )
+        .child("Open")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.reveal_result_path();
+            cx.notify();
+        }))
     }
 }
 
@@ -2263,6 +2483,7 @@ impl OddSnapRustApp {
         Ok(CaptureRunResult {
             capture: saved,
             copy_error,
+            original_preview_path: None,
         })
     }
 
@@ -2519,14 +2740,19 @@ impl OddSnapRustApp {
     }
 
     fn run_sticker_capture(&mut self, trigger: &'static str) {
-        self.run_processed_capture(trigger, ProcessedCaptureTool::Sticker);
+        self.run_processed_capture(trigger, ProcessedCaptureTool::Sticker, None);
     }
 
-    fn run_upscale_capture(&mut self, trigger: &'static str) {
-        self.run_processed_capture(trigger, ProcessedCaptureTool::Upscale);
+    fn run_upscale_capture(&mut self, trigger: &'static str, cx: &mut Context<Self>) {
+        self.run_processed_capture(trigger, ProcessedCaptureTool::Upscale, Some(cx));
     }
 
-    fn run_processed_capture(&mut self, trigger: &'static str, tool: ProcessedCaptureTool) {
+    fn run_processed_capture(
+        &mut self,
+        trigger: &'static str,
+        tool: ProcessedCaptureTool,
+        cx: Option<&mut Context<Self>>,
+    ) {
         if self.settings.capture_delay_seconds > 0 {
             self.capture_status = format!(
                 "Waiting {}s before {} capture.",
@@ -2565,6 +2791,9 @@ impl OddSnapRustApp {
                     CaptureMode::Rectangle,
                     tool.history_kind(),
                 );
+                let preview_status = cx.map_or_else(String::new, |cx| {
+                    self.open_processed_result_preview(tool, &provider_name, &result, cx)
+                });
                 let copy_status = match (
                     self.settings.copy_captures_to_clipboard,
                     result.copy_error.as_deref(),
@@ -2577,7 +2806,7 @@ impl OddSnapRustApp {
                     "{trigger} received. {} {} via {provider_name} {copy_status} {path}{history_status}",
                     platform.name(),
                     tool.label()
-                )
+                ) + &preview_status
             }
             Err(error) => format!(
                 "{} {} capture failed: {error}",
@@ -2683,7 +2912,11 @@ impl OddSnapRustApp {
         }
         fs::copy(&output_path, &destination)
             .map_err(|error| format!("failed to save {} capture: {error}", tool.slug()))?;
-        let _ = fs::remove_file(&input_path);
+        let preview_original_path =
+            processed_capture_preview_enabled(tool, &self.settings).then_some(input_path.clone());
+        if preview_original_path.is_none() {
+            let _ = fs::remove_file(&input_path);
+        }
         let _ = fs::remove_file(&output_path);
 
         let saved = oddsnap_platform::CaptureResult {
@@ -2702,6 +2935,7 @@ impl OddSnapRustApp {
             CaptureRunResult {
                 capture: saved,
                 copy_error,
+                original_preview_path: preview_original_path,
             },
             provider_name,
         ))
@@ -2812,7 +3046,7 @@ impl OddSnapRustApp {
         self.save_and_copy_capture(adapter, capture)
     }
 
-    fn run_default_capture_command(&mut self, trigger: &'static str) {
+    fn run_default_capture_command(&mut self, trigger: &'static str, cx: &mut Context<Self>) {
         match default_capture_action(self.settings.default_capture_mode) {
             DefaultCaptureAction::Capture(mode) => {
                 self.capture_status = format!("{trigger} received.");
@@ -2832,7 +3066,7 @@ impl OddSnapRustApp {
                 self.run_sticker_capture(trigger);
             }
             DefaultCaptureAction::Upscale => {
-                self.run_upscale_capture(trigger);
+                self.run_upscale_capture(trigger, cx);
             }
             DefaultCaptureAction::Center => {
                 self.run_center_capture(trigger);
@@ -3678,6 +3912,51 @@ impl OddSnapRustApp {
         };
     }
 
+    fn open_processed_result_preview(
+        &mut self,
+        tool: ProcessedCaptureTool,
+        provider_name: &str,
+        result: &CaptureRunResult,
+        cx: &mut Context<Self>,
+    ) -> String {
+        if !processed_capture_preview_enabled(tool, &self.settings) {
+            return String::new();
+        }
+
+        let bounds = Bounds::centered(None, size(px(860.0), px(560.0)), cx);
+        match cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions {
+                    title: Some(format!("OddSnap {} Preview", tool.label()).into()),
+                    appears_transparent: true,
+                    traffic_light_position: None,
+                }),
+                window_background: WindowBackgroundAppearance::Transparent,
+                window_decorations: Some(WindowDecorations::Client),
+                app_id: Some(format!("dev.jasper.oddsnap.rust.{}-preview", tool.slug())),
+                window_min_size: Some(size(px(520.0), px(340.0))),
+                ..Default::default()
+            },
+            |_, cx| {
+                cx.new(|_| {
+                    ProcessedResultPreviewWindow::new(
+                        tool,
+                        provider_name.to_string(),
+                        result.original_preview_path.clone(),
+                        result.capture.image_path.clone(),
+                    )
+                })
+            },
+        ) {
+            Ok(_) => "; preview opened".into(),
+            Err(error) => {
+                let _ = result.original_preview_path.as_ref().map(fs::remove_file);
+                format!("; preview failed: {error}")
+            }
+        }
+    }
+
     fn copy_code_history_text(&mut self, text: String) {
         let result = copy_text_to_host_clipboard(&text);
 
@@ -3741,7 +4020,7 @@ impl OddSnapRustApp {
         cx.spawn(async move |this, cx| loop {
             while let Ok(event) = receiver.try_recv() {
                 let _ = this.update(cx, |app, cx| {
-                    app.handle_hotkey_event(event);
+                    app.handle_hotkey_event(event, cx);
                     cx.notify();
                 });
             }
@@ -3766,7 +4045,7 @@ impl OddSnapRustApp {
         cx.spawn(async move |this, cx| loop {
             while let Ok(event) = receiver.try_recv() {
                 let _ = this.update(cx, |app, cx| {
-                    app.handle_hotkey_event(event);
+                    app.handle_hotkey_event(event, cx);
                     cx.notify();
                 });
             }
@@ -3848,10 +4127,14 @@ impl OddSnapRustApp {
     }
 
     #[cfg(target_os = "windows")]
-    fn handle_hotkey_event(&mut self, event: oddsnap_platform_windows::WindowsHotkeyEvent) {
+    fn handle_hotkey_event(
+        &mut self,
+        event: oddsnap_platform_windows::WindowsHotkeyEvent,
+        cx: &mut Context<Self>,
+    ) {
         match event {
             oddsnap_platform_windows::WindowsHotkeyEvent::Capture => {
-                self.run_default_capture_command("Capture hotkey");
+                self.run_default_capture_command("Capture hotkey", cx);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Recording => {
                 self.recording_status = "Recording hotkey received.".into();
@@ -3879,7 +4162,7 @@ impl OddSnapRustApp {
                 self.run_sticker_capture("Sticker hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Upscale => {
-                self.run_upscale_capture("Upscale hotkey");
+                self.run_upscale_capture("Upscale hotkey", cx);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Center => {
                 self.run_center_capture("Center hotkey");
@@ -3897,10 +4180,10 @@ impl OddSnapRustApp {
     }
 
     #[cfg(not(target_os = "windows"))]
-    fn handle_hotkey_event(&mut self, event: CrossPlatformHotkeyEvent) {
+    fn handle_hotkey_event(&mut self, event: CrossPlatformHotkeyEvent, cx: &mut Context<Self>) {
         match event {
             CrossPlatformHotkeyEvent::Capture => {
-                self.run_default_capture_command("Capture hotkey");
+                self.run_default_capture_command("Capture hotkey", cx);
             }
             CrossPlatformHotkeyEvent::Recording => {
                 self.recording_status = "Recording hotkey received.".into();
@@ -3928,7 +4211,7 @@ impl OddSnapRustApp {
                 self.run_sticker_capture("Sticker hotkey");
             }
             CrossPlatformHotkeyEvent::Upscale => {
-                self.run_upscale_capture("Upscale hotkey");
+                self.run_upscale_capture("Upscale hotkey", cx);
             }
             CrossPlatformHotkeyEvent::Center => {
                 self.run_center_capture("Center hotkey");
@@ -3957,7 +4240,7 @@ impl OddSnapRustApp {
                     self.recording_status = "Tray stop recording received.".into();
                     self.stop_recording();
                 } else {
-                    self.run_default_capture_command("Tray capture");
+                    self.run_default_capture_command("Tray capture", cx);
                 }
             }
             oddsnap_platform_windows::WindowsTrayEvent::ToggleRecording => {
@@ -4002,7 +4285,7 @@ impl OddSnapRustApp {
                     self.recording_status = "Menu bar stop recording received.".into();
                     self.stop_recording();
                 } else {
-                    self.run_default_capture_command("Menu bar capture");
+                    self.run_default_capture_command("Menu bar capture", cx);
                 }
             }
             oddsnap_platform_macos::MacosTrayEvent::ToggleRecording => {
@@ -5402,6 +5685,16 @@ fn next_upscale_scale_factor(scale: u32) -> u32 {
     }
 }
 
+fn processed_capture_preview_enabled(tool: ProcessedCaptureTool, settings: &AppSettings) -> bool {
+    match tool {
+        ProcessedCaptureTool::Sticker => false,
+        ProcessedCaptureTool::Upscale => {
+            UpscaleSettings::from_json_value(settings.upscale_upload_settings.as_ref())
+                .show_preview_window
+        }
+    }
+}
+
 fn image_search_settings_summary(settings: &AppSettings) -> String {
     image_search::settings_summary(settings)
 }
@@ -6199,6 +6492,37 @@ mod tests {
         assert_eq!(next_upscale_scale_factor(2), 3);
         assert_eq!(next_upscale_scale_factor(3), 4);
         assert_eq!(next_upscale_scale_factor(4), 2);
+
+        let mut preview_settings = AppSettings {
+            upscale_upload_settings: Some(
+                UpscaleSettings {
+                    show_preview_window: true,
+                    ..UpscaleSettings::default()
+                }
+                .to_json_value(),
+            ),
+            ..AppSettings::default()
+        };
+        assert!(processed_capture_preview_enabled(
+            ProcessedCaptureTool::Upscale,
+            &preview_settings
+        ));
+        assert!(!processed_capture_preview_enabled(
+            ProcessedCaptureTool::Sticker,
+            &preview_settings
+        ));
+
+        preview_settings.upscale_upload_settings = Some(
+            UpscaleSettings {
+                show_preview_window: false,
+                ..UpscaleSettings::default()
+            }
+            .to_json_value(),
+        );
+        assert!(!processed_capture_preview_enabled(
+            ProcessedCaptureTool::Upscale,
+            &preview_settings
+        ));
     }
 
     #[test]

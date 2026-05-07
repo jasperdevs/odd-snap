@@ -120,6 +120,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust can run configured local upscale through an isolated ONNX Runtime Python runtime, download/cache the active ONNX model, honor the configured scale factor, and fall back from the GPU engine to the configured CPU engine when processing fails.
 - GPUI can persist sticker provider, Remove.bg/Photoroom API keys, local model, CPU/GPU execution, stroke, and shadow settings back to the migrated sticker settings JSON.
 - GPUI can persist upscale provider, DeepAI API key, local model, CPU/GPU execution, scale factor, and preview-window preference back to the migrated upscale settings JSON.
+- GPUI can open an upscale result preview window with before/after images and copy/open actions after a processed capture when the migrated preview-window preference is enabled.
 - Rust can auto-upload saved media to curl-backed public hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and the temporary-host fallback chain, then persist the returned link in history.
 - Rust can build and parse curl-backed Imgur and ImgBB uploads from imported upload settings, including Imgur Client-ID/Bearer auth and ImgBB API-key uploads.
 - Rust can build and parse curl-backed Gyazo and imgpile uploads from imported upload settings, including Gyazo access-token and imgpile bearer-token uploads.
@@ -167,7 +168,7 @@ The rewrite does not yet implement the full production capture overlay, annotati
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
-Sticker/upscale parity still depends on the current platform region selector; the Rust local rembg/ONNX runtime foundation and basic GPUI provider/model/API-key controls are present, but preview-window parity and real-device runtime smoke verification still need to land before full feature parity can be claimed.
+Sticker/upscale parity still depends on the current platform region selector; the Rust local rembg/ONNX runtime foundation and basic GPUI provider/model/API-key controls are present, but interactive before/after upscale preview controls and real-device runtime smoke verification still need to land before full feature parity can be claimed.
 The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, or sound/toast polish.
 The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair/window-detection feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, or annotation tools.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.
