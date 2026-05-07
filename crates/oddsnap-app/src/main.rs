@@ -221,6 +221,78 @@ struct UploadMetadata {
     error: Option<String>,
 }
 
+struct OcrResultWindow {
+    text: String,
+    status: String,
+}
+
+impl OcrResultWindow {
+    fn new(text: String) -> Self {
+        Self {
+            text,
+            status: "OCR result ready.".into(),
+        }
+    }
+}
+
+impl Render for OcrResultWindow {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .bg(ui::skin::color(ui::skin::APP_BG))
+            .text_color(ui::skin::color(ui::skin::BRIGHT_TEXT))
+            .p(px(16.0))
+            .flex()
+            .flex_col()
+            .gap(px(10.0))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_size(px(15.0)).child("OCR result"))
+                    .child(
+                        ui::action_button_style(
+                            div().id("ocr-result-window-copy"),
+                            ui::ButtonVariant::History,
+                        )
+                        .child("Copy")
+                        .on_click(cx.listener(
+                            |this: &mut Self, _, _, cx| {
+                                cx.stop_propagation();
+                                this.status = match copy_text_to_host_clipboard(&this.text) {
+                                    Ok(()) => "OCR text copied.".into(),
+                                    Err(error) => format!("Copy OCR text failed: {error}"),
+                                };
+                                cx.notify();
+                            },
+                        )),
+                    ),
+            )
+            .child(
+                div()
+                    .id("ocr-result-window-text")
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .overflow_y_scroll()
+                    .rounded(px(6.0))
+                    .border_1()
+                    .border_color(rgb(0x2b3039))
+                    .bg(rgb(0x151922))
+                    .p(px(12.0))
+                    .text_size(px(13.0))
+                    .text_color(ui::skin::color(ui::skin::BODY_TEXT))
+                    .child(SharedString::from(self.text.clone())),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                    .child(SharedString::from(self.status.clone())),
+            )
+    }
+}
+
 struct ActiveRecording {
     handle: Box<dyn VideoRecordingHandle>,
     width: u32,
@@ -1384,6 +1456,7 @@ impl OddSnapRustApp {
                         div()
                             .flex()
                             .gap(px(8.0))
+                            .child(self.open_ocr_result_window_button(cx, text.to_string()))
                             .child(self.copy_ocr_text_button(cx, text.to_string()))
                             .child(self.translate_ocr_text_button(cx, text.to_string())),
                     ),
@@ -1790,6 +1863,26 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.copy_ocr_history_text(text.clone());
+            cx.notify();
+        }))
+    }
+
+    fn open_ocr_result_window_button(
+        &self,
+        cx: &mut Context<Self>,
+        text: String,
+    ) -> impl IntoElement {
+        ui::action_button_style(
+            div().id(SharedString::from(format!(
+                "open-ocr-{}",
+                stable_text_key(&text)
+            ))),
+            ui::ButtonVariant::History,
+        )
+        .child("Open")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.open_ocr_result_window(text.clone(), cx);
             cx.notify();
         }))
     }
@@ -3417,6 +3510,31 @@ impl OddSnapRustApp {
         self.capture_status = match result {
             Ok(()) => "OCR text copied.".into(),
             Err(error) => format!("Copy OCR text failed: {error}"),
+        };
+    }
+
+    fn open_ocr_result_window(&mut self, text: String, cx: &mut Context<Self>) {
+        let bounds = Bounds::centered(None, size(px(540.0), px(460.0)), cx);
+        let result = cx.open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions {
+                    title: Some("OddSnap OCR Result".into()),
+                    appears_transparent: true,
+                    traffic_light_position: None,
+                }),
+                window_background: WindowBackgroundAppearance::Transparent,
+                window_decorations: Some(WindowDecorations::Client),
+                app_id: Some("dev.jasper.oddsnap.rust.ocr-result".into()),
+                window_min_size: Some(size(px(360.0), px(260.0))),
+                ..Default::default()
+            },
+            |_, cx| cx.new(|_| OcrResultWindow::new(text)),
+        );
+
+        self.capture_status = match result {
+            Ok(_) => "OCR result opened.".into(),
+            Err(error) => format!("OCR result window failed: {error}"),
         };
     }
 

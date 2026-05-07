@@ -160,8 +160,9 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows OCR adapter now tries native WinRT OCR before falling back to Tesseract.
 - [x] Rust OCR text history persistence and recent text copy actions.
 - [x] GPUI inline OCR result panel with copy and translate actions for the latest recognized text.
+- [x] GPUI detached OCR result window with scrollable text and copy action.
 - [x] macOS Vision OCR command-backed foundation before Tesseract fallback.
-- [ ] macOS OCR language discovery/install status, detached result window, translation polish, sound/toast polish, and production cleanup.
+- [ ] macOS OCR language discovery/install status, translation polish, sound/toast polish, and production cleanup.
 - [x] QR/barcode scan foundation decodes captured regions with a Rust ZXing-style decoder, copies decoded text, and persists recent scan history.
 - [ ] Translation.
 - [x] Core translation model, supported-language normalization, source/target resolution, and runtime configuration error rules ported from legacy.

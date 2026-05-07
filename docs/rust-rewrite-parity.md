@@ -137,6 +137,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust now has a cross-platform OCR service boundary backed by native Windows WinRT OCR with Tesseract fallback and Tesseract CLI foundations on macOS/Linux, with OCR button, hotkey, tray/menu, and default-capture routing plus persisted recent text history.
 - macOS OCR now tries a native Vision `VNRecognizeTextRequest` Swift command path before falling back to Tesseract.
 - The GPUI shell now shows an inline OCR result panel for the latest recognized text, with copy and translate actions, so OCR results are inspectable instead of only copied/truncated in recent rows.
+- The GPUI shell can open a detached OCR result window with scrollable text and a copy action.
 - Rust now has a QR/barcode scan foundation that captures a selected region, decodes QR/Aztec/Data Matrix/PDF417 and common 1D formats through a Rust ZXing-style decoder, copies decoded text, and persists recent scan history.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Recent OCR text rows can run the Google Translate API path through curl when a migrated API key is present, then copy the translated text.
@@ -159,7 +160,7 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, detached OCR result window polish, explicit image-search reindex progress UI/controls, full history actions, full sticker/upscale settings UI, release packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, OCR sound/toast polish, explicit image-search reindex progress UI/controls, full history actions, full sticker/upscale settings UI, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
