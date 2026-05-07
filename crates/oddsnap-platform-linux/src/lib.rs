@@ -940,10 +940,12 @@ fn parse_linux_region_selection(selection: &str) -> Result<CaptureRegion, Platfo
 #[cfg(test)]
 mod tests {
     use oddsnap_core::{NativeMaterial, RecordingFormat, RecordingQuality};
+    #[cfg(not(target_os = "linux"))]
+    use oddsnap_platform::WindowPickerService;
     use oddsnap_platform::{
         ClipboardImageService, ClipboardTextService, ColorPickerService, HotkeyService,
         OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
-        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
+        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
     };
 
     use super::LinuxPlatform;
