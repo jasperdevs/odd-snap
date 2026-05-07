@@ -83,6 +83,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust recording history can store FFmpeg-generated JPG thumbnails for saved GIF/video entries.
 - GPUI can persistently cycle implemented recording preferences for format and quality.
 - GPUI history rows show media kind and legacy upload metadata, and can copy stored upload links.
+- GPUI history rows can remove entries from the persisted Rust history index without deleting the original media file.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.
 - GPUI shows the newest saved image capture as an inline preview when the file still exists.

@@ -145,6 +145,15 @@ impl HistoryStore {
         Ok(index)
     }
 
+    pub fn remove_entry(&self, file_path: &Path) -> Result<HistoryIndex, HistoryStoreError> {
+        let mut index = self.load_or_default()?;
+        index
+            .entries
+            .retain(|existing| existing.file_path != file_path);
+        self.save(&index)?;
+        Ok(index)
+    }
+
     pub fn append_color_entry(
         &self,
         entry: ColorHistoryEntry,
@@ -246,6 +255,33 @@ mod tests {
         assert_eq!(index.entries[0].file_path, first_path);
         assert_eq!(index.entries[0].width, 3);
         assert_eq!(index.entries[1].file_name, "second.bmp");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_store_removes_entries_without_deleting_files() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-history-remove-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let store = HistoryStore::new(root.join("history.json"));
+        let first_path = root.join("first.bmp");
+        let second_path = root.join("second.bmp");
+        fs::write(&first_path, b"first").expect("write first");
+        fs::write(&second_path, b"second").expect("write second");
+        let first = HistoryEntry::from_capture_file(first_path.clone(), 1, 1, HistoryKind::Image)
+            .expect("build first history entry");
+        let second = HistoryEntry::from_capture_file(second_path.clone(), 2, 2, HistoryKind::Image)
+            .expect("build second history entry");
+
+        store.append_entry(first).expect("append first");
+        store.append_entry(second).expect("append second");
+        let index = store.remove_entry(&first_path).expect("remove first");
+
+        assert_eq!(index.entries.len(), 1);
+        assert_eq!(index.entries[0].file_path, second_path);
+        assert!(first_path.exists());
+        assert!(second_path.exists());
         let _ = fs::remove_dir_all(root);
     }
 

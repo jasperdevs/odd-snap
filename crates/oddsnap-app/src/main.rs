@@ -732,7 +732,8 @@ impl OddSnapRustApp {
                             .child(self.open_history_button(cx, entry.path.clone()))
                             .when_some(entry.upload_url.clone(), |row, url| {
                                 row.child(self.copy_upload_url_button(cx, url))
-                            }),
+                            })
+                            .child(self.remove_history_button(cx, entry.path.clone())),
                     ),
             );
         }
@@ -933,6 +934,26 @@ impl OddSnapRustApp {
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
                 this.copy_history_upload_url(url.clone());
+                cx.notify();
+            }))
+    }
+
+    fn remove_history_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
+        div()
+            .id(SharedString::from(format!("remove-history-{path}")))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(rgb(0x354052))
+            .bg(rgb(0x202733))
+            .hover(|this| this.bg(rgb(0x2a3342)))
+            .px(px(8.0))
+            .py(px(4.0))
+            .text_size(px(11.0))
+            .text_color(rgb(0xd8dde6))
+            .child("Remove")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.remove_history_entry(path.clone());
                 cx.notify();
             }))
     }
@@ -1353,6 +1374,16 @@ impl OddSnapRustApp {
         self.capture_status = match result {
             Ok(()) => "Upload link copied.".into(),
             Err(error) => format!("Copy upload link failed: {error}"),
+        };
+    }
+
+    fn remove_history_entry(&mut self, path: String) {
+        self.capture_status = match self.history_store.remove_entry(Path::new(&path)) {
+            Ok(index) => {
+                self.capture_history = history_entries_to_capture_history(index);
+                format!("Removed {path} from history.")
+            }
+            Err(error) => format!("Remove from history failed: {error}"),
         };
     }
 
