@@ -1,0 +1,4 @@
+*.entitlements text eol=lf
+*.gitattributes text eol=lf
+*.sh text eol=lf
+*.plist text eol=lf

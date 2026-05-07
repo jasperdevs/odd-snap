@@ -42,6 +42,14 @@ macOS CI can compile and test command construction and parsers, but real capture
 
 Distribution outside the Mac App Store still requires a Developer ID Application certificate, hardened runtime, notarization, and stapling. Those steps are documented in `docs/macos-readiness.md` and are not performed by this branch workflow.
 
+The repo now includes local-only macOS package scaffolding:
+
+- `packaging/macos/Info.plist`
+- `packaging/macos/OddSnap.entitlements`
+- `scripts/macos/package-oddsnap-rust.sh`
+
+That script is intentionally not wired to publish artifacts. It can build an unsigned `.app`/ZIP for smoke testing, or use `CODESIGN_IDENTITY` and `NOTARY_PROFILE` on a Mac when Developer ID signing and notarization are ready.
+
 ## Current release pipeline boundary
 
 `.github/workflows/build.yml` and `.github/workflows/release.yml` still package the existing Windows .NET app. The Rust rewrite workflow intentionally does not upload artifacts or publish releases yet.

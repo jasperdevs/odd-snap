@@ -10,6 +10,8 @@ on:
       - "docs/rust-packaging-readiness.md"
       - "docs/rust-rewrite-parity.md"
       - "docs/rust-rewrite-todo.md"
+      - "packaging/macos/**"
+      - "scripts/macos/**"
       - ".github/workflows/rust-rewrite.yml"
   push:
     branches:
@@ -33,6 +35,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+      - name: Validate macOS package metadata
+        if: runner.os == 'macOS'
+        run: plutil -lint packaging/macos/Info.plist packaging/macos/OddSnap.entitlements
       - name: Format
         run: cargo fmt --all --check
       - name: Check

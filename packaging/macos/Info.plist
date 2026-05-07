@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>OddSnap</string>
+	<key>CFBundleExecutable</key>
+	<string>oddsnap-rust</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.jasper.oddsnap</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>OddSnap</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>0.1.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>OddSnap uses Apple Events to read the active window bounds for window capture.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>OddSnap uses microphone input when you choose to include microphone audio in a screen recording.</string>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+</dict>
+</plist>
