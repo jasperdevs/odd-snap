@@ -250,6 +250,7 @@ impl UploadDestination {
                 | Self::Immich
                 | Self::Dropbox
                 | Self::OneDrive
+                | Self::GoogleDrive
         )
     }
 }
@@ -506,6 +507,11 @@ pub struct DropboxCurlUploadPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OneDriveCurlUploadPlan {
+    pub upload: CurlUploadRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoogleDriveCurlUploadPlan {
     pub upload: CurlUploadRequest,
 }
 
@@ -812,6 +818,90 @@ pub fn build_onedrive_create_link_request(
             .collect(),
         stdin_body: Some(body.into_bytes()),
         success_url: None,
+    })
+}
+
+pub fn build_google_drive_curl_upload_plan(
+    file_path: &Path,
+    settings: &UploadSettings,
+) -> Result<GoogleDriveCurlUploadPlan, String> {
+    let token = settings.google_drive_access_token.trim();
+    if token.is_empty() {
+        return Err(missing_upload_setting("Google Drive access token"));
+    }
+    let metadata = std::fs::metadata(file_path)
+        .map_err(|error| format!("Google Drive upload could not read file metadata: {error}"))?;
+    if metadata.len() > 5 * MIB {
+        return Err(
+            "Google Drive resumable uploads over 5MB are pending in the Rust backend.".into(),
+        );
+    }
+    let boundary = "oddsnap-rust-drive-boundary";
+    let body = google_drive_multipart_body(file_path, settings, boundary)?;
+    let upload = CurlUploadRequest {
+        destination: UploadDestination::GoogleDrive,
+        provider_name: UploadDestination::GoogleDrive.display_name(),
+        program: "curl".into(),
+        args: curl_base_args()
+            .into_iter()
+            .chain([
+                "--request".into(),
+                "POST".into(),
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "--header".into(),
+                format!("Content-Type: multipart/related; boundary={boundary}"),
+                "--data-binary".into(),
+                "@-".into(),
+                "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink".into(),
+            ])
+            .collect(),
+        stdin_body: Some(body),
+        success_url: None,
+    };
+    Ok(GoogleDriveCurlUploadPlan { upload })
+}
+
+pub fn build_google_drive_permission_request(
+    file_id: &str,
+    settings: &UploadSettings,
+) -> Result<CurlUploadRequest, String> {
+    let token = settings.google_drive_access_token.trim();
+    if token.is_empty() {
+        return Err(missing_upload_setting("Google Drive access token"));
+    }
+    let file_id = file_id.trim();
+    if file_id.is_empty() {
+        return Err("Google Drive returned no file ID.".into());
+    }
+    let body = serde_json::json!({
+        "role": "reader",
+        "type": "anyone",
+    })
+    .to_string();
+    Ok(CurlUploadRequest {
+        destination: UploadDestination::GoogleDrive,
+        provider_name: UploadDestination::GoogleDrive.display_name(),
+        program: "curl".into(),
+        args: curl_base_args()
+            .into_iter()
+            .chain([
+                "--request".into(),
+                "POST".into(),
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "--header".into(),
+                "Content-Type: application/json".into(),
+                "--data-binary".into(),
+                "@-".into(),
+                format!(
+                    "https://www.googleapis.com/drive/v3/files/{}/permissions",
+                    percent_encode_path_component(file_id)
+                ),
+            ])
+            .collect(),
+        stdin_body: Some(body.into_bytes()),
+        success_url: Some(google_drive_file_url(file_id)),
     })
 }
 
@@ -1161,6 +1251,9 @@ pub fn build_curl_upload_request_with_settings(
         UploadDestination::OneDrive => {
             return Err("OneDrive uploads use the multi-step Rust curl backend.".into());
         }
+        UploadDestination::GoogleDrive => {
+            return Err("Google Drive uploads use the multi-step Rust curl backend.".into());
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -1293,6 +1386,34 @@ pub fn parse_onedrive_create_link_output(output: &str) -> Result<UploadSuccess, 
     parse_plain_url("OneDrive", url).map(|url| UploadSuccess {
         url,
         provider_name: UploadDestination::OneDrive.display_name(),
+    })
+}
+
+pub fn parse_google_drive_upload_file_id(output: &str) -> Result<String, String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if !(200..300).contains(&status_code) {
+        return Err(build_upload_error("Google Drive", status_code, body));
+    }
+    let node: Value = serde_json::from_str(body)
+        .map_err(|error| format!("Google Drive returned invalid JSON: {error}"))?;
+    node.get("id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "Google Drive returned no file ID.".into())
+}
+
+pub fn parse_google_drive_permission_output(
+    output: &str,
+    file_id: &str,
+) -> Result<UploadSuccess, String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if !(200..300).contains(&status_code) {
+        return Err(build_upload_error("Google Drive", status_code, body));
+    }
+    parse_plain_url("Google Drive", &google_drive_file_url(file_id)).map(|url| UploadSuccess {
+        url,
+        provider_name: UploadDestination::GoogleDrive.display_name(),
     })
 }
 
@@ -1634,6 +1755,62 @@ fn onedrive_upload_url(file_path: &Path, settings: &UploadSettings) -> Result<St
     Ok(format!(
         "https://graph.microsoft.com/v1.0/me/drive/root:/{path}:/content"
     ))
+}
+
+fn google_drive_multipart_body(
+    file_path: &Path,
+    settings: &UploadSettings,
+    boundary: &str,
+) -> Result<Vec<u8>, String> {
+    let file_name = upload_file_name(file_path)?;
+    let file_body = std::fs::read(file_path)
+        .map_err(|error| format!("Google Drive upload could not read file: {error}"))?;
+    let mut metadata = serde_json::json!({ "name": file_name });
+    let folder = settings.google_drive_folder_id.trim();
+    if !folder.is_empty() {
+        metadata["parents"] = serde_json::json!([folder]);
+    }
+
+    let mut body = Vec::new();
+    body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+    body.extend_from_slice(b"Content-Type: application/json; charset=UTF-8\r\n\r\n");
+    body.extend_from_slice(metadata.to_string().as_bytes());
+    body.extend_from_slice(b"\r\n");
+    body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+    body.extend_from_slice(
+        format!("Content-Type: {}\r\n\r\n", upload_content_type(file_path)).as_bytes(),
+    );
+    body.extend_from_slice(&file_body);
+    body.extend_from_slice(b"\r\n");
+    body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+    Ok(body)
+}
+
+fn google_drive_file_url(file_id: &str) -> String {
+    format!(
+        "https://drive.google.com/file/d/{}/view",
+        percent_encode_path_component(file_id.trim())
+    )
+}
+
+fn upload_content_type(file_path: &Path) -> &'static str {
+    match file_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        "webp" => "image/webp",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        _ => "application/octet-stream",
+    }
 }
 
 fn append_url_path_segments<'a>(
@@ -2709,6 +2886,49 @@ mod tests {
     }
 
     #[test]
+    fn builds_google_drive_multipart_upload_plan_and_permission_request() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-drive-upload-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let path = root.join("capture.png");
+        fs::write(&path, b"png").expect("write upload file");
+
+        let settings = UploadSettings {
+            google_drive_access_token: "drive-token".into(),
+            google_drive_folder_id: "folder-id".into(),
+            ..UploadSettings::default()
+        };
+        let plan = build_google_drive_curl_upload_plan(&path, &settings).expect("build drive plan");
+
+        assert!(plan
+            .upload
+            .args
+            .contains(&"Authorization: Bearer drive-token".into()));
+        assert!(plan.upload.args.iter().any(|arg| {
+            arg.starts_with("Content-Type: multipart/related; boundary=oddsnap-rust-drive-boundary")
+        }));
+        assert!(plan.upload.args.contains(&"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink".into()));
+        let body = String::from_utf8(plan.upload.stdin_body.expect("multipart body"))
+            .expect("utf8 multipart body");
+        assert!(body.contains(r#""name":"capture.png""#));
+        assert!(body.contains(r#""parents":["folder-id"]"#));
+        assert!(body.contains("Content-Type: image/png"));
+
+        let permission =
+            build_google_drive_permission_request("file id", &settings).expect("permission");
+        assert!(permission
+            .args
+            .contains(&"https://www.googleapis.com/drive/v3/files/file%20id/permissions".into()));
+        let body = String::from_utf8(permission.stdin_body.expect("permission body"))
+            .expect("utf8 permission body");
+        assert!(body.contains("\"role\":\"reader\""));
+        assert!(body.contains("\"type\":\"anyone\""));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn parses_upload_responses_for_public_hosts() {
         assert_eq!(
             parse_upload_response(
@@ -2842,6 +3062,25 @@ mod tests {
             .expect("parse onedrive link")
             .url,
             "https://1drv.ms/u/s!abc"
+        );
+
+        assert_eq!(
+            parse_google_drive_upload_file_id(
+                r#"{"id":"drive-file-id"}
+200"#,
+            )
+            .expect("parse drive file id"),
+            "drive-file-id"
+        );
+        assert_eq!(
+            parse_google_drive_permission_output(
+                r#"{"id":"permission-id"}
+200"#,
+                "drive-file-id",
+            )
+            .expect("parse drive permission")
+            .url,
+            "https://drive.google.com/file/d/drive-file-id/view"
         );
 
         assert_eq!(
