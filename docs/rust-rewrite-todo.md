@@ -120,6 +120,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Linux X11 FFmpeg recording can target an explicit capture region.
 - [x] Linux recording falls back to video-only when imported audio settings are enabled.
 - [x] macOS desktop video recording start/cancel/stop foundation through `screencapture` plus FFmpeg conversion.
+- [x] Recording handles fail explicitly when stop is called without a running process.
 - [ ] Region GIF recording.
 - [x] GPUI active-window recording uses the explicit-region FFmpeg path.
 - [ ] Freeform region MP4/WebM recording.

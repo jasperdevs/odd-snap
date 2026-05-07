@@ -920,9 +920,9 @@ impl oddsnap_platform::VideoRecordingHandle for MacosVideoRecordingHandle {
 
     fn stop(&mut self) -> Result<oddsnap_platform::VideoRecordingResult, PlatformError> {
         let Some(mut child) = self.child.take() else {
-            return Ok(oddsnap_platform::VideoRecordingResult {
-                output_path: self.output_path.clone(),
-            });
+            return Err(PlatformError::Failed(
+                "recording process is not running".into(),
+            ));
         };
 
         if let Err(error) = request_macos_recording_stop(&mut child) {

@@ -604,9 +604,9 @@ impl VideoRecordingHandle for WindowsVideoRecordingHandle {
 
     fn stop(&mut self) -> Result<VideoRecordingResult, PlatformError> {
         let Some(mut child) = self.child.take() else {
-            return Ok(VideoRecordingResult {
-                output_path: self.output_path.clone(),
-            });
+            return Err(PlatformError::Failed(
+                "recording process is not running".into(),
+            ));
         };
 
         if let Some(stdin) = child.stdin.as_mut() {
