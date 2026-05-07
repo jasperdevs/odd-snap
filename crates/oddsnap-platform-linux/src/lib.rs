@@ -474,10 +474,44 @@ fn run_clipboard_bytes_command(
 
 impl ColorPickerService for LinuxPlatform {
     fn sample_cursor_color(&self) -> Result<ColorSample, PlatformError> {
-        Err(PlatformError::Unsupported(
-            "Linux color picker is not implemented yet",
-        ))
+        #[cfg(target_os = "linux")]
+        {
+            run_linux_color_picker()
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(PlatformError::Unsupported(
+                "Linux color picker is only available on Linux",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn run_linux_color_picker() -> Result<ColorSample, PlatformError> {
+    let cursor = run_linux_command_stdout("xdotool", &["getmouselocation", "--shell"])?;
+    let (x, y) = parse_xdotool_mouse_location(&cursor)?;
+    let capture = run_linux_screenshot(
+        Some(&CaptureRegion {
+            x,
+            y,
+            width: 1,
+            height: 1,
+        }),
+        false,
+    )?;
+    let sample = oddsnap_platform::image_file_top_left_color_sample(&capture.image_path);
+    let _ = std::fs::remove_file(capture.image_path);
+    sample
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xdotool_mouse_location(output: &str) -> Result<(i32, i32), PlatformError> {
+    Ok((
+        parse_xdotool_i32(output, "X")?,
+        parse_xdotool_i32(output, "Y")?,
+    ))
 }
 
 impl HotkeyService for LinuxPlatform {
@@ -642,6 +676,15 @@ mod tests {
     }
 
     #[test]
+    fn linux_mouse_location_parser_reads_xdotool_shell_output() {
+        assert_eq!(
+            super::parse_xdotool_mouse_location("X=-12\nY=34\nSCREEN=0\nWINDOW=10485763\n")
+                .expect("parse mouse location"),
+            (-12, 34)
+        );
+    }
+
+    #[test]
     fn linux_screenshot_commands_cover_fullscreen_and_region_backends() {
         let path = std::path::Path::new("/tmp/oddsnap-test.png");
         let full = super::linux_screenshot_commands(None, true, path);
@@ -792,6 +835,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn linux_color_picker_service_is_explicitly_unimplemented() {
         let adapter = LinuxPlatform;
 
@@ -799,7 +843,18 @@ mod tests {
             .sample_cursor_color()
             .expect_err("Linux color picker pending");
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on Linux"));
+    }
+
+    #[test]
+    #[ignore = "samples one pixel at the local Linux cursor using xdotool and a screenshot backend"]
+    #[cfg(target_os = "linux")]
+    fn linux_color_picker_can_sample_cursor_color() {
+        let adapter = LinuxPlatform;
+
+        adapter
+            .sample_cursor_color()
+            .expect("sample cursor color through Linux backend");
     }
 
     #[test]

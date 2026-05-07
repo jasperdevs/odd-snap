@@ -18,6 +18,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS has command-backed Screen & System Audio Recording permission detection through the platform permissions service, plus capture-failure guidance that points users to the current System Settings location.
 - Linux has command-backed still-capture foundations for common screenshot tools (`grim`, `gnome-screenshot`, `spectacle`, or `scrot`).
 - Linux has an X11 active-window discovery foundation through `xdotool`; active-window capture can reuse the command-backed region screenshot path when `xdotool` and a screenshot backend are available.
+- Linux has an X11 color-picker foundation through `xdotool` cursor coordinates plus a 1x1 screenshot sample, and the GPUI color action routes to that adapter on Linux.
 - GPUI shell can invoke the Windows capture service through a local smoke action.
 - Shared capture trait can capture the full virtual screen by reusing monitor enumeration and region capture.
 - GPUI exposes rectangle, full-screen, and active-window capture actions instead of mapping rectangle capture to full-screen.

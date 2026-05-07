@@ -53,6 +53,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Linux explicit unsupported capture/clipboard adapter surfaces.
 - [x] Linux command-backed still screenshot capture foundation.
 - [x] Linux X11 active-window discovery foundation through `xdotool`.
+- [x] Linux X11 color picker foundation through cursor coordinate screenshot sampling.
 
 ## Milestone 3 - Capture Core
 

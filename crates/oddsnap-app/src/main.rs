@@ -1136,7 +1136,17 @@ impl OddSnapRustApp {
             })
         };
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            adapter.sample_cursor_color().map(|sample| {
+                let bare = sample.bare_hex_rgb();
+                let copied = adapter.copy_text_to_clipboard(&bare).is_ok();
+                (sample.hex_rgb(), bare, copied)
+            })
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
         let result: Result<(String, String, bool), oddsnap_platform::PlatformError> =
             Err(oddsnap_platform::PlatformError::Unsupported(
                 "color picker is pending on this platform",
