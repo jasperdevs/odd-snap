@@ -138,6 +138,20 @@ pub(crate) fn toggle_selected_history_path(selected_paths: &mut Vec<String>, pat
     }
 }
 
+pub(crate) fn add_selected_history_paths<I>(selected_paths: &mut Vec<String>, paths: I) -> usize
+where
+    I: IntoIterator<Item = String>,
+{
+    let mut added_count = 0usize;
+    for path in paths {
+        if !history_selection_contains(selected_paths, &path) {
+            selected_paths.push(path);
+            added_count += 1;
+        }
+    }
+    added_count
+}
+
 pub(crate) fn retain_selected_history_paths(
     selected_paths: &mut Vec<String>,
     available_paths: &[String],
@@ -314,10 +328,15 @@ mod tests {
         ));
         assert_eq!(selected_paths, vec!["two.png"]);
 
+        let added_count =
+            add_selected_history_paths(&mut selected_paths, ["two.png".into(), "three.png".into()]);
+        assert_eq!(added_count, 1);
+        assert_eq!(selected_paths, vec!["two.png", "three.png"]);
+
         retain_selected_history_paths(&mut selected_paths, &["three.png".into(), "two.png".into()]);
-        assert_eq!(selected_paths, vec!["two.png"]);
+        assert_eq!(selected_paths, vec!["two.png", "three.png"]);
 
         retain_selected_history_paths(&mut selected_paths, &["three.png".into()]);
-        assert!(selected_paths.is_empty());
+        assert_eq!(selected_paths, vec!["three.png"]);
     }
 }

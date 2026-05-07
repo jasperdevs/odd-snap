@@ -162,6 +162,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI media history rows and filtered counts surface captured-age and storage-size metadata from the persisted index.
 - [x] GPUI media history groups visible rows into age sections for faster scanning.
 - [x] GPUI media history can select rows, clear selection, and bulk-remove selected rows from the persisted Rust history index without deleting media files.
+- [x] GPUI media history can select all currently filtered rows and apply selected upload/link bulk actions.
 - [ ] Full media history UI details, bulk actions, and large-history polish.
 - [x] GPUI app has a dedicated action model module for capture modes, recording targets, pending tool routes, hotkey events, and settings actions.
 

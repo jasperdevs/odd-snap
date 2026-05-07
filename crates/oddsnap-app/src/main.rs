@@ -68,10 +68,10 @@ use hotkeys::{
 use hotkeys::{start_capture_hotkey_listener, ImportedHotkeyAccelerators};
 use image_search::{ImageSearchOcrHydrationSummary, ImageSearchReindexQueueState};
 use media_history::{
-    filtered_capture_history, history_selection_contains, media_history_count_text,
-    media_history_detail_line, media_history_group_label, next_media_history_visible_limit,
-    retain_selected_history_paths, toggle_selected_history_path, HistoryKindFilter,
-    HistoryUploadFilter, DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT,
+    add_selected_history_paths, filtered_capture_history, history_selection_contains,
+    media_history_count_text, media_history_detail_line, media_history_group_label,
+    next_media_history_visible_limit, retain_selected_history_paths, toggle_selected_history_path,
+    HistoryKindFilter, HistoryUploadFilter, DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT,
     IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT,
 };
 use processed_preview::ProcessedResultPreviewWindow;
@@ -1500,8 +1500,13 @@ impl OddSnapRustApp {
             .child(self.history_upload_filter_button(cx))
             .child(self.copy_filtered_upload_links_button(cx))
             .child(self.upload_filtered_history_button(cx))
+            .when(filtered_count > 0, |bar| {
+                bar.child(self.select_filtered_history_button(cx))
+            })
             .when(selected_count > 0, |bar| {
-                bar.child(self.remove_selected_history_button(cx))
+                bar.child(self.copy_selected_upload_links_button(cx))
+                    .child(self.upload_selected_history_button(cx))
+                    .child(self.remove_selected_history_button(cx))
                     .child(self.clear_history_selection_button(cx))
                     .child(
                         div()
@@ -2175,6 +2180,19 @@ impl OddSnapRustApp {
         }))
     }
 
+    fn select_filtered_history_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("select-filtered-history-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Select filtered")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.select_filtered_history_entries();
+            cx.notify();
+        }))
+    }
+
     fn select_history_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
         let selected = history_selection_contains(&self.selected_history_paths, &path);
         let label = if selected { "Selected" } else { "Select" };
@@ -2186,6 +2204,32 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.toggle_history_selection(path.clone());
+            cx.notify();
+        }))
+    }
+
+    fn upload_selected_history_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("upload-selected-history-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Upload selected")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.retry_selected_history_uploads();
+            cx.notify();
+        }))
+    }
+
+    fn copy_selected_upload_links_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("copy-selected-upload-links-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy selected links")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_selected_history_upload_links();
             cx.notify();
         }))
     }
@@ -4178,8 +4222,29 @@ impl OddSnapRustApp {
             self.history_kind_filter,
             self.history_upload_filter,
         );
+        self.retry_history_upload_entries(
+            entries,
+            "No filtered history entries to upload.",
+            "Filtered",
+        );
+    }
+
+    fn retry_selected_history_uploads(&mut self) {
+        self.retry_history_upload_entries(
+            self.selected_capture_history(),
+            "No selected history entries to upload.",
+            "Selected",
+        );
+    }
+
+    fn retry_history_upload_entries(
+        &mut self,
+        entries: Vec<CaptureHistoryEntry>,
+        empty_message: &'static str,
+        status_label: &str,
+    ) {
         if entries.is_empty() {
-            self.capture_status = "No filtered history entries to upload.".into();
+            self.capture_status = empty_message.into();
             return;
         }
 
@@ -4204,7 +4269,7 @@ impl OddSnapRustApp {
         }
 
         self.capture_status = format!(
-            "Filtered upload retry done: {uploaded}/{total} uploaded, {failed} failed, {missing} missing."
+            "{status_label} upload retry done: {uploaded}/{total} uploaded, {failed} failed, {missing} missing."
         );
     }
 
@@ -4222,6 +4287,19 @@ impl OddSnapRustApp {
         self.capture_status = match copy_text_to_host_clipboard(&text) {
             Ok(()) => format!("{link_count} upload links copied."),
             Err(error) => format!("Copy filtered upload links failed: {error}"),
+        };
+    }
+
+    fn copy_selected_history_upload_links(&mut self) {
+        let entries = self.selected_capture_history();
+        let Some(text) = filtered_upload_links_text(&entries) else {
+            self.capture_status = "No upload links in selected history.".into();
+            return;
+        };
+        let link_count = text.lines().count();
+        self.capture_status = match copy_text_to_host_clipboard(&text) {
+            Ok(()) => format!("{link_count} selected upload links copied."),
+            Err(error) => format!("Copy selected upload links failed: {error}"),
         };
     }
 
@@ -4250,6 +4328,35 @@ impl OddSnapRustApp {
         } else {
             format!("Unselected {path}.")
         };
+    }
+
+    fn select_filtered_history_entries(&mut self) {
+        let entries = filtered_capture_history(
+            &self.capture_history,
+            self.history_kind_filter,
+            self.history_upload_filter,
+        );
+        if entries.is_empty() {
+            self.media_status = "No filtered history rows to select.".into();
+            return;
+        }
+
+        let filtered_count = entries.len();
+        let added_count = add_selected_history_paths(
+            &mut self.selected_history_paths,
+            entries.into_iter().map(|entry| entry.path),
+        );
+        self.media_status = format!(
+            "Selected {added_count} more history rows; {filtered_count} rows match the current filters."
+        );
+    }
+
+    fn selected_capture_history(&self) -> Vec<CaptureHistoryEntry> {
+        self.capture_history
+            .iter()
+            .filter(|entry| history_selection_contains(&self.selected_history_paths, &entry.path))
+            .cloned()
+            .collect()
     }
 
     fn clear_history_selection(&mut self) {

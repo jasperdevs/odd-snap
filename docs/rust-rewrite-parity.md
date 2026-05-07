@@ -125,6 +125,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI media history rows and filtered counts surface captured-age and storage-size metadata from the persisted index.
 - GPUI media history groups visible rows into age sections for faster scanning.
 - GPUI media history can select individual rows, clear the selection, and bulk-remove selected rows from the persisted Rust history index without deleting original media files.
+- GPUI media history can select all rows matching the active filters and run selected-row upload retry or upload-link copy actions.
 - GPUI generated-history rows can remove color, OCR text, and QR/barcode entries from the persisted Rust history index without touching media files.
 - GPUI feature routing has a dedicated action model module for capture modes, recording targets, settings actions, pending tool parity messages, and cross-platform hotkey events.
 - Imported AI Redirect hotkeys can open configured chat providers that do not require hosted-image upload, copying the newest saved image first.
