@@ -44,6 +44,7 @@ use oddsnap_platform::{
 mod actions;
 mod image_search;
 mod ocr_translation;
+mod settings_text;
 mod sticker_upscale;
 mod ui;
 
@@ -117,6 +118,7 @@ struct OddSnapRustApp {
     tray_status: String,
     recording_status: String,
     active_recording: Option<ActiveRecording>,
+    settings_text_input: Option<settings_text::SettingsTextInputState>,
     capture_history: Vec<CaptureHistoryEntry>,
     color_history: Vec<ColorHistoryEntry>,
     ocr_history: Vec<OcrHistoryEntry>,
@@ -391,6 +393,7 @@ impl OddSnapRustApp {
             tray_status,
             recording_status: "No recording running.".into(),
             active_recording: None,
+            settings_text_input: None,
             capture_history,
             color_history,
             ocr_history,
@@ -675,12 +678,25 @@ impl OddSnapRustApp {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .gap(px(8.0))
                     .child(self.settings_button(
                         cx,
                         "sticker-provider-button",
                         "Sticker Provider".into(),
                         SettingsAction::StickerProvider,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "removebg-key-button",
+                        "Remove.bg Key".into(),
+                        SettingsAction::EditRemoveBgApiKey,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "photoroom-key-button",
+                        "Photoroom Key".into(),
+                        SettingsAction::EditPhotoroomApiKey,
                     ))
                     .child(self.settings_button(
                         cx,
@@ -718,12 +734,19 @@ impl OddSnapRustApp {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .gap(px(8.0))
                     .child(self.settings_button(
                         cx,
                         "upscale-provider-button",
                         "Upscale Provider".into(),
                         SettingsAction::UpscaleProvider,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "deepai-key-button",
+                        "DeepAI Key".into(),
+                        SettingsAction::EditDeepAiApiKey,
                     ))
                     .child(self.settings_button(
                         cx,
@@ -750,6 +773,9 @@ impl OddSnapRustApp {
                         SettingsAction::ToggleUpscalePreview,
                     )),
             )
+            .when_some(self.settings_text_input.as_ref(), |body, input| {
+                body.child(settings_text_input_panel(input))
+            })
             .child(
                 div()
                     .text_size(px(12.0))
@@ -1438,6 +1464,31 @@ impl OddSnapRustApp {
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(input) = self.settings_text_input.as_mut() {
+            match input.handle_key_down(event) {
+                settings_text::SettingsTextInputEvent::Editing => {
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
+                settings_text::SettingsTextInputEvent::Commit { target, value } => {
+                    self.settings_text_input = None;
+                    self.commit_settings_text_input(target, value);
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
+                settings_text::SettingsTextInputEvent::Cancel => {
+                    self.settings_text_input = None;
+                    self.capture_status = "Settings text edit canceled.".into();
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
+                settings_text::SettingsTextInputEvent::Ignored => {}
+            }
+        }
+
         if !self.settings.show_image_search_bar {
             return;
         }
@@ -1554,6 +1605,55 @@ impl OddSnapRustApp {
                 this.apply_settings_action(action);
                 cx.notify();
             }))
+    }
+
+    fn start_settings_text_input(&mut self, target: settings_text::SettingsTextTarget) {
+        let value = match target {
+            settings_text::SettingsTextTarget::RemoveBg => {
+                StickerSettings::from_json_value(self.settings.sticker_upload_settings.as_ref())
+                    .remove_bg_api_key
+            }
+            settings_text::SettingsTextTarget::Photoroom => {
+                StickerSettings::from_json_value(self.settings.sticker_upload_settings.as_ref())
+                    .photoroom_api_key
+            }
+            settings_text::SettingsTextTarget::DeepAi => {
+                UpscaleSettings::from_json_value(self.settings.upscale_upload_settings.as_ref())
+                    .deep_ai_api_key
+            }
+        };
+        self.settings_text_input = Some(settings_text::SettingsTextInputState::new(target, value));
+        self.capture_status = format!("Editing {}.", target.label());
+    }
+
+    fn commit_settings_text_input(
+        &mut self,
+        target: settings_text::SettingsTextTarget,
+        value: String,
+    ) {
+        match target {
+            settings_text::SettingsTextTarget::RemoveBg => {
+                let mut settings = StickerSettings::from_json_value(
+                    self.settings.sticker_upload_settings.as_ref(),
+                );
+                settings.remove_bg_api_key = value;
+                self.persist_sticker_settings(settings, "Remove.bg API key updated".into());
+            }
+            settings_text::SettingsTextTarget::Photoroom => {
+                let mut settings = StickerSettings::from_json_value(
+                    self.settings.sticker_upload_settings.as_ref(),
+                );
+                settings.photoroom_api_key = value;
+                self.persist_sticker_settings(settings, "Photoroom API key updated".into());
+            }
+            settings_text::SettingsTextTarget::DeepAi => {
+                let mut settings = UpscaleSettings::from_json_value(
+                    self.settings.upscale_upload_settings.as_ref(),
+                );
+                settings.deep_ai_api_key = value;
+                self.persist_upscale_settings(settings, "DeepAI API key updated".into());
+            }
+        }
     }
 
     fn image_search_index_ocr_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -2833,6 +2933,12 @@ impl OddSnapRustApp {
                 settings.provider = next_sticker_provider(&settings.provider);
                 self.persist_sticker_settings(settings, "Sticker provider updated".into());
             }
+            SettingsAction::EditRemoveBgApiKey => {
+                self.start_settings_text_input(settings_text::SettingsTextTarget::RemoveBg);
+            }
+            SettingsAction::EditPhotoroomApiKey => {
+                self.start_settings_text_input(settings_text::SettingsTextTarget::Photoroom);
+            }
             SettingsAction::StickerLocalEngine => {
                 let mut settings = StickerSettings::from_json_value(
                     self.settings.sticker_upload_settings.as_ref(),
@@ -2883,6 +2989,9 @@ impl OddSnapRustApp {
                 );
                 settings.provider = next_upscale_provider(&settings.provider);
                 self.persist_upscale_settings(settings, "Upscale provider updated".into());
+            }
+            SettingsAction::EditDeepAiApiKey => {
+                self.start_settings_text_input(settings_text::SettingsTextTarget::DeepAi);
             }
             SettingsAction::UpscaleLocalEngine => {
                 let mut settings = UpscaleSettings::from_json_value(
@@ -4887,8 +4996,10 @@ fn upscale_settings_summary_text(settings: &AppSettings) -> String {
 
 fn sticker_settings_summary(settings: &StickerSettings) -> String {
     format!(
-        "{} · model {} · {} · stroke {} · shadow {}",
+        "{} · remove.bg {} · photoroom {} · model {} · {} · stroke {} · shadow {}",
         settings.provider.label(),
+        settings_text::masked_secret_summary(&settings.remove_bg_api_key),
+        settings_text::masked_secret_summary(&settings.photoroom_api_key),
         settings.local_engine,
         execution_provider_label(&settings.local_execution_provider),
         on_off(settings.add_stroke),
@@ -4898,8 +5009,9 @@ fn sticker_settings_summary(settings: &StickerSettings) -> String {
 
 fn upscale_settings_summary(settings: &UpscaleSettings) -> String {
     format!(
-        "{} · model {} · {} · {}x · preview {}",
+        "{} · deepai {} · model {} · {} · {}x · preview {}",
         settings.provider.label(),
+        settings_text::masked_secret_summary(&settings.deep_ai_api_key),
         settings.local_engine,
         execution_provider_label(&settings.local_execution_provider),
         settings.scale_factor,
@@ -5387,6 +5499,34 @@ fn preview_path_for_capture(path: &Path) -> Option<PathBuf> {
     }
 }
 
+fn settings_text_input_panel(input: &settings_text::SettingsTextInputState) -> impl IntoElement {
+    ui::surface_style(div())
+        .flex()
+        .flex_col()
+        .gap(px(6.0))
+        .child(
+            div()
+                .text_size(px(11.0))
+                .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                .child(SharedString::from(format!(
+                    "Editing {}",
+                    input.target.label()
+                ))),
+        )
+        .child(
+            div()
+                .rounded(px(6.0))
+                .border_1()
+                .border_color(rgb(0x5d6f92))
+                .bg(rgb(0x151922))
+                .px(px(10.0))
+                .py(px(7.0))
+                .text_size(px(12.0))
+                .text_color(ui::skin::color(ui::skin::BRIGHT_TEXT))
+                .child(SharedString::from(input.value.clone())),
+        )
+}
+
 fn state_color(state: CapabilityState) -> u32 {
     match state {
         CapabilityState::Available => 0x5be49b,
@@ -5735,6 +5875,8 @@ mod tests {
         set_active_sticker_engine(&mut sticker, "U2Net");
         assert_eq!(sticker.local_engine, "U2Net");
         assert_eq!(sticker.local_cpu_engine, "U2Net");
+        sticker.remove_bg_api_key = "remove-secret".into();
+        assert!(sticker_settings_summary(&sticker).contains("remove.bg set ...cret"));
 
         assert_eq!(
             next_upscale_provider(&UpscaleProvider::Local),
