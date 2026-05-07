@@ -239,6 +239,7 @@ impl UploadDestination {
                 | Self::CustomHttp
                 | Self::WebDav
                 | Self::AzureBlob
+                | Self::Ftp
         )
     }
 }
@@ -842,6 +843,26 @@ pub fn build_curl_upload_request_with_settings(
                 upload_url,
             ]);
         }
+        UploadDestination::Ftp => {
+            let file_name = upload_file_name(file_path)?;
+            let upload_url = ftp_upload_url(&settings.ftp_url, &file_name)?;
+            let username = settings.ftp_username.trim();
+            if username.is_empty() {
+                return Err(missing_upload_setting("FTP username"));
+            }
+            success_url = Some(if settings.ftp_public_url.trim().is_empty() {
+                upload_url.clone()
+            } else {
+                append_url_path(settings.ftp_public_url.trim(), &file_name)
+            });
+            args.extend([
+                "--user".into(),
+                format!("{username}:{}", settings.ftp_password),
+                "--upload-file".into(),
+                file_path.display().to_string(),
+                upload_url,
+            ]);
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -1161,6 +1182,21 @@ fn azure_blob_urls(sas_base_url: &str, file_name: &str) -> Result<(String, Strin
         format!("{public_url}?{query}")
     };
     Ok((upload_url, public_url))
+}
+
+fn ftp_upload_url(base_url: &str, file_name: &str) -> Result<String, String> {
+    let mut normalized = base_url.trim().to_string();
+    if normalized.is_empty() {
+        return Err(missing_upload_setting("FTP URL"));
+    }
+    if !normalized.contains("://") {
+        normalized = format!("ftp://{normalized}");
+    }
+    let lower = normalized.to_ascii_lowercase();
+    if !(lower.starts_with("ftp://") || lower.starts_with("ftps://")) {
+        return Err("FTP URL must be a valid ftp:// or ftps:// address.".into());
+    }
+    Ok(append_url_path(&normalized, file_name))
 }
 
 fn percent_encode_path_component(value: &str) -> String {
@@ -1711,6 +1747,28 @@ mod tests {
         assert_eq!(
             azure.success_url.as_deref(),
             Some("https://blob.example.test/container/capture.png")
+        );
+
+        let ftp = build_curl_upload_request_with_settings(
+            UploadDestination::Ftp,
+            &path,
+            &UploadSettings {
+                ftp_url: "ftps://ftp.example.test/uploads".into(),
+                ftp_username: "user".into(),
+                ftp_password: "pass".into(),
+                ftp_public_url: "https://cdn.example.test/uploads".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build ftp");
+        assert!(ftp.args.contains(&"user:pass".into()));
+        assert!(ftp.args.contains(&"capture.png".into()));
+        assert!(ftp
+            .args
+            .contains(&"ftps://ftp.example.test/uploads/capture.png".into()));
+        assert_eq!(
+            ftp.success_url.as_deref(),
+            Some("https://cdn.example.test/uploads/capture.png")
         );
     }
 

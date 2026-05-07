@@ -111,6 +111,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust can build and parse curl-backed Gyazo and imgpile uploads from imported upload settings, including Gyazo access-token and imgpile bearer-token uploads.
 - Rust can build and parse curl-backed custom HTTP multipart uploads from imported custom URL, field name, headers, and response URL path settings.
 - Rust can build curl-backed WebDAV and Azure Blob SAS uploads from imported credentials/URLs, including empty 2xx response handling through computed public URLs.
+- Rust can build curl-backed FTP/FTPS uploads from imported credentials/public URL settings, including empty 2xx response handling through computed public URLs.
 - Rust core now ports the legacy OCR line-layout formatter that orders recognized lines, preserves paragraph gaps, and retains indentation in copied/viewed text.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Rust core now ports the legacy image-search query matcher for normalization, file-name/OCR source filtering, scoring, exact-match behavior, and newest-first tie-breaking.
