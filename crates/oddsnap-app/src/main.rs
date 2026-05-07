@@ -66,6 +66,9 @@ const WINDOWS_TRAY_FOUNDATION_STATUS: &str =
 #[cfg(any(target_os = "macos", test))]
 const MACOS_MENU_BAR_FOUNDATION_STATUS: &str =
     "Menu bar: macOS status item foundation active; OCR wired, scroll capture still pending.";
+#[cfg(target_os = "linux")]
+const LINUX_TRAY_FOUNDATION_STATUS: &str =
+    "Tray: Linux appindicator/status icon foundation active; OCR wired, scroll capture still pending.";
 
 fn main() {
     application().run(|cx: &mut App| {
@@ -144,6 +147,8 @@ struct OddSnapRustApp {
     tray_icon: Option<oddsnap_platform_windows::WindowsTrayIcon>,
     #[cfg(target_os = "macos")]
     tray_icon: Option<oddsnap_platform_macos::MacosTrayIcon>,
+    #[cfg(target_os = "linux")]
+    tray_icon: Option<oddsnap_platform_linux::LinuxTrayIcon>,
 }
 
 #[derive(Clone)]
@@ -486,6 +491,8 @@ impl OddSnapRustApp {
             #[cfg(target_os = "windows")]
             tray_icon,
             #[cfg(target_os = "macos")]
+            tray_icon,
+            #[cfg(target_os = "linux")]
             tray_icon,
         };
 
@@ -4212,13 +4219,42 @@ impl OddSnapRustApp {
         .detach();
     }
 
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(all(
+        not(target_os = "windows"),
+        not(target_os = "macos"),
+        not(target_os = "linux")
+    ))]
     fn start_tray_event_pump(&self, _: Option<()>, _: &mut Context<Self>) {}
 
     #[cfg(target_os = "macos")]
     fn start_tray_event_pump(
         &self,
         receiver: Option<std::sync::mpsc::Receiver<oddsnap_platform_macos::MacosTrayEvent>>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(receiver) = receiver else {
+            return;
+        };
+
+        cx.spawn(async move |this, cx| loop {
+            while let Ok(event) = receiver.try_recv() {
+                let _ = this.update(cx, |app, cx| {
+                    app.handle_tray_event(event, cx);
+                    cx.notify();
+                });
+            }
+
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(100))
+                .await;
+        })
+        .detach();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn start_tray_event_pump(
+        &self,
+        receiver: Option<std::sync::mpsc::Receiver<oddsnap_platform_linux::LinuxTrayEvent>>,
         cx: &mut Context<Self>,
     ) {
         let Some(receiver) = receiver else {
@@ -4450,6 +4486,51 @@ impl OddSnapRustApp {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    fn handle_tray_event(
+        &mut self,
+        event: oddsnap_platform_linux::LinuxTrayEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            oddsnap_platform_linux::LinuxTrayEvent::Capture => {
+                if self.active_recording.is_some() {
+                    self.recording_status = "Tray stop recording received.".into();
+                    self.stop_recording();
+                } else {
+                    self.run_default_capture_command("Tray capture", cx);
+                }
+            }
+            oddsnap_platform_linux::LinuxTrayEvent::ToggleRecording => {
+                self.recording_status = "Tray recording command received.".into();
+                self.toggle_recording(RecordingTarget::FullScreen);
+            }
+            oddsnap_platform_linux::LinuxTrayEvent::Ocr => {
+                self.run_ocr_capture("Tray text capture");
+            }
+            oddsnap_platform_linux::LinuxTrayEvent::ColorPicker => {
+                self.capture_status = "Tray color picker received.".into();
+                self.run_color_picker();
+            }
+            oddsnap_platform_linux::LinuxTrayEvent::ScrollCapture => {
+                self.capture_status =
+                    pending_tool_trigger_status("Tray scroll capture", PendingTool::ScrollCapture);
+            }
+            oddsnap_platform_linux::LinuxTrayEvent::Settings => {
+                self.tray_status = "Tray settings command focused the Rust window.".into();
+                cx.activate(true);
+            }
+            oddsnap_platform_linux::LinuxTrayEvent::History => {
+                self.tray_status = "Tray history command focused recent captures.".into();
+                cx.activate(true);
+            }
+            oddsnap_platform_linux::LinuxTrayEvent::Quit => {
+                self.tray_status = "Tray quit requested.".into();
+                cx.quit();
+            }
+        }
+    }
+
     fn capture_output_directory(&self) -> std::path::PathBuf {
         self.settings
             .capture_output_directory_or(default_capture_directory())
@@ -4521,6 +4602,14 @@ impl OddSnapRustApp {
             if let Some(tray_icon) = &self.tray_icon {
                 if let Err(error) = tray_icon.set_recording_state(self.active_recording.is_some()) {
                     self.tray_status = format!("Menu bar recording state update failed: {error}");
+                }
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(tray_icon) = &self.tray_icon {
+                if let Err(error) = tray_icon.set_recording_state(self.active_recording.is_some()) {
+                    self.tray_status = format!("Tray recording state update failed: {error}");
                 }
             }
         }
@@ -5289,7 +5378,28 @@ fn start_tray_icon() -> (
     }
 }
 
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
+fn start_tray_icon() -> (
+    String,
+    Option<oddsnap_platform_linux::LinuxTrayIcon>,
+    Option<std::sync::mpsc::Receiver<oddsnap_platform_linux::LinuxTrayEvent>>,
+) {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    match oddsnap_platform_linux::start_oddsnap_tray_icon(sender) {
+        Ok(tray_icon) => (
+            LINUX_TRAY_FOUNDATION_STATUS.into(),
+            Some(tray_icon),
+            Some(receiver),
+        ),
+        Err(error) => (format!("Tray unavailable: {error}"), None, None),
+    }
+}
+
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "linux")
+))]
 fn start_tray_icon() -> (String, Option<()>, Option<()>) {
     ("Tray: pending on this platform.".into(), None, None)
 }

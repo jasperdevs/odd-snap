@@ -62,7 +62,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] macOS active-window bounds discovery foundation through `osascript`/System Events.
 - [x] macOS native interactive rectangle/window selection foundation through `screencapture -i`.
 - [ ] Linux portal-aware screen capture plan.
-- [ ] Linux tray/appindicator strategy.
+- [x] Linux tray/appindicator status icon and menu foundation.
 - [x] Linux app-level X11 global hotkey listener foundation.
 - [x] Linux hotkey startup blocks Wayland/headless sessions with explicit guidance instead of attempting the X11 path.
 - [ ] Linux Wayland global hotkey support.

@@ -83,6 +83,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
 - Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.
 - macOS can install a menu bar status item with the legacy menu commands, dispatch menu bar capture/recording/settings/history/quit events into GPUI, and update the recording menu label.
+- Linux can install an appindicator/status tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the recording menu label.
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.
 - GPUI capture smoke honors the imported capture delay and surfaces imported capture UX preferences.
 - GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
