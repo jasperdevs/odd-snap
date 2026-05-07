@@ -16,8 +16,8 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
 - macOS has a command-backed `screencapture` still-capture foundation for full-screen and explicit-region PNG captures.
 - macOS has command-backed monitor enumeration through AppKit/JXA, including screen origin, size, and backing scale.
-- macOS has command-backed Screen & System Audio Recording permission detection through the platform permissions service, plus capture-failure guidance that points users to the current System Settings location.
-- GPUI startup surfaces missing macOS Screen & System Audio Recording permission before capture or recording actions fail.
+- macOS has command-backed Screen & System Audio Recording and Accessibility permission detection through the platform permissions service, plus capture/active-window failure guidance that points users to the current System Settings locations.
+- GPUI startup surfaces missing macOS Screen & System Audio Recording and Accessibility permissions before capture, recording, or active-window actions fail.
 - macOS has command-backed active-window bounds discovery through `osascript`/System Events, so active-window capture can reuse the `screencapture -R` region path when Accessibility and Screen & System Audio Recording permissions are granted.
 - macOS rectangle capture can use the native interactive `screencapture -i` selection flow from the GPUI shell; this is a system selection foundation, not the production OddSnap overlay.
 - Linux has an X11 monitor-enumeration foundation through `xrandr --query`, including multi-monitor and negative-offset virtual desktop geometry.

@@ -49,3 +49,4 @@ site/vite-dev.*.log
 
 ## Rust rewrite
 target/
+dist/

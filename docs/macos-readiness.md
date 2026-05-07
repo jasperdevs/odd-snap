@@ -5,7 +5,9 @@ This is local planning only. Do not treat it as a release checklist until the Ru
 ## Local development
 
 - Treat current Apple Silicon macOS as the primary Mac target. Intel Mac support is compatibility coverage, not the main optimization target.
+- The Rust CI macOS package smoke runs on the latest Apple Silicon lane first and repeats on Intel only as compatibility coverage.
 - Screen capture and recording require macOS permission in System Settings > Privacy & Security > Screen & System Audio Recording.
+- Active-window capture requires Accessibility access in System Settings > Privacy & Security > Accessibility because the current foundation asks System Events for the front window bounds.
 - While running from a terminal or dev tool, macOS may grant the permission to the launcher instead of the final bundled app.
 - After the app is bundled, re-check the bundled OddSnap app in the same settings pane.
 
@@ -64,7 +66,7 @@ After opening the bundled app, verify full-screen capture, rectangle capture, ac
 ## Current Rust-port implications
 
 - The current macOS capture path shells out to `screencapture`, so permission failures should point users to Screen & System Audio Recording.
-- Active-window detection shells out to System Events, so the signed app bundle needs the Apple Events usage string in `packaging/macos/Info.plist` and the Apple Events entitlement in `packaging/macos/OddSnap.entitlements`.
+- Active-window detection shells out to System Events, so startup now reports Accessibility when that permission is missing. The signed app bundle also needs the Apple Events usage string in `packaging/macos/Info.plist` and the Apple Events entitlement in `packaging/macos/OddSnap.entitlements`.
 - Microphone recording needs `NSMicrophoneUsageDescription`; system audio recording is still pending.
 - Global hotkeys currently use the app-level `global-hotkey` foundation, not a finished macOS platform service, and need real-device validation on macOS before this can be marked fully available.
 - The menu bar status item foundation uses the Rust tray/menu bridge and needs real-device validation on Apple Silicon macOS before it can be marked fully available.

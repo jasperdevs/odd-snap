@@ -396,9 +396,18 @@ fn macos_screen_recording_permission_name() -> &'static str {
     "Screen & System Audio Recording"
 }
 
+fn macos_accessibility_permission_name() -> &'static str {
+    "Accessibility"
+}
+
 #[cfg(any(target_os = "macos", test))]
 fn macos_screen_recording_permission_hint() -> &'static str {
     "Enable screen capture access in System Settings > Privacy & Security > Screen & System Audio Recording for OddSnap or the app that launched it."
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_accessibility_permission_hint() -> &'static str {
+    "Enable Accessibility access in System Settings > Privacy & Security > Accessibility for OddSnap or the app that launched it."
 }
 
 #[cfg(target_os = "macos")]
@@ -417,6 +426,17 @@ fn macos_screen_recording_permission_probe() -> bool {
         && oddsnap_platform::image_file_dimensions(&output_path).is_ok();
     let _ = fs::remove_file(output_path);
     granted
+}
+
+#[cfg(target_os = "macos")]
+fn macos_accessibility_permission_probe() -> bool {
+    Command::new("osascript")
+        .args([
+            "-e",
+            "tell application \"System Events\" to count of application processes",
+        ])
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 impl WindowPickerService for MacosPlatform {
@@ -444,8 +464,9 @@ fn run_macos_active_window_detection() -> Result<WindowInfo, PlatformError> {
 
     if !output.status.success() {
         return Err(PlatformError::Failed(format!(
-            "osascript exited with status {}. Enable Accessibility access in System Settings > Privacy & Security > Accessibility if active-window detection is denied.",
-            output.status
+            "osascript exited with status {}. {}",
+            output.status,
+            macos_accessibility_permission_hint()
         )));
     }
 
@@ -822,16 +843,22 @@ impl PermissionsService for MacosPlatform {
     fn missing_permissions(&self) -> Vec<String> {
         #[cfg(target_os = "macos")]
         {
-            if macos_screen_recording_permission_probe() {
-                Vec::new()
-            } else {
-                vec![macos_screen_recording_permission_name().into()]
+            let mut missing = Vec::new();
+            if !macos_screen_recording_permission_probe() {
+                missing.push(macos_screen_recording_permission_name().into());
             }
+            if !macos_accessibility_permission_probe() {
+                missing.push(macos_accessibility_permission_name().into());
+            }
+            missing
         }
 
         #[cfg(not(target_os = "macos"))]
         {
-            vec![macos_screen_recording_permission_name().into()]
+            vec![
+                macos_screen_recording_permission_name().into(),
+                macos_accessibility_permission_name().into(),
+            ]
         }
     }
 }
@@ -1373,18 +1400,27 @@ mod tests {
             super::macos_screen_recording_permission_name(),
             "Screen & System Audio Recording"
         );
+        assert_eq!(
+            super::macos_accessibility_permission_name(),
+            "Accessibility"
+        );
         assert!(super::macos_screen_recording_permission_hint()
             .contains("System Settings > Privacy & Security"));
+        assert!(super::macos_accessibility_permission_hint()
+            .contains("System Settings > Privacy & Security > Accessibility"));
     }
 
     #[test]
     #[cfg(not(target_os = "macos"))]
-    fn macos_permission_service_reports_screen_recording_on_wrong_host() {
+    fn macos_permission_service_reports_required_permissions_on_wrong_host() {
         let adapter = MacosPlatform;
 
         assert_eq!(
             adapter.missing_permissions(),
-            vec!["Screen & System Audio Recording".to_string()]
+            vec![
+                "Screen & System Audio Recording".to_string(),
+                "Accessibility".to_string()
+            ]
         );
     }
 

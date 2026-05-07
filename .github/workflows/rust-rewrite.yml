@@ -56,3 +56,6 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Build app
         run: cargo build -p oddsnap-app --bin oddsnap-rust
+      - name: Package unsigned macOS app bundle
+        if: runner.os == 'macOS'
+        run: scripts/macos/package-oddsnap-rust.sh --profile debug --skip-build --unsigned --output dist/macos-ci

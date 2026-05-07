@@ -44,8 +44,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows monitor enumeration.
 - [x] Windows system DPI mapping for monitor scale.
 - [ ] Windows per-monitor DPI verification.
-- [x] macOS command-backed screen recording permission detection and failure guidance.
-- [x] GPUI startup surfaces missing macOS Screen & System Audio Recording permission.
+- [x] macOS command-backed screen recording and Accessibility permission detection and failure guidance.
+- [x] GPUI startup surfaces missing macOS Screen & System Audio Recording and Accessibility permissions.
 - [x] macOS menu bar status item foundation.
 - [x] macOS app-level global hotkey listener foundation.
 - [x] macOS explicit unsupported capture/clipboard adapter surfaces.
@@ -155,5 +155,6 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] macOS full parity verification.
 - [ ] Linux full parity verification.
 - [x] CI-only Rust rewrite matrix runs fmt/check/test/clippy/build on Windows, Ubuntu, latest Apple Silicon macOS, and Intel macOS compatibility.
+- [x] macOS CI lanes create an unsigned local `.app` bundle smoke artifact without uploading or releasing it.
 - [x] Rust packaging readiness notes document current non-release boundary and host dependency caveats.
 - [ ] Release decision document.
