@@ -41,7 +41,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows monitor enumeration.
 - [x] Windows system DPI mapping for monitor scale.
 - [ ] Windows per-monitor DPI verification.
-- [ ] macOS screen recording permission detection.
+- [x] macOS command-backed screen recording permission detection and failure guidance.
 - [ ] macOS tray/menu bar presence.
 - [x] macOS app-level global hotkey listener foundation.
 - [x] macOS explicit unsupported capture/clipboard adapter surfaces.

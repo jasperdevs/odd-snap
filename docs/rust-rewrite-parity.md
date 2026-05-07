@@ -15,6 +15,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows monitor enumeration returns the virtual-screen bounds through the platform service.
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
 - macOS has a command-backed `screencapture` still-capture foundation for full-screen and explicit-region PNG captures.
+- macOS has command-backed Screen & System Audio Recording permission detection through the platform permissions service, plus capture-failure guidance that points users to the current System Settings location.
 - Linux has command-backed still-capture foundations for common screenshot tools (`grim`, `gnome-screenshot`, `spectacle`, or `scrot`).
 - GPUI shell can invoke the Windows capture service through a local smoke action.
 - Shared capture trait can capture the full virtual screen by reusing monitor enumeration and region capture.

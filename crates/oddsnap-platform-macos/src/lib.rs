@@ -1,6 +1,7 @@
 use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::{
+    fs,
     io::Write,
     path::PathBuf,
     process::{Command, Stdio},
@@ -11,7 +12,7 @@ use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, Platf
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
     ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle,
-    OverlayWindowRequest, PlatformAdapter, PlatformError, RegionOverlayService,
+    OverlayWindowRequest, PermissionsService, PlatformAdapter, PlatformError, RegionOverlayService,
     RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
     WindowInfo, WindowPickerService,
 };
@@ -128,7 +129,8 @@ fn run_macos_screencapture(
         })?;
     if !status.success() {
         return Err(PlatformError::Failed(format!(
-            "macOS screencapture exited with status {status}"
+            "macOS screencapture exited with status {status}. {}",
+            macos_screen_recording_permission_hint()
         )));
     }
 
@@ -182,6 +184,33 @@ fn macos_capture_output_path() -> PathBuf {
         duration.as_secs(),
         duration.subsec_nanos()
     ))
+}
+
+fn macos_screen_recording_permission_name() -> &'static str {
+    "Screen & System Audio Recording"
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_screen_recording_permission_hint() -> &'static str {
+    "Enable screen capture access in System Settings > Privacy & Security > Screen & System Audio Recording for OddSnap or the app that launched it."
+}
+
+#[cfg(target_os = "macos")]
+fn macos_screen_recording_permission_probe() -> bool {
+    let output_path = macos_capture_output_path();
+    let region = CaptureRegion {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    let args = macos_screencapture_args(Some(&region), false, &output_path);
+    let status = Command::new("screencapture").args(&args).status();
+    let granted = matches!(status, Ok(status) if status.success())
+        && output_path.exists()
+        && oddsnap_platform::image_file_dimensions(&output_path).is_ok();
+    let _ = fs::remove_file(output_path);
+    granted
 }
 
 impl WindowPickerService for MacosPlatform {
@@ -263,6 +292,24 @@ impl HotkeyService for MacosPlatform {
     }
 }
 
+impl PermissionsService for MacosPlatform {
+    fn missing_permissions(&self) -> Vec<String> {
+        #[cfg(target_os = "macos")]
+        {
+            if macos_screen_recording_permission_probe() {
+                Vec::new()
+            } else {
+                vec![macos_screen_recording_permission_name().into()]
+            }
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            vec![macos_screen_recording_permission_name().into()]
+        }
+    }
+}
+
 impl VideoRecordingService for MacosPlatform {
     fn start_desktop_recording(
         &self,
@@ -304,8 +351,8 @@ mod tests {
     use oddsnap_core::{NativeMaterial, RecordingFormat, RecordingQuality};
     use oddsnap_platform::{
         ClipboardImageService, ClipboardTextService, ColorPickerService, HotkeyService,
-        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
-        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
+        OverlayWindowRequest, PermissionsService, PlatformAdapter, RegionOverlayService,
+        RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
     };
 
     use super::MacosPlatform;
@@ -382,6 +429,27 @@ mod tests {
         assert_eq!(
             args,
             vec!["-x", "-C", "-R", "-10,20,30,40", "/tmp/oddsnap-test.png"]
+        );
+    }
+
+    #[test]
+    fn macos_permission_guidance_names_current_system_setting() {
+        assert_eq!(
+            super::macos_screen_recording_permission_name(),
+            "Screen & System Audio Recording"
+        );
+        assert!(super::macos_screen_recording_permission_hint()
+            .contains("System Settings > Privacy & Security"));
+    }
+
+    #[test]
+    #[cfg(not(target_os = "macos"))]
+    fn macos_permission_service_reports_screen_recording_on_wrong_host() {
+        let adapter = MacosPlatform;
+
+        assert_eq!(
+            adapter.missing_permissions(),
+            vec!["Screen & System Audio Recording".to_string()]
         );
     }
 
