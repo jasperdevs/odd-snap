@@ -234,6 +234,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Full upscale parity, including real-runtime smoke verification.
 - [x] Local runtime install/remove controls for active sticker/upscale runtimes.
 - [x] GPUI lifecycle controls expose and persist imported startup/update-check preferences with explicit non-release-channel status.
+- [x] Rust core update-check foundation can parse GitHub latest-release metadata, compare release versions, extract SHA-256 digests, and choose Windows/macOS/Linux update assets.
 - [ ] Update/install flow.
 
 ## Milestone 6 - Migration And Parity Closure

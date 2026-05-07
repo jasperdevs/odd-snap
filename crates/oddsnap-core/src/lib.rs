@@ -12,6 +12,7 @@ pub mod scroll_capture;
 pub mod settings;
 pub mod sticker_upscale;
 pub mod translation;
+pub mod update;
 pub mod upload;
 
 pub use annotations::{
@@ -72,6 +73,11 @@ pub use translation::{
     resolve_translation_target_language, translation_configuration_error,
     translation_language_name, CurlTranslationRequest, TranslationModel,
     SUPPORTED_TRANSLATION_LANGUAGES,
+};
+pub use update::{
+    build_update_check_summary, parse_release_version, ReleaseVersion, UpdateAsset,
+    UpdateCheckParseError, UpdateCheckSummary, UpdatePlatform, LATEST_RELEASE_API_URL,
+    RELEASES_PAGE_URL,
 };
 pub use upload::{
     build_curl_upload_request, build_curl_upload_request_with_settings,
