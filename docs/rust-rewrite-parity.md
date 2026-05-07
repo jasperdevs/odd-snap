@@ -23,6 +23,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can run a primitive native drag-selection loop and capture the selected region through the shared capture pipeline.
 - Windows can copy generated BMP captures to the system clipboard as image data.
 - Windows can copy saved PNG, JPEG, and BMP capture files to the system clipboard as image data.
+- Linux can copy saved image captures to the system clipboard through `wl-copy` or `xclip` by normalizing to PNG data.
 - macOS and Linux have command-backed text clipboard adapters for copied links and color/history text.
 - Windows can sample the cursor pixel color, format it as OddSnap-compatible hex, and copy it to the clipboard from the GPUI shell or tray color picker command.
 - Rust history stores recent color picks separately from file-backed media history and exposes recent-color copy actions in the GPUI shell.

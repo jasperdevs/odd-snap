@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io::BufWriter,
+    io::{BufWriter, Cursor},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -376,6 +376,16 @@ pub fn image_file_dimensions(path: &Path) -> Result<(u32, u32), PlatformError> {
     }
 }
 
+pub fn image_file_to_png_bytes(path: &Path) -> Result<Vec<u8>, PlatformError> {
+    let image = image::open(path)
+        .map_err(|source| PlatformError::Failed(format!("failed to decode image: {source}")))?;
+    let mut bytes = Cursor::new(Vec::new());
+    image
+        .write_to(&mut bytes, ImageFormat::Png)
+        .map_err(|source| PlatformError::Failed(format!("failed to encode PNG image: {source}")))?;
+    Ok(bytes.into_inner())
+}
+
 pub trait HotkeyService: Send + Sync {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError>;
 }
@@ -455,9 +465,9 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        image_file_dimensions, image_file_to_windows_dib_bytes, persist_capture_to_directory,
-        persist_capture_to_directory_as, persist_capture_to_path_as, virtual_screen_region,
-        CaptureRegion, CaptureResult, ColorSample, MonitorInfo,
+        image_file_dimensions, image_file_to_png_bytes, image_file_to_windows_dib_bytes,
+        persist_capture_to_directory, persist_capture_to_directory_as, persist_capture_to_path_as,
+        virtual_screen_region, CaptureRegion, CaptureResult, ColorSample, MonitorInfo,
     };
     use oddsnap_core::CaptureImageFormat;
 
@@ -728,6 +738,33 @@ mod tests {
         .expect("write source png");
 
         assert_eq!(image_file_dimensions(&source).expect("dimensions"), (3, 2));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn image_file_to_png_bytes_encodes_decodable_png() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-platform-png-bytes-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp test root");
+        let source = root.join("source.bmp");
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            2,
+            2,
+            image::Rgba([10, 20, 30, 255]),
+        ))
+        .save_with_format(&source, image::ImageFormat::Bmp)
+        .expect("write source bmp");
+
+        let bytes = image_file_to_png_bytes(&source).expect("PNG bytes");
+
+        assert_eq!(&bytes[0..8], b"\x89PNG\r\n\x1A\n");
+        let decoded = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+            .expect("decode png");
+        assert_eq!((decoded.width(), decoded.height()), (2, 2));
 
         let _ = fs::remove_dir_all(root);
     }

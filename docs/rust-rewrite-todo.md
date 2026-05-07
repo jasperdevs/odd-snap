@@ -74,6 +74,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Capture image format persistence for PNG/JPEG/BMP.
 - [x] Windows image clipboard foundation.
 - [x] Windows image clipboard supports saved PNG/JPEG/BMP captures.
+- [x] Linux command-backed image clipboard foundation.
 - [x] Windows text clipboard foundation.
 - [x] macOS/Linux command-backed text clipboard foundation.
 - [x] Windows cursor color sampling and clipboard copy foundation.

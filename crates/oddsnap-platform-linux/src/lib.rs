@@ -246,11 +246,48 @@ impl WindowPickerService for LinuxPlatform {
 
 impl ClipboardImageService for LinuxPlatform {
     fn copy_image_to_clipboard(&self, image_path: &Path) -> Result<(), PlatformError> {
-        let _ = image_path;
-        Err(PlatformError::Unsupported(
-            "Linux image clipboard is not implemented yet",
-        ))
+        #[cfg(target_os = "linux")]
+        {
+            copy_image_to_linux_clipboard(image_path)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = image_path;
+            Err(PlatformError::Unsupported(
+                "Linux image clipboard is only available on Linux",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn copy_image_to_linux_clipboard(image_path: &Path) -> Result<(), PlatformError> {
+    let png = oddsnap_platform::image_file_to_png_bytes(image_path)?;
+    let mut errors = Vec::new();
+
+    for (program, args) in linux_image_clipboard_commands() {
+        match run_clipboard_bytes_command(program, &args, &png) {
+            Ok(()) => return Ok(()),
+            Err(error) => errors.push(format!("{program}: {error}")),
+        }
+    }
+
+    Err(PlatformError::Failed(format!(
+        "no Linux image clipboard command succeeded: {}",
+        errors.join("; ")
+    )))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_image_clipboard_commands() -> Vec<(&'static str, Vec<&'static str>)> {
+    vec![
+        ("wl-copy", vec!["--type", "image/png"]),
+        (
+            "xclip",
+            vec!["-selection", "clipboard", "-t", "image/png", "-i"],
+        ),
+    ]
 }
 
 impl ClipboardTextService for LinuxPlatform {
@@ -293,6 +330,15 @@ fn copy_text_to_linux_clipboard(text: &str) -> Result<(), PlatformError> {
 
 #[cfg(target_os = "linux")]
 fn run_clipboard_command(program: &str, args: &[&str], text: &str) -> Result<(), PlatformError> {
+    run_clipboard_bytes_command(program, args, text.as_bytes())
+}
+
+#[cfg(target_os = "linux")]
+fn run_clipboard_bytes_command(
+    program: &str,
+    args: &[&str],
+    bytes: &[u8],
+) -> Result<(), PlatformError> {
     let mut child = Command::new(program)
         .args(args)
         .stdin(Stdio::piped())
@@ -303,8 +349,8 @@ fn run_clipboard_command(program: &str, args: &[&str], text: &str) -> Result<(),
         .stdin
         .take()
         .ok_or_else(|| PlatformError::Failed("failed to open clipboard command stdin".into()))?;
-    stdin.write_all(text.as_bytes()).map_err(|source| {
-        PlatformError::Failed(format!("failed to write clipboard text: {source}"))
+    stdin.write_all(bytes).map_err(|source| {
+        PlatformError::Failed(format!("failed to write clipboard data: {source}"))
     })?;
     drop(stdin);
 
@@ -486,14 +532,59 @@ mod tests {
     }
 
     #[test]
-    fn linux_clipboard_service_is_explicitly_unimplemented() {
+    #[cfg(not(target_os = "linux"))]
+    fn linux_image_clipboard_reports_wrong_host() {
         let adapter = LinuxPlatform;
 
         let error = adapter
             .copy_image_to_clipboard(std::path::Path::new("capture.bmp"))
             .expect_err("Linux clipboard pending");
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on Linux"));
+    }
+
+    #[test]
+    fn linux_image_clipboard_commands_use_png_mime_type() {
+        assert_eq!(
+            super::linux_image_clipboard_commands(),
+            vec![
+                ("wl-copy", vec!["--type", "image/png"]),
+                (
+                    "xclip",
+                    vec!["-selection", "clipboard", "-t", "image/png", "-i"]
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    #[ignore = "writes a tiny image to the local Linux clipboard through wl-copy or xclip"]
+    #[cfg(target_os = "linux")]
+    fn linux_image_clipboard_can_copy_png_data() {
+        let adapter = LinuxPlatform;
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-linux-image-clipboard-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp test root");
+        let source = root.join("source.png");
+        std::fs::write(
+            &source,
+            [
+                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0,
+                1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 224,
+                18, 145, 251, 15, 0, 3, 74, 1, 66, 143, 246, 24, 176, 0, 0, 0, 0, 73, 69, 78, 68,
+                174, 66, 96, 130,
+            ],
+        )
+        .expect("write source png");
+
+        adapter
+            .copy_image_to_clipboard(&source)
+            .expect("copy image");
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
