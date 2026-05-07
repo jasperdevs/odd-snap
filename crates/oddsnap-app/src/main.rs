@@ -128,6 +128,8 @@ struct OddSnapRustApp {
     latest_ocr_result: Option<String>,
     latest_scan_result: Option<CodeHistoryEntry>,
     image_search: image_search::ImageSearchUiState,
+    image_search_reindex_queue: ImageSearchReindexQueueState,
+    last_auto_image_search_ocr_unix_ms: u64,
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
     _hotkey_listener: Option<oddsnap_platform_windows::WindowsHotkeyListener>,
@@ -186,6 +188,72 @@ struct CaptureRunResult {
     capture: oddsnap_platform::CaptureResult,
     copy_error: Option<String>,
     original_preview_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct ImageSearchReindexQueueState {
+    active: bool,
+    cancel_requested: bool,
+    total: usize,
+    processed: usize,
+    indexed: usize,
+    empty: usize,
+    failed: usize,
+    skipped: usize,
+    current_file: Option<String>,
+}
+
+impl ImageSearchReindexQueueState {
+    fn start(total: usize) -> Self {
+        Self {
+            active: total > 0,
+            total,
+            ..Self::default()
+        }
+    }
+
+    fn request_cancel(&mut self) {
+        if self.active {
+            self.cancel_requested = true;
+        }
+    }
+
+    fn finish(&mut self) {
+        self.active = false;
+        self.cancel_requested = false;
+        self.current_file = None;
+    }
+
+    fn apply_summary(&mut self, summary: &ImageSearchOcrHydrationSummary) {
+        self.processed = self.processed.saturating_add(summary.attempted);
+        self.indexed = self.indexed.saturating_add(summary.indexed);
+        self.empty = self.empty.saturating_add(summary.empty);
+        self.failed = self.failed.saturating_add(summary.failed);
+        self.skipped = self.skipped.saturating_add(summary.skipped);
+    }
+
+    fn detail_text(&self) -> String {
+        if !self.active && self.total == 0 {
+            return "Reindex queue idle.".into();
+        }
+
+        let state = if self.cancel_requested {
+            "canceling"
+        } else if self.active {
+            "running"
+        } else {
+            "done"
+        };
+        let current = self
+            .current_file
+            .as_deref()
+            .filter(|file| !file.is_empty())
+            .unwrap_or("none");
+        format!(
+            "Reindex {state}: {}/{} processed, {} text, {} empty, {} failed, {} skipped; current {current}.",
+            self.processed, self.total, self.indexed, self.empty, self.failed, self.skipped
+        )
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -476,6 +544,8 @@ impl OddSnapRustApp {
             latest_ocr_result,
             latest_scan_result,
             image_search: image_search::ImageSearchUiState::new(),
+            image_search_reindex_queue: ImageSearchReindexQueueState::default(),
+            last_auto_image_search_ocr_unix_ms: 0,
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
             _hotkey_listener: hotkey_listener,
@@ -1453,7 +1523,25 @@ impl OddSnapRustApp {
                         ),
                         SettingsAction::ToggleImageSearchDiagnostics,
                     ))
-                    .child(self.image_search_index_ocr_button(cx))
+                    .when(!self.image_search_reindex_queue.active, |row| {
+                        row.child(self.image_search_index_ocr_button(cx))
+                    })
+                    .when(self.image_search_reindex_queue.active, |row| {
+                        row.child(self.settings_button(
+                            cx,
+                            "image-search-cancel-reindex-button",
+                            "Cancel OCR".into(),
+                            SettingsAction::CancelImageSearchReindexQueue,
+                        ))
+                    })
+                    .when(!self.image_search_reindex_queue.active, |row| {
+                        row.child(self.settings_button(
+                            cx,
+                            "image-search-start-reindex-button",
+                            "Reindex OCR".into(),
+                            SettingsAction::StartImageSearchReindexQueue,
+                        ))
+                    })
                     .child(self.settings_button(
                         cx,
                         "image-search-auto-index-button",
@@ -1473,6 +1561,14 @@ impl OddSnapRustApp {
                     .text_color(rgb(0x8b93a3))
                     .child(SharedString::from(
                         self.image_search.status_text(&self.settings, match_count),
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(rgb(0x8b93a3))
+                    .child(SharedString::from(
+                        self.image_search_reindex_queue.detail_text(),
                     )),
             )
     }
@@ -3135,6 +3231,12 @@ impl OddSnapRustApp {
                     on_off(self.settings.auto_index_images)
                 ));
             }
+            SettingsAction::StartImageSearchReindexQueue => {
+                self.start_image_search_reindex_queue();
+            }
+            SettingsAction::CancelImageSearchReindexQueue => {
+                self.cancel_image_search_reindex_queue();
+            }
             SettingsAction::InstallArgosTranslationRuntime => {
                 self.capture_status = match ocr_translation::install_argos_runtime() {
                     Ok(()) => "Argos Translate installed.".into(),
@@ -3362,6 +3464,39 @@ impl OddSnapRustApp {
         self.hydrate_image_search_ocr_batch_with_adapter(adapter, usize::MAX)
     }
 
+    fn start_image_search_reindex_queue(&mut self) {
+        if self.image_search_reindex_queue.active {
+            self.capture_status = self.image_search_reindex_queue.detail_text();
+            return;
+        }
+
+        match self.image_search_index_store.load_or_default() {
+            Ok(index) => {
+                let total = image_search_reindex_pending_count(&index, app_unix_millis_now());
+                self.image_search_reindex_queue = ImageSearchReindexQueueState::start(total);
+                self.capture_status = if total == 0 {
+                    "Image OCR reindex queue already current.".into()
+                } else {
+                    format!("Image OCR reindex queue started with {total} records.")
+                };
+                self.image_search_index_status = image_search_index_status(&index);
+            }
+            Err(error) => {
+                self.image_search_reindex_queue = ImageSearchReindexQueueState::default();
+                self.capture_status = format!("Image OCR reindex queue failed: {error}");
+            }
+        }
+    }
+
+    fn cancel_image_search_reindex_queue(&mut self) {
+        if self.image_search_reindex_queue.active {
+            self.image_search_reindex_queue.request_cancel();
+            self.capture_status = "Image OCR reindex will cancel before the next record.".into();
+        } else {
+            self.capture_status = "Image OCR reindex queue is not running.".into();
+        }
+    }
+
     fn hydrate_image_search_ocr_batch_with_adapter<T>(
         &mut self,
         adapter: &T,
@@ -3403,6 +3538,105 @@ impl OddSnapRustApp {
         Ok(summary)
     }
 
+    fn hydrate_image_search_reindex_queue_tick(&mut self) -> Option<String> {
+        if !self.image_search_reindex_queue.active {
+            return None;
+        }
+        if self.image_search_reindex_queue.cancel_requested {
+            self.image_search_reindex_queue.finish();
+            return Some(format!(
+                "Image OCR reindex canceled. {}",
+                self.image_search_reindex_queue.detail_text()
+            ));
+        }
+
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.hydrate_image_search_reindex_queue_tick_with_adapter(&adapter)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.hydrate_image_search_reindex_queue_tick_with_adapter(&adapter)
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.hydrate_image_search_reindex_queue_tick_with_adapter(&adapter)
+        };
+
+        Some(match result {
+            Ok(status) => status,
+            Err(error) => {
+                self.image_search_reindex_queue.finish();
+                format!("Image OCR reindex failed: {error}")
+            }
+        })
+    }
+
+    fn hydrate_image_search_reindex_queue_tick_with_adapter<T>(
+        &mut self,
+        adapter: &T,
+    ) -> Result<String, String>
+    where
+        T: OcrTextService,
+    {
+        let mut index = self
+            .image_search_index_store
+            .load_or_default()
+            .map_err(|error| error.to_string())?;
+        let now = app_unix_millis_now();
+        let Some(record) = index
+            .records
+            .iter_mut()
+            .find(|record| image_search_record_needs_ocr(record, now))
+        else {
+            self.image_search_reindex_queue.finish();
+            return Ok(format!(
+                "Image OCR reindex complete. {}",
+                self.image_search_reindex_queue.detail_text()
+            ));
+        };
+
+        self.image_search_reindex_queue.current_file = Some(file_name_for_path(&record.file_path));
+        let mut summary = ImageSearchOcrHydrationSummary::default();
+        hydrate_image_search_record_ocr(
+            record,
+            adapter,
+            &self.settings.ocr_language_tag,
+            now,
+            &mut summary,
+        );
+        self.image_search_reindex_queue.apply_summary(&summary);
+
+        self.image_search_index_store
+            .save(&index)
+            .map_err(|error| error.to_string())?;
+        self.image_search_index_status = image_search_index_status(&index);
+
+        let history_index = self
+            .history_store
+            .load_or_default()
+            .map_err(|error| error.to_string())?;
+        self.refresh_capture_history(history_index);
+
+        let remaining = image_search_reindex_pending_count(&index, app_unix_millis_now());
+        if remaining == 0
+            || self.image_search_reindex_queue.processed >= self.image_search_reindex_queue.total
+        {
+            self.image_search_reindex_queue.finish();
+            Ok(format!(
+                "Image OCR reindex complete. {}",
+                self.image_search_reindex_queue.detail_text()
+            ))
+        } else {
+            Ok(self.image_search_reindex_queue.detail_text())
+        }
+    }
+
     fn hydrate_image_search_ocr_background_tick(&mut self) -> Option<String> {
         if !self.settings.auto_index_images {
             return None;
@@ -3434,6 +3668,19 @@ impl OddSnapRustApp {
             Ok(_) => None,
             Err(error) => Some(format!("Image OCR background refresh failed: {error}")),
         }
+    }
+
+    fn image_search_ocr_maintenance_tick(&mut self) -> Option<String> {
+        if self.image_search_reindex_queue.active {
+            return self.hydrate_image_search_reindex_queue_tick();
+        }
+
+        let now = app_unix_millis_now();
+        if now.saturating_sub(self.last_auto_image_search_ocr_unix_ms) < 5_000 {
+            return None;
+        }
+        self.last_auto_image_search_ocr_unix_ms = now;
+        self.hydrate_image_search_ocr_background_tick()
     }
 
     fn auto_hydrate_image_search_ocr_for_path(&mut self, path: &Path) -> String {
@@ -3923,11 +4170,11 @@ impl OddSnapRustApp {
     fn start_image_search_ocr_background_pump(&self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
-                .timer(std::time::Duration::from_secs(5))
+                .timer(std::time::Duration::from_secs(1))
                 .await;
 
             let _ = this.update(cx, |app, cx| {
-                if let Some(status) = app.hydrate_image_search_ocr_background_tick() {
+                if let Some(status) = app.image_search_ocr_maintenance_tick() {
                     app.image_search_index_status = status;
                     cx.notify();
                 }
@@ -5101,14 +5348,7 @@ fn sync_image_search_index_records(
 }
 
 fn image_search_index_status(index: &ImageSearchIndex) -> String {
-    let pending = index
-        .records
-        .iter()
-        .filter(|record| {
-            record.ocr_state != ImageSearchOcrState::Failed
-                && image_search_record_needs_ocr(record, app_unix_millis_now())
-        })
-        .count();
+    let pending = image_search_reindex_pending_count(index, app_unix_millis_now());
     let indexed = index
         .records
         .iter()
@@ -5120,6 +5360,17 @@ fn image_search_index_status(index: &ImageSearchIndex) -> String {
         .filter(|record| record.ocr_state == ImageSearchOcrState::Failed)
         .count();
     image_search_index_status_with_counts(index.records.len(), pending, indexed, None, failed)
+}
+
+fn image_search_reindex_pending_count(index: &ImageSearchIndex, now_unix_ms: u64) -> usize {
+    index
+        .records
+        .iter()
+        .filter(|record| {
+            record.ocr_state != ImageSearchOcrState::Failed
+                && image_search_record_needs_ocr(record, now_unix_ms)
+        })
+        .count()
 }
 
 fn image_search_index_status_with_updates(updated: usize, failed: usize) -> String {
@@ -6997,6 +7248,66 @@ mod tests {
         assert_eq!(
             status,
             "Image index: 3 records, 1 pending, 1 OCR ready, 1 failed."
+        );
+    }
+
+    #[test]
+    fn image_search_reindex_queue_tracks_progress_and_cancel_state() {
+        let mut queue = ImageSearchReindexQueueState::start(3);
+        assert!(queue.active);
+        assert_eq!(queue.total, 3);
+
+        queue.current_file = Some("first.png".into());
+        queue.apply_summary(&ImageSearchOcrHydrationSummary {
+            attempted: 1,
+            indexed: 1,
+            ..ImageSearchOcrHydrationSummary::default()
+        });
+        assert_eq!(
+            queue.detail_text(),
+            "Reindex running: 1/3 processed, 1 text, 0 empty, 0 failed, 0 skipped; current first.png."
+        );
+
+        queue.request_cancel();
+        assert!(queue.cancel_requested);
+        assert!(queue.detail_text().starts_with("Reindex canceling:"));
+        queue.finish();
+        assert!(!queue.active);
+        assert_eq!(queue.current_file, None);
+    }
+
+    #[test]
+    fn image_search_reindex_pending_count_excludes_indexed_and_failed_records() {
+        let pending = ImageSearchIndexRecord {
+            file_path: PathBuf::from("pending.png"),
+            file_length_bytes: 10,
+            last_write_time_unix_ms: 1,
+            ocr_language_tag: "auto".into(),
+            ocr_engine_id: "pending".into(),
+            ocr_completed: false,
+            ocr_state: ImageSearchOcrState::Pending,
+            ocr_retry_count: 0,
+            next_ocr_retry_unix_ms: 0,
+            ocr_text: String::new(),
+            indexed_at_unix_ms: 1,
+            last_error: String::new(),
+        };
+        let mut indexed = pending.clone();
+        indexed.file_path = PathBuf::from("indexed.png");
+        indexed.ocr_completed = true;
+        indexed.ocr_state = ImageSearchOcrState::Indexed;
+        let mut failed = pending.clone();
+        failed.file_path = PathBuf::from("failed.png");
+        failed.ocr_state = ImageSearchOcrState::Failed;
+
+        assert_eq!(
+            image_search_reindex_pending_count(
+                &ImageSearchIndex {
+                    records: vec![pending, indexed, failed],
+                },
+                10
+            ),
+            1
         );
     }
 

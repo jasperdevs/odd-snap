@@ -61,6 +61,8 @@ pub(crate) enum SettingsAction {
     ToggleImageSearchExactMatch,
     ToggleImageSearchDiagnostics,
     ToggleImageSearchAutoIndex,
+    StartImageSearchReindexQueue,
+    CancelImageSearchReindexQueue,
     InstallArgosTranslationRuntime,
     RemoveArgosTranslationRuntime,
     InstallLocalTranslationRuntime,

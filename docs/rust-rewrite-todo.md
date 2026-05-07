@@ -181,7 +181,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Background OCR refresh worker hydrates due image-search records incrementally.
 - [x] GPUI image-index status reports record, pending, OCR-ready, and failed counts.
 - [x] GPUI image-search controls expose an explicit automatic OCR indexing toggle.
-- [ ] Full reindex progress UI with cancellable queue/details.
+- [x] GPUI image-search OCR reindex queue exposes start/cancel controls, current-file details, and running result counts.
+- [ ] Full reindex verification against large imported histories and real OCR runtimes.
 - [ ] Production color picker overlay polish.
 - [x] AI Redirect hotkey can open configured chat providers that do not require hosted-image upload and copies the newest saved image.
 - [x] Google Lens AI Redirect can upload the newest saved image through the configured AI temporary host and open the Lens URL.
