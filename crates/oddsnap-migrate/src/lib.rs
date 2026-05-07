@@ -606,6 +606,7 @@ pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryInde
         return Ok(HistoryIndex {
             entries: Vec::new(),
             colors,
+            ocr_entries: Vec::new(),
         });
     }
 
@@ -674,7 +675,11 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
         }
     })?;
 
-    Ok(HistoryIndex { entries, colors })
+    Ok(HistoryIndex {
+        entries,
+        colors,
+        ocr_entries: Vec::new(),
+    })
 }
 
 fn import_color_history_database(
@@ -764,6 +769,7 @@ fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
     Ok(HistoryIndex {
         entries,
         colors: Vec::new(),
+        ocr_entries: Vec::new(),
     })
 }
 

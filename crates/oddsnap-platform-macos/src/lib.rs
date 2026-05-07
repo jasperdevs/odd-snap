@@ -15,10 +15,10 @@ use oddsnap_core::{build_recording_output_args, FfmpegRecordingRequest};
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
-    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle,
-    OverlayWindowRequest, PermissionsService, PlatformAdapter, PlatformError, RegionOverlayService,
-    RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
-    WindowInfo, WindowPickerService,
+    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OcrTextRequest, OcrTextResult,
+    OcrTextService, OverlayWindowHandle, OverlayWindowRequest, PermissionsService, PlatformAdapter,
+    PlatformError, RegionOverlayService, RegionSelectionService, ScreenCaptureService,
+    VideoRecordingRequest, VideoRecordingService, WindowInfo, WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -639,6 +639,23 @@ impl ClipboardTextService for MacosPlatform {
             let _ = text;
             Err(PlatformError::Unsupported(
                 "macOS text clipboard is only available on macOS",
+            ))
+        }
+    }
+}
+
+impl OcrTextService for MacosPlatform {
+    fn recognize_text(&self, request: OcrTextRequest) -> Result<OcrTextResult, PlatformError> {
+        #[cfg(target_os = "macos")]
+        {
+            oddsnap_platform::recognize_text_with_tesseract(&request)
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "macOS OCR is only available on macOS",
             ))
         }
     }

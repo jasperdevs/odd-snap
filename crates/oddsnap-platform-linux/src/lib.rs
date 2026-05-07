@@ -14,10 +14,10 @@ use oddsnap_core::{build_recording_output_args, FfmpegRecordingRequest};
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
-    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle,
-    OverlayWindowRequest, PlatformAdapter, PlatformError, RegionOverlayService,
-    RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
-    WindowInfo, WindowPickerService,
+    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OcrTextRequest, OcrTextResult,
+    OcrTextService, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter, PlatformError,
+    RegionOverlayService, RegionSelectionService, ScreenCaptureService, VideoRecordingRequest,
+    VideoRecordingService, WindowInfo, WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -495,6 +495,23 @@ impl ClipboardTextService for LinuxPlatform {
             let _ = text;
             Err(PlatformError::Unsupported(
                 "Linux text clipboard is only available on Linux",
+            ))
+        }
+    }
+}
+
+impl OcrTextService for LinuxPlatform {
+    fn recognize_text(&self, request: OcrTextRequest) -> Result<OcrTextResult, PlatformError> {
+        #[cfg(target_os = "linux")]
+        {
+            oddsnap_platform::recognize_text_with_tesseract(&request)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "Linux OCR is only available on Linux",
             ))
         }
     }

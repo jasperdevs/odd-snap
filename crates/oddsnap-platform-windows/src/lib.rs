@@ -9,10 +9,11 @@ use oddsnap_platform::image_file_to_windows_dib_bytes;
 use oddsnap_platform::VideoRecordingResult;
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
-    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle,
-    OverlayWindowRequest, PlatformAdapter, PlatformError, RegionOverlayService,
-    RegionSelectionService, ScreenCaptureService, ScreenshotExclusionService, VideoRecordingHandle,
-    VideoRecordingRequest, VideoRecordingService, WindowInfo, WindowPickerService,
+    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OcrTextRequest, OcrTextResult,
+    OcrTextService, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter, PlatformError,
+    RegionOverlayService, RegionSelectionService, ScreenCaptureService, ScreenshotExclusionService,
+    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowInfo,
+    WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -487,6 +488,23 @@ impl ClipboardTextService for WindowsPlatform {
             let _ = text;
             Err(PlatformError::Unsupported(
                 "Windows text clipboard is only available on Windows",
+            ))
+        }
+    }
+}
+
+impl OcrTextService for WindowsPlatform {
+    fn recognize_text(&self, request: OcrTextRequest) -> Result<OcrTextResult, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            oddsnap_platform::recognize_text_with_tesseract(&request)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "Windows OCR is only available on Windows",
             ))
         }
     }

@@ -38,7 +38,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Unsupported imported default capture modes report pending parity instead of silently falling back to full-screen.
 - [x] Windows dedicated full-screen and active-window hotkey routing.
 - [x] Windows imported color-picker hotkey routing.
-- [x] Imported OCR hotkey routing reports pending OCR parity instead of being dropped.
+- [x] Imported OCR hotkey routing starts the Rust OCR capture path instead of being dropped.
 - [x] Imported scan/sticker/upscale/center/ruler/scroll/AI hotkey routing reports pending parity instead of being dropped.
 - [x] Pending advanced tool metadata is centralized for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - [x] Duplicate imported hotkeys are rejected before platform registration.
@@ -148,6 +148,9 @@ Keep it updated whenever a rewrite milestone lands.
 
 - [ ] OCR.
 - [x] Core OCR line-layout text formatter ported from the legacy Windows OCR result flow.
+- [x] Cross-platform OCR service boundary and Tesseract CLI runtime foundation wired into OCR button, hotkey, tray/menu, and default-capture flow.
+- [x] Rust OCR text history persistence and recent text copy actions.
+- [ ] Native Windows WinRT OCR, macOS Vision OCR, language discovery/install status, result window, translation actions, sound/toast polish, and production cleanup.
 - [ ] Translation.
 - [x] Core translation model, supported-language normalization, source/target resolution, and runtime configuration error rules ported from legacy.
 - [ ] Image search.

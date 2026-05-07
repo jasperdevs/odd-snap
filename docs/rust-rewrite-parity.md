@@ -63,14 +63,14 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.
-- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, while OCR/scan/sticker/upscale/center/ruler report explicit pending parity.
+- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, OCR routes to the Rust OCR capture foundation, and scan/sticker/upscale/center/ruler report explicit pending parity.
 - Windows hotkey listener can dispatch imported full-screen and active-window capture hotkeys into the GPUI shell.
 - Windows hotkey listener can dispatch the imported color-picker hotkey into the Rust color sampling path.
 - macOS has an app-level global hotkey listener foundation through `global-hotkey`; the manager is created during GPUI app startup so it stays on the main application thread.
 - Linux has an app-level global hotkey listener foundation through `global-hotkey` for X11 sessions; Wayland hotkey support still needs a portal/compositor-specific path.
 - Linux startup now refuses Wayland/headless global-hotkey registration with an explicit status instead of silently trying the X11-only path.
 - macOS/Linux hotkey events route to the same GPUI actions as Windows for default capture, recording, full-screen capture, active-window capture, and color picker, with still-pending platform actions reporting their existing unsupported status.
-- Imported OCR hotkeys are registered and routed on Windows/macOS/Linux startup; they currently report pending Rust OCR parity instead of being silently dropped.
+- Imported OCR hotkeys are registered and routed on Windows/macOS/Linux startup; they start the Rust OCR capture foundation instead of being silently dropped.
 - Imported scan, sticker, upscale, center, ruler, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; they currently report explicit pending parity statuses instead of being silently dropped.
 - Pending advanced tool metadata is centralized in the Rust app registry for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
@@ -122,6 +122,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust can run the curl-backed Google Drive multipart/resumable upload and public-reader permission flow from imported access token/folder settings.
 - Rust preserves the legacy transfer.sh behavior as an explicit unavailable-provider error instead of attempting a broken public service.
 - Rust core now ports the legacy OCR line-layout formatter that orders recognized lines, preserves paragraph gaps, and retains indentation in copied/viewed text.
+- Rust now has a cross-platform OCR service boundary backed by a Tesseract CLI runtime foundation, with OCR button, hotkey, tray/menu, and default-capture routing plus persisted recent text history.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Rust core now ports the legacy image-search query matcher for normalization, file-name/OCR source filtering, scoring, exact-match behavior, and newest-first tie-breaking.
 - Rust core now ports the legacy image-search index record metadata, OCR status labels, diagnostics text, and match-source descriptions for file-name versus OCR matches.
@@ -135,10 +136,10 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, OCR, translation, OCR-backed image-search text hydration/background workers/reindex progress, full history actions, local runtimes, release packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, native WinRT/Vision OCR engines, OCR result window, translation, OCR-backed image-search text hydration/background workers/reindex progress, full history actions, local runtimes, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
-The Windows tray foundation is present, but the Rust menu still routes text capture and scroll capture to pending-status messages until those feature backends land.
-The macOS menu bar foundation is present, but it still needs real-device validation on Apple Silicon macOS and routes text capture and scroll capture to pending-status messages until those feature backends land.
+The Windows tray foundation is present and routes text capture to the OCR foundation, but scroll capture still reports pending status until that backend lands.
+The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS and scroll capture still reports pending status until that backend lands.
 The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, or sound/toast polish.
 The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair/window-detection feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, or annotation tools.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.

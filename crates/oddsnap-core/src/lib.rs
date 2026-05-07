@@ -17,7 +17,7 @@ pub use filename_template::{
 };
 pub use history::{
     default_history_path, ColorHistoryEntry, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
-    HistoryStoreError,
+    HistoryStoreError, OcrHistoryEntry,
 };
 pub use image_search::{
     build_image_search_text, default_image_search_index_path, describe_image_search_match,

@@ -26,14 +26,15 @@ use oddsnap_core::{
     CapabilityState, CaptureImageFormat, ColorHistoryEntry, DefaultCaptureMode,
     FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
     ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchSources,
-    PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore, TranslationModel,
-    UploadDestination, UploadPreflight, UploadSettings,
+    OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore,
+    TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
     CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService, ColorPickerService,
-    OverlayWindowRequest, PlatformAdapter, RegionSelectionService, ScreenCaptureService,
-    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
+    OcrTextRequest, OcrTextService, OverlayWindowRequest, PlatformAdapter, RegionSelectionService,
+    ScreenCaptureService, VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService,
+    WindowPickerService,
 };
 
 mod actions;
@@ -50,10 +51,10 @@ use actions::{
 
 #[cfg(any(target_os = "windows", test))]
 const WINDOWS_TRAY_FOUNDATION_STATUS: &str =
-    "Tray: Windows icon and menu foundation active; OCR and scroll capture still pending.";
+    "Tray: Windows icon and menu foundation active; OCR wired, scroll capture still pending.";
 #[cfg(any(target_os = "macos", test))]
 const MACOS_MENU_BAR_FOUNDATION_STATUS: &str =
-    "Menu bar: macOS status item foundation active; OCR and scroll capture still pending.";
+    "Menu bar: macOS status item foundation active; OCR wired, scroll capture still pending.";
 
 fn main() {
     application().run(|cx: &mut App| {
@@ -113,6 +114,7 @@ struct OddSnapRustApp {
     active_recording: Option<ActiveRecording>,
     capture_history: Vec<CaptureHistoryEntry>,
     color_history: Vec<ColorHistoryEntry>,
+    ocr_history: Vec<OcrHistoryEntry>,
     image_search: image_search::ImageSearchUiState,
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
@@ -281,7 +283,8 @@ impl OddSnapRustApp {
             sync_image_search_index_records(&image_search_index_store, &history_index, &settings);
         let capture_history =
             history_entries_to_capture_history(history_index.clone(), &image_search_index);
-        let color_history = history_entries_to_color_history(history_index);
+        let color_history = history_entries_to_color_history(history_index.clone());
+        let ocr_history = history_entries_to_ocr_history(history_index);
         let permission_status = host_permission_status();
         let media_status = match discover_ffmpeg_tools() {
             Some(tools) => {
@@ -341,6 +344,7 @@ impl OddSnapRustApp {
             active_recording: None,
             capture_history,
             color_history,
+            ocr_history,
             image_search: image_search::ImageSearchUiState::new(),
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
@@ -532,6 +536,7 @@ impl OddSnapRustApp {
                                 CaptureMode::ActiveWindow,
                             ))
                             .child(self.color_picker_button(cx))
+                            .child(self.ocr_button(cx))
                             .child(self.recording_button(cx))
                             .child(self.recording_target_button(cx))
                             .child(self.recording_region_button(cx)),
@@ -788,6 +793,41 @@ impl OddSnapRustApp {
                                 .child(SharedString::from(format!("#{}", entry.hex))),
                         )
                         .child(self.copy_color_hex_button(cx, entry.hex.clone())),
+                );
+            }
+        }
+
+        body = body.child(div().text_size(px(13.0)).child("Recent text captures"));
+        if self.ocr_history.is_empty() {
+            body = body.child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0x8b93a3))
+                    .child("No text captures yet."),
+            );
+        } else {
+            for entry in self.ocr_history.iter().take(3) {
+                body = body.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.0))
+                        .rounded(px(6.0))
+                        .bg(rgb(0x1d2027))
+                        .px(px(10.0))
+                        .py(px(8.0))
+                        .child(
+                            div()
+                                .line_clamp(2)
+                                .text_size(px(12.0))
+                                .child(SharedString::from(entry.text.clone())),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .gap(px(8.0))
+                                .child(self.copy_ocr_text_button(cx, entry.text.clone())),
+                        ),
                 );
             }
         }
@@ -1147,6 +1187,16 @@ impl OddSnapRustApp {
             }))
     }
 
+    fn ocr_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(div().id("ocr-button"), ui::ButtonVariant::Capture)
+            .child("OCR")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.run_ocr_capture("OCR button");
+                cx.notify();
+            }))
+    }
+
     fn settings_button(
         &self,
         cx: &mut Context<Self>,
@@ -1268,6 +1318,22 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.copy_color_history_hex(hex.clone());
+            cx.notify();
+        }))
+    }
+
+    fn copy_ocr_text_button(&self, cx: &mut Context<Self>, text: String) -> impl IntoElement {
+        ui::action_button_style(
+            div().id(SharedString::from(format!(
+                "copy-ocr-{}",
+                stable_text_key(&text)
+            ))),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy text")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_ocr_history_text(text.clone());
             cx.notify();
         }))
     }
@@ -1399,6 +1465,19 @@ impl OddSnapRustApp {
             + ClipboardImageService
             + RegionSelectionService,
     {
+        let capture = self.capture_with_adapter(adapter, mode)?;
+        self.save_and_copy_capture(adapter, capture)
+    }
+
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    fn capture_with_adapter<T>(
+        &self,
+        adapter: &T,
+        mode: CaptureMode,
+    ) -> Result<CaptureResult, oddsnap_platform::PlatformError>
+    where
+        T: ScreenCaptureService + WindowPickerService + RegionSelectionService,
+    {
         let capture = match mode {
             CaptureMode::Rectangle => {
                 let bounds = match adapter.monitors() {
@@ -1445,7 +1524,7 @@ impl OddSnapRustApp {
             }),
         };
 
-        capture.and_then(|capture| self.save_and_copy_capture(adapter, capture))
+        capture
     }
 
     #[cfg(target_os = "macos")]
@@ -1454,6 +1533,16 @@ impl OddSnapRustApp {
         adapter: &oddsnap_platform_macos::MacosPlatform,
         mode: CaptureMode,
     ) -> Result<CaptureRunResult, oddsnap_platform::PlatformError> {
+        let capture = self.capture_with_macos_adapter(adapter, mode)?;
+        self.save_and_copy_capture(adapter, capture)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn capture_with_macos_adapter(
+        &self,
+        adapter: &oddsnap_platform_macos::MacosPlatform,
+        mode: CaptureMode,
+    ) -> Result<CaptureResult, oddsnap_platform::PlatformError> {
         let capture = match mode {
             CaptureMode::Rectangle => {
                 adapter.capture_interactive_selection(self.settings.show_cursor)
@@ -1467,9 +1556,9 @@ impl OddSnapRustApp {
                     include_cursor: self.settings.show_cursor,
                 })
             }),
-        }?;
+        };
 
-        self.save_and_copy_capture(adapter, capture)
+        capture
     }
 
     fn save_and_copy_capture<T>(
@@ -1556,6 +1645,107 @@ impl OddSnapRustApp {
         };
     }
 
+    fn run_ocr_capture(&mut self, trigger: &'static str) {
+        if self.settings.capture_delay_seconds > 0 {
+            self.capture_status = format!(
+                "Waiting {}s before OCR capture.",
+                self.settings.capture_delay_seconds
+            );
+            thread::sleep(Duration::from_secs(
+                self.settings.capture_delay_seconds as u64,
+            ));
+        }
+
+        let platform = host_platform();
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.run_ocr_capture_with_adapter(&adapter, CaptureMode::Rectangle)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.run_ocr_capture_with_macos_adapter(&adapter, CaptureMode::Rectangle)
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.run_ocr_capture_with_adapter(&adapter, CaptureMode::Rectangle)
+        };
+
+        self.capture_status = match result {
+            Ok(status) => format!("{trigger} received. {status}"),
+            Err(error) => format!("{} OCR failed: {error}", platform.name()),
+        };
+    }
+
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    fn run_ocr_capture_with_adapter<T>(
+        &mut self,
+        adapter: &T,
+        mode: CaptureMode,
+    ) -> Result<String, oddsnap_platform::PlatformError>
+    where
+        T: ScreenCaptureService
+            + WindowPickerService
+            + RegionSelectionService
+            + OcrTextService
+            + ClipboardTextService,
+    {
+        let capture = self.capture_with_adapter(adapter, mode)?;
+        self.finish_ocr_capture(adapter, capture)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn run_ocr_capture_with_macos_adapter(
+        &mut self,
+        adapter: &oddsnap_platform_macos::MacosPlatform,
+        mode: CaptureMode,
+    ) -> Result<String, oddsnap_platform::PlatformError> {
+        let capture = self.capture_with_macos_adapter(adapter, mode)?;
+        self.finish_ocr_capture(adapter, capture)
+    }
+
+    fn finish_ocr_capture<T>(
+        &mut self,
+        adapter: &T,
+        capture: CaptureResult,
+    ) -> Result<String, oddsnap_platform::PlatformError>
+    where
+        T: OcrTextService + ClipboardTextService,
+    {
+        let captured_path = capture.image_path.clone();
+        let result = adapter.recognize_text(OcrTextRequest {
+            image_path: capture.image_path,
+            language_tag: self.settings.ocr_language_tag.clone(),
+        });
+        let _ = fs::remove_file(&captured_path);
+        let result = result?;
+        let text = result.text.trim().to_string();
+        if text.is_empty() {
+            return Ok(format!("OCR found no text with {}.", result.engine_id));
+        }
+
+        let copy_error = adapter
+            .copy_text_to_clipboard(&text)
+            .err()
+            .map(|error| error.to_string());
+        let char_count = text.chars().count();
+        let history_status = self.save_ocr_history(text);
+        Ok(match copy_error {
+            Some(error) => format!(
+                "OCR read {char_count} chars with {}; clipboard copy failed ({error}){history_status}.",
+                result.engine_id
+            ),
+            None => format!(
+                "OCR read {char_count} chars with {}, copied text{history_status}.",
+                result.engine_id
+            ),
+        })
+    }
+
     fn run_default_capture_command(&mut self, trigger: &'static str) {
         match default_capture_action(self.settings.default_capture_mode) {
             DefaultCaptureAction::Capture(mode) => {
@@ -1567,7 +1757,11 @@ impl OddSnapRustApp {
                 self.run_color_picker();
             }
             DefaultCaptureAction::Pending(tool) => {
-                self.capture_status = pending_default_capture_status(trigger, tool);
+                if tool == PendingTool::Ocr {
+                    self.run_ocr_capture(trigger);
+                } else {
+                    self.capture_status = pending_default_capture_status(trigger, tool);
+                }
             }
         }
     }
@@ -1582,6 +1776,25 @@ impl OddSnapRustApp {
                 "; history saved".into()
             }
             Err(error) => format!("; history save failed: {error}"),
+        }
+    }
+
+    fn save_ocr_history(&mut self, text: String) -> String {
+        if !self.settings.save_history {
+            self.ocr_history.insert(0, OcrHistoryEntry::new(text));
+            self.ocr_history.truncate(12);
+            return String::new();
+        }
+
+        match self
+            .history_store
+            .append_ocr_entry(OcrHistoryEntry::new(text))
+        {
+            Ok(index) => {
+                self.ocr_history = history_entries_to_ocr_history(index);
+                "; OCR history saved".into()
+            }
+            Err(error) => format!("; OCR history save failed: {error}"),
         }
     }
 
@@ -1879,6 +2092,15 @@ impl OddSnapRustApp {
         };
     }
 
+    fn copy_ocr_history_text(&mut self, text: String) {
+        let result = copy_text_to_host_clipboard(&text);
+
+        self.capture_status = match result {
+            Ok(()) => "OCR text copied.".into(),
+            Err(error) => format!("Copy OCR text failed: {error}"),
+        };
+    }
+
     #[cfg(target_os = "windows")]
     fn start_hotkey_event_pump(
         &self,
@@ -2005,7 +2227,7 @@ impl OddSnapRustApp {
                 self.run_color_picker();
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Ocr => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Ocr);
+                self.run_ocr_capture("OCR hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Scan => {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::Scan);
@@ -2054,7 +2276,7 @@ impl OddSnapRustApp {
                 self.run_color_picker();
             }
             CrossPlatformHotkeyEvent::Ocr => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Ocr);
+                self.run_ocr_capture("OCR hotkey");
             }
             CrossPlatformHotkeyEvent::Scan => {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::Scan);
@@ -2100,8 +2322,7 @@ impl OddSnapRustApp {
                 self.toggle_recording(RecordingTarget::FullScreen);
             }
             oddsnap_platform_windows::WindowsTrayEvent::Ocr => {
-                self.capture_status =
-                    pending_tool_trigger_status("Tray text capture", PendingTool::Ocr);
+                self.run_ocr_capture("Tray text capture");
             }
             oddsnap_platform_windows::WindowsTrayEvent::ColorPicker => {
                 self.capture_status = "Tray color picker received.".into();
@@ -2146,8 +2367,7 @@ impl OddSnapRustApp {
                 self.toggle_recording(RecordingTarget::FullScreen);
             }
             oddsnap_platform_macos::MacosTrayEvent::Ocr => {
-                self.capture_status =
-                    pending_tool_trigger_status("Menu bar text capture", PendingTool::Ocr);
+                self.run_ocr_capture("Menu bar text capture");
             }
             oddsnap_platform_macos::MacosTrayEvent::ColorPicker => {
                 self.capture_status = "Menu bar color picker received.".into();
@@ -3162,6 +3382,10 @@ fn history_entries_to_color_history(index: HistoryIndex) -> Vec<ColorHistoryEntr
     index.colors.into_iter().take(12).collect()
 }
 
+fn history_entries_to_ocr_history(index: HistoryIndex) -> Vec<OcrHistoryEntry> {
+    index.ocr_entries.into_iter().take(12).collect()
+}
+
 fn history_kind_label(kind: HistoryKind) -> &'static str {
     match kind {
         HistoryKind::Image => "Image",
@@ -3584,6 +3808,15 @@ fn video_thumbnail_path(history_store: &HistoryStore, media_path: &Path) -> Opti
 fn stable_path_key(path: &Path) -> String {
     let mut hash = 0xcbf29ce484222325u64;
     for byte in path.display().to_string().to_ascii_lowercase().bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
+}
+
+fn stable_text_key(text: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in text.bytes() {
         hash ^= byte as u64;
         hash = hash.wrapping_mul(0x100000001b3);
     }
@@ -4551,6 +4784,7 @@ mod tests {
                     captured_at_unix_ms: value,
                 })
                 .collect(),
+            ocr_entries: Vec::new(),
         };
 
         let colors = history_entries_to_color_history(index);

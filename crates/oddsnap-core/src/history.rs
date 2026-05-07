@@ -54,10 +54,25 @@ pub struct ColorHistoryEntry {
     pub captured_at_unix_ms: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OcrHistoryEntry {
+    pub text: String,
+    pub captured_at_unix_ms: u64,
+}
+
 impl ColorHistoryEntry {
     pub fn new(hex: impl Into<String>) -> Self {
         Self {
             hex: hex.into(),
+            captured_at_unix_ms: unix_millis_now(),
+        }
+    }
+}
+
+impl OcrHistoryEntry {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
             captured_at_unix_ms: unix_millis_now(),
         }
     }
@@ -101,6 +116,8 @@ pub struct HistoryIndex {
     pub entries: Vec<HistoryEntry>,
     #[serde(default)]
     pub colors: Vec<ColorHistoryEntry>,
+    #[serde(default)]
+    pub ocr_entries: Vec<OcrHistoryEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -185,6 +202,17 @@ impl HistoryStore {
         self.save(&index)?;
         Ok(index)
     }
+
+    pub fn append_ocr_entry(
+        &self,
+        entry: OcrHistoryEntry,
+    ) -> Result<HistoryIndex, HistoryStoreError> {
+        let mut index = self.load_or_default()?;
+        index.ocr_entries.insert(0, entry);
+        index.ocr_entries.truncate(500);
+        self.save(&index)?;
+        Ok(index)
+    }
 }
 
 pub fn default_history_path() -> PathBuf {
@@ -224,7 +252,7 @@ fn unix_millis_now() -> u64 {
 mod tests {
     use std::fs;
 
-    use super::{ColorHistoryEntry, HistoryEntry, HistoryKind, HistoryStore};
+    use super::{ColorHistoryEntry, HistoryEntry, HistoryKind, HistoryStore, OcrHistoryEntry};
 
     #[test]
     fn history_entry_reads_file_metadata() {
@@ -357,6 +385,27 @@ mod tests {
         assert_eq!(index.colors.len(), 200);
         assert_eq!(index.colors[0].hex, "0000CC");
         assert_eq!(index.colors[199].hex, "000005");
+        assert!(index.entries.is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_store_appends_ocr_entries_newest_first_and_caps_list() {
+        let root = std::env::temp_dir().join(format!("oddsnap-ocr-history-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let store = HistoryStore::new(root.join("history.json"));
+
+        for index in 0..505 {
+            store
+                .append_ocr_entry(OcrHistoryEntry::new(format!("text {index}")))
+                .expect("append OCR");
+        }
+
+        let index = store.load_or_default().expect("load history");
+        assert_eq!(index.ocr_entries.len(), 500);
+        assert_eq!(index.ocr_entries[0].text, "text 504");
+        assert_eq!(index.ocr_entries[499].text, "text 5");
         assert!(index.entries.is_empty());
         let _ = fs::remove_dir_all(root);
     }

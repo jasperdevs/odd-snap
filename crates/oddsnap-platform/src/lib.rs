@@ -2,6 +2,7 @@ use std::{
     fs,
     io::{BufWriter, Cursor},
     path::{Path, PathBuf},
+    process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -157,6 +158,22 @@ pub trait ClipboardImageService: Send + Sync {
 
 pub trait ClipboardTextService: Send + Sync {
     fn copy_text_to_clipboard(&self, text: &str) -> Result<(), PlatformError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OcrTextRequest {
+    pub image_path: PathBuf,
+    pub language_tag: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OcrTextResult {
+    pub text: String,
+    pub engine_id: String,
+}
+
+pub trait OcrTextService: Send + Sync {
+    fn recognize_text(&self, request: OcrTextRequest) -> Result<OcrTextResult, PlatformError>;
 }
 
 pub trait ColorPickerService: Send + Sync {
@@ -402,6 +419,61 @@ pub fn image_file_to_png_bytes(path: &Path) -> Result<Vec<u8>, PlatformError> {
     Ok(bytes.into_inner())
 }
 
+pub fn recognize_text_with_tesseract(
+    request: &OcrTextRequest,
+) -> Result<OcrTextResult, PlatformError> {
+    let mut command = Command::new("tesseract");
+    command.arg(&request.image_path).arg("stdout");
+    if let Some(language) = tesseract_language_arg(&request.language_tag) {
+        command.arg("-l").arg(language);
+    }
+
+    let output = command.output().map_err(|source| {
+        PlatformError::Failed(format!("failed to start tesseract OCR: {source}"))
+    })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(PlatformError::Failed(if stderr.is_empty() {
+            format!("tesseract OCR exited with status {}", output.status)
+        } else {
+            format!("tesseract OCR failed: {stderr}")
+        }));
+    }
+
+    Ok(OcrTextResult {
+        text: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        engine_id: "tesseract-cli".into(),
+    })
+}
+
+pub fn tesseract_language_arg(language_tag: &str) -> Option<&'static str> {
+    let tag = language_tag.trim();
+    if tag.is_empty() || tag.eq_ignore_ascii_case("auto") {
+        return None;
+    }
+
+    let primary = tag
+        .split(['-', '_'])
+        .next()
+        .unwrap_or(tag)
+        .to_ascii_lowercase();
+    match primary.as_str() {
+        "ar" => Some("ara"),
+        "de" => Some("deu"),
+        "en" => Some("eng"),
+        "es" => Some("spa"),
+        "fr" => Some("fra"),
+        "it" => Some("ita"),
+        "ja" => Some("jpn"),
+        "ko" => Some("kor"),
+        "pt" => Some("por"),
+        "ru" => Some("rus"),
+        "zh" => Some("chi_sim"),
+        _ => None,
+    }
+}
+
 pub trait HotkeyService: Send + Sync {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError>;
 }
@@ -483,8 +555,8 @@ mod tests {
     use super::{
         image_file_dimensions, image_file_to_png_bytes, image_file_to_windows_dib_bytes,
         image_file_top_left_color_sample, persist_capture_to_directory,
-        persist_capture_to_directory_as, persist_capture_to_path_as, virtual_screen_region,
-        CaptureRegion, CaptureResult, ColorSample, MonitorInfo,
+        persist_capture_to_directory_as, persist_capture_to_path_as, tesseract_language_arg,
+        virtual_screen_region, CaptureRegion, CaptureResult, ColorSample, MonitorInfo,
     };
     use oddsnap_core::CaptureImageFormat;
 
@@ -811,5 +883,14 @@ mod tests {
         assert_eq!((decoded.width(), decoded.height()), (2, 2));
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn tesseract_language_arg_maps_common_legacy_language_tags() {
+        assert_eq!(tesseract_language_arg("auto"), None);
+        assert_eq!(tesseract_language_arg("en-US"), Some("eng"));
+        assert_eq!(tesseract_language_arg("fr-CA"), Some("fra"));
+        assert_eq!(tesseract_language_arg("zh-Hans"), Some("chi_sim"));
+        assert_eq!(tesseract_language_arg("zz-ZZ"), None);
     }
 }
