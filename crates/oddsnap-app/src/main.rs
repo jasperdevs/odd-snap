@@ -30,6 +30,13 @@ use oddsnap_platform::{
     VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
 };
 
+#[cfg(any(target_os = "windows", test))]
+const WINDOWS_TRAY_FOUNDATION_STATUS: &str =
+    "Tray: Windows icon and menu foundation active; OCR and scroll capture still pending.";
+#[cfg(any(target_os = "macos", test))]
+const MACOS_MENU_BAR_FOUNDATION_STATUS: &str =
+    "Menu bar: macOS status item foundation active; OCR and scroll capture still pending.";
+
 fn main() {
     application().run(|cx: &mut App| {
         let bounds = Bounds::centered(None, size(px(1120.0), px(720.0)), cx);
@@ -2447,8 +2454,7 @@ fn start_tray_icon() -> (
     let (sender, receiver) = std::sync::mpsc::channel();
     match oddsnap_platform_windows::start_oddsnap_tray_icon(sender) {
         Ok(tray_icon) => (
-            "Tray: Windows icon and menu foundation active; OCR and scroll capture still pending."
-                .into(),
+            WINDOWS_TRAY_FOUNDATION_STATUS.into(),
             Some(tray_icon),
             Some(receiver),
         ),
@@ -2465,8 +2471,7 @@ fn start_tray_icon() -> (
     let (sender, receiver) = std::sync::mpsc::channel();
     match oddsnap_platform_macos::start_oddsnap_tray_icon(sender) {
         Ok(tray_icon) => (
-            "Menu bar: macOS status item foundation active; OCR and scroll capture still pending."
-                .into(),
+            MACOS_MENU_BAR_FOUNDATION_STATUS.into(),
             Some(tray_icon),
             Some(receiver),
         ),
@@ -2916,6 +2921,18 @@ mod tests {
             next_recording_quality(RecordingQuality::P480),
             RecordingQuality::Original
         );
+    }
+
+    #[test]
+    fn partial_foundation_statuses_do_not_claim_ready() {
+        for status in [
+            WINDOWS_TRAY_FOUNDATION_STATUS,
+            MACOS_MENU_BAR_FOUNDATION_STATUS,
+        ] {
+            assert!(status.contains("foundation active"));
+            assert!(status.contains("pending"));
+            assert!(!status.to_ascii_lowercase().contains("ready"));
+        }
     }
 
     #[test]
