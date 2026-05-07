@@ -938,11 +938,14 @@ impl oddsnap_platform::VideoRecordingHandle for MacosVideoRecordingHandle {
             .and_then(|thread| thread.join().ok())
             .unwrap_or_default();
 
-        if !status.success() && !is_non_empty_file(&self.temp_output_path) {
+        if !status.success() {
+            return Err(macos_recording_stop_error(status.code(), &stderr));
+        }
+
+        if !is_non_empty_file(&self.temp_output_path) {
             return Err(PlatformError::Failed(format!(
-                "macOS screen recording failed with exit code {:?}: {}",
-                status.code(),
-                stderr.trim()
+                "macOS screen recording output is empty: {}",
+                self.temp_output_path.display()
             )));
         }
 
@@ -1105,6 +1108,15 @@ fn wait_for_macos_child_exit(
 
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_recording_stop_error(code: Option<i32>, stderr: &str) -> PlatformError {
+    PlatformError::Failed(format!(
+        "macOS screen recording failed with exit code {:?}: {}",
+        code,
+        stderr.trim()
+    ))
 }
 
 #[cfg(target_os = "macos")]
@@ -1703,6 +1715,16 @@ mod tests {
                 "/tmp/oddsnap-recording.mov"
             ]
         );
+    }
+
+    #[test]
+    fn macos_recording_stop_error_reports_failed_exit() {
+        let error = super::macos_recording_stop_error(Some(1), " permission denied \n");
+
+        assert!(error
+            .to_string()
+            .contains("macOS screen recording failed with exit code Some(1)"));
+        assert!(error.to_string().contains("permission denied"));
     }
 
     #[test]
