@@ -12,6 +12,7 @@ The Rust rewrite workflow is CI-only and should prove:
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo build -p oddsnap-app --bin oddsnap-rust`
 - local unsigned Windows app-folder package smoke on Windows runners, with no upload
+- local unsigned Linux AppDir package smoke on Ubuntu runners, with no upload
 - `curl --version` on all CI hosts for the command-backed public upload foundation
 - Linux runtime command preflight for the external tools used by current capture, clipboard, region-selection, active-window, color-picker, upload, and recording foundations
 - unsigned macOS `.app` bundle creation on macOS runners, including host-architecture validation and no artifact upload
@@ -39,6 +40,18 @@ Current Linux runtime foundations also expect optional host tools for feature us
 - X11 recording: `ffmpeg` with `x11grab` support and a valid `DISPLAY`
 
 The CI lane installs and checks representative command coverage for these foundations (`curl`, `ffmpeg`, `grim`, `gnome-screenshot`, `scrot`, `slurp`, `slop`, `xdotool`, `xrandr`, `wl-copy`, `xclip`, and `xsel`). It does not prove real desktop capture in a granted graphical session.
+
+The repo includes a local-only Linux AppDir smoke script:
+
+- `scripts/linux/package-oddsnap-rust.sh`
+
+It copies the built Rust executable into `OddSnap-Rust.AppDir`, writes a desktop entry, writes minimal metainfo, and records `releaseChannelEnabled: false` plus `publicArtifact: false` in `oddsnap-rust-package.json`. It does not build a distro package, AppImage, Flatpak, Snap, repository, or update channel.
+
+Local smoke:
+
+```sh
+scripts/linux/package-oddsnap-rust.sh --profile debug
+```
 
 ## macOS runner and release notes
 

@@ -11,6 +11,7 @@ on:
       - "docs/rust-rewrite-parity.md"
       - "docs/rust-rewrite-todo.md"
       - "packaging/macos/**"
+      - "scripts/linux/**"
       - "scripts/macos/**"
       - "scripts/windows/**"
       - ".github/workflows/rust-rewrite.yml"
@@ -92,6 +93,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: scripts/windows/package-oddsnap-rust.ps1 -Profile debug -SkipBuild -Output dist/windows-ci
+      - name: Package local Linux AppDir
+        if: runner.os == 'Linux'
+        run: scripts/linux/package-oddsnap-rust.sh --profile debug --skip-build --output dist/linux-ci
       - name: Package unsigned macOS app bundle
         if: runner.os == 'macOS'
         run: scripts/macos/package-oddsnap-rust.sh --profile debug --skip-build --unsigned --output dist/macos-ci
