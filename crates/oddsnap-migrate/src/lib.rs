@@ -577,7 +577,7 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
 
 pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryIndex, MigrationError> {
     if paths.current_history_database_path.exists() {
-        let mut index = import_history_database(&paths.current_history_database_path)?;
+        let mut index = import_history_database(paths)?;
         if index.colors.is_empty() {
             index.colors = import_first_color_history_json(paths)?;
         }
@@ -595,7 +595,7 @@ pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryInde
     ];
     for path in json_paths {
         if path.exists() {
-            let mut index = import_history_json(&path)?;
+            let mut index = import_history_json(&path, paths)?;
             if index.colors.is_empty() {
                 index.colors = import_first_color_history_json(paths)?;
             }
@@ -629,7 +629,8 @@ fn history_index_has_content(index: &HistoryIndex) -> bool {
         || !index.code_entries.is_empty()
 }
 
-fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> {
+fn import_history_database(paths: &LegacyOddSnapPaths) -> Result<HistoryIndex, MigrationError> {
+    let path = &paths.current_history_database_path;
     let connection =
         Connection::open(path).map_err(|source| MigrationError::ReadHistoryDatabase {
             path: path.to_path_buf(),
@@ -662,20 +663,25 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
                 let height: i64 = row.get(4)?;
                 let file_size_bytes: i64 = row.get(5)?;
                 let kind: i64 = row.get(6)?;
+                let kind = legacy_history_kind_from_i64(kind);
                 let upload_url: Option<String> = row.get(7)?;
                 let upload_provider: Option<String> = row.get(8)?;
                 let upload_error: Option<String> = row.get(9)?;
+                let file_path = PathBuf::from(file_path);
+                let thumbnail_path =
+                    legacy_managed_thumbnail_path(&file_path, kind, &paths.current_history_dir);
                 Ok(legacy_history_entry(LegacyHistoryRecord {
                     file_name,
-                    file_path: PathBuf::from(file_path),
+                    file_path,
                     captured_at_unix_ms: dotnet_datetime_binary_to_unix_ms(captured_at_ticks),
                     width,
                     height,
                     file_size_bytes,
-                    kind: legacy_history_kind_from_i64(kind),
+                    kind,
                     upload_url,
                     upload_provider,
                     upload_error,
+                    thumbnail_path,
                 }))
             })
             .map_err(|source| MigrationError::ReadHistoryDatabase {
@@ -817,7 +823,10 @@ fn import_code_history_database(
     Ok(entries)
 }
 
-fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
+fn import_history_json(
+    path: &Path,
+    paths: &LegacyOddSnapPaths,
+) -> Result<HistoryIndex, MigrationError> {
     let json = fs::read_to_string(path).map_err(|source| MigrationError::ReadHistory {
         path: path.to_path_buf(),
         source,
@@ -835,6 +844,16 @@ fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
             if !file_path.exists() || !is_supported_history_file(&file_path) {
                 return None;
             }
+
+            let kind = legacy_history_kind_from_value(entry.get("Kind"));
+            let thumbnail_path = entry
+                .get("ThumbnailPath")
+                .and_then(Value::as_str)
+                .map(PathBuf::from)
+                .filter(|path| path.exists())
+                .or_else(|| {
+                    legacy_managed_thumbnail_path(&file_path, kind, &paths.current_history_dir)
+                });
 
             Some(legacy_history_entry(LegacyHistoryRecord {
                 file_name: entry
@@ -861,7 +880,7 @@ fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
                     .get("FileSizeBytes")
                     .and_then(Value::as_i64)
                     .unwrap_or_default(),
-                kind: legacy_history_kind_from_value(entry.get("Kind")),
+                kind,
                 upload_url: entry
                     .get("UploadUrl")
                     .and_then(Value::as_str)
@@ -874,6 +893,7 @@ fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
                     .get("UploadError")
                     .and_then(Value::as_str)
                     .map(str::to_string),
+                thumbnail_path,
             }))
         })
         .collect();
@@ -1071,6 +1091,7 @@ struct LegacyHistoryRecord {
     upload_url: Option<String>,
     upload_provider: Option<String>,
     upload_error: Option<String>,
+    thumbnail_path: Option<PathBuf>,
 }
 
 fn legacy_history_entry(record: LegacyHistoryRecord) -> HistoryEntry {
@@ -1098,8 +1119,35 @@ fn legacy_history_entry(record: LegacyHistoryRecord) -> HistoryEntry {
         upload_url: record.upload_url,
         upload_provider: record.upload_provider,
         upload_error: record.upload_error,
-        thumbnail_path: None,
+        thumbnail_path: record.thumbnail_path,
     }
+}
+
+fn legacy_managed_thumbnail_path(
+    file_path: &Path,
+    kind: HistoryKind,
+    current_history_dir: &Path,
+) -> Option<PathBuf> {
+    if kind != HistoryKind::Video {
+        return None;
+    }
+
+    let thumbnail_path = current_history_dir
+        .join("cache")
+        .join("video-thumbs")
+        .join(format!("{}.jpg", legacy_stable_path_key(file_path)));
+    thumbnail_path.exists().then_some(thumbnail_path)
+}
+
+fn legacy_stable_path_key(path: &Path) -> String {
+    let normalized = path
+        .display()
+        .to_string()
+        .trim_end_matches(['\\', '/'])
+        .to_string();
+    let mut sha1 = sha1_smol::Sha1::new();
+    sha1.update(normalized.as_bytes());
+    sha1.digest().to_string()
 }
 
 fn legacy_history_kind_from_value(value: Option<&Value>) -> HistoryKind {
@@ -1678,6 +1726,13 @@ mod tests {
         fs::create_dir_all(&root).expect("create root");
         let image = root.join("capture.png");
         fs::write(&image, b"png").expect("write image");
+        let video = root.join("clip.mp4");
+        fs::write(&video, b"video").expect("write video");
+        let thumbnail_dir = root.join("cache").join("video-thumbs");
+        fs::create_dir_all(&thumbnail_dir).expect("create thumbnail dir");
+        let video_thumbnail =
+            thumbnail_dir.join(format!("{}.jpg", super::legacy_stable_path_key(&video)));
+        fs::write(&video_thumbnail, b"thumb").expect("write video thumbnail");
         let database = root.join("history.db");
         let connection = rusqlite::Connection::open(&database).expect("open db");
         connection
@@ -1720,6 +1775,13 @@ mod tests {
             .expect("insert row");
         connection
             .execute(
+                "INSERT INTO history_entries(file_path, file_name, captured_at_ticks, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error)
+                 VALUES (?1, 'clip.mp4', ?2, 1280, 720, 5, 3, NULL, NULL, NULL)",
+                rusqlite::params![video.display().to_string(), legacy_ocr_ticks - 10_000],
+            )
+            .expect("insert video row");
+        connection
+            .execute(
                 "INSERT INTO color_entries(hex, captured_at_ticks) VALUES ('aabbcc', 456)",
                 [],
             )
@@ -1748,7 +1810,7 @@ mod tests {
 
         let index = super::import_existing_history(&paths).expect("import history");
 
-        assert_eq!(index.entries.len(), 1);
+        assert_eq!(index.entries.len(), 2);
         assert_eq!(index.entries[0].file_path, image);
         assert_eq!(index.entries[0].width, 12);
         assert_eq!(
@@ -1761,6 +1823,16 @@ mod tests {
             Some("https://example.test/capture.png")
         );
         assert_eq!(index.entries[0].upload_provider.as_deref(), Some("Catbox"));
+        let imported_video = index
+            .entries
+            .iter()
+            .find(|entry| entry.file_path == video)
+            .expect("video entry imported");
+        assert_eq!(imported_video.kind, oddsnap_core::HistoryKind::Video);
+        assert_eq!(
+            imported_video.thumbnail_path.as_ref(),
+            Some(&video_thumbnail)
+        );
         assert_eq!(index.colors.len(), 1);
         assert_eq!(index.colors[0].hex, "AABBCC");
         assert_eq!(index.ocr_entries.len(), 1);
