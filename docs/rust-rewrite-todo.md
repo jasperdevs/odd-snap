@@ -153,6 +153,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Native Windows WinRT OCR, macOS Vision OCR, language discovery/install status, result window, translation actions, sound/toast polish, and production cleanup.
 - [ ] Translation.
 - [x] Core translation model, supported-language normalization, source/target resolution, and runtime configuration error rules ported from legacy.
+- [x] Google Translate API curl request/response path wired to recent OCR text rows when a migrated API key is present.
+- [ ] Argos and open-source local translation runtime execution.
 - [ ] Image search.
 - [x] Core image-search query normalization, source filtering, scoring, and ranking ported from the legacy matcher.
 - [x] Core image-search index record, OCR status labels, diagnostics text, and match-source descriptions ported from legacy.

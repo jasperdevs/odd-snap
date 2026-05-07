@@ -19,16 +19,18 @@ use gpui::{
 use gpui_platform::application;
 use oddsnap_core::{
     apply_image_search_ocr_error, apply_image_search_ocr_success, build_available_capture_path,
-    build_video_thumbnail_args, build_video_thumbnail_fallback_args, default_history_path,
-    default_image_search_index_path, default_settings_path, discover_ffmpeg_tools,
-    format_file_name_template, history_entry_can_be_image_indexed,
-    image_search_record_matches_history_entry, image_search_record_needs_ocr,
+    build_google_translate_curl_request, build_video_thumbnail_args,
+    build_video_thumbnail_fallback_args, default_history_path, default_image_search_index_path,
+    default_settings_path, discover_ffmpeg_tools, format_file_name_template,
+    history_entry_can_be_image_indexed, image_search_record_matches_history_entry,
+    image_search_record_needs_ocr, parse_google_translate_response,
     pending_image_search_record_from_history_entry, retain_indexed_image_paths,
     upsert_image_search_record, AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat,
-    ColorHistoryEntry, DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex,
-    HistoryKind, HistoryStore, ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore,
-    ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
-    SettingsStore, TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
+    ColorHistoryEntry, CurlTranslationRequest, DefaultCaptureMode, FfmpegThumbnailRequest,
+    HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, ImageSearchIndex,
+    ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchSources, OcrHistoryEntry,
+    PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore, TranslationModel,
+    UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
@@ -836,7 +838,8 @@ impl OddSnapRustApp {
                             div()
                                 .flex()
                                 .gap(px(8.0))
-                                .child(self.copy_ocr_text_button(cx, entry.text.clone())),
+                                .child(self.copy_ocr_text_button(cx, entry.text.clone()))
+                                .child(self.translate_ocr_text_button(cx, entry.text.clone())),
                         ),
                 );
             }
@@ -1358,6 +1361,22 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.copy_ocr_history_text(text.clone());
+            cx.notify();
+        }))
+    }
+
+    fn translate_ocr_text_button(&self, cx: &mut Context<Self>, text: String) -> impl IntoElement {
+        ui::action_button_style(
+            div().id(SharedString::from(format!(
+                "translate-ocr-{}",
+                stable_text_key(&text)
+            ))),
+            ui::ButtonVariant::History,
+        )
+        .child("Translate")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.translate_ocr_history_text(text.clone());
             cx.notify();
         }))
     }
@@ -2208,6 +2227,68 @@ impl OddSnapRustApp {
         self.capture_status = match result {
             Ok(()) => "OCR text copied.".into(),
             Err(error) => format!("Copy OCR text failed: {error}"),
+        };
+    }
+
+    fn translate_ocr_history_text(&mut self, text: String) {
+        let source = oddsnap_core::resolve_translation_source_language(Some(
+            &self.settings.ocr_default_translate_from,
+        ));
+        let target = oddsnap_core::resolve_translation_target_language(
+            Some(&self.settings.ocr_default_translate_to),
+            Some(&self.settings.interface_language),
+            None,
+        );
+        let model = TranslationModel::from_legacy_value(self.settings.translation_model);
+        let google_key = self
+            .settings
+            .google_translate_api_key
+            .as_deref()
+            .filter(|key| !key.trim().is_empty());
+        if let Some(error) = oddsnap_core::translation_configuration_error(
+            &source,
+            model,
+            google_key.is_some(),
+            self.settings.translation_runtime_installed,
+            self.settings.translation_runtime_installed,
+        ) {
+            self.capture_status = error.into();
+            return;
+        }
+
+        if model != TranslationModel::Google {
+            self.capture_status = format!(
+                "{} translation runtime is preserved in settings, but Rust runtime execution is pending.",
+                model.label()
+            );
+            return;
+        }
+
+        let Some(api_key) = google_key else {
+            self.capture_status =
+                "Google Translate API key not set. Add it in Settings -> OCR.".into();
+            return;
+        };
+        let request = match build_google_translate_curl_request(&text, &source, &target, api_key) {
+            Ok(request) => request,
+            Err(error) => {
+                self.capture_status = error;
+                return;
+            }
+        };
+
+        self.capture_status = match run_translation_curl_request(&request)
+            .and_then(|output| parse_google_translate_response(&output))
+        {
+            Ok(translated) => match copy_text_to_host_clipboard(&translated) {
+                Ok(()) => format!(
+                    "Translated OCR text {source}->{target} with Google Translate and copied it."
+                ),
+                Err(error) => format!(
+                    "Translated OCR text {source}->{target} with Google Translate; clipboard copy failed: {error}"
+                ),
+            },
+            Err(error) => format!("Google Translate failed: {error}"),
         };
     }
 
@@ -3787,6 +3868,33 @@ fn run_curl_request(request: &oddsnap_core::CurlUploadRequest) -> Result<(String
     }
 
     Ok((stdout.into(), stderr.into()))
+}
+
+fn run_translation_curl_request(request: &CurlTranslationRequest) -> Result<String, String> {
+    let output = Command::new(&request.program)
+        .args(&request.args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("failed to start translation curl: {error}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    if output.status.success() {
+        return Ok(stdout);
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stdout.trim().is_empty() {
+        let error = stderr.trim();
+        Err(if error.is_empty() {
+            format!("translation curl exited with status {}", output.status)
+        } else {
+            error.into()
+        })
+    } else {
+        Ok(stdout)
+    }
 }
 
 fn append_curl_stderr(error: String, stderr: &str) -> String {

@@ -45,9 +45,11 @@ pub use settings::{
     SettingsSectionDefinition, SettingsStore, SettingsStoreError, SettingsValueKind, ToastPosition,
 };
 pub use translation::{
-    normalize_supported_translation_language, resolve_translation_source_language,
+    build_google_translate_curl_request, normalize_supported_translation_language,
+    parse_google_translate_response, resolve_translation_source_language,
     resolve_translation_target_language, translation_configuration_error,
-    translation_language_name, TranslationModel, SUPPORTED_TRANSLATION_LANGUAGES,
+    translation_language_name, CurlTranslationRequest, TranslationModel,
+    SUPPORTED_TRANSLATION_LANGUAGES,
 };
 pub use upload::{
     build_curl_upload_request, build_curl_upload_request_with_settings,

@@ -1,3 +1,9 @@
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CurlTranslationRequest {
+    pub program: String,
+    pub args: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TranslationModel {
     Argos = 0,
@@ -156,6 +162,96 @@ pub fn translation_configuration_error(
     }
 }
 
+pub fn build_google_translate_curl_request(
+    text: &str,
+    from_code: &str,
+    to_code: &str,
+    api_key: &str,
+) -> Result<CurlTranslationRequest, String> {
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return Err("Google Translate API key not set. Add it in Settings -> OCR.".into());
+    }
+    let target = resolve_translation_target_language(Some(to_code), None, None);
+    let source = resolve_translation_source_language(Some(from_code));
+    let mut args = vec![
+        "--silent".into(),
+        "--show-error".into(),
+        "--location".into(),
+        "--request".into(),
+        "POST".into(),
+        "--data-urlencode".into(),
+        format!("q={text}"),
+        "--data-urlencode".into(),
+        format!("target={target}"),
+    ];
+    if !source.eq_ignore_ascii_case("auto") {
+        args.extend(["--data-urlencode".into(), format!("source={source}")]);
+    }
+    args.extend([
+        "--data-urlencode".into(),
+        "format=text".into(),
+        "--write-out".into(),
+        "\n%{http_code}".into(),
+        format!(
+            "https://translation.googleapis.com/language/translate/v2?key={}",
+            percent_encode_query(api_key)
+        ),
+    ]);
+
+    Ok(CurlTranslationRequest {
+        program: "curl".into(),
+        args,
+    })
+}
+
+pub fn parse_google_translate_response(output: &str) -> Result<String, String> {
+    let (body, status_code) = split_google_translate_body_and_status(output)?;
+    let json: serde_json::Value = serde_json::from_str(body)
+        .map_err(|error| format!("Google Translate returned invalid JSON: {error}"))?;
+
+    if !(200..300).contains(&status_code) {
+        return Err(extract_google_translate_error(&json)
+            .unwrap_or_else(|| format!("Google Translate request failed ({status_code}).")));
+    }
+
+    json.pointer("/data/translations/0/translatedText")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| "Google Translate response did not include translated text.".into())
+}
+
+fn extract_google_translate_error(json: &serde_json::Value) -> Option<String> {
+    json.pointer("/error/message")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+        .or_else(|| json.get("error").map(ToString::to_string))
+}
+
+fn split_google_translate_body_and_status(output: &str) -> Result<(&str, u16), String> {
+    let (body, status) = output.rsplit_once('\n').ok_or_else(|| {
+        "Google Translate output did not include an HTTP status code.".to_string()
+    })?;
+    let status = status
+        .trim()
+        .parse::<u16>()
+        .map_err(|error| format!("Google Translate status was not numeric: {error}"))?;
+    Ok((body, status))
+}
+
+fn percent_encode_query(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,6 +353,34 @@ mod tests {
         assert_eq!(
             translation_configuration_error("en", TranslationModel::Google, true, false, false),
             None
+        );
+    }
+
+    #[test]
+    fn google_translate_curl_request_matches_legacy_form_fields() {
+        let request = build_google_translate_curl_request("hello world", "auto", "es-MX", "a b")
+            .expect("build google translate request");
+
+        assert_eq!(request.program, "curl");
+        assert!(request.args.contains(&"q=hello world".to_string()));
+        assert!(request.args.contains(&"target=es".to_string()));
+        assert!(request.args.contains(&"format=text".to_string()));
+        assert!(!request.args.iter().any(|arg| arg == "source=auto"));
+        assert!(request.args.iter().any(|arg| arg.ends_with("key=a%20b")));
+    }
+
+    #[test]
+    fn google_translate_parser_reports_success_and_api_errors() {
+        let success = r#"{"data":{"translations":[{"translatedText":"hola"}]}}"#;
+        assert_eq!(
+            parse_google_translate_response(&format!("{success}\n200")).as_deref(),
+            Ok("hola")
+        );
+
+        let failure = r#"{"error":{"message":"bad key"}}"#;
+        assert_eq!(
+            parse_google_translate_response(&format!("{failure}\n403")).unwrap_err(),
+            "bad key"
         );
     }
 }
