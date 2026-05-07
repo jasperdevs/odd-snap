@@ -58,13 +58,14 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import existing image/media history from the current SQLite history database or legacy JSON indexes when no Rust history file exists.
 - Rust startup can import existing color history from the current SQLite history database or legacy color JSON indexes.
 - Rust startup can import existing OCR text history from the current SQLite history database or legacy OCR JSON indexes.
+- Rust startup can import existing QR/barcode scan history from the current SQLite history database.
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
 - Windows can parse, register, listen for, and unregister process-local global hotkeys.
 - Windows has a Rust screenshot-exclusion service boundary backed by `SetWindowDisplayAffinity`.
 - Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.
-- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, OCR routes to the Rust OCR capture foundation, and scan/sticker/upscale/center/ruler report explicit pending parity.
+- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, OCR routes to the Rust OCR capture foundation, Scan routes to the Rust QR/barcode scan foundation, ruler routes to region measurement, and sticker/upscale/center report explicit pending parity.
 - Windows hotkey listener can dispatch imported full-screen and active-window capture hotkeys into the GPUI shell.
 - Windows hotkey listener can dispatch the imported color-picker hotkey into the Rust color sampling path.
 - macOS has an app-level global hotkey listener foundation through `global-hotkey`; the manager is created during GPUI app startup so it stays on the main application thread.
@@ -74,7 +75,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Imported OCR hotkeys are registered and routed on Windows/macOS/Linux startup; they start the Rust OCR capture foundation instead of being silently dropped.
 - Default capture mode `OCR` is modeled as an implemented OCR action instead of a pending advanced-tool fallback.
 - Imported ruler hotkeys and default ruler mode can now select a region, copy `widthxheight px @ x,y`, and report the measured dimensions.
-- Imported scan, sticker, upscale, center, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; they currently report explicit pending parity statuses instead of being silently dropped.
+- Imported scan, sticker, upscale, center, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; Scan starts the Rust QR/barcode scan foundation, while sticker/upscale/center/scroll-capture still report explicit pending parity statuses instead of being silently dropped.
 - Pending advanced tool metadata is centralized in the Rust app registry for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
 - Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.
@@ -128,6 +129,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust now has a cross-platform OCR service boundary backed by native Windows WinRT OCR with Tesseract fallback and Tesseract CLI foundations on macOS/Linux, with OCR button, hotkey, tray/menu, and default-capture routing plus persisted recent text history.
 - macOS OCR now tries a native Vision `VNRecognizeTextRequest` Swift command path before falling back to Tesseract.
 - The GPUI shell now shows an inline OCR result panel for the latest recognized text, with copy and translate actions, so OCR results are inspectable instead of only copied/truncated in recent rows.
+- Rust now has a QR/barcode scan foundation that captures a selected region, decodes QR/Aztec/Data Matrix/PDF417 and common 1D formats through a Rust ZXing-style decoder, copies decoded text, and persists recent scan history.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Recent OCR text rows can run the Google Translate API path through curl when a migrated API key is present, then copy the translated text.
 - Recent OCR text rows can run Argos Translate through the Python-backed legacy language-pack install/translate script when the runtime is marked installed.

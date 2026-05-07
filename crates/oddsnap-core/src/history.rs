@@ -60,6 +60,13 @@ pub struct OcrHistoryEntry {
     pub captured_at_unix_ms: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CodeHistoryEntry {
+    pub text: String,
+    pub format: String,
+    pub captured_at_unix_ms: u64,
+}
+
 impl ColorHistoryEntry {
     pub fn new(hex: impl Into<String>) -> Self {
         Self {
@@ -73,6 +80,16 @@ impl OcrHistoryEntry {
     pub fn new(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
+            captured_at_unix_ms: unix_millis_now(),
+        }
+    }
+}
+
+impl CodeHistoryEntry {
+    pub fn new(text: impl Into<String>, format: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            format: format.into(),
             captured_at_unix_ms: unix_millis_now(),
         }
     }
@@ -118,6 +135,8 @@ pub struct HistoryIndex {
     pub colors: Vec<ColorHistoryEntry>,
     #[serde(default)]
     pub ocr_entries: Vec<OcrHistoryEntry>,
+    #[serde(default)]
+    pub code_entries: Vec<CodeHistoryEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -210,6 +229,20 @@ impl HistoryStore {
         let mut index = self.load_or_default()?;
         index.ocr_entries.insert(0, entry);
         index.ocr_entries.truncate(500);
+        self.save(&index)?;
+        Ok(index)
+    }
+
+    pub fn append_code_entry(
+        &self,
+        entry: CodeHistoryEntry,
+    ) -> Result<HistoryIndex, HistoryStoreError> {
+        let mut index = self.load_or_default()?;
+        index.code_entries.retain(|existing| {
+            !(existing.text == entry.text && existing.format.eq_ignore_ascii_case(&entry.format))
+        });
+        index.code_entries.insert(0, entry);
+        index.code_entries.truncate(200);
         self.save(&index)?;
         Ok(index)
     }

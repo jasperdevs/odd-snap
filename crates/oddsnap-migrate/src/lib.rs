@@ -5,9 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use oddsnap_core::{
-    normalize_file_name_template, AppSettings, CaptureImageFormat, ColorHistoryEntry,
-    DefaultCaptureMode, HistoryEntry, HistoryIndex, HistoryKind, OcrHistoryEntry, RecordingFormat,
-    RecordingQuality, ToastPosition,
+    normalize_file_name_template, AppSettings, CaptureImageFormat, CodeHistoryEntry,
+    ColorHistoryEntry, DefaultCaptureMode, HistoryEntry, HistoryIndex, HistoryKind,
+    OcrHistoryEntry, RecordingFormat, RecordingQuality, ToastPosition,
 };
 use rusqlite::Connection;
 use serde_json::Value;
@@ -615,6 +615,7 @@ pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryInde
             entries: Vec::new(),
             colors,
             ocr_entries,
+            code_entries: Vec::new(),
         });
     }
 
@@ -622,7 +623,10 @@ pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryInde
 }
 
 fn history_index_has_content(index: &HistoryIndex) -> bool {
-    !index.entries.is_empty() || !index.colors.is_empty() || !index.ocr_entries.is_empty()
+    !index.entries.is_empty()
+        || !index.colors.is_empty()
+        || !index.ocr_entries.is_empty()
+        || !index.code_entries.is_empty()
 }
 
 fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> {
@@ -700,11 +704,18 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
             source,
         }
     })?;
+    let code_entries = import_code_history_database(&connection).map_err(|source| {
+        MigrationError::ReadHistoryDatabase {
+            path: path.to_path_buf(),
+            source,
+        }
+    })?;
 
     Ok(HistoryIndex {
         entries,
         colors,
         ocr_entries,
+        code_entries,
     })
 }
 
@@ -758,6 +769,45 @@ fn import_ocr_history_database(
         }
         entries.push(OcrHistoryEntry {
             text: text.to_string(),
+            captured_at_unix_ms: dotnet_datetime_binary_to_unix_ms(captured_at_ticks)
+                .unwrap_or_default(),
+        });
+    }
+    Ok(entries)
+}
+
+fn import_code_history_database(
+    connection: &Connection,
+) -> Result<Vec<CodeHistoryEntry>, rusqlite::Error> {
+    if !sqlite_table_exists(connection, "code_entries")? {
+        return Ok(Vec::new());
+    }
+
+    let mut statement = connection.prepare(
+        "SELECT text, format, captured_at_ticks FROM code_entries ORDER BY captured_at_ticks DESC LIMIT 200",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, i64>(2)?,
+        ))
+    })?;
+    let mut entries = Vec::new();
+    for row in rows {
+        let (text, format, captured_at_ticks) = row?;
+        let text = text.trim();
+        let format = format.trim();
+        if text.is_empty() {
+            continue;
+        }
+        entries.push(CodeHistoryEntry {
+            text: text.to_string(),
+            format: if format.is_empty() {
+                "UNKNOWN".into()
+            } else {
+                format.to_string()
+            },
             captured_at_unix_ms: dotnet_datetime_binary_to_unix_ms(captured_at_ticks)
                 .unwrap_or_default(),
         });
@@ -829,6 +879,7 @@ fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
         entries,
         colors: Vec::new(),
         ocr_entries: Vec::new(),
+        code_entries: Vec::new(),
     })
 }
 
@@ -1644,6 +1695,11 @@ mod tests {
                 CREATE TABLE ocr_entries (
                     text TEXT NOT NULL,
                     captured_at_ticks INTEGER NOT NULL
+                );
+                CREATE TABLE code_entries (
+                    text TEXT NOT NULL,
+                    format TEXT NOT NULL,
+                    captured_at_ticks INTEGER NOT NULL
                 );",
             )
             .expect("create table");
@@ -1668,6 +1724,12 @@ mod tests {
                 [legacy_ocr_ticks],
             )
             .expect("insert ocr row");
+        connection
+            .execute(
+                "INSERT INTO code_entries(text, format, captured_at_ticks) VALUES ('https://example.test', 'QR_CODE', ?1)",
+                [legacy_ocr_ticks],
+            )
+            .expect("insert code row");
 
         let paths = LegacyOddSnapPaths {
             roaming_dir: root.join("roaming"),
@@ -1690,6 +1752,13 @@ mod tests {
         assert_eq!(index.ocr_entries[0].text, "legacy ocr text");
         assert_eq!(
             index.ocr_entries[0].captured_at_unix_ms,
+            legacy_ocr_unix_ms as u64
+        );
+        assert_eq!(index.code_entries.len(), 1);
+        assert_eq!(index.code_entries[0].text, "https://example.test");
+        assert_eq!(index.code_entries[0].format, "QR_CODE");
+        assert_eq!(
+            index.code_entries[0].captured_at_unix_ms,
             legacy_ocr_unix_ms as u64
         );
         let _ = fs::remove_dir_all(root);

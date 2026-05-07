@@ -6,6 +6,7 @@ pub mod jobs;
 pub mod media;
 pub mod native_ui;
 pub mod ocr;
+pub mod scan;
 pub mod settings;
 pub mod translation;
 pub mod upload;
@@ -16,8 +17,8 @@ pub use filename_template::{
     DEFAULT_FILE_NAME_TEMPLATE, LEGACY_DEFAULT_FILE_NAME_TEMPLATE,
 };
 pub use history::{
-    default_history_path, ColorHistoryEntry, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
-    HistoryStoreError, OcrHistoryEntry,
+    default_history_path, CodeHistoryEntry, ColorHistoryEntry, HistoryEntry, HistoryIndex,
+    HistoryKind, HistoryStore, HistoryStoreError, OcrHistoryEntry,
 };
 pub use image_search::{
     apply_image_search_ocr_error, apply_image_search_ocr_success, build_image_search_text,
@@ -39,6 +40,9 @@ pub use media::{
 };
 pub use native_ui::{NativeMaterial, NativeUiProfile};
 pub use ocr::{format_recognized_ocr_text, OcrLineLayout};
+pub use scan::{
+    decode_barcode_image, humanize_barcode_format, BarcodeScanError, BarcodeScanResult,
+};
 pub use settings::{
     default_settings_path, AppSettings, CaptureImageFormat, DefaultCaptureMode, RecordingFormat,
     RecordingQuality, SettingDefinition, SettingsOptionDefinition, SettingsPageDefinition,

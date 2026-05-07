@@ -8,10 +8,15 @@ rust-version.workspace = true
 
 [dependencies]
 chrono.workspace = true
+image.workspace = true
 regex.workspace = true
+rxing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+rxing = { workspace = true, features = ["encoders"] }
 
 [lints]
 workspace = true

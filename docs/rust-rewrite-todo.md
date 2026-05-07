@@ -40,8 +40,9 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows dedicated full-screen and active-window hotkey routing.
 - [x] Windows imported color-picker hotkey routing.
 - [x] Imported OCR hotkey routing starts the Rust OCR capture path instead of being dropped.
+- [x] Imported scan hotkey routing starts the Rust QR/barcode scan foundation instead of being dropped.
 - [x] Imported ruler hotkey routing measures a selected region and copies dimensions.
-- [x] Imported scan/sticker/upscale/center/scroll/AI hotkey routing reports pending parity instead of being dropped.
+- [x] Imported sticker/upscale/center/scroll/AI hotkey routing reports pending parity instead of being dropped.
 - [x] Pending advanced tool metadata is centralized for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - [x] Duplicate imported hotkeys are rejected before platform registration.
 - [x] Windows topmost transparent overlay window foundation.
@@ -157,6 +158,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI inline OCR result panel with copy and translate actions for the latest recognized text.
 - [x] macOS Vision OCR command-backed foundation before Tesseract fallback.
 - [ ] macOS OCR language discovery/install status, detached result window, translation polish, sound/toast polish, and production cleanup.
+- [x] QR/barcode scan foundation decodes captured regions with a Rust ZXing-style decoder, copies decoded text, and persists recent scan history.
 - [ ] Translation.
 - [x] Core translation model, supported-language normalization, source/target resolution, and runtime configuration error rules ported from legacy.
 - [x] Google Translate API curl request/response path wired to recent OCR text rows when a migrated API key is present.
@@ -206,6 +208,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Import existing history.
 - [x] Import existing color history.
 - [x] Import existing OCR history.
+- [x] Import existing QR/barcode scan history from the current SQLite history database.
 - [ ] Import existing media metadata where practical.
 - [ ] Windows full parity verification.
 - [ ] macOS full parity verification.

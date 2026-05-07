@@ -19,16 +19,17 @@ use gpui::{
 use gpui_platform::application;
 use oddsnap_core::{
     apply_image_search_ocr_error, apply_image_search_ocr_success, build_available_capture_path,
-    build_video_thumbnail_args, build_video_thumbnail_fallback_args, default_history_path,
-    default_image_search_index_path, default_settings_path, discover_ffmpeg_tools,
-    format_file_name_template, history_entry_can_be_image_indexed,
-    image_search_record_matches_history_entry, image_search_record_needs_ocr,
-    pending_image_search_record_from_history_entry, retain_indexed_image_paths,
-    upsert_image_search_record, AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat,
-    ColorHistoryEntry, DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex,
-    HistoryKind, HistoryStore, ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore,
-    ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
-    SettingsStore, TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
+    build_video_thumbnail_args, build_video_thumbnail_fallback_args, decode_barcode_image,
+    default_history_path, default_image_search_index_path, default_settings_path,
+    discover_ffmpeg_tools, format_file_name_template, history_entry_can_be_image_indexed,
+    humanize_barcode_format, image_search_record_matches_history_entry,
+    image_search_record_needs_ocr, pending_image_search_record_from_history_entry,
+    retain_indexed_image_paths, upsert_image_search_record, AiChatProvider, AppSettings,
+    CapabilityState, CaptureImageFormat, CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode,
+    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
+    ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchSources,
+    OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore,
+    TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
@@ -117,7 +118,9 @@ struct OddSnapRustApp {
     capture_history: Vec<CaptureHistoryEntry>,
     color_history: Vec<ColorHistoryEntry>,
     ocr_history: Vec<OcrHistoryEntry>,
+    code_history: Vec<CodeHistoryEntry>,
     latest_ocr_result: Option<String>,
+    latest_scan_result: Option<CodeHistoryEntry>,
     image_search: image_search::ImageSearchUiState,
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
@@ -296,8 +299,10 @@ impl OddSnapRustApp {
         let capture_history =
             history_entries_to_capture_history(history_index.clone(), &image_search_index);
         let color_history = history_entries_to_color_history(history_index.clone());
-        let ocr_history = history_entries_to_ocr_history(history_index);
+        let ocr_history = history_entries_to_ocr_history(history_index.clone());
+        let code_history = history_entries_to_code_history(history_index);
         let latest_ocr_result = ocr_history.first().map(|entry| entry.text.clone());
+        let latest_scan_result = code_history.first().cloned();
         let permission_status = host_permission_status();
         let media_status = match discover_ffmpeg_tools() {
             Some(tools) => {
@@ -358,7 +363,9 @@ impl OddSnapRustApp {
             capture_history,
             color_history,
             ocr_history,
+            code_history,
             latest_ocr_result,
+            latest_scan_result,
             image_search: image_search::ImageSearchUiState::new(),
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
@@ -552,6 +559,7 @@ impl OddSnapRustApp {
                             ))
                             .child(self.color_picker_button(cx))
                             .child(self.ocr_button(cx))
+                            .child(self.scan_button(cx))
                             .child(self.recording_button(cx))
                             .child(self.recording_target_button(cx))
                             .child(self.recording_region_button(cx)),
@@ -893,6 +901,46 @@ impl OddSnapRustApp {
             body = body.child(self.ocr_result_panel(cx, text));
         }
 
+        body = body.child(div().text_size(px(13.0)).child("Recent QR/barcode scans"));
+        if self.code_history.is_empty() {
+            body = body.child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0x8b93a3))
+                    .child("No QR/barcode scans yet."),
+            );
+        } else {
+            for entry in self.code_history.iter().take(3) {
+                body = body.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.0))
+                        .rounded(px(6.0))
+                        .bg(rgb(0x1d2027))
+                        .px(px(10.0))
+                        .py(px(8.0))
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                                .child(SharedString::from(humanize_barcode_format(&entry.format))),
+                        )
+                        .child(
+                            div()
+                                .line_clamp(2)
+                                .text_size(px(12.0))
+                                .child(SharedString::from(entry.text.clone())),
+                        )
+                        .child(self.copy_code_text_button(cx, entry.text.clone())),
+                );
+            }
+        }
+
+        if let Some(entry) = self.latest_scan_result.as_ref() {
+            body = body.child(self.scan_result_panel(cx, entry));
+        }
+
         body = body.child(div().text_size(px(13.0)).child("Recent captures"));
         if self.settings.show_image_search_bar {
             body = body.child(self.image_search_bar(cx));
@@ -1157,6 +1205,35 @@ impl OddSnapRustApp {
             )
     }
 
+    fn scan_result_panel(
+        &self,
+        cx: &mut Context<Self>,
+        entry: &CodeHistoryEntry,
+    ) -> impl IntoElement {
+        ui::surface_style(div())
+            .flex()
+            .flex_col()
+            .gap(px(7.0))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_size(px(13.0)).child(SharedString::from(format!(
+                        "{} result",
+                        humanize_barcode_format(&entry.format)
+                    ))))
+                    .child(self.copy_code_text_button(cx, entry.text.clone())),
+            )
+            .child(
+                div()
+                    .line_clamp(8)
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::BODY_TEXT))
+                    .child(SharedString::from(entry.text.clone())),
+            )
+    }
+
     fn capture_preview(&self, preview_path: PathBuf) -> impl IntoElement {
         div()
             .h(px(180.0))
@@ -1283,6 +1360,16 @@ impl OddSnapRustApp {
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
                 this.run_ocr_capture("OCR button");
+                cx.notify();
+            }))
+    }
+
+    fn scan_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(div().id("scan-button"), ui::ButtonVariant::Capture)
+            .child("Scan")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.run_scan_capture("Scan button");
                 cx.notify();
             }))
     }
@@ -1453,6 +1540,22 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.translate_ocr_history_text(text.clone());
+            cx.notify();
+        }))
+    }
+
+    fn copy_code_text_button(&self, cx: &mut Context<Self>, text: String) -> impl IntoElement {
+        ui::action_button_style(
+            div().id(SharedString::from(format!(
+                "copy-code-{}",
+                stable_text_key(&text)
+            ))),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_code_history_text(text.clone());
             cx.notify();
         }))
     }
@@ -1866,6 +1969,101 @@ impl OddSnapRustApp {
         })
     }
 
+    fn run_scan_capture(&mut self, trigger: &'static str) {
+        if self.settings.capture_delay_seconds > 0 {
+            self.capture_status = format!(
+                "Waiting {}s before QR/barcode scan.",
+                self.settings.capture_delay_seconds
+            );
+            thread::sleep(Duration::from_secs(
+                self.settings.capture_delay_seconds as u64,
+            ));
+        }
+
+        let platform = host_platform();
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.run_scan_capture_with_adapter(&adapter, CaptureMode::Rectangle)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.run_scan_capture_with_macos_adapter(&adapter, CaptureMode::Rectangle)
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.run_scan_capture_with_adapter(&adapter, CaptureMode::Rectangle)
+        };
+
+        self.capture_status = match result {
+            Ok(status) => format!("{trigger} received. {status}"),
+            Err(error) => format!("{} scan failed: {error}", platform.name()),
+        };
+    }
+
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    fn run_scan_capture_with_adapter<T>(
+        &mut self,
+        adapter: &T,
+        mode: CaptureMode,
+    ) -> Result<String, oddsnap_platform::PlatformError>
+    where
+        T: ScreenCaptureService
+            + WindowPickerService
+            + RegionSelectionService
+            + ClipboardTextService,
+    {
+        let capture = self.capture_with_adapter(adapter, mode)?;
+        self.finish_scan_capture(adapter, capture)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn run_scan_capture_with_macos_adapter(
+        &mut self,
+        adapter: &oddsnap_platform_macos::MacosPlatform,
+        mode: CaptureMode,
+    ) -> Result<String, oddsnap_platform::PlatformError> {
+        let capture = self.capture_with_macos_adapter(adapter, mode)?;
+        self.finish_scan_capture(adapter, capture)
+    }
+
+    fn finish_scan_capture<T>(
+        &mut self,
+        adapter: &T,
+        capture: CaptureResult,
+    ) -> Result<String, oddsnap_platform::PlatformError>
+    where
+        T: ClipboardTextService,
+    {
+        let captured_path = capture.image_path.clone();
+        let decoded = decode_barcode_image(&captured_path);
+        let _ = fs::remove_file(&captured_path);
+        let decoded =
+            decoded.map_err(|error| oddsnap_platform::PlatformError::Failed(error.to_string()))?;
+        let Some(decoded) = decoded else {
+            return Ok("Scan found no QR/barcode.".into());
+        };
+
+        let copy_error = adapter
+            .copy_text_to_clipboard(&decoded.text)
+            .err()
+            .map(|error| error.to_string());
+        let entry = CodeHistoryEntry::new(decoded.text, decoded.format);
+        let format_label = humanize_barcode_format(&entry.format);
+        self.latest_scan_result = Some(entry.clone());
+        let history_status = self.save_code_history(entry);
+        Ok(match copy_error {
+            Some(error) => {
+                format!("{format_label} found; clipboard copy failed ({error}){history_status}.")
+            }
+            None => format!("{format_label} found and copied{history_status}."),
+        })
+    }
+
     fn run_default_capture_command(&mut self, trigger: &'static str) {
         match default_capture_action(self.settings.default_capture_mode) {
             DefaultCaptureAction::Capture(mode) => {
@@ -1878,6 +2076,9 @@ impl OddSnapRustApp {
             }
             DefaultCaptureAction::Ocr => {
                 self.run_ocr_capture(trigger);
+            }
+            DefaultCaptureAction::Scan => {
+                self.run_scan_capture(trigger);
             }
             DefaultCaptureAction::Ruler => {
                 self.run_ruler_measure(trigger);
@@ -1967,6 +2168,26 @@ impl OddSnapRustApp {
                 "; OCR history saved".into()
             }
             Err(error) => format!("; OCR history save failed: {error}"),
+        }
+    }
+
+    fn save_code_history(&mut self, entry: CodeHistoryEntry) -> String {
+        if !self.settings.save_history {
+            self.code_history.retain(|existing| {
+                !(existing.text == entry.text
+                    && existing.format.eq_ignore_ascii_case(&entry.format))
+            });
+            self.code_history.insert(0, entry);
+            self.code_history.truncate(12);
+            return String::new();
+        }
+
+        match self.history_store.append_code_entry(entry) {
+            Ok(index) => {
+                self.code_history = history_entries_to_code_history(index);
+                "; scan history saved".into()
+            }
+            Err(error) => format!("; scan history save failed: {error}"),
         }
     }
 
@@ -2497,6 +2718,15 @@ impl OddSnapRustApp {
         };
     }
 
+    fn copy_code_history_text(&mut self, text: String) {
+        let result = copy_text_to_host_clipboard(&text);
+
+        self.capture_status = match result {
+            Ok(()) => "QR/barcode text copied.".into(),
+            Err(error) => format!("Copy QR/barcode text failed: {error}"),
+        };
+    }
+
     fn translate_ocr_history_text(&mut self, text: String) {
         self.capture_status = match ocr_translation::translate_ocr_text(&text, &self.settings) {
             Ok(translated) => match copy_text_to_host_clipboard(&translated.text) {
@@ -2662,7 +2892,7 @@ impl OddSnapRustApp {
                 self.run_ocr_capture("OCR hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Scan => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Scan);
+                self.run_scan_capture("Scan hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Sticker => {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::Sticker);
@@ -2711,7 +2941,7 @@ impl OddSnapRustApp {
                 self.run_ocr_capture("OCR hotkey");
             }
             CrossPlatformHotkeyEvent::Scan => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Scan);
+                self.run_scan_capture("Scan hotkey");
             }
             CrossPlatformHotkeyEvent::Sticker => {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::Sticker);
@@ -3892,6 +4122,10 @@ fn history_entries_to_ocr_history(index: HistoryIndex) -> Vec<OcrHistoryEntry> {
     index.ocr_entries.into_iter().take(12).collect()
 }
 
+fn history_entries_to_code_history(index: HistoryIndex) -> Vec<CodeHistoryEntry> {
+    index.code_entries.into_iter().take(12).collect()
+}
+
 fn history_kind_label(kind: HistoryKind) -> &'static str {
     match kind {
         HistoryKind::Image => "Image",
@@ -4753,12 +4987,15 @@ mod tests {
             DefaultCaptureAction::Ocr
         ));
         assert!(matches!(
+            default_capture_action(DefaultCaptureMode::Scan),
+            DefaultCaptureAction::Scan
+        ));
+        assert!(matches!(
             default_capture_action(DefaultCaptureMode::Ruler),
             DefaultCaptureAction::Ruler
         ));
 
         for (mode, tool) in [
-            (DefaultCaptureMode::Scan, PendingTool::Scan),
             (DefaultCaptureMode::Sticker, PendingTool::Sticker),
             (DefaultCaptureMode::Upscale, PendingTool::Upscale),
             (DefaultCaptureMode::Center, PendingTool::Center),
@@ -4773,8 +5010,8 @@ mod tests {
     #[test]
     fn pending_default_capture_status_is_explicit() {
         assert_eq!(
-            pending_default_capture_status("Capture hotkey", PendingTool::Scan),
-            "Capture hotkey received; default capture mode 'Scan' needs Rust scan parity."
+            pending_default_capture_status("Capture hotkey", PendingTool::Sticker),
+            "Capture hotkey received; default capture mode 'Sticker' needs Rust sticker/background removal parity."
         );
     }
 
@@ -5398,6 +5635,7 @@ mod tests {
                 })
                 .collect(),
             ocr_entries: Vec::new(),
+            code_entries: Vec::new(),
         };
 
         let colors = history_entries_to_color_history(index);
