@@ -240,6 +240,7 @@ impl UploadDestination {
                 | Self::WebDav
                 | Self::AzureBlob
                 | Self::Ftp
+                | Self::S3Compatible
         )
     }
 }
@@ -863,6 +864,44 @@ pub fn build_curl_upload_request_with_settings(
                 upload_url,
             ]);
         }
+        UploadDestination::S3Compatible => {
+            let endpoint = s3_endpoint_url(&settings.s3_endpoint)?;
+            let bucket = settings.s3_bucket.trim();
+            if bucket.is_empty() {
+                return Err(missing_upload_setting("S3 bucket"));
+            }
+            let access_key = settings.s3_access_key.trim();
+            if access_key.is_empty() {
+                return Err(missing_upload_setting("S3 access key"));
+            }
+            if settings.s3_secret_key.trim().is_empty() {
+                return Err(missing_upload_setting("S3 secret key"));
+            }
+
+            let key = s3_object_key(file_path, settings)?;
+            let object_url = append_url_path_segments(&endpoint, [bucket, &key]);
+            success_url = Some(if settings.s3_public_url.trim().is_empty() {
+                object_url.clone()
+            } else {
+                append_url_path_segments(settings.s3_public_url.trim(), [key.as_str()])
+            });
+            let region = if settings.s3_region.trim().is_empty() {
+                "auto"
+            } else {
+                settings.s3_region.trim()
+            };
+            args.extend([
+                "--request".into(),
+                "PUT".into(),
+                "--aws-sigv4".into(),
+                format!("aws:amz:{region}:s3"),
+                "--user".into(),
+                format!("{access_key}:{}", settings.s3_secret_key),
+                "--upload-file".into(),
+                file_path.display().to_string(),
+                object_url,
+            ]);
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -1156,11 +1195,21 @@ fn upload_file_name(file_path: &Path) -> Result<String, String> {
 }
 
 fn append_url_path(base_url: &str, file_name: &str) -> String {
-    format!(
-        "{}/{}",
-        base_url.trim_end_matches('/'),
-        percent_encode_path_component(file_name)
-    )
+    append_url_path_segments(base_url, [file_name])
+}
+
+fn append_url_path_segments<'a>(
+    base_url: &str,
+    segments: impl IntoIterator<Item = &'a str>,
+) -> String {
+    let encoded_path = segments
+        .into_iter()
+        .flat_map(|segment| segment.split('/'))
+        .filter(|segment| !segment.is_empty())
+        .map(percent_encode_path_component)
+        .collect::<Vec<_>>()
+        .join("/");
+    format!("{}/{}", base_url.trim_end_matches('/'), encoded_path)
 }
 
 fn azure_blob_urls(sas_base_url: &str, file_name: &str) -> Result<(String, String), String> {
@@ -1197,6 +1246,30 @@ fn ftp_upload_url(base_url: &str, file_name: &str) -> Result<String, String> {
         return Err("FTP URL must be a valid ftp:// or ftps:// address.".into());
     }
     Ok(append_url_path(&normalized, file_name))
+}
+
+fn s3_endpoint_url(endpoint: &str) -> Result<String, String> {
+    let mut normalized = endpoint.trim().trim_end_matches('/').to_string();
+    if normalized.is_empty() {
+        return Err(missing_upload_setting("S3 endpoint"));
+    }
+    if !normalized.contains("://") {
+        normalized = format!("https://{normalized}");
+    }
+    if !is_https_url(&normalized) {
+        return Err("S3 uploads require an HTTPS endpoint.".into());
+    }
+    Ok(normalized)
+}
+
+fn s3_object_key(file_path: &Path, settings: &UploadSettings) -> Result<String, String> {
+    let file_name = upload_file_name(file_path)?;
+    let prefix = settings.s3_path_prefix.trim().trim_matches('/');
+    Ok(if prefix.is_empty() {
+        format!("oddsnap/{file_name}")
+    } else {
+        format!("{prefix}/oddsnap/{file_name}")
+    })
 }
 
 fn percent_encode_path_component(value: &str) -> String {
@@ -1769,6 +1842,31 @@ mod tests {
         assert_eq!(
             ftp.success_url.as_deref(),
             Some("https://cdn.example.test/uploads/capture.png")
+        );
+
+        let s3 = build_curl_upload_request_with_settings(
+            UploadDestination::S3Compatible,
+            &path,
+            &UploadSettings {
+                s3_endpoint: "https://s3.example.test".into(),
+                s3_bucket: "bucket".into(),
+                s3_region: "auto".into(),
+                s3_access_key: "access".into(),
+                s3_secret_key: "secret".into(),
+                s3_path_prefix: "captures".into(),
+                s3_public_url: "https://cdn.example.test".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build s3");
+        assert!(s3.args.contains(&"aws:amz:auto:s3".into()));
+        assert!(s3.args.contains(&"access:secret".into()));
+        assert!(s3
+            .args
+            .contains(&"https://s3.example.test/bucket/captures/oddsnap/capture.png".into()));
+        assert_eq!(
+            s3.success_url.as_deref(),
+            Some("https://cdn.example.test/captures/oddsnap/capture.png")
         );
     }
 

@@ -163,6 +163,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed custom HTTP multipart uploads with imported field name, headers, and response URL extraction.
 - [x] Curl-backed WebDAV and Azure Blob SAS uploads with imported credentials/URLs and empty-success response handling.
 - [x] Curl-backed FTP/FTPS uploads with imported credentials/public URL and empty-success response handling.
+- [x] Curl-backed S3-compatible uploads using curl SigV4 support with imported endpoint/bucket/keys/public URL.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.
