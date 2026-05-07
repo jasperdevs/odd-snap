@@ -56,6 +56,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust app now has a platform-neutral annotation workspace foundation for committed annotations, previews, selection, move/scale operations, and undo/redo before the production GPUI drawing surface is wired.
 - Rust app now derives annotation toolbar visibility, labels, active tool state, and custom hotkey selection from migrated settings before the production GPUI drawing surface is wired.
 - GPUI shell now owns persistent annotation workspace/tool state and renders a selectable annotation toolbar from migrated settings instead of keeping annotation state tests-only.
+- Rust app can produce a platform-neutral annotation render plan for committed, selected, and preview annotations so GPUI/platform drawing code can share one annotation surface contract.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - Rust startup reports corrupt/unreadable Rust history instead of silently treating it as empty history.
 - GPUI recent-capture rows can reveal saved files through the host file browser on Windows/macOS, and open the containing folder on Linux where the generic `xdg-open` fallback cannot select a file.

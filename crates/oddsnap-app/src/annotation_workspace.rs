@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use oddsnap_core::{
-    hit_test_annotations, Annotation, AnnotationPoint, AnnotationRect, AnnotationToolGroup,
-    AppSettings, TOOL_DEFINITIONS,
+    hit_test_annotations, Annotation, AnnotationColor, AnnotationPoint, AnnotationRect,
+    AnnotationToolGroup, AppSettings, TOOL_DEFINITIONS,
 };
 
 const UNDO_LIMIT: usize = 100;
@@ -32,6 +32,91 @@ pub(crate) struct AnnotationToolbarTool {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct AnnotationToolState {
     active_tool_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AnnotationRenderLayer {
+    Committed,
+    Preview,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct AnnotationRenderItem {
+    pub(crate) layer: AnnotationRenderLayer,
+    pub(crate) selected: bool,
+    pub(crate) bounds: AnnotationRect,
+    pub(crate) primitive: AnnotationRenderPrimitive,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum AnnotationRenderPrimitive {
+    DrawStroke {
+        points: Vec<AnnotationPoint>,
+        color: AnnotationColor,
+    },
+    BlurRect {
+        rect: AnnotationRect,
+    },
+    Arrow {
+        from: AnnotationPoint,
+        to: AnnotationPoint,
+        color: AnnotationColor,
+    },
+    CurvedArrow {
+        points: Vec<AnnotationPoint>,
+        color: AnnotationColor,
+    },
+    Highlight {
+        rect: AnnotationRect,
+        color: AnnotationColor,
+    },
+    StepNumber {
+        position: AnnotationPoint,
+        number: u32,
+        color: AnnotationColor,
+    },
+    EraserFill {
+        rect: AnnotationRect,
+        color: AnnotationColor,
+    },
+    Text {
+        position: AnnotationPoint,
+        text: String,
+        font_size: f32,
+        color: AnnotationColor,
+        bold: bool,
+        italic: bool,
+        stroke: bool,
+        shadow: bool,
+        background: bool,
+        font_family: String,
+    },
+    Magnifier {
+        position: AnnotationPoint,
+        source_rect: AnnotationRect,
+    },
+    Emoji {
+        position: AnnotationPoint,
+        emoji: String,
+        size: f32,
+    },
+    Line {
+        from: AnnotationPoint,
+        to: AnnotationPoint,
+        color: AnnotationColor,
+    },
+    Ruler {
+        from: AnnotationPoint,
+        to: AnnotationPoint,
+    },
+    RectShape {
+        rect: AnnotationRect,
+        color: AnnotationColor,
+    },
+    CircleShape {
+        rect: AnnotationRect,
+        color: AnnotationColor,
+    },
 }
 
 impl AnnotationToolState {
@@ -119,6 +204,25 @@ pub(crate) fn annotation_toolbar_tools(settings: &AppSettings) -> Vec<Annotation
 impl AnnotationWorkspace {
     pub(crate) fn annotations(&self) -> &[Annotation] {
         &self.annotations
+    }
+
+    pub(crate) fn render_plan(&self) -> Vec<AnnotationRenderItem> {
+        let committed = self
+            .annotations
+            .iter()
+            .enumerate()
+            .map(|(index, annotation)| {
+                annotation_render_item(
+                    annotation,
+                    AnnotationRenderLayer::Committed,
+                    self.selected_index == Some(index),
+                )
+            });
+        let preview = self.preview.as_ref().map(|annotation| {
+            annotation_render_item(annotation, AnnotationRenderLayer::Preview, false)
+        });
+
+        committed.chain(preview).collect()
     }
 
     pub(crate) fn selected_index(&self) -> Option<usize> {
@@ -252,6 +356,111 @@ impl AnnotationWorkspace {
     }
 }
 
+fn annotation_render_item(
+    annotation: &Annotation,
+    layer: AnnotationRenderLayer,
+    selected: bool,
+) -> AnnotationRenderItem {
+    AnnotationRenderItem {
+        layer,
+        selected,
+        bounds: annotation.bounds(),
+        primitive: annotation_render_primitive(annotation),
+    }
+}
+
+fn annotation_render_primitive(annotation: &Annotation) -> AnnotationRenderPrimitive {
+    match annotation {
+        Annotation::DrawStroke { points, color } => AnnotationRenderPrimitive::DrawStroke {
+            points: points.clone(),
+            color: *color,
+        },
+        Annotation::BlurRect { rect } => AnnotationRenderPrimitive::BlurRect { rect: *rect },
+        Annotation::Arrow { from, to, color } => AnnotationRenderPrimitive::Arrow {
+            from: *from,
+            to: *to,
+            color: *color,
+        },
+        Annotation::CurvedArrow { points, color } => AnnotationRenderPrimitive::CurvedArrow {
+            points: points.clone(),
+            color: *color,
+        },
+        Annotation::Highlight { rect, color } => AnnotationRenderPrimitive::Highlight {
+            rect: *rect,
+            color: *color,
+        },
+        Annotation::StepNumber {
+            position,
+            number,
+            color,
+        } => AnnotationRenderPrimitive::StepNumber {
+            position: *position,
+            number: *number,
+            color: *color,
+        },
+        Annotation::EraserFill { rect, color } => AnnotationRenderPrimitive::EraserFill {
+            rect: *rect,
+            color: *color,
+        },
+        Annotation::Text {
+            position,
+            text,
+            font_size,
+            color,
+            bold,
+            italic,
+            stroke,
+            shadow,
+            background,
+            font_family,
+        } => AnnotationRenderPrimitive::Text {
+            position: *position,
+            text: text.clone(),
+            font_size: *font_size,
+            color: *color,
+            bold: *bold,
+            italic: *italic,
+            stroke: *stroke,
+            shadow: *shadow,
+            background: *background,
+            font_family: font_family.clone(),
+        },
+        Annotation::Magnifier {
+            position,
+            source_rect,
+        } => AnnotationRenderPrimitive::Magnifier {
+            position: *position,
+            source_rect: *source_rect,
+        },
+        Annotation::Emoji {
+            position,
+            emoji,
+            size,
+        } => AnnotationRenderPrimitive::Emoji {
+            position: *position,
+            emoji: emoji.clone(),
+            size: *size,
+        },
+        Annotation::Line { from, to, color } => AnnotationRenderPrimitive::Line {
+            from: *from,
+            to: *to,
+            color: *color,
+        },
+        Annotation::Ruler { from, to } => AnnotationRenderPrimitive::Ruler {
+            from: *from,
+            to: *to,
+        },
+        Annotation::RectShape { rect, color } => AnnotationRenderPrimitive::RectShape {
+            rect: *rect,
+            color: *color,
+        },
+        Annotation::CircleShape { rect, color } => AnnotationRenderPrimitive::CircleShape {
+            rect: *rect,
+            color: *color,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,6 +530,56 @@ mod tests {
         state.select_tool("select", &AppSettings::default());
         state.reconcile_with_settings(&settings);
         assert_eq!(state.active_tool_id(), None);
+    }
+
+    #[test]
+    fn render_plan_preserves_committed_selection_and_preview_order() {
+        let mut workspace = AnnotationWorkspace::default();
+        workspace.add_annotation(Annotation::Line {
+            from: AnnotationPoint { x: 0, y: 0 },
+            to: AnnotationPoint { x: 10, y: 10 },
+            color: color(),
+        });
+        workspace.add_annotation(Annotation::RectShape {
+            rect: AnnotationRect {
+                x: 20,
+                y: 20,
+                width: 30,
+                height: 40,
+            },
+            color: color(),
+        });
+        workspace.set_preview(Annotation::BlurRect {
+            rect: AnnotationRect {
+                x: 3,
+                y: 4,
+                width: 5,
+                height: 6,
+            },
+        });
+
+        let plan = workspace.render_plan();
+
+        assert_eq!(plan.len(), 3);
+        assert_eq!(plan[0].layer, AnnotationRenderLayer::Committed);
+        assert!(!plan[0].selected);
+        assert_eq!(plan[1].layer, AnnotationRenderLayer::Committed);
+        assert!(plan[1].selected);
+        assert_eq!(
+            plan[1].bounds,
+            AnnotationRect {
+                x: 20,
+                y: 20,
+                width: 30,
+                height: 40,
+            }
+        );
+        assert_eq!(plan[2].layer, AnnotationRenderLayer::Preview);
+        assert!(!plan[2].selected);
+        assert!(matches!(
+            plan[2].primitive,
+            AnnotationRenderPrimitive::BlurRect { .. }
+        ));
     }
 
     #[test]
