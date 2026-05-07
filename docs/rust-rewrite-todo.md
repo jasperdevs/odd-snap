@@ -190,6 +190,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Remote DeepAI upscale provider foundation.
 - [x] Local rembg sticker runtime foundation with active-model preparation, stroke/shadow effects, and GPU-to-CPU processing fallback.
 - [x] Local ONNX upscale runtime foundation with model download/cache, scale handling, and GPU-to-CPU processing fallback.
+- [x] macOS sticker/upscale captures route through native interactive `screencapture -i` selection instead of staying hard-blocked behind the production overlay.
 - [x] GPUI sticker controls can persist provider, Remove.bg/Photoroom API keys, local model, CPU/GPU execution, stroke, and shadow settings.
 - [x] GPUI upscale controls can persist provider, DeepAI API key, local model, CPU/GPU execution, scale, and preview-window preference.
 - [x] GPUI upscale preview window opens saved before/after result images when preview is enabled.

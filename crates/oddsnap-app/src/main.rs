@@ -2772,10 +2772,10 @@ impl OddSnapRustApp {
         };
 
         #[cfg(target_os = "macos")]
-        let result = Err(format!(
-            "macOS {} selection needs the production overlay",
-            tool.slug()
-        ));
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.run_processed_capture_with_macos_adapter(&adapter, tool)
+        };
 
         #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
         let result = {
@@ -2860,6 +2860,30 @@ impl OddSnapRustApp {
                 include_cursor: self.settings.show_cursor,
             })
             .map_err(|error| error.to_string())?;
+        self.finish_processed_capture(adapter, tool, capture)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn run_processed_capture_with_macos_adapter(
+        &self,
+        adapter: &oddsnap_platform_macos::MacosPlatform,
+        tool: ProcessedCaptureTool,
+    ) -> Result<(CaptureRunResult, String), String> {
+        let capture = adapter
+            .capture_interactive_selection(self.settings.show_cursor)
+            .map_err(|error| error.to_string())?;
+        self.finish_processed_capture(adapter, tool, capture)
+    }
+
+    fn finish_processed_capture<T>(
+        &self,
+        adapter: &T,
+        tool: ProcessedCaptureTool,
+        capture: CaptureResult,
+    ) -> Result<(CaptureRunResult, String), String>
+    where
+        T: ClipboardImageService,
+    {
         let input_path = temporary_processed_capture_path(tool, "input.png");
         let output_path = temporary_processed_capture_path(tool, "output.png");
         let source = persist_capture_to_path_as(
@@ -2869,6 +2893,9 @@ impl OddSnapRustApp {
             self.settings.jpeg_quality,
         )
         .map_err(|error| error.to_string())?;
+        if capture.image_path != source.image_path {
+            let _ = fs::remove_file(&capture.image_path);
+        }
 
         let process_result = match tool {
             ProcessedCaptureTool::Sticker => sticker_upscale::process_sticker_capture(
