@@ -1093,6 +1093,31 @@ impl OddSnapRustApp {
                 div()
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(lifecycle_settings_summary(
+                        &self.settings,
+                    ))),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "start-with-system-button",
+                        format!("Startup {}", on_off(self.settings.start_with_windows)),
+                        SettingsAction::ToggleStartWithSystem,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "auto-update-check-button",
+                        format!("Updates {}", on_off(self.settings.auto_check_for_updates)),
+                        SettingsAction::ToggleAutoCheckForUpdates,
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(format!(
                         "Recording hotkey: {}",
                         self.settings
@@ -3232,6 +3257,20 @@ impl OddSnapRustApp {
                     self.settings.recording_quality.label()
                 ));
             }
+            SettingsAction::ToggleStartWithSystem => {
+                self.settings.start_with_windows = !self.settings.start_with_windows;
+                self.persist_lifecycle_settings(format!(
+                    "Start with system {}",
+                    on_off(self.settings.start_with_windows)
+                ));
+            }
+            SettingsAction::ToggleAutoCheckForUpdates => {
+                self.settings.auto_check_for_updates = !self.settings.auto_check_for_updates;
+                self.persist_lifecycle_settings(format!(
+                    "Automatic update checks {}",
+                    on_off(self.settings.auto_check_for_updates)
+                ));
+            }
             SettingsAction::ToggleImageSearchBar => {
                 self.settings.show_image_search_bar = !self.settings.show_image_search_bar;
                 if !self.settings.show_image_search_bar {
@@ -3460,6 +3499,13 @@ impl OddSnapRustApp {
     fn persist_recording_settings(&mut self, message: String) {
         self.recording_status = match self.settings_store.save(&self.settings) {
             Ok(()) => format!("{message}."),
+            Err(error) => format!("Settings save failed: {error}"),
+        };
+    }
+
+    fn persist_lifecycle_settings(&mut self, message: String) {
+        self.capture_status = match self.settings_store.save(&self.settings) {
+            Ok(()) => format!("{message}. {}", lifecycle_settings_summary(&self.settings)),
             Err(error) => format!("Settings save failed: {error}"),
         };
     }
@@ -5853,6 +5899,23 @@ fn advanced_settings_summary_text(settings: &AppSettings) -> String {
     )
 }
 
+fn lifecycle_settings_summary(settings: &AppSettings) -> String {
+    let startup = if settings.start_with_windows {
+        "startup requested"
+    } else {
+        "startup off"
+    };
+    let updates = if settings.auto_check_for_updates {
+        "update checks requested"
+    } else {
+        "update checks off"
+    };
+
+    format!(
+        "Lifecycle prefs: {startup} · {updates} · Rust release/update channel not enabled on this branch"
+    )
+}
+
 fn sticker_settings_summary_text(settings: &AppSettings) -> String {
     let sticker_settings =
         StickerSettings::from_json_value(settings.sticker_upload_settings.as_ref());
@@ -7355,6 +7418,29 @@ mod tests {
             ..AppSettings::default()
         };
         assert_eq!(upload_settings_summary(&configured), "upload Catbox ready");
+    }
+
+    #[test]
+    fn lifecycle_summary_reports_imported_startup_and_update_flags() {
+        let disabled = AppSettings {
+            start_with_windows: false,
+            auto_check_for_updates: false,
+            ..AppSettings::default()
+        };
+        assert_eq!(
+            lifecycle_settings_summary(&disabled),
+            "Lifecycle prefs: startup off · update checks off · Rust release/update channel not enabled on this branch"
+        );
+
+        let enabled = AppSettings {
+            start_with_windows: true,
+            auto_check_for_updates: true,
+            ..AppSettings::default()
+        };
+        assert_eq!(
+            lifecycle_settings_summary(&enabled),
+            "Lifecycle prefs: startup requested · update checks requested · Rust release/update channel not enabled on this branch"
+        );
     }
 
     #[test]

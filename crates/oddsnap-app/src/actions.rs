@@ -55,6 +55,8 @@ pub(crate) enum SettingsAction {
     ScrollingCaptureMode,
     RecordingFormat,
     RecordingQuality,
+    ToggleStartWithSystem,
+    ToggleAutoCheckForUpdates,
     ToggleImageSearchBar,
     ToggleImageSearchFileName,
     ToggleImageSearchOcr,
