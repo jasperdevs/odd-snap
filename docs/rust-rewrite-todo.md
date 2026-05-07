@@ -167,6 +167,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed S3-compatible uploads using curl SigV4 support with imported endpoint/bucket/keys/public URL.
 - [x] Curl-backed SFTP uploads with imported credentials/public URL and host-key SHA-256 fingerprint pinning.
 - [x] Curl-backed GitHub uploads with imported token/repo/branch/path-prefix settings and stdin JSON payload support.
+- [x] Curl-backed Immich uploads with imported base URL/API key settings and legacy multipart metadata fields.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.

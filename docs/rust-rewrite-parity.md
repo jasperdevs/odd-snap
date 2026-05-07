@@ -116,6 +116,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust can build curl-backed S3-compatible uploads through curl SigV4 support from imported endpoint, bucket, region, access key, secret key, path prefix, and public URL settings.
 - Rust can build curl-backed SFTP uploads from imported host, port, credentials, remote path, public URL, and SHA-256 host-key fingerprint settings.
 - Rust can build curl-backed GitHub uploads from imported token/repo/branch/path-prefix settings, send the JSON content payload through curl stdin, and parse or compute the raw.githubusercontent.com URL.
+- Rust can build curl-backed Immich uploads from imported base URL/API key settings, preserve the legacy multipart metadata field set, and parse returned asset IDs into Immich photo URLs.
 - Rust core now ports the legacy OCR line-layout formatter that orders recognized lines, preserves paragraph gaps, and retains indentation in copied/viewed text.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Rust core now ports the legacy image-search query matcher for normalization, file-name/OCR source filtering, scoring, exact-match behavior, and newest-first tie-breaking.
