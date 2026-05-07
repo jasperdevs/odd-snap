@@ -696,7 +696,7 @@ mod tests {
         };
 
         assert_eq!(
-            translate_ocr_text("hello", &settings).unwrap_err(),
+            translate_ocr_text("hello", &settings).expect_err("missing Google API key"),
             "Google Translate API key not set. Add it in Settings -> OCR."
         );
     }
@@ -816,20 +816,21 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         let paths = open_source_local_runtime_paths_from_root(root.clone());
 
-        fs::create_dir_all(&paths.model_dir).unwrap();
-        fs::create_dir_all(&paths.tokenizer_dir).unwrap();
-        fs::write(paths.model_dir.join("model.bin"), b"model").unwrap();
-        fs::write(paths.tokenizer_dir.join("tokenizer_config.json"), b"{}").unwrap();
-        fs::write(&paths.runtime_version_path, b"old").unwrap();
+        fs::create_dir_all(&paths.model_dir).expect("create model dir");
+        fs::create_dir_all(&paths.tokenizer_dir).expect("create tokenizer dir");
+        fs::write(paths.model_dir.join("model.bin"), b"model").expect("write model marker");
+        fs::write(paths.tokenizer_dir.join("tokenizer_config.json"), b"{}")
+            .expect("write tokenizer marker");
+        fs::write(&paths.runtime_version_path, b"old").expect("write old runtime version");
         assert!(!has_open_source_local_runtime_files(&paths));
 
         fs::write(
             &paths.runtime_version_path,
             OPEN_SOURCE_LOCAL_RUNTIME_VERSION,
         )
-        .unwrap();
+        .expect("write current runtime version");
         assert!(has_open_source_local_runtime_files(&paths));
 
-        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(root).expect("remove runtime test root");
     }
 }

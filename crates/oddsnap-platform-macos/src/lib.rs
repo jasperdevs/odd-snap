@@ -670,13 +670,64 @@ impl OcrTextService for MacosPlatform {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MacosOcrLanguageStatus {
+    pub requested_language_tag: String,
+    pub vision_language_tag: Option<String>,
+    pub tesseract_language_arg: Option<&'static str>,
+}
+
+impl MacosOcrLanguageStatus {
+    pub fn summary(&self) -> String {
+        match (
+            self.vision_language_tag.as_deref(),
+            self.tesseract_language_arg,
+        ) {
+            (None, None) => {
+                "macOS OCR language: auto; Vision uses system-supported languages and Tesseract fallback runs without a language override.".into()
+            }
+            (Some(vision), Some(tesseract)) => format!(
+                "macOS OCR language: Vision tries {vision}; Tesseract fallback uses {tesseract}."
+            ),
+            (Some(vision), None) => format!(
+                "macOS OCR language: Vision tries {vision}; Tesseract fallback has no mapped language override."
+            ),
+            (None, Some(tesseract)) => format!(
+                "macOS OCR language: Vision auto; Tesseract fallback uses {tesseract}."
+            ),
+        }
+    }
+}
+
+pub fn macos_ocr_language_status(language_tag: &str) -> MacosOcrLanguageStatus {
+    let requested = normalize_macos_vision_language_tag(language_tag);
+    let vision_language_tag = (!requested.eq_ignore_ascii_case("auto")).then(|| requested.clone());
+    let tesseract_language_arg = oddsnap_platform::tesseract_language_arg(language_tag);
+
+    MacosOcrLanguageStatus {
+        requested_language_tag: requested,
+        vision_language_tag,
+        tesseract_language_arg,
+    }
+}
+
+fn normalize_macos_vision_language_tag(language_tag: &str) -> String {
+    let normalized = language_tag.trim().replace('_', "-");
+    if normalized.is_empty() {
+        "auto".into()
+    } else {
+        normalized
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn recognize_text_with_macos_vision(
     request: &OcrTextRequest,
 ) -> Result<OcrTextResult, PlatformError> {
+    let language_status = macos_ocr_language_status(&request.language_tag);
     let args = macos_vision_ocr_command_args(
         &request.image_path.display().to_string(),
-        &request.language_tag,
+        &language_status.requested_language_tag,
     );
     let output = Command::new("swift")
         .args(args)
@@ -744,7 +795,30 @@ let request = VNRecognizeTextRequest()
 request.recognitionLevel = .accurate
 request.usesLanguageCorrection = true
 if !languageTag.isEmpty && languageTag.lowercased() != "auto" {
-    request.recognitionLanguages = [languageTag]
+    let normalizedLanguageTag = languageTag.replacingOccurrences(of: "_", with: "-")
+    let primaryLanguageTag = normalizedLanguageTag.split(separator: "-").first.map(String.init) ?? normalizedLanguageTag
+    var languageCandidates = [normalizedLanguageTag]
+    if primaryLanguageTag != normalizedLanguageTag {
+        languageCandidates.append(primaryLanguageTag)
+    }
+
+    let supportedLanguages = (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
+        for: .accurate,
+        revision: request.revision
+    )) ?? []
+    let matchedLanguage = languageCandidates.compactMap { candidate in
+        supportedLanguages.first { supported in
+            supported.caseInsensitiveCompare(candidate) == .orderedSame
+        }
+    }.first
+
+    guard let matchedLanguage else {
+        let sample = supportedLanguages.prefix(12).joined(separator: ", ")
+        fputs("Vision OCR does not support requested language \(normalizedLanguageTag) for revision \(request.revision). Supported languages include: \(sample)\n", stderr)
+        exit(3)
+    }
+
+    request.recognitionLanguages = [matchedLanguage]
 }
 
 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
@@ -1622,9 +1696,49 @@ mod tests {
 
         assert_eq!(args[0], "-e");
         assert!(args[1].contains("VNRecognizeTextRequest"));
+        assert!(args[1].contains("supportedRecognitionLanguages"));
         assert_eq!(args[2], "--");
         assert_eq!(args[3], "/tmp/capture.png");
         assert_eq!(args[4], "en-US");
+    }
+
+    #[test]
+    fn macos_ocr_language_status_reports_vision_and_tesseract_paths() {
+        let status = super::macos_ocr_language_status("en_US");
+
+        assert_eq!(status.requested_language_tag, "en-US");
+        assert_eq!(status.vision_language_tag.as_deref(), Some("en-US"));
+        assert_eq!(status.tesseract_language_arg, Some("eng"));
+        assert_eq!(
+            status.summary(),
+            "macOS OCR language: Vision tries en-US; Tesseract fallback uses eng."
+        );
+    }
+
+    #[test]
+    fn macos_ocr_language_status_reports_auto_language() {
+        let status = super::macos_ocr_language_status("  ");
+
+        assert_eq!(status.requested_language_tag, "auto");
+        assert_eq!(status.vision_language_tag, None);
+        assert_eq!(status.tesseract_language_arg, None);
+        assert_eq!(
+            status.summary(),
+            "macOS OCR language: auto; Vision uses system-supported languages and Tesseract fallback runs without a language override."
+        );
+    }
+
+    #[test]
+    fn macos_ocr_language_status_reports_unmapped_tesseract_fallback() {
+        let status = super::macos_ocr_language_status("zz-ZZ");
+
+        assert_eq!(status.requested_language_tag, "zz-ZZ");
+        assert_eq!(status.vision_language_tag.as_deref(), Some("zz-ZZ"));
+        assert_eq!(status.tesseract_language_arg, None);
+        assert_eq!(
+            status.summary(),
+            "macOS OCR language: Vision tries zz-ZZ; Tesseract fallback has no mapped language override."
+        );
     }
 
     #[test]

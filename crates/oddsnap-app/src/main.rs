@@ -5886,7 +5886,7 @@ fn advanced_settings_summary_text(settings: &AppSettings) -> String {
         None,
     );
 
-    format!(
+    let summary = format!(
         "Advanced prefs: OCR {} · translate {}->{} via {} · {} · {} · {} · {} custom hotkeys",
         settings.ocr_language_tag,
         translation_source,
@@ -5896,7 +5896,20 @@ fn advanced_settings_summary_text(settings: &AppSettings) -> String {
         upload,
         enabled_tools,
         settings.tool_hotkeys.len()
-    )
+    );
+
+    #[cfg(target_os = "macos")]
+    let summary = {
+        let mut summary = summary;
+        summary.push_str(" · ");
+        summary.push_str(
+            &oddsnap_platform_macos::macos_ocr_language_status(&settings.ocr_language_tag)
+                .summary(),
+        );
+        summary
+    };
+
+    summary
 }
 
 fn lifecycle_settings_summary(settings: &AppSettings) -> String {

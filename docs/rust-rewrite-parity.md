@@ -145,6 +145,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust core now ports the legacy OCR line-layout formatter that orders recognized lines, preserves paragraph gaps, and retains indentation in copied/viewed text.
 - Rust now has a cross-platform OCR service boundary backed by native Windows WinRT OCR with Tesseract fallback and Tesseract CLI foundations on macOS/Linux, with OCR button, hotkey, tray/menu, and default-capture routing plus persisted recent text history.
 - macOS OCR now tries a native Vision `VNRecognizeTextRequest` Swift command path before falling back to Tesseract.
+- macOS OCR now exposes requested-language status in the GPUI advanced summary, normalizes Vision language tags, and lets Tesseract fallback take over when Vision rejects an unsupported requested language.
 - The GPUI shell now shows an inline OCR result panel for the latest recognized text, with copy and translate actions, so OCR results are inspectable instead of only copied/truncated in recent rows.
 - The GPUI shell can open a detached OCR result window with scrollable text and a copy action.
 - Recent OCR history rows can open the detached result window and remove individual persisted text entries.
@@ -172,7 +173,7 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, real-device recording/audio verification, macOS OCR language discovery/install status, OCR sound/toast polish, large-history real-runtime verification for image-search reindexing, remaining legacy history detail/bulk views, full sticker/upscale settings UI, release packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, real-device recording/audio verification, remaining macOS OCR translation/sound/toast polish, large-history real-runtime verification for image-search reindexing, remaining legacy history detail/bulk views, full sticker/upscale settings UI, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and real-device PulseAudio microphone/system-audio verification are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.

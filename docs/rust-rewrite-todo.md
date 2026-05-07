@@ -168,6 +168,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI inline OCR result panel with copy and translate actions for the latest recognized text.
 - [x] GPUI detached OCR result window with scrollable text and copy action.
 - [x] macOS Vision OCR command-backed foundation before Tesseract fallback.
+- [x] macOS OCR language status reports Vision requested-language behavior and Tesseract fallback mapping.
 - [ ] macOS OCR language discovery/install status, translation polish, sound/toast polish, and production cleanup.
 - [x] QR/barcode scan foundation decodes captured regions with a Rust ZXing-style decoder, copies decoded text, and persists recent scan history with copy/remove actions.
 - [ ] Translation.
