@@ -2025,37 +2025,88 @@ impl OddSnapRustApp {
         let mut summary = ImageSearchOcrHydrationSummary::default();
 
         for record in &mut index.records {
-            if !image_search_record_needs_ocr(record, now) {
-                summary.skipped += 1;
-                continue;
-            }
+            hydrate_image_search_record_ocr(
+                record,
+                adapter,
+                &self.settings.ocr_language_tag,
+                now,
+                &mut summary,
+            );
+        }
 
-            summary.attempted += 1;
-            record.ocr_language_tag = self.settings.ocr_language_tag.clone();
-            if !record.file_path.exists() {
-                apply_image_search_ocr_error(record, "indexed image file no longer exists", now);
-                summary.failed += 1;
-                continue;
-            }
+        self.image_search_index_store
+            .save(&index)
+            .map_err(|error| error.to_string())?;
+        self.image_search_index_status = image_search_index_status(&index);
 
-            match adapter.recognize_text(OcrTextRequest {
-                image_path: record.file_path.clone(),
-                language_tag: record.ocr_language_tag.clone(),
-            }) {
-                Ok(result) => {
-                    let text = result.text.trim().to_string();
-                    if text.is_empty() {
-                        summary.empty += 1;
-                    } else {
-                        summary.indexed += 1;
-                    }
-                    apply_image_search_ocr_success(record, text, result.engine_id, now);
-                }
-                Err(error) => {
-                    apply_image_search_ocr_error(record, error.to_string(), now);
-                    summary.failed += 1;
-                }
-            }
+        let history_index = self
+            .history_store
+            .load_or_default()
+            .map_err(|error| error.to_string())?;
+        self.refresh_capture_history(history_index);
+        Ok(summary)
+    }
+
+    fn auto_hydrate_image_search_ocr_for_path(&mut self, path: &Path) -> String {
+        if !self.settings.auto_index_images {
+            return String::new();
+        }
+
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.hydrate_image_search_ocr_path_with_adapter(&adapter, path)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.hydrate_image_search_ocr_path_with_adapter(&adapter, path)
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.hydrate_image_search_ocr_path_with_adapter(&adapter, path)
+        };
+
+        match result {
+            Ok(summary) => image_search_auto_ocr_status(&summary),
+            Err(error) => format!("; image OCR index failed: {error}"),
+        }
+    }
+
+    fn hydrate_image_search_ocr_path_with_adapter<T>(
+        &mut self,
+        adapter: &T,
+        path: &Path,
+    ) -> Result<ImageSearchOcrHydrationSummary, String>
+    where
+        T: OcrTextService,
+    {
+        let mut index = self
+            .image_search_index_store
+            .load_or_default()
+            .map_err(|error| error.to_string())?;
+        let now = app_unix_millis_now();
+        let mut summary = ImageSearchOcrHydrationSummary::default();
+
+        if let Some(record) = index
+            .records
+            .iter_mut()
+            .find(|record| record.file_path == path)
+        {
+            hydrate_image_search_record_ocr(
+                record,
+                adapter,
+                &self.settings.ocr_language_tag,
+                now,
+                &mut summary,
+            );
+        }
+
+        if summary.attempted == 0 {
+            return Ok(summary);
         }
 
         self.image_search_index_store
@@ -3002,11 +3053,14 @@ impl OddSnapRustApp {
         match self.history_store.append_entry(entry) {
             Ok(index) => {
                 let image_search_status = self.sync_pending_image_search_entry(&indexed_entry);
+                let image_search_ocr_status =
+                    self.auto_hydrate_image_search_ocr_for_path(&indexed_entry.file_path);
                 self.refresh_capture_history(index);
                 format!(
-                    "{}{}",
+                    "{}{}{}",
                     upload_history_status(self.capture_history.first()),
-                    image_search_status
+                    image_search_status,
+                    image_search_ocr_status
                 )
             }
             Err(error) => format!("; history failed: {error}"),
@@ -3531,6 +3585,63 @@ fn image_search_ocr_hydration_status(summary: &ImageSearchOcrHydrationSummary) -
         "Image OCR index refreshed: {} with text, {} empty, {} failed, {} skipped.",
         summary.indexed, summary.empty, summary.failed, summary.skipped
     )
+}
+
+fn image_search_auto_ocr_status(summary: &ImageSearchOcrHydrationSummary) -> String {
+    match (
+        summary.attempted,
+        summary.indexed,
+        summary.empty,
+        summary.failed,
+    ) {
+        (0, _, _, _) => String::new(),
+        (_, indexed, _, 0) if indexed > 0 => "; image OCR indexed".into(),
+        (_, 0, empty, 0) if empty > 0 => "; image OCR found no text".into(),
+        (_, _, _, failed) if failed > 0 => "; image OCR index failed".into(),
+        _ => String::new(),
+    }
+}
+
+fn hydrate_image_search_record_ocr<T>(
+    record: &mut ImageSearchIndexRecord,
+    adapter: &T,
+    language_tag: &str,
+    now: u64,
+    summary: &mut ImageSearchOcrHydrationSummary,
+) where
+    T: OcrTextService,
+{
+    if !image_search_record_needs_ocr(record, now) {
+        summary.skipped += 1;
+        return;
+    }
+
+    summary.attempted += 1;
+    record.ocr_language_tag = language_tag.to_string();
+    if !record.file_path.exists() {
+        apply_image_search_ocr_error(record, "indexed image file no longer exists", now);
+        summary.failed += 1;
+        return;
+    }
+
+    match adapter.recognize_text(OcrTextRequest {
+        image_path: record.file_path.clone(),
+        language_tag: record.ocr_language_tag.clone(),
+    }) {
+        Ok(result) => {
+            let text = result.text.trim().to_string();
+            if text.is_empty() {
+                summary.empty += 1;
+            } else {
+                summary.indexed += 1;
+            }
+            apply_image_search_ocr_success(record, text, result.engine_id, now);
+        }
+        Err(error) => {
+            apply_image_search_ocr_error(record, error.to_string(), now);
+            summary.failed += 1;
+        }
+    }
 }
 
 fn file_name_for_path(path: &Path) -> String {
@@ -4880,6 +4991,55 @@ mod tests {
         ];
 
         assert_eq!(newest_history_image_path(&history), Some(image));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[derive(Debug)]
+    struct FakeOcrTextService;
+
+    impl OcrTextService for FakeOcrTextService {
+        fn recognize_text(
+            &self,
+            request: OcrTextRequest,
+        ) -> Result<oddsnap_platform::OcrTextResult, oddsnap_platform::PlatformError> {
+            assert_eq!(request.language_tag, "en-US");
+            Ok(oddsnap_platform::OcrTextResult {
+                text: " Settings window ".into(),
+                engine_id: "fake-ocr".into(),
+            })
+        }
+    }
+
+    #[test]
+    fn hydrate_image_search_record_ocr_indexes_trimmed_text() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-image-search-ocr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp test root");
+        let image = root.join("settings.png");
+        std::fs::write(&image, b"fake image").expect("write image");
+        let history_entry =
+            HistoryEntry::from_capture_file(image.clone(), 10, 10, HistoryKind::Image)
+                .expect("history entry");
+        let mut record =
+            pending_image_search_record_from_history_entry(&history_entry, "auto", "pending")
+                .expect("pending record");
+        let mut summary = ImageSearchOcrHydrationSummary::default();
+
+        hydrate_image_search_record_ocr(
+            &mut record,
+            &FakeOcrTextService,
+            "en-US",
+            123,
+            &mut summary,
+        );
+
+        assert_eq!(summary.attempted, 1);
+        assert_eq!(summary.indexed, 1);
+        assert_eq!(record.ocr_text, "Settings window");
+        assert_eq!(record.ocr_engine_id, "fake-ocr");
+        assert_eq!(record.ocr_language_tag, "en-US");
+
         let _ = std::fs::remove_dir_all(root);
     }
 
