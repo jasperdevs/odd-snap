@@ -37,6 +37,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows dedicated full-screen and active-window hotkey routing.
 - [x] Windows imported color-picker hotkey routing.
 - [x] Imported OCR hotkey routing reports pending OCR parity instead of being dropped.
+- [x] Duplicate imported hotkeys are rejected before platform registration.
 - [x] Windows topmost transparent overlay window foundation.
 - [x] Windows screenshot exclusion service foundation.
 - [x] Windows monitor enumeration.
