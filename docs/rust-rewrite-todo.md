@@ -43,6 +43,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows topmost transparent overlay window foundation.
 - [x] Windows screenshot exclusion service foundation.
 - [x] Windows monitor enumeration.
+- [x] Windows monitor enumeration fails explicitly instead of silently falling back to synthetic virtual-screen data.
 - [x] Windows system DPI mapping for monitor scale.
 - [ ] Windows per-monitor DPI verification.
 - [x] macOS command-backed screen recording and Accessibility permission detection and failure guidance.

@@ -84,14 +84,13 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
     DispatchMessageW, DrawIconEx, GetCursorInfo, GetCursorPos, GetForegroundWindow, GetIconInfo,
-    GetMessageW, GetSystemMetrics, GetWindow, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-    IsWindowVisible, LoadIconW, PeekMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassW,
+    GetMessageW, GetWindow, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, IsWindowVisible,
+    LoadIconW, PeekMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassW,
     SetForegroundWindow, SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowPos,
     ShowWindow, TrackPopupMenu, TranslateMessage, CURSORINFO, CURSOR_SHOWING, DI_NORMAL,
     GW_HWNDNEXT, HMENU, HWND_MESSAGE, HWND_TOPMOST, ICONINFO, IDI_APPLICATION, LWA_ALPHA,
-    MF_SEPARATOR, MF_STRING, MSG, PM_NOREMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-    SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
-    SW_SHOW, TPM_LEFTALIGN, TPM_RETURNCMD, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+    MF_SEPARATOR, MF_STRING, MSG, PM_NOREMOVE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    SWP_SHOWWINDOW, SW_SHOW, TPM_LEFTALIGN, TPM_RETURNCMD, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
     WINDOW_DISPLAY_AFFINITY, WINDOW_EX_STYLE, WM_APP, WM_ERASEBKGND, WM_HOTKEY, WM_KEYDOWN,
     WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED,
     WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_OVERLAPPED, WS_POPUP,
@@ -2081,10 +2080,12 @@ fn enumerate_windows_monitors() -> Result<Vec<MonitorInfo>, PlatformError> {
     }
 
     if monitors.is_empty() {
-        return fallback_virtual_screen_monitor();
+        Err(PlatformError::Failed(
+            "EnumDisplayMonitors returned no displays".into(),
+        ))
+    } else {
+        Ok(monitors)
     }
-
-    Ok(monitors)
 }
 
 #[cfg(target_os = "windows")]
@@ -2127,30 +2128,6 @@ fn monitor_bounds(monitor: HMONITOR) -> Option<RECT> {
     };
     let success = unsafe { GetMonitorInfoW(monitor, &mut info) };
     success.as_bool().then_some(info.rcMonitor)
-}
-
-#[cfg(target_os = "windows")]
-fn fallback_virtual_screen_monitor() -> Result<Vec<MonitorInfo>, PlatformError> {
-    let x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
-    let y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
-    let width = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
-    let height = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
-
-    if width <= 0 || height <= 0 {
-        return Err(PlatformError::Failed(
-            "Windows returned an empty virtual screen".into(),
-        ));
-    }
-
-    Ok(vec![MonitorInfo {
-        id: "windows-virtual-screen".into(),
-        name: "Virtual screen".into(),
-        x,
-        y,
-        width: width as u32,
-        height: height as u32,
-        scale_percent: system_scale_percent(),
-    }])
 }
 
 #[cfg(target_os = "windows")]
@@ -2849,7 +2826,7 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "windows")]
-    fn windows_monitor_enumeration_returns_virtual_screen() {
+    fn windows_monitor_enumeration_returns_display_entries() {
         use oddsnap_platform::ScreenCaptureService;
 
         let adapter = WindowsPlatform;

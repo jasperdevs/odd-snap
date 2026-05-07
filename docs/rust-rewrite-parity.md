@@ -12,7 +12,7 @@ The Rust rewrite must not replace the current app until this document and the li
   - macOS: Liquid Glass aligned.
   - Linux: freedesktop adaptive.
 - Legacy settings JSON can be located and parsed without requiring the full old C# schema.
-- Windows monitor enumeration returns the virtual-screen bounds through the platform service.
+- Windows monitor enumeration returns real display entries through the platform service instead of silently inventing a virtual-screen monitor when enumeration returns none.
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
 - macOS has a command-backed `screencapture` still-capture foundation for full-screen and explicit-region PNG captures.
 - macOS has command-backed monitor enumeration through AppKit/JXA, including screen origin, size, and backing scale.
