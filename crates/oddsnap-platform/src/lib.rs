@@ -315,6 +315,56 @@ fn save_capture_file_as(
     }
 }
 
+pub fn image_file_to_windows_dib_bytes(path: &Path) -> Result<Vec<u8>, PlatformError> {
+    let image = image::open(path)
+        .map_err(|source| {
+            PlatformError::Failed(format!("failed to decode clipboard image: {source}"))
+        })?
+        .to_rgba8();
+    let width = image.width();
+    let height = image.height();
+    if width == 0 || height == 0 {
+        return Err(PlatformError::Failed("clipboard image is empty".into()));
+    }
+
+    let width_i32 = i32::try_from(width)
+        .map_err(|_| PlatformError::Failed("clipboard image width is too large".into()))?;
+    let height_i32 = i32::try_from(height)
+        .map_err(|_| PlatformError::Failed("clipboard image height is too large".into()))?;
+    let row_len = (width as usize)
+        .checked_mul(4)
+        .ok_or_else(|| PlatformError::Failed("clipboard image row is too large".into()))?;
+    let pixel_bytes_len = row_len
+        .checked_mul(height as usize)
+        .ok_or_else(|| PlatformError::Failed("clipboard image is too large".into()))?;
+    let pixel_bytes_len_u32 = u32::try_from(pixel_bytes_len)
+        .map_err(|_| PlatformError::Failed("clipboard image is too large".into()))?;
+
+    let mut dib = Vec::with_capacity(40 + pixel_bytes_len);
+    dib.extend_from_slice(&40u32.to_le_bytes());
+    dib.extend_from_slice(&width_i32.to_le_bytes());
+    dib.extend_from_slice(&height_i32.to_le_bytes());
+    dib.extend_from_slice(&1u16.to_le_bytes());
+    dib.extend_from_slice(&32u16.to_le_bytes());
+    dib.extend_from_slice(&0u32.to_le_bytes());
+    dib.extend_from_slice(&pixel_bytes_len_u32.to_le_bytes());
+    dib.extend_from_slice(&0i32.to_le_bytes());
+    dib.extend_from_slice(&0i32.to_le_bytes());
+    dib.extend_from_slice(&0u32.to_le_bytes());
+    dib.extend_from_slice(&0u32.to_le_bytes());
+
+    let pixels = image.as_raw();
+    for y in (0..height as usize).rev() {
+        let row_start = y * row_len;
+        let row = &pixels[row_start..row_start + row_len];
+        for pixel in row.chunks_exact(4) {
+            dib.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
+        }
+    }
+
+    Ok(dib)
+}
+
 pub trait HotkeyService: Send + Sync {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError>;
 }
@@ -394,8 +444,9 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        persist_capture_to_directory, persist_capture_to_directory_as, persist_capture_to_path_as,
-        virtual_screen_region, CaptureRegion, CaptureResult, ColorSample, MonitorInfo,
+        image_file_to_windows_dib_bytes, persist_capture_to_directory,
+        persist_capture_to_directory_as, persist_capture_to_path_as, virtual_screen_region,
+        CaptureRegion, CaptureResult, ColorSample, MonitorInfo,
     };
     use oddsnap_core::CaptureImageFormat;
 
@@ -577,6 +628,74 @@ mod tests {
 
         assert_eq!(saved.image_path, destination);
         assert!(saved.image_path.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn image_file_to_windows_dib_bytes_converts_png_to_bottom_up_bgra() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-platform-dib-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp test root");
+        let source = root.join("source.png");
+        let mut image = image::RgbaImage::new(2, 2);
+        image.put_pixel(0, 0, image::Rgba([10, 20, 30, 255]));
+        image.put_pixel(1, 0, image::Rgba([40, 50, 60, 255]));
+        image.put_pixel(0, 1, image::Rgba([70, 80, 90, 255]));
+        image.put_pixel(1, 1, image::Rgba([100, 110, 120, 255]));
+        image
+            .save_with_format(&source, image::ImageFormat::Png)
+            .expect("write source png");
+
+        let dib = image_file_to_windows_dib_bytes(&source).expect("DIB bytes");
+
+        assert_eq!(&dib[0..4], &40u32.to_le_bytes());
+        assert_eq!(&dib[4..8], &2i32.to_le_bytes());
+        assert_eq!(&dib[8..12], &2i32.to_le_bytes());
+        assert_eq!(&dib[12..14], &1u16.to_le_bytes());
+        assert_eq!(&dib[14..16], &32u16.to_le_bytes());
+        assert_eq!(&dib[16..20], &0u32.to_le_bytes());
+        assert_eq!(&dib[20..24], &16u32.to_le_bytes());
+        assert_eq!(
+            &dib[40..],
+            &[90, 80, 70, 255, 120, 110, 100, 255, 30, 20, 10, 255, 60, 50, 40, 255]
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn image_file_to_windows_dib_bytes_accepts_jpeg_and_bmp_files() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-platform-dib-formats-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp test root");
+        let source = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            2,
+            1,
+            image::Rgba([10, 20, 30, 255]),
+        ));
+
+        for (file_name, format) in [
+            ("source.jpg", image::ImageFormat::Jpeg),
+            ("source.bmp", image::ImageFormat::Bmp),
+        ] {
+            let path = root.join(file_name);
+            source
+                .save_with_format(&path, format)
+                .expect("write source image");
+
+            let dib = image_file_to_windows_dib_bytes(&path).expect("DIB bytes");
+
+            assert_eq!(&dib[0..4], &40u32.to_le_bytes());
+            assert_eq!(&dib[4..8], &2i32.to_le_bytes());
+            assert_eq!(&dib[8..12], &1i32.to_le_bytes());
+            assert_eq!(&dib[14..16], &32u16.to_le_bytes());
+            assert_eq!(dib.len(), 40 + 8);
+        }
+
         let _ = fs::remove_dir_all(root);
     }
 }

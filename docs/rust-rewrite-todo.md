@@ -71,6 +71,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Monthly save folder persistence for saved captures.
 - [x] Capture image format persistence for PNG/JPEG/BMP.
 - [x] Windows image clipboard foundation.
+- [x] Windows image clipboard supports saved PNG/JPEG/BMP captures.
 - [x] Windows text clipboard foundation.
 - [x] Windows cursor color sampling and clipboard copy foundation.
 - [x] Rust color history persistence and recent-color copy actions.
