@@ -31,7 +31,7 @@ use oddsnap_core::{
     ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
     ScrollingCaptureMode, SettingsStore, StickerProvider, StickerSettings, TranslationModel,
     UploadDestination, UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings,
-    SUPPORTED_TRANSLATION_LANGUAGES,
+    RELEASES_PAGE_URL, SUPPORTED_TRANSLATION_LANGUAGES,
 };
 use oddsnap_platform::{
     default_capture_directory, image_file_dimensions, persist_capture_to_path_as,
@@ -1152,6 +1152,12 @@ impl OddSnapRustApp {
                         "auto-update-check-button",
                         format!("Updates {}", on_off(self.settings.auto_check_for_updates)),
                         SettingsAction::ToggleAutoCheckForUpdates,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "open-release-page-button",
+                        "Open releases".into(),
+                        SettingsAction::OpenReleasePage,
                     )),
             )
             .child(
@@ -3560,6 +3566,12 @@ impl OddSnapRustApp {
                     "Automatic update checks {}",
                     on_off(self.settings.auto_check_for_updates)
                 ));
+            }
+            SettingsAction::OpenReleasePage => {
+                self.capture_status = match open_external_url(RELEASES_PAGE_URL) {
+                    Ok(()) => "Opened OddSnap releases page.".into(),
+                    Err(error) => format!("Open releases failed: {error}"),
+                };
             }
             SettingsAction::ToggleImageSearchBar => {
                 self.settings.show_image_search_bar = !self.settings.show_image_search_bar;

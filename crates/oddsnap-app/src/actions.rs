@@ -60,6 +60,7 @@ pub(crate) enum SettingsAction {
     RecordingQuality,
     ToggleStartWithSystem,
     ToggleAutoCheckForUpdates,
+    OpenReleasePage,
     ToggleImageSearchBar,
     ToggleImageSearchFileName,
     ToggleImageSearchOcr,
