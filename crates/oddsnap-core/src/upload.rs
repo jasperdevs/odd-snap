@@ -249,6 +249,7 @@ impl UploadDestination {
                 | Self::GitHub
                 | Self::Immich
                 | Self::Dropbox
+                | Self::OneDrive
         )
     }
 }
@@ -504,6 +505,11 @@ pub struct DropboxCurlUploadPlan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OneDriveCurlUploadPlan {
+    pub upload: CurlUploadRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UploadSuccess {
     pub url: String,
     pub provider_name: String,
@@ -729,6 +735,83 @@ pub fn build_dropbox_curl_upload_plan(
         upload,
         create_shared_link,
         list_shared_links,
+    })
+}
+
+pub fn build_onedrive_curl_upload_plan(
+    file_path: &Path,
+    settings: &UploadSettings,
+) -> Result<OneDriveCurlUploadPlan, String> {
+    let token = settings.one_drive_access_token.trim();
+    if token.is_empty() {
+        return Err(missing_upload_setting("OneDrive access token"));
+    }
+    let body = std::fs::read(file_path)
+        .map_err(|error| format!("OneDrive upload could not read file: {error}"))?;
+    let upload = CurlUploadRequest {
+        destination: UploadDestination::OneDrive,
+        provider_name: UploadDestination::OneDrive.display_name(),
+        program: "curl".into(),
+        args: curl_base_args()
+            .into_iter()
+            .chain([
+                "--request".into(),
+                "PUT".into(),
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "--header".into(),
+                "Content-Type: application/octet-stream".into(),
+                "--data-binary".into(),
+                "@-".into(),
+                onedrive_upload_url(file_path, settings)?,
+            ])
+            .collect(),
+        stdin_body: Some(body),
+        success_url: None,
+    };
+    Ok(OneDriveCurlUploadPlan { upload })
+}
+
+pub fn build_onedrive_create_link_request(
+    item_id: &str,
+    settings: &UploadSettings,
+) -> Result<CurlUploadRequest, String> {
+    let token = settings.one_drive_access_token.trim();
+    if token.is_empty() {
+        return Err(missing_upload_setting("OneDrive access token"));
+    }
+    let item_id = item_id.trim();
+    if item_id.is_empty() {
+        return Err("OneDrive returned no item ID.".into());
+    }
+    let body = serde_json::json!({
+        "type": "view",
+        "scope": "anonymous",
+    })
+    .to_string();
+    Ok(CurlUploadRequest {
+        destination: UploadDestination::OneDrive,
+        provider_name: UploadDestination::OneDrive.display_name(),
+        program: "curl".into(),
+        args: curl_base_args()
+            .into_iter()
+            .chain([
+                "--request".into(),
+                "POST".into(),
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "--header".into(),
+                "Content-Type: application/json".into(),
+                "--data-binary".into(),
+                "@-".into(),
+                format!(
+                    "https://graph.microsoft.com/v1.0/me/drive/items/{}/createLink",
+                    percent_encode_path_component(item_id)
+                ),
+            ])
+            .collect(),
+        stdin_body: Some(body.into_bytes()),
+        success_url: None,
     })
 }
 
@@ -1075,6 +1158,9 @@ pub fn build_curl_upload_request_with_settings(
         UploadDestination::Dropbox => {
             return Err("Dropbox uploads use the multi-step Rust curl backend.".into());
         }
+        UploadDestination::OneDrive => {
+            return Err("OneDrive uploads use the multi-step Rust curl backend.".into());
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -1176,6 +1262,38 @@ pub fn dropbox_shared_link_already_exists(output: &str) -> bool {
         return false;
     }
     body.contains("shared_link_already_exists")
+}
+
+pub fn parse_onedrive_upload_item_id(output: &str) -> Result<String, String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if !(200..300).contains(&status_code) {
+        return Err(build_upload_error("OneDrive", status_code, body));
+    }
+    let node: Value = serde_json::from_str(body)
+        .map_err(|error| format!("OneDrive returned invalid JSON: {error}"))?;
+    node.get("id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "OneDrive returned no item ID.".into())
+}
+
+pub fn parse_onedrive_create_link_output(output: &str) -> Result<UploadSuccess, String> {
+    let (body, status_code) = split_curl_body_and_status(output)?;
+    if !(200..300).contains(&status_code) {
+        return Err(build_upload_error("OneDrive", status_code, body));
+    }
+    let node: Value = serde_json::from_str(body)
+        .map_err(|error| format!("OneDrive returned invalid JSON: {error}"))?;
+    let url = node
+        .get("link")
+        .and_then(|link| link.get("webUrl"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| "OneDrive returned no sharing link.".to_string())?;
+    parse_plain_url("OneDrive", url).map(|url| UploadSuccess {
+        url,
+        provider_name: UploadDestination::OneDrive.display_name(),
+    })
 }
 
 pub fn parse_upload_response(
@@ -1497,6 +1615,25 @@ fn dropbox_upload_path(file_path: &Path, settings: &UploadSettings) -> Result<St
     } else {
         format!("/{prefix}/{file_name}")
     })
+}
+
+fn onedrive_upload_url(file_path: &Path, settings: &UploadSettings) -> Result<String, String> {
+    let file_name = upload_file_name(file_path)?;
+    let folder = settings.one_drive_folder.trim().trim_matches('/');
+    let path = if folder.is_empty() {
+        percent_encode_path_component(&file_name)
+    } else {
+        folder
+            .split('/')
+            .chain([file_name.as_str()])
+            .filter(|segment| !segment.is_empty())
+            .map(percent_encode_path_component)
+            .collect::<Vec<_>>()
+            .join("/")
+    };
+    Ok(format!(
+        "https://graph.microsoft.com/v1.0/me/drive/root:/{path}:/content"
+    ))
 }
 
 fn append_url_path_segments<'a>(
@@ -2533,6 +2670,45 @@ mod tests {
     }
 
     #[test]
+    fn builds_onedrive_curl_upload_plan_and_create_link_request() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-onedrive-upload-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let path = root.join("capture file.png");
+        fs::write(&path, b"png").expect("write upload file");
+
+        let settings = UploadSettings {
+            one_drive_access_token: "onedrive-token".into(),
+            one_drive_folder: "OddSnap/Captures".into(),
+            ..UploadSettings::default()
+        };
+        let plan = build_onedrive_curl_upload_plan(&path, &settings).expect("build onedrive plan");
+
+        assert!(plan
+            .upload
+            .args
+            .contains(&"Authorization: Bearer onedrive-token".into()));
+        assert!(plan.upload.args.contains(
+            &"https://graph.microsoft.com/v1.0/me/drive/root:/OddSnap/Captures/capture%20file.png:/content".into()
+        ));
+        assert_eq!(plan.upload.stdin_body.as_deref(), Some(b"png".as_slice()));
+
+        let create_link =
+            build_onedrive_create_link_request("item id", &settings).expect("create link request");
+        assert!(create_link.args.contains(
+            &"https://graph.microsoft.com/v1.0/me/drive/items/item%20id/createLink".into()
+        ));
+        let body = String::from_utf8(create_link.stdin_body.expect("link body")).expect("utf8");
+        assert!(body.contains("\"type\":\"view\""));
+        assert!(body.contains("\"scope\":\"anonymous\""));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn parses_upload_responses_for_public_hosts() {
         assert_eq!(
             parse_upload_response(
@@ -2649,6 +2825,24 @@ mod tests {
             r#"{"error":{".tag":"shared_link_already_exists"}}
 409"#
         ));
+
+        assert_eq!(
+            parse_onedrive_upload_item_id(
+                r#"{"id":"item-id"}
+201"#,
+            )
+            .expect("parse onedrive item id"),
+            "item-id"
+        );
+        assert_eq!(
+            parse_onedrive_create_link_output(
+                r#"{"link":{"webUrl":"https://1drv.ms/u/s!abc"}}
+200"#,
+            )
+            .expect("parse onedrive link")
+            .url,
+            "https://1drv.ms/u/s!abc"
+        );
 
         assert_eq!(
             parse_upload_response(UploadDestination::Catbox, "https://files.catbox.moe/a.png")

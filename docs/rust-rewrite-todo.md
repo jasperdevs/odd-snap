@@ -169,6 +169,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed GitHub uploads with imported token/repo/branch/path-prefix settings and stdin JSON payload support.
 - [x] Curl-backed Immich uploads with imported base URL/API key settings and legacy multipart metadata fields.
 - [x] Curl-backed Dropbox upload/share-link flow with imported access token/path-prefix settings and existing-link fallback.
+- [x] Curl-backed OneDrive upload/create-link flow with imported access token/folder settings.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.

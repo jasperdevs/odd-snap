@@ -46,12 +46,14 @@ pub use translation::{
 };
 pub use upload::{
     build_curl_upload_request, build_curl_upload_request_with_settings,
-    build_dropbox_curl_upload_plan, build_google_lens_url, dropbox_shared_link_already_exists,
+    build_dropbox_curl_upload_plan, build_google_lens_url, build_onedrive_create_link_request,
+    build_onedrive_curl_upload_plan, dropbox_shared_link_already_exists,
     normalize_ai_chat_upload_destination, parse_curl_upload_output,
     parse_curl_upload_output_with_settings, parse_curl_upload_output_with_success_url,
     parse_dropbox_list_shared_links_output, parse_dropbox_shared_link_output,
-    parse_dropbox_upload_ack, parse_upload_response, parse_upload_response_with_settings,
-    should_upload_media, temporary_host_fallbacks, upload_preflight_for_explicit_media,
-    upload_preflight_for_media, AiChatProvider, CurlUploadRequest, DropboxCurlUploadPlan,
+    parse_dropbox_upload_ack, parse_onedrive_create_link_output, parse_onedrive_upload_item_id,
+    parse_upload_response, parse_upload_response_with_settings, should_upload_media,
+    temporary_host_fallbacks, upload_preflight_for_explicit_media, upload_preflight_for_media,
+    AiChatProvider, CurlUploadRequest, DropboxCurlUploadPlan, OneDriveCurlUploadPlan,
     UploadDestination, UploadPreflight, UploadSettings, UploadSuccess,
 };

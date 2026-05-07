@@ -2866,6 +2866,9 @@ fn run_curl_upload(
     if destination == UploadDestination::Dropbox {
         return run_dropbox_curl_upload(path, settings);
     }
+    if destination == UploadDestination::OneDrive {
+        return run_onedrive_curl_upload(path, settings);
+    }
 
     let request =
         oddsnap_core::build_curl_upload_request_with_settings(destination, path, settings)?;
@@ -2900,6 +2903,20 @@ fn run_dropbox_curl_upload(
         }
         Err(error) => Err(append_curl_stderr(error, &link_stderr)),
     }
+}
+
+fn run_onedrive_curl_upload(
+    path: &Path,
+    settings: &UploadSettings,
+) -> Result<oddsnap_core::UploadSuccess, String> {
+    let plan = oddsnap_core::build_onedrive_curl_upload_plan(path, settings)?;
+    let (upload_stdout, upload_stderr) = run_curl_request(&plan.upload)?;
+    let item_id = oddsnap_core::parse_onedrive_upload_item_id(&upload_stdout)
+        .map_err(|error| append_curl_stderr(error, &upload_stderr))?;
+    let create_link = oddsnap_core::build_onedrive_create_link_request(&item_id, settings)?;
+    let (link_stdout, link_stderr) = run_curl_request(&create_link)?;
+    oddsnap_core::parse_onedrive_create_link_output(&link_stdout)
+        .map_err(|error| append_curl_stderr(error, &link_stderr))
 }
 
 fn run_curl_request(request: &oddsnap_core::CurlUploadRequest) -> Result<(String, String), String> {
