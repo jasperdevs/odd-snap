@@ -206,24 +206,15 @@ fn run_linux_screenshot(
     for (program, args) in linux_screenshot_commands(region, include_cursor, &output_path) {
         match Command::new(&program).args(&args).status() {
             Ok(status) if status.success() => {
-                let capture_region = match region {
-                    Some(region) => region.clone(),
-                    None => {
-                        let (width, height) =
-                            oddsnap_platform::image_file_dimensions(&output_path)?;
-                        CaptureRegion {
-                            x: 0,
-                            y: 0,
-                            width,
-                            height,
-                        }
+                match linux_capture_region_from_output(region, &output_path) {
+                    Ok(capture_region) => {
+                        return Ok(CaptureResult {
+                            image_path: output_path,
+                            region: capture_region,
+                        });
                     }
-                };
-
-                return Ok(CaptureResult {
-                    image_path: output_path,
-                    region: capture_region,
-                });
+                    Err(error) => errors.push(format!("{program} wrote invalid output: {error}")),
+                }
             }
             Ok(status) => errors.push(format!("{program} exited with status {status}")),
             Err(error) => errors.push(format!("{program}: {error}")),
@@ -234,6 +225,23 @@ fn run_linux_screenshot(
         "no Linux screenshot command succeeded: {}",
         errors.join("; ")
     )))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_capture_region_from_output(
+    requested_region: Option<&CaptureRegion>,
+    output_path: &Path,
+) -> Result<CaptureRegion, PlatformError> {
+    let (width, height) = oddsnap_platform::image_file_dimensions(output_path)?;
+    match requested_region {
+        Some(region) => Ok(region.clone()),
+        None => Ok(CaptureRegion {
+            x: 0,
+            y: 0,
+            width,
+            height,
+        }),
+    }
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -1165,6 +1173,57 @@ mod tests {
                 ]
             )
         );
+    }
+
+    #[test]
+    fn linux_capture_region_from_output_requires_decodable_image() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-linux-capture-output-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp test root");
+
+        let missing = root.join("missing.png");
+        let error = super::linux_capture_region_from_output(None, &missing)
+            .expect_err("missing screenshot output rejected");
+        assert!(error.to_string().contains("image"));
+
+        let valid = root.join("valid.png");
+        std::fs::write(
+            &valid,
+            [
+                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0,
+                1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 224,
+                18, 145, 251, 15, 0, 3, 74, 1, 66, 143, 246, 24, 176, 0, 0, 0, 0, 73, 69, 78, 68,
+                174, 66, 96, 130,
+            ],
+        )
+        .expect("write valid png");
+
+        assert_eq!(
+            super::linux_capture_region_from_output(None, &valid).expect("read image dimensions"),
+            oddsnap_platform::CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1
+            }
+        );
+
+        let requested = oddsnap_platform::CaptureRegion {
+            x: -10,
+            y: 20,
+            width: 30,
+            height: 40,
+        };
+        assert_eq!(
+            super::linux_capture_region_from_output(Some(&requested), &valid)
+                .expect("validate region output"),
+            requested
+        );
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

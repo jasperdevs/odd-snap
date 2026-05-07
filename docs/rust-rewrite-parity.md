@@ -22,6 +22,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS rectangle capture can use the native interactive `screencapture -i` selection flow from the GPUI shell; this is a system selection foundation, not the production OddSnap overlay.
 - Linux has an X11 monitor-enumeration foundation through `xrandr --query`, including multi-monitor and negative-offset virtual desktop geometry.
 - Linux has command-backed still-capture foundations for common screenshot tools (`grim`, `gnome-screenshot`, `spectacle`, or `scrot`).
+- Linux still-capture backends must now leave a readable image file before the capture is accepted, so a successful-but-empty helper command can fall through to the next backend instead of producing a broken history row.
 - Linux has command-backed interactive region selection through `slurp` on Wayland and `slop` on X11; the GPUI Region action can fall back to those selectors even when `xrandr` monitor enumeration is unavailable.
 - Linux has an X11 active-window discovery foundation through `xdotool`; active-window capture can reuse the command-backed region screenshot path when `xdotool` and a screenshot backend are available.
 - Linux has an X11 color-picker foundation through `xdotool` cursor coordinates plus a 1x1 screenshot sample, and the GPUI color action routes to that adapter on Linux.
