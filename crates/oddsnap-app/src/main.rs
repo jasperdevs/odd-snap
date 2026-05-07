@@ -217,6 +217,7 @@ impl OddSnapRustApp {
         let history_index = history_store.load_or_default().unwrap_or_default();
         let capture_history = history_entries_to_capture_history(history_index.clone());
         let color_history = history_entries_to_color_history(history_index);
+        let permission_status = host_permission_status();
         let media_status = match discover_ffmpeg_tools() {
             Some(tools) => {
                 let probe = tools
@@ -241,7 +242,10 @@ impl OddSnapRustApp {
             platform_name: platform.name().into(),
             native_ui_goal: profile.visual_goal,
             capabilities,
-            capture_status: combine_startup_status(capture_status, history_migration_status),
+            capture_status: combine_startup_status(
+                combine_startup_status(capture_status, history_migration_status),
+                permission_status,
+            ),
             settings,
             settings_store,
             settings_path,
@@ -315,6 +319,22 @@ fn combine_startup_status(base: String, extra: Option<String>) -> String {
         Some(extra) if !extra.is_empty() => format!("{base} {extra}"),
         _ => base,
     }
+}
+
+#[cfg(target_os = "macos")]
+fn host_permission_status() -> Option<String> {
+    let platform = oddsnap_platform_macos::MacosPlatform;
+    let missing = oddsnap_platform::PermissionsService::missing_permissions(&platform);
+    if missing.is_empty() {
+        None
+    } else {
+        Some(format!("Missing permissions: {}.", missing.join(", ")))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn host_permission_status() -> Option<String> {
+    None
 }
 
 fn host_platform() -> Box<dyn PlatformAdapter> {
