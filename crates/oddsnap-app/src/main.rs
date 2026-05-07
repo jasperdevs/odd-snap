@@ -1407,6 +1407,7 @@ impl OddSnapRustApp {
             .gap(px(8.0))
             .child(self.history_kind_filter_button(cx))
             .child(self.history_upload_filter_button(cx))
+            .child(self.upload_filtered_history_button(cx))
             .child(self.remove_filtered_history_button(cx))
             .child(
                 div()
@@ -1985,6 +1986,19 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.retry_history_upload(PathBuf::from(&path), kind);
+            cx.notify();
+        }))
+    }
+
+    fn upload_filtered_history_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("upload-filtered-history-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Upload filtered")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.retry_filtered_history_uploads();
             cx.notify();
         }))
     }
@@ -3850,6 +3864,42 @@ impl OddSnapRustApp {
         } else {
             format!("Upload retry needs a destination in Settings -> Uploads.{history_status}")
         };
+    }
+
+    fn retry_filtered_history_uploads(&mut self) {
+        let entries = filtered_capture_history(
+            &self.capture_history,
+            self.history_kind_filter,
+            self.history_upload_filter,
+        );
+        if entries.is_empty() {
+            self.capture_status = "No filtered history entries to upload.".into();
+            return;
+        }
+
+        let total = entries.len();
+        let mut uploaded = 0usize;
+        let mut failed = 0usize;
+        let mut missing = 0usize;
+        for entry in entries {
+            let path = PathBuf::from(&entry.path);
+            if !path.exists() {
+                missing += 1;
+                continue;
+            }
+
+            let upload = self.explicit_upload_metadata(entry.kind, &path, false);
+            if upload.url.is_some() {
+                uploaded += 1;
+            } else {
+                failed += 1;
+            }
+            let _ = self.update_history_upload_metadata(&path, &upload);
+        }
+
+        self.capture_status = format!(
+            "Filtered upload retry done: {uploaded}/{total} uploaded, {failed} failed, {missing} missing."
+        );
     }
 
     fn copy_history_path(&mut self, path: String) {

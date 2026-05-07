@@ -153,6 +153,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI history rows can remove entries from the persisted Rust history index without deleting media files.
 - [x] GPUI history rows can manually retry uploads with the current upload destination.
 - [x] GPUI media history exposes kind and upload-state filters with filter-aware empty states.
+- [x] GPUI media history can bulk-retry uploads for currently filtered rows with the current upload destination.
 - [x] GPUI media history can bulk-remove currently filtered rows from the persisted Rust history index without deleting media files.
 - [ ] Full media history UI details, bulk actions, and large-history polish.
 - [x] GPUI app has a dedicated action model module for capture modes, recording targets, pending tool routes, hotkey events, and settings actions.
