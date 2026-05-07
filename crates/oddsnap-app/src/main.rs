@@ -1435,6 +1435,7 @@ impl OddSnapRustApp {
             .gap(px(8.0))
             .child(self.history_kind_filter_button(cx))
             .child(self.history_upload_filter_button(cx))
+            .child(self.copy_filtered_upload_links_button(cx))
             .child(self.upload_filtered_history_button(cx))
             .child(self.remove_filtered_history_button(cx))
             .child(
@@ -2027,6 +2028,19 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.retry_filtered_history_uploads();
+            cx.notify();
+        }))
+    }
+
+    fn copy_filtered_upload_links_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("copy-filtered-upload-links-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy links")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_filtered_history_upload_links();
             cx.notify();
         }))
     }
@@ -3993,6 +4007,23 @@ impl OddSnapRustApp {
         );
     }
 
+    fn copy_filtered_history_upload_links(&mut self) {
+        let entries = filtered_capture_history(
+            &self.capture_history,
+            self.history_kind_filter,
+            self.history_upload_filter,
+        );
+        let Some(text) = filtered_upload_links_text(&entries) else {
+            self.capture_status = "No upload links in filtered history.".into();
+            return;
+        };
+        let link_count = text.lines().count();
+        self.capture_status = match copy_text_to_host_clipboard(&text) {
+            Ok(()) => format!("{link_count} upload links copied."),
+            Err(error) => format!("Copy filtered upload links failed: {error}"),
+        };
+    }
+
     fn copy_history_path(&mut self, path: String) {
         let result = copy_text_to_host_clipboard(&path);
 
@@ -5903,6 +5934,16 @@ fn upload_history_status(entry: Option<&CaptureHistoryEntry>) -> String {
     String::new()
 }
 
+fn filtered_upload_links_text(entries: &[CaptureHistoryEntry]) -> Option<String> {
+    let links = entries
+        .iter()
+        .filter_map(|entry| entry.upload_url.as_deref())
+        .map(str::trim)
+        .filter(|url| !url.is_empty())
+        .collect::<Vec<_>>();
+    (!links.is_empty()).then(|| links.join("\n"))
+}
+
 fn run_curl_upload(
     destination: UploadDestination,
     path: &Path,
@@ -7197,6 +7238,36 @@ mod tests {
                 .len(),
             0
         );
+    }
+
+    #[test]
+    fn filtered_upload_links_text_skips_empty_links() {
+        let mut first = CaptureHistoryEntry {
+            mode: CaptureMode::FullScreen,
+            kind: HistoryKind::Image,
+            path: "capture.png".into(),
+            file_name: "capture.png".into(),
+            preview_path: None,
+            width: 10,
+            height: 10,
+            captured_at_unix_ms: 1,
+            image_search_ocr_text: String::new(),
+            image_search_record: None,
+            upload_url: Some(" https://example.test/a.png ".into()),
+            upload_provider: Some("Example".into()),
+            upload_error: None,
+        };
+        let mut second = first.clone();
+        second.upload_url = None;
+        let mut third = first.clone();
+        third.upload_url = Some("https://example.test/b.png".into());
+
+        assert_eq!(
+            filtered_upload_links_text(&[first.clone(), second, third]).as_deref(),
+            Some("https://example.test/a.png\nhttps://example.test/b.png")
+        );
+        first.upload_url = Some(" ".into());
+        assert_eq!(filtered_upload_links_text(&[first]), None);
     }
 
     #[test]
