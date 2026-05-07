@@ -111,6 +111,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] GIF recording.
 - [x] Windows FFmpeg-backed desktop video recording start/stop foundation.
 - [x] Windows FFmpeg recording can target an explicit capture region.
+- [x] Windows recording falls back to video-only when imported audio settings are enabled.
 - [x] Linux X11 FFmpeg-backed desktop video recording start/cancel/stop foundation.
 - [x] Linux X11 FFmpeg recording can target an explicit capture region.
 - [x] Linux recording falls back to video-only when imported audio settings are enabled.

@@ -81,6 +81,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust core can build format-specific FFmpeg output arguments for GIF, MP4, WebM, and MKV recording targets.
 - Windows has a Rust platform service boundary for starting/stopping FFmpeg-backed desktop video recordings from the GPUI shell.
 - Windows FFmpeg recording requests can carry capture-region bounds into `gdigrab` offset/video-size arguments.
+- Windows recording now falls back to video-only when imported settings request microphone or desktop audio, instead of passing audio flags that the Windows recording backend does not yet implement.
 - Linux has an X11 FFmpeg-backed desktop recording foundation through `x11grab`, including explicit-region bounds for full-screen and active-window recording requests.
 - Linux recording falls back to video-only when imported settings request microphone or desktop audio, instead of blocking the whole recording before audio capture parity lands.
 - macOS has a `screencapture`-backed desktop recording foundation that records to a temporary MOV and transcodes to the requested OddSnap recording format through FFmpeg; microphone capture can request the default input, while system audio remains pending.

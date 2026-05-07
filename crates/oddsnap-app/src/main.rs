@@ -2678,13 +2678,26 @@ fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Opti
     }
 }
 
-#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
+#[cfg(target_os = "windows")]
 fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
-    (
-        settings.record_microphone,
-        settings.record_desktop_audio,
-        None,
-    )
+    if settings.record_microphone || settings.record_desktop_audio {
+        (
+            false,
+            false,
+            Some("audio capture pending on Windows; recording video only"),
+        )
+    } else {
+        (false, false, None)
+    }
+}
+
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "macos"),
+    not(target_os = "windows")
+))]
+fn recording_audio_request_for_host(_: &AppSettings) -> (bool, bool, Option<&'static str>) {
+    (false, false, None)
 }
 
 fn hotkey_capture_mode(default_mode: DefaultCaptureMode) -> CaptureMode {
@@ -3027,10 +3040,24 @@ mod tests {
             );
         }
 
-        #[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
+        #[cfg(target_os = "windows")]
         {
-            assert!(microphone);
-            assert!(desktop_audio);
+            assert!(!microphone);
+            assert!(!desktop_audio);
+            assert_eq!(
+                note,
+                Some("audio capture pending on Windows; recording video only")
+            );
+        }
+
+        #[cfg(all(
+            not(target_os = "linux"),
+            not(target_os = "macos"),
+            not(target_os = "windows")
+        ))]
+        {
+            assert!(!microphone);
+            assert!(!desktop_audio);
             assert_eq!(note, None);
         }
     }
