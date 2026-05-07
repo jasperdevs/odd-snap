@@ -2900,11 +2900,15 @@ fn reveal_history_path(path: &Path) -> Result<&'static str, String> {
     }
 
     let (program, args, action) = reveal_file_command(path);
-    Command::new(program)
+    let status = Command::new(program)
         .args(args)
-        .spawn()
-        .map(|_| action.past_tense())
-        .map_err(|error| format!("failed to run {program}: {error}"))
+        .status()
+        .map_err(|error| format!("failed to run {program}: {error}"))?;
+    if status.success() {
+        Ok(action.past_tense())
+    } else {
+        Err(format!("{program} exited with status {status}"))
+    }
 }
 
 fn copy_text_to_host_clipboard(text: &str) -> Result<(), oddsnap_platform::PlatformError> {

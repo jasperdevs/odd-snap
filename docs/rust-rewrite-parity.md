@@ -50,6 +50,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - Rust startup reports corrupt/unreadable Rust history instead of silently treating it as empty history.
 - GPUI recent-capture rows can reveal saved files through the host file browser on Windows/macOS, and open the containing folder on Linux where the generic `xdg-open` fallback cannot select a file.
+- History reveal/open actions now require the host command to exit successfully before reporting success.
 - Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
 - Rust startup can import legacy capture image format and JPEG quality settings.
 - Rust startup can import legacy file-name template and monthly-folder save settings.

@@ -108,6 +108,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Startup reports corrupt/unreadable Rust history instead of silently showing empty history.
 - [x] Post-capture image preview.
 - [x] GPUI recent-captures list can reveal saved files on Windows/macOS and open their containing folder on Linux.
+- [x] History reveal/open actions check host command exit status before reporting success.
 
 ## Milestone 4 - Recording And Media
 
