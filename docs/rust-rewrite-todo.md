@@ -147,6 +147,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] OCR.
 - [ ] Translation.
 - [ ] Image search.
+- [x] Core image-search query normalization, source filtering, scoring, and ranking ported from the legacy matcher.
 - [ ] Production color picker overlay polish.
 - [x] AI Redirect hotkey can open configured chat providers that do not require hosted-image upload and copies the newest saved image.
 - [x] Google Lens AI Redirect can upload the newest saved image through the configured AI temporary host and open the Lens URL.

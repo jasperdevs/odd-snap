@@ -1,6 +1,7 @@
 pub mod capabilities;
 pub mod filename_template;
 pub mod history;
+pub mod image_search;
 pub mod jobs;
 pub mod media;
 pub mod native_ui;
@@ -15,6 +16,10 @@ pub use filename_template::{
 pub use history::{
     default_history_path, ColorHistoryEntry, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
     HistoryStoreError,
+};
+pub use image_search::{
+    normalize_image_search_text, rank_image_search_items, score_image_search,
+    score_normalized_image_search, score_pre_normalized_image_search, ImageSearchSources,
 };
 pub use jobs::{AppJobArea, AppJobSnapshot};
 pub use media::{
