@@ -24,6 +24,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS and Linux adapters expose explicit pending capture/window/clipboard service implementations instead of missing trait surfaces.
 - Windows monitor enumeration now reports real display entries with DPI-derived scale percentages.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
+- GPUI recent-capture rows can reveal saved files through the host file browser.
 - Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
 - Rust startup can import legacy capture image format and JPEG quality settings.
 - Rust startup can import legacy file-name template and monthly-folder save settings.

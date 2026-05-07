@@ -74,6 +74,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI persisted controls for image format, clipboard copy, and cursor inclusion.
 - [x] Rust JSON media history store for saved image captures.
 - [x] Post-capture image preview.
+- [x] GPUI recent-captures list can reveal saved files in the system file browser.
 
 ## Milestone 4 - Recording And Media
 

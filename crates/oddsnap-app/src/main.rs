@@ -542,7 +542,8 @@ impl OddSnapRustApp {
                             .text_size(px(11.0))
                             .text_color(rgb(0x9ba3af))
                             .child(SharedString::from(entry.path.clone())),
-                    ),
+                    )
+                    .child(self.open_history_button(cx, entry.path.clone())),
             );
         }
 
@@ -683,6 +684,26 @@ impl OddSnapRustApp {
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
                 this.apply_settings_action(action);
+                cx.notify();
+            }))
+    }
+
+    fn open_history_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
+        div()
+            .id(SharedString::from(format!("open-history-{path}")))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(rgb(0x354052))
+            .bg(rgb(0x202733))
+            .hover(|this| this.bg(rgb(0x2a3342)))
+            .px(px(8.0))
+            .py(px(4.0))
+            .text_size(px(11.0))
+            .text_color(rgb(0xd8dde6))
+            .child("Open")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.open_history_path(PathBuf::from(&path));
                 cx.notify();
             }))
     }
@@ -832,6 +853,13 @@ impl OddSnapRustApp {
         self.recording_status = match self.settings_store.save(&self.settings) {
             Ok(()) => format!("{message}."),
             Err(error) => format!("Settings save failed: {error}"),
+        };
+    }
+
+    fn open_history_path(&mut self, path: PathBuf) {
+        self.capture_status = match reveal_file_in_system_browser(&path) {
+            Ok(()) => format!("Opened {}.", path.display()),
+            Err(error) => format!("Open failed: {error}"),
         };
     }
 
@@ -1305,6 +1333,37 @@ fn hotkey_capture_mode(default_mode: DefaultCaptureMode) -> CaptureMode {
     }
 }
 
+fn reveal_file_command(path: &Path) -> (&'static str, Vec<String>) {
+    #[cfg(target_os = "windows")]
+    {
+        ("explorer.exe", vec![format!("/select,{}", path.display())])
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        ("open", vec!["-R".into(), path.display().to_string()])
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let target = path.parent().unwrap_or(path);
+        ("xdg-open", vec![target.display().to_string()])
+    }
+}
+
+fn reveal_file_in_system_browser(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err(format!("{} does not exist", path.display()));
+    }
+
+    let (program, args) = reveal_file_command(path);
+    Command::new(program)
+        .args(args)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("failed to run {program}: {error}"))
+}
+
 fn on_off(value: bool) -> &'static str {
     if value {
         "on"
@@ -1367,5 +1426,29 @@ mod tests {
             hotkey_capture_mode(DefaultCaptureMode::Rectangle),
             CaptureMode::FullScreen
         ));
+    }
+
+    #[test]
+    fn builds_history_reveal_command_for_current_platform() {
+        let path = PathBuf::from(r"C:\captures\OddSnap.png");
+        let (program, args) = reveal_file_command(&path);
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(program, "explorer.exe");
+            assert_eq!(args, vec![r"/select,C:\captures\OddSnap.png"]);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(program, "open");
+            assert_eq!(args, vec!["-R", r"C:\captures\OddSnap.png"]);
+        }
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            assert_eq!(program, "xdg-open");
+            assert_eq!(args, vec!["."]);
+        }
     }
 }
