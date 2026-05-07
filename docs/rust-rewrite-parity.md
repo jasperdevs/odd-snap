@@ -43,6 +43,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.
 - GPUI capture smoke honors the imported capture delay and surfaces imported capture UX preferences.
 - GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
+- GPUI can persistently cycle implemented default capture mode, capture delay, crosshair, magnifier, and window-detection preferences.
 - Rust settings preserve advanced legacy preferences for OCR, translation, uploads, image search, tool visibility, custom tool hotkeys, toast timing, screenshot styling, setup state, and open-with apps.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
 - Rust FFmpeg discovery also checks bundled executable and legacy AppData locations before PATH.

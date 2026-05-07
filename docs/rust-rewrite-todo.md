@@ -74,6 +74,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI recent-captures list for capture smoke results.
 - [x] Rust settings store for capture output and clipboard preferences.
 - [x] GPUI persisted controls for image format, clipboard copy, and cursor inclusion.
+- [x] GPUI persisted controls for default capture mode, delay, crosshair, magnifier, and window detection preferences.
 - [x] Rust JSON media history store for saved image captures.
 - [x] Post-capture image preview.
 - [x] GPUI recent-captures list can reveal saved files in the system file browser.

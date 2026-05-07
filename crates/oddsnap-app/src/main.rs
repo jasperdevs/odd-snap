@@ -129,6 +129,11 @@ enum SettingsAction {
     CaptureImageFormat,
     ToggleClipboardCopy,
     ToggleCursor,
+    DefaultCaptureMode,
+    CaptureDelay,
+    ToggleCrosshair,
+    ToggleMagnifier,
+    ToggleWindowDetection,
     RecordingFormat,
     RecordingQuality,
 }
@@ -487,6 +492,47 @@ impl OddSnapRustApp {
                         "cursor-capture-button",
                         format!("Cursor {}", on_off(self.settings.show_cursor)),
                         SettingsAction::ToggleCursor,
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "default-capture-mode-button",
+                        format!("Default {}", self.settings.default_capture_mode.label()),
+                        SettingsAction::DefaultCaptureMode,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "capture-delay-button",
+                        format!("Delay {}s", self.settings.capture_delay_seconds),
+                        SettingsAction::CaptureDelay,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "crosshair-guides-button",
+                        format!(
+                            "Crosshair {}",
+                            on_off(self.settings.show_crosshair_guides)
+                        ),
+                        SettingsAction::ToggleCrosshair,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "capture-magnifier-button",
+                        format!(
+                            "Magnifier {}",
+                            on_off(self.settings.show_capture_magnifier)
+                        ),
+                        SettingsAction::ToggleMagnifier,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "window-detection-button",
+                        format!("Detect windows {}", on_off(self.settings.detect_windows)),
+                        SettingsAction::ToggleWindowDetection,
                     )),
             )
             .child(
@@ -955,6 +1001,43 @@ impl OddSnapRustApp {
                 self.persist_capture_settings(format!(
                     "Cursor capture {}",
                     on_off(self.settings.show_cursor)
+                ));
+            }
+            SettingsAction::DefaultCaptureMode => {
+                self.settings.default_capture_mode =
+                    next_default_capture_mode(self.settings.default_capture_mode);
+                self.persist_capture_settings(format!(
+                    "Default capture mode set to {}",
+                    self.settings.default_capture_mode.label()
+                ));
+            }
+            SettingsAction::CaptureDelay => {
+                self.settings.capture_delay_seconds =
+                    next_capture_delay_seconds(self.settings.capture_delay_seconds);
+                self.persist_capture_settings(format!(
+                    "Capture delay set to {}s",
+                    self.settings.capture_delay_seconds
+                ));
+            }
+            SettingsAction::ToggleCrosshair => {
+                self.settings.show_crosshair_guides = !self.settings.show_crosshair_guides;
+                self.persist_capture_settings(format!(
+                    "Crosshair guides {}",
+                    on_off(self.settings.show_crosshair_guides)
+                ));
+            }
+            SettingsAction::ToggleMagnifier => {
+                self.settings.show_capture_magnifier = !self.settings.show_capture_magnifier;
+                self.persist_capture_settings(format!(
+                    "Capture magnifier {}",
+                    on_off(self.settings.show_capture_magnifier)
+                ));
+            }
+            SettingsAction::ToggleWindowDetection => {
+                self.settings.detect_windows = !self.settings.detect_windows;
+                self.persist_capture_settings(format!(
+                    "Window detection {}",
+                    on_off(self.settings.detect_windows)
                 ));
             }
             SettingsAction::RecordingFormat => {
@@ -1670,6 +1753,31 @@ fn next_capture_image_format(format: CaptureImageFormat) -> CaptureImageFormat {
     }
 }
 
+fn next_default_capture_mode(mode: DefaultCaptureMode) -> DefaultCaptureMode {
+    match mode {
+        DefaultCaptureMode::Rectangle => DefaultCaptureMode::Fullscreen,
+        DefaultCaptureMode::Fullscreen => DefaultCaptureMode::ActiveWindow,
+        DefaultCaptureMode::ActiveWindow
+        | DefaultCaptureMode::ColorPicker
+        | DefaultCaptureMode::Ocr
+        | DefaultCaptureMode::Scan
+        | DefaultCaptureMode::Sticker
+        | DefaultCaptureMode::Upscale
+        | DefaultCaptureMode::Center
+        | DefaultCaptureMode::Ruler => DefaultCaptureMode::Rectangle,
+    }
+}
+
+fn next_capture_delay_seconds(delay: u32) -> u32 {
+    match delay {
+        0 => 1,
+        1 => 3,
+        3 => 5,
+        5 => 10,
+        _ => 0,
+    }
+}
+
 fn next_recording_format(format: RecordingFormat) -> RecordingFormat {
     match format {
         RecordingFormat::Gif => RecordingFormat::Mp4,
@@ -1760,6 +1868,27 @@ mod tests {
             next_capture_image_format(CaptureImageFormat::Bmp),
             CaptureImageFormat::Png
         );
+        assert_eq!(
+            next_default_capture_mode(DefaultCaptureMode::Rectangle),
+            DefaultCaptureMode::Fullscreen
+        );
+        assert_eq!(
+            next_default_capture_mode(DefaultCaptureMode::Fullscreen),
+            DefaultCaptureMode::ActiveWindow
+        );
+        assert_eq!(
+            next_default_capture_mode(DefaultCaptureMode::ActiveWindow),
+            DefaultCaptureMode::Rectangle
+        );
+        assert_eq!(
+            next_default_capture_mode(DefaultCaptureMode::Ocr),
+            DefaultCaptureMode::Rectangle
+        );
+        assert_eq!(next_capture_delay_seconds(0), 1);
+        assert_eq!(next_capture_delay_seconds(1), 3);
+        assert_eq!(next_capture_delay_seconds(3), 5);
+        assert_eq!(next_capture_delay_seconds(5), 10);
+        assert_eq!(next_capture_delay_seconds(10), 0);
     }
 
     #[test]
