@@ -5,6 +5,7 @@ pub mod image_search;
 pub mod jobs;
 pub mod media;
 pub mod native_ui;
+pub mod ocr;
 pub mod settings;
 pub mod upload;
 
@@ -28,6 +29,7 @@ pub use media::{
     FfmpegRecordingRequest, FfmpegThumbnailRequest, FfmpegTools,
 };
 pub use native_ui::{NativeMaterial, NativeUiProfile};
+pub use ocr::{format_recognized_ocr_text, OcrLineLayout};
 pub use settings::{
     default_settings_path, AppSettings, CaptureImageFormat, DefaultCaptureMode, RecordingFormat,
     RecordingQuality, SettingDefinition, SettingsOptionDefinition, SettingsPageDefinition,

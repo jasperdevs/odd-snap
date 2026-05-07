@@ -145,6 +145,7 @@ Keep it updated whenever a rewrite milestone lands.
 ## Milestone 5 - Advanced OddSnap Features
 
 - [ ] OCR.
+- [x] Core OCR line-layout text formatter ported from the legacy Windows OCR result flow.
 - [ ] Translation.
 - [ ] Image search.
 - [x] Core image-search query normalization, source filtering, scoring, and ranking ported from the legacy matcher.
