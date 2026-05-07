@@ -61,6 +61,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Production region selection overlay.
 - [x] Windows primitive drag region selection capture path.
 - [x] Windows primitive region-selection frame and crosshair visual feedback.
+- [x] Windows primitive region-selection window detection/snap foundation.
 - [ ] Production crosshair guides across overlay tools.
 - [ ] Magnifier.
 - [ ] Annotation drawing.

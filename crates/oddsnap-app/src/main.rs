@@ -991,6 +991,7 @@ impl OddSnapRustApp {
                         opacity: 24,
                         click_through: false,
                         show_crosshair_guides: self.settings.show_crosshair_guides,
+                        detect_windows: self.settings.detect_windows,
                     })? {
                         Some(region) => adapter.capture_region_with_options(CaptureRequest {
                             region,

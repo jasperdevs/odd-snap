@@ -39,7 +39,9 @@ use windows::Win32::Foundation::{
     COLORREF, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
 };
 #[cfg(target_os = "windows")]
-use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
+use windows::Win32::Graphics::Dwm::{
+    DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS,
+};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateSolidBrush, DeleteDC,
@@ -78,17 +80,17 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
     DispatchMessageW, DrawIconEx, GetCursorInfo, GetCursorPos, GetForegroundWindow, GetIconInfo,
-    GetMessageW, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, LoadIconW,
-    PeekMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassW, SetForegroundWindow,
-    SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowPos, ShowWindow, TrackPopupMenu,
-    TranslateMessage, CURSORINFO, CURSOR_SHOWING, DI_NORMAL, HMENU, HWND_MESSAGE, HWND_TOPMOST,
-    ICONINFO, IDI_APPLICATION, LWA_ALPHA, MF_SEPARATOR, MF_STRING, MSG, PM_NOREMOVE,
-    SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOW, TPM_LEFTALIGN, TPM_RETURNCMD,
-    WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY, WINDOW_EX_STYLE, WM_APP,
-    WM_ERASEBKGND, WM_HOTKEY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT,
-    WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
-    WS_EX_TRANSPARENT, WS_OVERLAPPED, WS_POPUP,
+    GetMessageW, GetSystemMetrics, GetWindow, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
+    IsWindowVisible, LoadIconW, PeekMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassW,
+    SetForegroundWindow, SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowPos,
+    ShowWindow, TrackPopupMenu, TranslateMessage, CURSORINFO, CURSOR_SHOWING, DI_NORMAL,
+    GW_HWNDNEXT, HMENU, HWND_MESSAGE, HWND_TOPMOST, ICONINFO, IDI_APPLICATION, LWA_ALPHA,
+    MF_SEPARATOR, MF_STRING, MSG, PM_NOREMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+    SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    SW_SHOW, TPM_LEFTALIGN, TPM_RETURNCMD, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+    WINDOW_DISPLAY_AFFINITY, WINDOW_EX_STYLE, WM_APP, WM_ERASEBKGND, WM_HOTKEY, WM_KEYDOWN,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_OVERLAPPED, WS_POPUP,
 };
 
 #[derive(Debug, Default)]
@@ -136,8 +138,10 @@ const TRAY_MENU_QUIT_ID: usize = 0x1008;
 struct WindowsRegionSelectionState {
     bounds: CaptureRegion,
     show_crosshair_guides: bool,
+    detect_windows: bool,
     start: Option<(i32, i32)>,
     current: Option<(i32, i32)>,
+    detected_window: Option<CaptureRegion>,
     result: Option<Option<CaptureRegion>>,
 }
 
@@ -1049,8 +1053,10 @@ fn run_region_selection_loop(
             WindowsRegionSelectionState {
                 bounds: request.bounds.clone(),
                 show_crosshair_guides: request.show_crosshair_guides,
+                detect_windows: request.detect_windows,
                 start: None,
                 current: None,
+                detected_window: None,
                 result: None,
             },
         );
@@ -1173,9 +1179,7 @@ unsafe extern "system" fn region_selection_window_proc(
         }
         WM_MOUSEMOVE => {
             let point = selection_lparam_point(lparam);
-            update_region_selection_state(hwnd, |state| {
-                state.current = Some(clamp_selection_point(point, &state.bounds));
-            });
+            update_region_selection_hover(hwnd, point);
             unsafe {
                 let _ = InvalidateRect(Some(hwnd), None, false);
             }
@@ -1189,6 +1193,7 @@ unsafe extern "system" fn region_selection_window_proc(
                 state.result = Some(match (state.start, state.current) {
                     (Some(start), Some(end)) => {
                         selection_region_from_points(&state.bounds, start, end)
+                            .or_else(|| state.detected_window.clone())
                     }
                     _ => None,
                 });
@@ -1242,6 +1247,29 @@ fn update_region_selection_state(
 }
 
 #[cfg(target_os = "windows")]
+fn update_region_selection_hover(hwnd: HWND, point: (i32, i32)) {
+    let mut detection_request = None;
+    if let Ok(mut states) = region_selection_states().lock() {
+        if let Some(state) = states.get_mut(&hwnd_key(hwnd)) {
+            let point = clamp_selection_point(point, &state.bounds);
+            state.current = Some(point);
+            if state.start.is_none() && state.detect_windows {
+                detection_request = Some((state.bounds.clone(), point));
+            } else if state.start.is_some() {
+                state.detected_window = None;
+            }
+        }
+    }
+
+    if let Some((bounds, point)) = detection_request {
+        let detected = detect_window_region_at_selection_point(hwnd, &bounds, point);
+        update_region_selection_state(hwnd, |state| {
+            state.detected_window = detected;
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn paint_region_selection_window(hwnd: HWND) {
     let state = region_selection_states()
         .lock()
@@ -1265,6 +1293,15 @@ fn paint_region_selection_window(hwnd: HWND) {
         if state.show_crosshair_guides {
             if let Some(cursor) = state.current {
                 paint_crosshair_guides(hdc, &state.bounds, cursor);
+            }
+        }
+
+        if state.start.is_none() {
+            if let Some(detected) = state.detected_window.as_ref() {
+                if let Some(rect) = capture_region_to_client_rect(&state.bounds, detected) {
+                    frame_region_rect(hdc, rect, COLORREF(0x0000ff00));
+                    frame_region_rect(hdc, inset_rect(rect, 1), COLORREF(0x00ffffff));
+                }
             }
         }
 
@@ -1381,6 +1418,23 @@ fn selection_client_rect_from_points(start: (i32, i32), end: (i32, i32)) -> Opti
     let top = start.1.min(end.1);
     let right = start.0.max(end.0);
     let bottom = start.1.max(end.1);
+    if right <= left || bottom <= top {
+        return None;
+    }
+    Some(RECT {
+        left,
+        top,
+        right,
+        bottom,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn capture_region_to_client_rect(bounds: &CaptureRegion, region: &CaptureRegion) -> Option<RECT> {
+    let left = region.x.checked_sub(bounds.x)?;
+    let top = region.y.checked_sub(bounds.y)?;
+    let right = left.checked_add(i32::try_from(region.width).ok()?)?;
+    let bottom = top.checked_add(i32::try_from(region.height).ok()?)?;
     if right <= left || bottom <= top {
         return None;
     }
@@ -1967,6 +2021,88 @@ fn rect_to_region(rect: RECT) -> Result<CaptureRegion, PlatformError> {
             .map_err(|_| PlatformError::Failed("window width is invalid".into()))?,
         height: u32::try_from(rect.bottom - rect.top)
             .map_err(|_| PlatformError::Failed("window height is invalid".into()))?,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn detect_window_region_at_selection_point(
+    overlay_hwnd: HWND,
+    bounds: &CaptureRegion,
+    point: (i32, i32),
+) -> Option<CaptureRegion> {
+    let screen_x = bounds.x.saturating_add(point.0);
+    let screen_y = bounds.y.saturating_add(point.1);
+    let mut candidate = unsafe { GetWindow(overlay_hwnd, GW_HWNDNEXT).ok()? };
+    for _ in 0..256 {
+        if candidate.is_invalid() {
+            break;
+        }
+        if is_detectable_window(candidate) {
+            if let Ok(rect) = window_capture_rect(candidate) {
+                if let Ok(region) = rect_to_region(rect) {
+                    if region_contains_point(&region, screen_x, screen_y) {
+                        return intersect_capture_regions(&region, bounds);
+                    }
+                }
+            }
+        }
+        candidate = unsafe { GetWindow(candidate, GW_HWNDNEXT).ok()? };
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn is_detectable_window(hwnd: HWND) -> bool {
+    let is_visible = unsafe { IsWindowVisible(hwnd).as_bool() };
+    let has_title = unsafe { GetWindowTextLengthW(hwnd) } > 0;
+    is_visible && has_title && !is_window_cloaked(hwnd)
+}
+
+#[cfg(target_os = "windows")]
+fn is_window_cloaked(hwnd: HWND) -> bool {
+    let mut cloaked = 0u32;
+    let result = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAKED,
+            (&mut cloaked as *mut u32).cast(),
+            mem::size_of::<u32>() as u32,
+        )
+    };
+    result.is_ok() && cloaked != 0
+}
+
+#[cfg(target_os = "windows")]
+fn region_contains_point(region: &CaptureRegion, x: i32, y: i32) -> bool {
+    let right = region.x.saturating_add(region.width as i32);
+    let bottom = region.y.saturating_add(region.height as i32);
+    x >= region.x && x < right && y >= region.y && y < bottom
+}
+
+#[cfg(target_os = "windows")]
+fn intersect_capture_regions(
+    region: &CaptureRegion,
+    bounds: &CaptureRegion,
+) -> Option<CaptureRegion> {
+    let left = region.x.max(bounds.x);
+    let top = region.y.max(bounds.y);
+    let right = region
+        .x
+        .saturating_add(region.width as i32)
+        .min(bounds.x.saturating_add(bounds.width as i32));
+    let bottom = region
+        .y
+        .saturating_add(region.height as i32)
+        .min(bounds.y.saturating_add(bounds.height as i32));
+    if right <= left || bottom <= top {
+        return None;
+    }
+    Some(CaptureRegion {
+        x: left,
+        y: top,
+        width: u32::try_from(right - left).ok()?,
+        height: u32::try_from(bottom - top).ok()?,
     })
 }
 
@@ -2577,6 +2713,7 @@ mod tests {
             opacity: 1,
             click_through: true,
             show_crosshair_guides: false,
+            detect_windows: false,
         }) {
             Ok(_) => panic!("empty overlay should fail"),
             Err(error) => error,
@@ -2615,6 +2752,55 @@ mod tests {
         assert_eq!((paint_rect.left, paint_rect.top), (20, 30));
         assert_eq!((paint_rect.right, paint_rect.bottom), (220, 180));
         assert!(super::selection_client_rect_from_points((4, 4), (4, 9)).is_none());
+
+        let client_rect = super::capture_region_to_client_rect(
+            &bounds,
+            &oddsnap_platform::CaptureRegion {
+                x: -100,
+                y: 70,
+                width: 200,
+                height: 150,
+            },
+        )
+        .expect("client rect");
+        assert_eq!(
+            (
+                client_rect.left,
+                client_rect.top,
+                client_rect.right,
+                client_rect.bottom
+            ),
+            (20, 30, 220, 180)
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn window_detection_intersection_clips_to_virtual_screen() {
+        let bounds = oddsnap_platform::CaptureRegion {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 80,
+        };
+        let window = oddsnap_platform::CaptureRegion {
+            x: -10,
+            y: 20,
+            width: 60,
+            height: 70,
+        };
+
+        assert!(super::region_contains_point(&window, 0, 25));
+        assert!(!super::region_contains_point(&window, 50, 25));
+        assert_eq!(
+            super::intersect_capture_regions(&window, &bounds),
+            Some(oddsnap_platform::CaptureRegion {
+                x: 0,
+                y: 20,
+                width: 50,
+                height: 60,
+            })
+        );
     }
 
     #[test]
@@ -2664,6 +2850,7 @@ mod tests {
             opacity: 24,
             click_through: false,
             show_crosshair_guides: false,
+            detect_windows: false,
         }) {
             Ok(_) => panic!("empty selection bounds should fail"),
             Err(error) => error,
@@ -2688,6 +2875,7 @@ mod tests {
                 opacity: 1,
                 click_through: true,
                 show_crosshair_guides: false,
+                detect_windows: false,
             })
             .expect("overlay window");
 
