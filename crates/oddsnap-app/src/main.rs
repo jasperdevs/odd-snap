@@ -21,8 +21,8 @@ use oddsnap_core::{
     default_history_path, default_settings_path, discover_ffmpeg_tools, format_file_name_template,
     AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat, ColorHistoryEntry,
     DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind,
-    HistoryStore, PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore,
-    UploadDestination, UploadPreflight, UploadSettings,
+    HistoryStore, ImageSearchSources, PlatformCapability, RecordingFormat, RecordingQuality,
+    SettingsStore, TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
@@ -2385,27 +2385,7 @@ impl OddSnapRustApp {
     }
 
     fn advanced_settings_summary(&self) -> String {
-        let upload = if self.settings.auto_upload_screenshots
-            || self.settings.auto_upload_gifs
-            || self.settings.auto_upload_videos
-        {
-            upload_settings_summary(&self.settings)
-        } else {
-            "upload off".into()
-        };
-        let enabled_tools = self
-            .settings
-            .enabled_tools
-            .as_ref()
-            .map_or("all tools".into(), |tools| format!("{} tools", tools.len()));
-        format!(
-            "Advanced prefs: OCR {} · translate model {} · {} · {} · {} custom hotkeys",
-            self.settings.ocr_language_tag,
-            self.settings.translation_model,
-            upload,
-            enabled_tools,
-            self.settings.tool_hotkeys.len()
-        )
+        advanced_settings_summary_text(&self.settings)
     }
 
     fn upload_metadata(
@@ -3030,6 +3010,66 @@ fn newest_history_image_path(history: &[CaptureHistoryEntry]) -> Option<PathBuf>
         .filter(|entry| matches!(entry.kind, HistoryKind::Image | HistoryKind::Sticker))
         .map(|entry| PathBuf::from(&entry.path))
         .find(|path| path.exists())
+}
+
+fn advanced_settings_summary_text(settings: &AppSettings) -> String {
+    let upload = if settings.auto_upload_screenshots
+        || settings.auto_upload_gifs
+        || settings.auto_upload_videos
+    {
+        upload_settings_summary(settings)
+    } else {
+        "upload off".into()
+    };
+    let enabled_tools = settings
+        .enabled_tools
+        .as_ref()
+        .map_or("all tools".into(), |tools| format!("{} tools", tools.len()));
+    let translation_model = TranslationModel::from_legacy_value(settings.translation_model);
+    let translation_source = oddsnap_core::resolve_translation_source_language(Some(
+        &settings.ocr_default_translate_from,
+    ));
+    let translation_target = oddsnap_core::resolve_translation_target_language(
+        Some(&settings.ocr_default_translate_to),
+        Some(&settings.interface_language),
+        None,
+    );
+
+    format!(
+        "Advanced prefs: OCR {} · translate {}->{} via {} · {} · {} · {} · {} custom hotkeys",
+        settings.ocr_language_tag,
+        translation_source,
+        translation_target,
+        translation_model.label(),
+        image_search_settings_summary(settings),
+        upload,
+        enabled_tools,
+        settings.tool_hotkeys.len()
+    )
+}
+
+fn image_search_settings_summary(settings: &AppSettings) -> String {
+    if !settings.show_image_search_bar {
+        return "image search hidden".into();
+    }
+
+    let sources = ImageSearchSources::from_bits(settings.image_search_sources);
+    let source_label = match (
+        sources.contains(ImageSearchSources::FILE_NAME),
+        sources.contains(ImageSearchSources::OCR),
+    ) {
+        (true, true) => "file+OCR",
+        (true, false) => "file",
+        (false, true) => "OCR",
+        (false, false) => "off",
+    };
+    let exact = if settings.image_search_exact_match {
+        "exact"
+    } else {
+        "loose"
+    };
+
+    format!("image search {source_label}/{exact}")
 }
 
 fn upload_settings_summary(settings: &AppSettings) -> String {
@@ -4039,6 +4079,61 @@ mod tests {
             ..AppSettings::default()
         };
         assert_eq!(upload_settings_summary(&configured), "upload Catbox ready");
+    }
+
+    #[test]
+    fn advanced_settings_summary_uses_core_translation_and_search_labels() {
+        let mut tool_hotkeys = std::collections::BTreeMap::new();
+        tool_hotkeys.insert("arrow".into(), vec![0, 49]);
+        let settings = AppSettings {
+            ocr_language_tag: "en-US".into(),
+            ocr_default_translate_from: "auto".into(),
+            ocr_default_translate_to: "fr-CA".into(),
+            translation_model: TranslationModel::Google as u32,
+            interface_language: "es-MX".into(),
+            image_search_sources: ImageSearchSources::FILE_NAME.bits(),
+            image_search_exact_match: true,
+            auto_upload_screenshots: true,
+            image_upload_destination: "Catbox".into(),
+            enabled_tools: Some(vec!["rect".into(), "ocr".into()]),
+            tool_hotkeys,
+            ..AppSettings::default()
+        };
+
+        assert_eq!(
+            advanced_settings_summary_text(&settings),
+            "Advanced prefs: OCR en-US · translate auto->fr via Google Translate · image search file/exact · upload Catbox ready · 2 tools · 1 custom hotkeys"
+        );
+    }
+
+    #[test]
+    fn image_search_summary_reports_hidden_and_source_modes() {
+        let hidden = AppSettings {
+            show_image_search_bar: false,
+            ..AppSettings::default()
+        };
+        assert_eq!(
+            image_search_settings_summary(&hidden),
+            "image search hidden"
+        );
+
+        let ocr_only = AppSettings {
+            image_search_sources: ImageSearchSources::OCR.bits(),
+            ..AppSettings::default()
+        };
+        assert_eq!(
+            image_search_settings_summary(&ocr_only),
+            "image search OCR/loose"
+        );
+
+        let disabled = AppSettings {
+            image_search_sources: ImageSearchSources::NONE.bits(),
+            ..AppSettings::default()
+        };
+        assert_eq!(
+            image_search_settings_summary(&disabled),
+            "image search off/loose"
+        );
     }
 
     #[test]
