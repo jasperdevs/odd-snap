@@ -19,18 +19,19 @@ use gpui::{
 use gpui_platform::application;
 use oddsnap_core::{
     apply_image_search_ocr_error, apply_image_search_ocr_success, build_available_capture_path,
-    build_video_thumbnail_args, build_video_thumbnail_fallback_args, decode_barcode_image,
-    default_history_path, default_image_search_index_path, default_settings_path,
-    discover_ffmpeg_tools, format_file_name_template, history_entry_can_be_image_indexed,
-    humanize_barcode_format, image_search_record_matches_history_entry,
-    image_search_record_needs_ocr, pending_image_search_record_from_history_entry,
-    retain_indexed_image_paths, upsert_image_search_record, AiChatProvider, AppSettings,
-    CapabilityState, CaptureImageFormat, CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode,
-    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
-    ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchOcrState,
-    ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
-    ScrollingCaptureMode, SettingsStore, StickerProvider, StickerSettings, TranslationModel,
-    UploadDestination, UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings,
+    build_update_check_summary, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
+    decode_barcode_image, default_history_path, default_image_search_index_path,
+    default_settings_path, discover_ffmpeg_tools, format_file_name_template,
+    history_entry_can_be_image_indexed, humanize_barcode_format,
+    image_search_record_matches_history_entry, image_search_record_needs_ocr,
+    pending_image_search_record_from_history_entry, retain_indexed_image_paths,
+    upsert_image_search_record, AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat,
+    CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry,
+    HistoryIndex, HistoryKind, HistoryStore, ImageSearchIndex, ImageSearchIndexRecord,
+    ImageSearchIndexStore, ImageSearchOcrState, ImageSearchSources, OcrHistoryEntry,
+    PlatformCapability, RecordingFormat, RecordingQuality, ScrollingCaptureMode, SettingsStore,
+    StickerProvider, StickerSettings, TranslationModel, UpdatePlatform, UploadDestination,
+    UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings, LATEST_RELEASE_API_URL,
     RELEASES_PAGE_URL, SUPPORTED_TRANSLATION_LANGUAGES,
 };
 use oddsnap_platform::{
@@ -1152,6 +1153,12 @@ impl OddSnapRustApp {
                         "auto-update-check-button",
                         format!("Updates {}", on_off(self.settings.auto_check_for_updates)),
                         SettingsAction::ToggleAutoCheckForUpdates,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "check-updates-button",
+                        "Check updates".into(),
+                        SettingsAction::CheckForUpdates,
                     ))
                     .child(self.settings_button(
                         cx,
@@ -3567,6 +3574,9 @@ impl OddSnapRustApp {
                     on_off(self.settings.auto_check_for_updates)
                 ));
             }
+            SettingsAction::CheckForUpdates => {
+                self.check_for_updates();
+            }
             SettingsAction::OpenReleasePage => {
                 self.capture_status = match open_external_url(RELEASES_PAGE_URL) {
                     Ok(()) => "Opened OddSnap releases page.".into(),
@@ -3841,6 +3851,46 @@ impl OddSnapRustApp {
         self.capture_status = match self.settings_store.save(&self.settings) {
             Ok(()) => format!("{message}. {}", lifecycle_settings_summary(&self.settings)),
             Err(error) => format!("Settings save failed: {error}"),
+        };
+    }
+
+    fn check_for_updates(&mut self) {
+        let (program, args) = update_check_curl_command();
+        let output = match Command::new(program).args(&args).output() {
+            Ok(output) => output,
+            Err(error) => {
+                self.capture_status = format!("Update check failed to start {program}: {error}");
+                return;
+            }
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            self.capture_status = if stderr.is_empty() {
+                format!("Update check failed with status {}.", output.status)
+            } else {
+                format!(
+                    "Update check failed with status {}: {stderr}",
+                    output.status
+                )
+            };
+            return;
+        }
+
+        let release_json = String::from_utf8_lossy(&output.stdout);
+        self.capture_status = match build_update_check_summary(
+            &release_json,
+            env!("CARGO_PKG_VERSION"),
+            update_platform_for_host(),
+        ) {
+            Ok(summary) => {
+                if let Some(asset) = summary.asset {
+                    format!("{} Download: {}", summary.status_message, asset.name)
+                } else {
+                    format!("{} No platform asset found.", summary.status_message)
+                }
+            }
+            Err(error) => format!("Update check parse failed: {error}"),
         };
     }
 
@@ -6183,6 +6233,60 @@ fn lifecycle_settings_summary(settings: &AppSettings) -> String {
     )
 }
 
+fn update_check_curl_command() -> (&'static str, Vec<String>) {
+    (
+        "curl",
+        vec![
+            "--location".into(),
+            "--fail".into(),
+            "--silent".into(),
+            "--show-error".into(),
+            "--header".into(),
+            "Accept: application/vnd.github+json".into(),
+            "--header".into(),
+            "X-GitHub-Api-Version: 2022-11-28".into(),
+            "--user-agent".into(),
+            format!("OddSnapRust/{}", env!("CARGO_PKG_VERSION")),
+            LATEST_RELEASE_API_URL.into(),
+        ],
+    )
+}
+
+#[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+fn update_platform_for_host() -> UpdatePlatform {
+    UpdatePlatform::WindowsArm64
+}
+
+#[cfg(all(target_os = "windows", not(target_arch = "aarch64")))]
+fn update_platform_for_host() -> UpdatePlatform {
+    UpdatePlatform::WindowsX64
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn update_platform_for_host() -> UpdatePlatform {
+    UpdatePlatform::MacosAarch64
+}
+
+#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+fn update_platform_for_host() -> UpdatePlatform {
+    UpdatePlatform::MacosX64
+}
+
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+fn update_platform_for_host() -> UpdatePlatform {
+    UpdatePlatform::LinuxArm64
+}
+
+#[cfg(all(target_os = "linux", not(target_arch = "aarch64")))]
+fn update_platform_for_host() -> UpdatePlatform {
+    UpdatePlatform::LinuxX64
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn update_platform_for_host() -> UpdatePlatform {
+    UpdatePlatform::WindowsX64
+}
+
 fn sticker_settings_summary_text(settings: &AppSettings) -> String {
     let sticker_settings =
         StickerSettings::from_json_value(settings.sticker_upload_settings.as_ref());
@@ -7811,6 +7915,25 @@ mod tests {
             lifecycle_settings_summary(&enabled),
             "Lifecycle prefs: startup requested · update checks requested · Rust release/update channel not enabled on this branch"
         );
+    }
+
+    #[test]
+    fn update_check_curl_command_targets_github_latest_release_api() {
+        let (program, args) = update_check_curl_command();
+
+        assert_eq!(program, "curl");
+        assert!(args.contains(&"--fail".to_string()));
+        assert!(args.contains(&"Accept: application/vnd.github+json".to_string()));
+        assert!(args.contains(&LATEST_RELEASE_API_URL.to_string()));
+        assert!(matches!(
+            update_platform_for_host(),
+            UpdatePlatform::WindowsX64
+                | UpdatePlatform::WindowsArm64
+                | UpdatePlatform::MacosAarch64
+                | UpdatePlatform::MacosX64
+                | UpdatePlatform::LinuxX64
+                | UpdatePlatform::LinuxArm64
+        ));
     }
 
     #[test]
