@@ -15,6 +15,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows monitor enumeration returns the virtual-screen bounds through the platform service.
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
 - macOS has a command-backed `screencapture` still-capture foundation for full-screen and explicit-region PNG captures.
+- macOS has command-backed monitor enumeration through AppKit/JXA, including screen origin, size, and backing scale.
 - macOS has command-backed Screen & System Audio Recording permission detection through the platform permissions service, plus capture-failure guidance that points users to the current System Settings location.
 - macOS has command-backed active-window bounds discovery through `osascript`/System Events, so active-window capture can reuse the `screencapture -R` region path when Accessibility and Screen & System Audio Recording permissions are granted.
 - macOS rectangle capture can use the native interactive `screencapture -i` selection flow from the GPUI shell; this is a system selection foundation, not the production OddSnap overlay.

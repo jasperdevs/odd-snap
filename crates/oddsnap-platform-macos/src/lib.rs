@@ -88,9 +88,17 @@ impl PlatformAdapter for MacosPlatform {
 
 impl ScreenCaptureService for MacosPlatform {
     fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError> {
-        Err(PlatformError::Unsupported(
-            "macOS monitor enumeration is not implemented yet",
-        ))
+        #[cfg(target_os = "macos")]
+        {
+            run_macos_monitor_enumeration()
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            Err(PlatformError::Unsupported(
+                "macOS monitor enumeration is only available on macOS",
+            ))
+        }
     }
 
     fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
@@ -135,6 +143,89 @@ impl ScreenCaptureService for MacosPlatform {
             ))
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn run_macos_monitor_enumeration() -> Result<Vec<MonitorInfo>, PlatformError> {
+    let output = Command::new("osascript")
+        .args(macos_monitor_jxa_args())
+        .output()
+        .map_err(|source| PlatformError::Failed(format!("failed to start osascript: {source}")))?;
+
+    if !output.status.success() {
+        return Err(PlatformError::Failed(format!(
+            "osascript monitor enumeration exited with status {}",
+            output.status
+        )));
+    }
+
+    let monitors = parse_macos_monitor_jxa_output(&String::from_utf8_lossy(&output.stdout))?;
+    if monitors.is_empty() {
+        Err(PlatformError::Failed(
+            "macOS monitor enumeration returned no screens".into(),
+        ))
+    } else {
+        Ok(monitors)
+    }
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_monitor_jxa_args() -> [&'static str; 4] {
+    [
+        "-l",
+        "JavaScript",
+        "-e",
+        "ObjC.import('AppKit'); const screens = $.NSScreen.screens; const lines = []; for (let i = 0; i < screens.count; i++) { const screen = screens.objectAtIndex(i); const frame = screen.frame; const name = screen.localizedName ? ObjC.unwrap(screen.localizedName).replace(/\\t/g, ' ') : `Display ${i + 1}`; lines.push([i + 1, name, Math.round(frame.origin.x), Math.round(frame.origin.y), Math.round(frame.size.width), Math.round(frame.size.height), Math.round(screen.backingScaleFactor * 100)].join('\\t')); } lines.join('\\n');",
+    ]
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_monitor_jxa_output(output: &str) -> Result<Vec<MonitorInfo>, PlatformError> {
+    let mut monitors = Vec::new();
+    for line in output.lines().filter(|line| !line.trim().is_empty()) {
+        let parts = line.split('\t').collect::<Vec<_>>();
+        if parts.len() != 7 {
+            return Err(PlatformError::Failed(
+                "osascript monitor output must contain seven tab-separated fields".into(),
+            ));
+        }
+        let width = parse_macos_monitor_u32(parts[4], "width")?;
+        let height = parse_macos_monitor_u32(parts[5], "height")?;
+        if width == 0 || height == 0 {
+            return Err(PlatformError::Failed(
+                "osascript monitor output reported an empty display".into(),
+            ));
+        }
+
+        monitors.push(MonitorInfo {
+            id: parts[0].trim().into(),
+            name: parts[1].trim().into(),
+            x: parse_macos_monitor_i32(parts[2], "x")?,
+            y: parse_macos_monitor_i32(parts[3], "y")?,
+            width,
+            height,
+            scale_percent: parse_macos_monitor_u32(parts[6], "scale")?,
+        });
+    }
+    Ok(monitors)
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_monitor_i32(value: &str, label: &str) -> Result<i32, PlatformError> {
+    value.trim().parse::<i32>().map_err(|source| {
+        PlatformError::Failed(format!(
+            "osascript monitor output reported invalid {label}: {source}"
+        ))
+    })
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_monitor_u32(value: &str, label: &str) -> Result<u32, PlatformError> {
+    value.trim().parse::<u32>().map_err(|source| {
+        PlatformError::Failed(format!(
+            "osascript monitor output reported invalid {label}: {source}"
+        ))
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -650,7 +741,7 @@ mod tests {
 
         let error = adapter.monitors().expect_err("macOS capture pending");
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on macOS"));
 
         let error = adapter
             .capture_region(oddsnap_platform::CaptureRegion {
@@ -666,6 +757,57 @@ mod tests {
             .active_window()
             .expect_err("macOS active window wrong host");
         assert!(error.to_string().contains("only available on macOS"));
+    }
+
+    #[test]
+    fn macos_monitor_jxa_uses_appkit_screens() {
+        let args = super::macos_monitor_jxa_args();
+
+        assert_eq!(args[0], "-l");
+        assert_eq!(args[1], "JavaScript");
+        assert!(args[3].contains("NSScreen.screens"));
+        assert!(args[3].contains("backingScaleFactor"));
+    }
+
+    #[test]
+    fn macos_monitor_parser_reads_multiple_screens() {
+        let monitors = super::parse_macos_monitor_jxa_output(
+            "1\tBuilt-in Display\t0\t0\t1512\t982\t200\n\
+             2\tStudio Display\t-1920\t-120\t1920\t1080\t100\n",
+        )
+        .expect("parse monitor output");
+
+        assert_eq!(
+            monitors,
+            vec![
+                oddsnap_platform::MonitorInfo {
+                    id: "1".into(),
+                    name: "Built-in Display".into(),
+                    x: 0,
+                    y: 0,
+                    width: 1512,
+                    height: 982,
+                    scale_percent: 200,
+                },
+                oddsnap_platform::MonitorInfo {
+                    id: "2".into(),
+                    name: "Studio Display".into(),
+                    x: -1920,
+                    y: -120,
+                    width: 1920,
+                    height: 1080,
+                    scale_percent: 100,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn macos_monitor_parser_rejects_empty_display() {
+        let error = super::parse_macos_monitor_jxa_output("1\tDisplay\t0\t0\t0\t982\t200\n")
+            .expect_err("empty monitor rejected");
+
+        assert!(error.to_string().contains("empty display"));
     }
 
     #[test]

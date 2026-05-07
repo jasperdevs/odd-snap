@@ -46,6 +46,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] macOS app-level global hotkey listener foundation.
 - [x] macOS explicit unsupported capture/clipboard adapter surfaces.
 - [x] macOS command-backed still screenshot capture foundation.
+- [x] macOS monitor enumeration foundation through AppKit/JXA.
 - [x] macOS active-window bounds discovery foundation through `osascript`/System Events.
 - [x] macOS native interactive rectangle/window selection foundation through `screencapture -i`.
 - [ ] Linux portal-aware screen capture plan.
