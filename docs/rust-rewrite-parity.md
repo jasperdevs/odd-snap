@@ -95,12 +95,12 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust core can build format-specific FFmpeg output arguments for GIF, MP4, WebM, and MKV recording targets.
 - Windows has a Rust platform service boundary for starting/stopping FFmpeg-backed desktop video recordings from the GPUI shell.
 - Windows FFmpeg recording requests can carry capture-region bounds into `gdigrab` offset/video-size arguments.
-- Windows recording now falls back to video-only when imported settings request microphone or desktop audio, instead of passing audio flags that the Windows recording backend does not yet implement.
+- Windows FFmpeg recording now passes imported microphone and desktop-audio settings as `dshow`/`wasapi` input devices for MP4/WebM/MKV output, while GIF output remains video-only because GIF cannot carry audio.
 - Recording handles on Windows, macOS, and Linux now fail explicitly if asked to stop without a running child process.
 - Linux has an X11 FFmpeg-backed desktop recording foundation through `x11grab`, including explicit-region bounds for full-screen and active-window recording requests.
-- Linux recording falls back to video-only when imported settings request microphone or desktop audio, instead of blocking the whole recording before audio capture parity lands.
+- Linux FFmpeg recording now passes imported microphone and desktop-audio settings as PulseAudio input devices for MP4/WebM/MKV output, while GIF output remains video-only because GIF cannot carry audio.
 - macOS has a `screencapture`-backed desktop recording foundation that records to a temporary MOV and transcodes to the requested OddSnap recording format through FFmpeg; microphone capture can request the default input, while system audio remains pending.
-- GPUI recording status reflects macOS microphone support separately from still-pending Windows/Linux audio capture and macOS system audio.
+- GPUI recording status reflects enabled Windows/Linux FFmpeg audio inputs, macOS microphone support, and still-pending macOS system audio.
 - GPUI can start active-window recording through the explicit-region FFmpeg path.
 - The current desktop/window recording path supports GIF output through the shared FFmpeg recording arguments and records GIF entries distinctly in history.
 - GPUI can start freeform region recording through the same region selector and explicit-region FFmpeg path for GIF, MP4, WebM, and MKV settings.
@@ -167,8 +167,8 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, OCR sound/toast polish, large-history real-runtime verification for image-search reindexing, remaining legacy history detail/bulk views, full sticker/upscale settings UI, release packaging, or update behavior.
-Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
+The rewrite does not yet implement the full production capture overlay, annotation, real-device recording/audio verification, macOS OCR language discovery/install status, OCR sound/toast polish, large-history real-runtime verification for image-search reindexing, remaining legacy history detail/bulk views, full sticker/upscale settings UI, release packaging, or update behavior.
+Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and real-device PulseAudio microphone/system-audio verification are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
 Sticker/upscale parity still depends on production overlay polish and real-device validation; the Rust local rembg/ONNX runtime foundation, macOS native selection route, and basic GPUI provider/model/API-key controls are present, but interactive before/after upscale preview controls and real-device runtime smoke verification still need to land before full feature parity can be claimed.

@@ -6488,12 +6488,12 @@ fn recording_audio_status_summary(settings: &AppSettings) -> (&'static str, &'st
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 fn recording_audio_status_summary(settings: &AppSettings) -> (&'static str, &'static str) {
     let microphone = if settings.record_microphone {
-        "mic configured, pending"
+        "mic on"
     } else {
         "mic off"
     };
     let desktop_audio = if settings.record_desktop_audio {
-        "desktop audio configured, pending"
+        "desktop audio on"
     } else {
         "desktop audio off"
     };
@@ -6511,15 +6511,11 @@ fn recording_audio_status_summary(_: &AppSettings) -> (&'static str, &'static st
 
 #[cfg(target_os = "linux")]
 fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
-    if settings.record_microphone || settings.record_desktop_audio {
-        (
-            false,
-            false,
-            Some("audio capture pending on Linux; recording video only"),
-        )
-    } else {
-        (false, false, None)
-    }
+    (
+        settings.record_microphone,
+        settings.record_desktop_audio,
+        None,
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -6537,15 +6533,11 @@ fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Opti
 
 #[cfg(target_os = "windows")]
 fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
-    if settings.record_microphone || settings.record_desktop_audio {
-        (
-            false,
-            false,
-            Some("audio capture pending on Windows; recording video only"),
-        )
-    } else {
-        (false, false, None)
-    }
+    (
+        settings.record_microphone,
+        settings.record_desktop_audio,
+        None,
+    )
 }
 
 #[cfg(all(
@@ -7184,14 +7176,11 @@ mod tests {
 
         #[cfg(target_os = "linux")]
         {
-            assert_eq!(microphone_status, "mic configured, pending");
-            assert_eq!(desktop_audio_status, "desktop audio configured, pending");
-            assert!(!microphone);
-            assert!(!desktop_audio);
-            assert_eq!(
-                note,
-                Some("audio capture pending on Linux; recording video only")
-            );
+            assert_eq!(microphone_status, "mic on");
+            assert_eq!(desktop_audio_status, "desktop audio on");
+            assert!(microphone);
+            assert!(desktop_audio);
+            assert_eq!(note, None);
         }
 
         #[cfg(target_os = "macos")]
@@ -7208,14 +7197,11 @@ mod tests {
 
         #[cfg(target_os = "windows")]
         {
-            assert_eq!(microphone_status, "mic configured, pending");
-            assert_eq!(desktop_audio_status, "desktop audio configured, pending");
-            assert!(!microphone);
-            assert!(!desktop_audio);
-            assert_eq!(
-                note,
-                Some("audio capture pending on Windows; recording video only")
-            );
+            assert_eq!(microphone_status, "mic on");
+            assert_eq!(desktop_audio_status, "desktop audio on");
+            assert!(microphone);
+            assert!(desktop_audio);
+            assert_eq!(note, None);
         }
 
         #[cfg(all(

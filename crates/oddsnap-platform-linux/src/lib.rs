@@ -804,6 +804,7 @@ fn linux_desktop_recording_args_for_display(
         "-i".into(),
         linux_x11grab_input(display, request.region.as_ref()),
     ]);
+    input_args.extend(linux_recording_audio_input_args(request));
 
     build_recording_output_args(&FfmpegRecordingRequest {
         input_args,
@@ -812,6 +813,32 @@ fn linux_desktop_recording_args_for_display(
         quality: request.quality,
         fps: request.fps,
     })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_recording_audio_input_args(request: &VideoRecordingRequest) -> Vec<String> {
+    if request.format == oddsnap_core::RecordingFormat::Gif {
+        return Vec::new();
+    }
+
+    let mut args = Vec::new();
+    if request.record_microphone {
+        let device = request
+            .microphone_device_id
+            .as_deref()
+            .filter(|device| !device.trim().is_empty())
+            .unwrap_or("default");
+        args.extend(["-f".into(), "pulse".into(), "-i".into(), device.into()]);
+    }
+    if request.record_desktop_audio {
+        let device = request
+            .desktop_audio_device_id
+            .as_deref()
+            .filter(|device| !device.trim().is_empty())
+            .unwrap_or("default");
+        args.extend(["-f".into(), "pulse".into(), "-i".into(), device.into()]);
+    }
+    args
 }
 
 #[cfg(target_os = "linux")]
@@ -1479,12 +1506,46 @@ mod tests {
     }
 
     #[test]
-    fn linux_recording_args_ignore_audio_flags_until_audio_capture_lands() {
+    fn linux_recording_args_include_audio_inputs_for_video() {
         let args = super::linux_desktop_recording_args_for_display(
             &VideoRecordingRequest {
                 output_path: std::path::PathBuf::from("/tmp/oddsnap-recording.mp4"),
                 region: None,
                 format: RecordingFormat::Mp4,
+                quality: RecordingQuality::Original,
+                fps: 30,
+                record_microphone: true,
+                record_desktop_audio: true,
+                microphone_device_id: Some("mic".into()),
+                desktop_audio_device_id: Some("desktop".into()),
+            },
+            ":0",
+        );
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "x11grab"]));
+        assert_eq!(args.iter().filter(|arg| arg.as_str() == "-f").count(), 3);
+        assert_eq!(
+            args.windows(2)
+                .filter(|pair| pair == &["-f".to_string(), "pulse".to_string()])
+                .count(),
+            2
+        );
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i".to_string(), "mic".to_string()]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i".to_string(), "desktop".to_string()]));
+        assert!(!args.iter().any(|arg| arg.contains("alsa")));
+    }
+
+    #[test]
+    fn linux_recording_args_exclude_audio_inputs_for_gif() {
+        let args = super::linux_desktop_recording_args_for_display(
+            &VideoRecordingRequest {
+                output_path: std::path::PathBuf::from("/tmp/oddsnap-recording.gif"),
+                region: None,
+                format: RecordingFormat::Gif,
                 quality: RecordingQuality::Original,
                 fps: 30,
                 record_microphone: true,

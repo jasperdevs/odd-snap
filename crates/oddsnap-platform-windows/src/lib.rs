@@ -829,6 +829,7 @@ fn windows_desktop_recording_args(request: &VideoRecordingRequest) -> Vec<String
         ]);
     }
     input_args.extend(["-i".into(), "desktop".into()]);
+    input_args.extend(windows_recording_audio_input_args(request));
 
     build_recording_output_args(&FfmpegRecordingRequest {
         input_args,
@@ -837,6 +838,33 @@ fn windows_desktop_recording_args(request: &VideoRecordingRequest) -> Vec<String
         quality: request.quality,
         fps: request.fps,
     })
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_recording_audio_input_args(request: &VideoRecordingRequest) -> Vec<String> {
+    if request.format == oddsnap_core::RecordingFormat::Gif {
+        return Vec::new();
+    }
+
+    let mut args = Vec::new();
+    if request.record_microphone {
+        let device = request
+            .microphone_device_id
+            .as_deref()
+            .filter(|device| !device.trim().is_empty())
+            .unwrap_or("default");
+        args.extend(["-f".into(), "dshow".into(), "-i".into()]);
+        args.push(format!("audio={device}"));
+    }
+    if request.record_desktop_audio {
+        let device = request
+            .desktop_audio_device_id
+            .as_deref()
+            .filter(|device| !device.trim().is_empty())
+            .unwrap_or("default");
+        args.extend(["-f".into(), "wasapi".into(), "-i".into(), device.into()]);
+    }
+    args
 }
 
 #[cfg(target_os = "windows")]
@@ -3396,6 +3424,52 @@ mod tests {
         assert!(args.windows(2).any(|pair| pair == ["-vf", "scale=-2:1080"]));
         assert!(args.windows(2).any(|pair| pair == ["-c:v", "libvpx-vp9"]));
         assert_eq!(args.last().map(String::as_str), Some("capture.webm"));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn windows_desktop_recording_args_include_audio_inputs_for_video() {
+        let args = super::windows_desktop_recording_args(&VideoRecordingRequest {
+            output_path: std::path::PathBuf::from("capture.mp4"),
+            region: None,
+            format: RecordingFormat::Mp4,
+            quality: RecordingQuality::Original,
+            fps: 30,
+            record_microphone: true,
+            record_desktop_audio: true,
+            microphone_device_id: Some("OddSnap Mic".into()),
+            desktop_audio_device_id: Some("OddSnap Speakers".into()),
+        });
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "dshow"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i", "audio=OddSnap Mic"]));
+        assert!(args.windows(2).any(|pair| pair == ["-f", "wasapi"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i", "OddSnap Speakers"]));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn windows_desktop_recording_args_exclude_audio_inputs_for_gif() {
+        let args = super::windows_desktop_recording_args(&VideoRecordingRequest {
+            output_path: std::path::PathBuf::from("capture.gif"),
+            region: None,
+            format: RecordingFormat::Gif,
+            quality: RecordingQuality::Original,
+            fps: 30,
+            record_microphone: true,
+            record_desktop_audio: true,
+            microphone_device_id: Some("OddSnap Mic".into()),
+            desktop_audio_device_id: Some("OddSnap Speakers".into()),
+        });
+
+        assert!(!args.iter().any(|arg| arg == "dshow"));
+        assert!(!args.iter().any(|arg| arg == "wasapi"));
+        assert!(!args.iter().any(|arg| arg == "audio=OddSnap Mic"));
+        assert!(!args.iter().any(|arg| arg == "OddSnap Speakers"));
     }
 
     #[test]

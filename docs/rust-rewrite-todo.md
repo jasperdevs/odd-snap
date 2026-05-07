@@ -125,10 +125,10 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Desktop/window GIF recording through the shared FFmpeg recording path.
 - [x] Windows FFmpeg-backed desktop video recording start/stop foundation.
 - [x] Windows FFmpeg recording can target an explicit capture region.
-- [x] Windows recording falls back to video-only when imported audio settings are enabled.
+- [x] Windows FFmpeg recording passes microphone `dshow` and desktop-audio `wasapi` inputs for non-GIF formats when imported audio settings are enabled.
 - [x] Linux X11 FFmpeg-backed desktop video recording start/cancel/stop foundation.
 - [x] Linux X11 FFmpeg recording can target an explicit capture region.
-- [x] Linux recording falls back to video-only when imported audio settings are enabled.
+- [x] Linux FFmpeg recording passes PulseAudio microphone and desktop-audio inputs for non-GIF formats when imported audio settings are enabled.
 - [x] macOS desktop video recording start/cancel/stop foundation through `screencapture` plus FFmpeg conversion.
 - [x] Recording handles fail explicitly when stop is called without a running process.
 - [x] Freeform region GIF recording through the GPUI region recording action and shared FFmpeg path.
@@ -139,8 +139,10 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Rust recording settings import and FFmpeg output argument model.
 - [x] GPUI persisted controls for recording format and quality.
 - [x] macOS microphone recording request through native `screencapture -g`, with GPUI status no longer calling it pending.
-- [ ] Microphone recording.
-- [ ] System audio recording where supported.
+- [x] Windows/Linux FFmpeg microphone input arguments for non-GIF recording formats.
+- [x] Windows/Linux FFmpeg desktop/system audio input arguments for non-GIF recording formats.
+- [ ] Real-device microphone recording verification across Windows, macOS, and Linux.
+- [ ] Real-device system audio recording verification where supported.
 - [x] Video thumbnail generation for Rust recording history.
 - [x] Recording thumbnails are validated as decodable image files before being shown in history.
 - [x] Basic persisted media history index.
