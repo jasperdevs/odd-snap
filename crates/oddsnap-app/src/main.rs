@@ -2460,7 +2460,9 @@ impl OddSnapRustApp {
             };
         }
 
-        match run_curl_upload(destination, path) {
+        let upload_settings =
+            UploadSettings::from_json_value(self.settings.image_upload_settings.as_ref());
+        match run_curl_upload(destination, path, &upload_settings) {
             Ok(success) => UploadMetadata {
                 url: Some(success.url),
                 provider: Some(success.provider_name),
@@ -2476,8 +2478,10 @@ impl OddSnapRustApp {
 
     fn run_temporary_host_upload(&self, path: &Path) -> UploadMetadata {
         let mut errors = Vec::new();
+        let upload_settings =
+            UploadSettings::from_json_value(self.settings.image_upload_settings.as_ref());
         for destination in oddsnap_core::temporary_host_fallbacks() {
-            match run_curl_upload(destination.clone(), path) {
+            match run_curl_upload(destination.clone(), path, &upload_settings) {
                 Ok(success) => {
                     return UploadMetadata {
                         url: Some(success.url),
@@ -3123,8 +3127,10 @@ fn upload_history_status(entry: Option<&CaptureHistoryEntry>) -> String {
 fn run_curl_upload(
     destination: UploadDestination,
     path: &Path,
+    settings: &UploadSettings,
 ) -> Result<oddsnap_core::UploadSuccess, String> {
-    let request = oddsnap_core::build_curl_upload_request(destination, path)?;
+    let request =
+        oddsnap_core::build_curl_upload_request_with_settings(destination, path, settings)?;
     let output = Command::new(&request.program)
         .args(&request.args)
         .stdin(Stdio::null())

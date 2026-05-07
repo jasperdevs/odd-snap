@@ -223,7 +223,9 @@ impl UploadDestination {
     pub fn curl_upload_supported(&self) -> bool {
         matches!(
             self,
-            Self::Catbox
+            Self::Imgur
+                | Self::ImgBb
+                | Self::Catbox
                 | Self::Litterbox
                 | Self::FileIo
                 | Self::Uguu
@@ -632,6 +634,14 @@ pub fn build_curl_upload_request(
     destination: UploadDestination,
     file_path: &Path,
 ) -> Result<CurlUploadRequest, String> {
+    build_curl_upload_request_with_settings(destination, file_path, &UploadSettings::default())
+}
+
+pub fn build_curl_upload_request_with_settings(
+    destination: UploadDestination,
+    file_path: &Path,
+    settings: &UploadSettings,
+) -> Result<CurlUploadRequest, String> {
     if !destination.curl_upload_supported() {
         return Err(format!(
             "{} upload is not implemented in the Rust curl backend yet.",
@@ -650,6 +660,35 @@ pub fn build_curl_upload_request(
     ];
 
     match destination {
+        UploadDestination::Imgur => {
+            let client_id = settings.imgur_client_id.trim();
+            if client_id.is_empty() {
+                return Err(missing_upload_setting("Imgur client ID"));
+            }
+            let access_token = settings.imgur_access_token.trim();
+            args.extend(["--header".into()]);
+            args.push(if access_token.is_empty() {
+                format!("Authorization: Client-ID {client_id}")
+            } else {
+                format!("Authorization: Bearer {access_token}")
+            });
+            args.extend([
+                "-F".into(),
+                curl_file_form("image", file_path),
+                "https://api.imgur.com/3/image".into(),
+            ]);
+        }
+        UploadDestination::ImgBb => {
+            let api_key = settings.imgbb_api_key.trim();
+            if api_key.is_empty() {
+                return Err(missing_upload_setting("ImgBB API key"));
+            }
+            args.extend([
+                "-F".into(),
+                curl_file_form("image", file_path),
+                format!("https://api.imgbb.com/1/upload?key={api_key}"),
+            ]);
+        }
         UploadDestination::Catbox => {
             args.extend([
                 "-F".into(),
@@ -731,6 +770,47 @@ pub fn parse_upload_response(
 ) -> Result<UploadSuccess, String> {
     let provider_name = destination.display_name();
     match destination {
+        UploadDestination::Imgur => {
+            let node: Value = serde_json::from_str(body)
+                .map_err(|error| format!("Imgur returned invalid JSON: {error}"))?;
+            if node
+                .get("success")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                let url = node
+                    .get("data")
+                    .and_then(|data| data.get("link"))
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "Imgur did not return a usable link.".to_string())?;
+                return parse_plain_url("Imgur", url)
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+            Err(json_error_message("Imgur", &node))
+        }
+        UploadDestination::ImgBb => {
+            let node: Value = serde_json::from_str(body)
+                .map_err(|error| format!("ImgBB returned invalid JSON: {error}"))?;
+            if node
+                .get("success")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                let url = node
+                    .get("data")
+                    .and_then(|data| data.get("url"))
+                    .and_then(Value::as_str)
+                    .or_else(|| {
+                        node.get("data")
+                            .and_then(|data| data.get("display_url"))
+                            .and_then(Value::as_str)
+                    })
+                    .ok_or_else(|| "ImgBB did not return a usable link.".to_string())?;
+                return parse_plain_url("ImgBB", url)
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+            Err(json_error_message("ImgBB", &node))
+        }
         UploadDestination::Catbox | UploadDestination::Litterbox | UploadDestination::Uguu => {
             parse_plain_url(&provider_name, body).map(|url| UploadSuccess { url, provider_name })
         }
@@ -1182,11 +1262,59 @@ mod tests {
         assert!(file_io.args.contains(&"file=@capture.png".into()));
         assert!(file_io.args.contains(&"https://file.io".into()));
 
+        let imgur = build_curl_upload_request_with_settings(
+            UploadDestination::Imgur,
+            &path,
+            &UploadSettings {
+                imgur_client_id: "client".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build imgur");
+        assert!(imgur
+            .args
+            .contains(&"Authorization: Client-ID client".into()));
+        assert!(imgur.args.contains(&"https://api.imgur.com/3/image".into()));
+
+        let imgbb = build_curl_upload_request_with_settings(
+            UploadDestination::ImgBb,
+            &path,
+            &UploadSettings {
+                imgbb_api_key: "key".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build imgbb");
+        assert!(imgbb.args.contains(&"image=@capture.png".into()));
+        assert!(imgbb
+            .args
+            .contains(&"https://api.imgbb.com/1/upload?key=key".into()));
+
         assert!(build_curl_upload_request(UploadDestination::Imgur, &path).is_err());
     }
 
     #[test]
     fn parses_upload_responses_for_public_hosts() {
+        assert_eq!(
+            parse_upload_response(
+                UploadDestination::Imgur,
+                r#"{"success":true,"data":{"link":"https://i.imgur.com/a.png"}}"#,
+            )
+            .expect("parse imgur")
+            .url,
+            "https://i.imgur.com/a.png"
+        );
+
+        assert_eq!(
+            parse_upload_response(
+                UploadDestination::ImgBb,
+                r#"{"success":true,"data":{"url":"https://i.ibb.co/a.png"}}"#,
+            )
+            .expect("parse imgbb")
+            .url,
+            "https://i.ibb.co/a.png"
+        );
+
         assert_eq!(
             parse_upload_response(UploadDestination::Catbox, "https://files.catbox.moe/a.png")
                 .expect("parse catbox")
