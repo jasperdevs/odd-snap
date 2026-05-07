@@ -225,8 +225,10 @@ impl UploadDestination {
             self,
             Self::Imgur
                 | Self::ImgBb
+                | Self::ImgPile
                 | Self::Catbox
                 | Self::Litterbox
+                | Self::Gyazo
                 | Self::FileIo
                 | Self::Uguu
                 | Self::TmpFiles
@@ -689,6 +691,19 @@ pub fn build_curl_upload_request_with_settings(
                 format!("https://api.imgbb.com/1/upload?key={api_key}"),
             ]);
         }
+        UploadDestination::ImgPile => {
+            let token = settings.imgpile_api_token.trim();
+            if token.is_empty() {
+                return Err(missing_upload_setting("imgpile API token"));
+            }
+            args.extend([
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "-F".into(),
+                curl_file_form("file", file_path),
+                "https://cdn.imgpile.com/api/v1/media".into(),
+            ]);
+        }
         UploadDestination::Catbox => {
             args.extend([
                 "-F".into(),
@@ -707,6 +722,19 @@ pub fn build_curl_upload_request_with_settings(
                 "-F".into(),
                 curl_file_form("fileToUpload", file_path),
                 "https://litterbox.catbox.moe/resources/internals/api.php".into(),
+            ]);
+        }
+        UploadDestination::Gyazo => {
+            let access_token = settings.gyazo_access_token.trim();
+            if access_token.is_empty() {
+                return Err(missing_upload_setting("Gyazo access token"));
+            }
+            args.extend([
+                "-F".into(),
+                format!("access_token={access_token}"),
+                "-F".into(),
+                curl_file_form("imagedata", file_path),
+                "https://upload.gyazo.com/api/upload".into(),
             ]);
         }
         UploadDestination::FileIo => {
@@ -810,6 +838,30 @@ pub fn parse_upload_response(
                     .map(|url| UploadSuccess { url, provider_name });
             }
             Err(json_error_message("ImgBB", &node))
+        }
+        UploadDestination::ImgPile => {
+            let node: Value = serde_json::from_str(body)
+                .map_err(|error| format!("imgpile returned invalid JSON: {error}"))?;
+            let url = node
+                .get("media")
+                .and_then(|media| media.get("urls"))
+                .and_then(|urls| urls.get("original"))
+                .and_then(Value::as_str);
+            if let Some(url) = url {
+                return parse_plain_url("imgpile", url)
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+            Err(json_error_message("imgpile", &node))
+        }
+        UploadDestination::Gyazo => {
+            let node: Value = serde_json::from_str(body)
+                .map_err(|error| format!("Gyazo returned invalid JSON: {error}"))?;
+            let url = node.get("permalink_url").and_then(Value::as_str);
+            if let Some(url) = url {
+                return parse_plain_url("Gyazo", url)
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+            Err(json_error_message("Gyazo", &node))
         }
         UploadDestination::Catbox | UploadDestination::Litterbox | UploadDestination::Uguu => {
             parse_plain_url(&provider_name, body).map(|url| UploadSuccess { url, provider_name })
@@ -1290,7 +1342,41 @@ mod tests {
             .args
             .contains(&"https://api.imgbb.com/1/upload?key=key".into()));
 
+        let gyazo = build_curl_upload_request_with_settings(
+            UploadDestination::Gyazo,
+            &path,
+            &UploadSettings {
+                gyazo_access_token: "token".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build gyazo");
+        assert!(gyazo.args.contains(&"access_token=token".into()));
+        assert!(gyazo.args.contains(&"imagedata=@capture.png".into()));
+        assert!(gyazo
+            .args
+            .contains(&"https://upload.gyazo.com/api/upload".into()));
+
+        let imgpile = build_curl_upload_request_with_settings(
+            UploadDestination::ImgPile,
+            &path,
+            &UploadSettings {
+                imgpile_api_token: "pile-token".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build imgpile");
+        assert!(imgpile
+            .args
+            .contains(&"Authorization: Bearer pile-token".into()));
+        assert!(imgpile.args.contains(&"file=@capture.png".into()));
+        assert!(imgpile
+            .args
+            .contains(&"https://cdn.imgpile.com/api/v1/media".into()));
+
         assert!(build_curl_upload_request(UploadDestination::Imgur, &path).is_err());
+        assert!(build_curl_upload_request(UploadDestination::Gyazo, &path).is_err());
+        assert!(build_curl_upload_request(UploadDestination::ImgPile, &path).is_err());
     }
 
     #[test]
@@ -1313,6 +1399,26 @@ mod tests {
             .expect("parse imgbb")
             .url,
             "https://i.ibb.co/a.png"
+        );
+
+        assert_eq!(
+            parse_upload_response(
+                UploadDestination::Gyazo,
+                r#"{"permalink_url":"https://gyazo.com/abc"}"#,
+            )
+            .expect("parse gyazo")
+            .url,
+            "https://gyazo.com/abc"
+        );
+
+        assert_eq!(
+            parse_upload_response(
+                UploadDestination::ImgPile,
+                r#"{"media":{"urls":{"original":"https://cdn.imgpile.com/a.png"}}}"#,
+            )
+            .expect("parse imgpile")
+            .url,
+            "https://cdn.imgpile.com/a.png"
         );
 
         assert_eq!(
