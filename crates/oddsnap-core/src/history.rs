@@ -222,6 +222,20 @@ impl HistoryStore {
         Ok(index)
     }
 
+    pub fn remove_color_entry(
+        &self,
+        hex: &str,
+        captured_at_unix_ms: u64,
+    ) -> Result<HistoryIndex, HistoryStoreError> {
+        let mut index = self.load_or_default()?;
+        index.colors.retain(|existing| {
+            !(existing.hex.eq_ignore_ascii_case(hex)
+                && existing.captured_at_unix_ms == captured_at_unix_ms)
+        });
+        self.save(&index)?;
+        Ok(index)
+    }
+
     pub fn append_ocr_entry(
         &self,
         entry: OcrHistoryEntry,
@@ -229,6 +243,19 @@ impl HistoryStore {
         let mut index = self.load_or_default()?;
         index.ocr_entries.insert(0, entry);
         index.ocr_entries.truncate(500);
+        self.save(&index)?;
+        Ok(index)
+    }
+
+    pub fn remove_ocr_entry(
+        &self,
+        text: &str,
+        captured_at_unix_ms: u64,
+    ) -> Result<HistoryIndex, HistoryStoreError> {
+        let mut index = self.load_or_default()?;
+        index.ocr_entries.retain(|existing| {
+            !(existing.text == text && existing.captured_at_unix_ms == captured_at_unix_ms)
+        });
         self.save(&index)?;
         Ok(index)
     }
@@ -243,6 +270,22 @@ impl HistoryStore {
         });
         index.code_entries.insert(0, entry);
         index.code_entries.truncate(200);
+        self.save(&index)?;
+        Ok(index)
+    }
+
+    pub fn remove_code_entry(
+        &self,
+        text: &str,
+        format: &str,
+        captured_at_unix_ms: u64,
+    ) -> Result<HistoryIndex, HistoryStoreError> {
+        let mut index = self.load_or_default()?;
+        index.code_entries.retain(|existing| {
+            !(existing.text == text
+                && existing.format.eq_ignore_ascii_case(format)
+                && existing.captured_at_unix_ms == captured_at_unix_ms)
+        });
         self.save(&index)?;
         Ok(index)
     }
@@ -285,7 +328,10 @@ fn unix_millis_now() -> u64 {
 mod tests {
     use std::fs;
 
-    use super::{ColorHistoryEntry, HistoryEntry, HistoryKind, HistoryStore, OcrHistoryEntry};
+    use super::{
+        CodeHistoryEntry, ColorHistoryEntry, HistoryEntry, HistoryKind, HistoryStore,
+        OcrHistoryEntry,
+    };
 
     #[test]
     fn history_entry_reads_file_metadata() {
@@ -440,6 +486,59 @@ mod tests {
         assert_eq!(index.ocr_entries[0].text, "text 504");
         assert_eq!(index.ocr_entries[499].text, "text 5");
         assert!(index.entries.is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_store_removes_generated_entries_by_stable_identity() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-generated-history-remove-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let store = HistoryStore::new(root.join("history.json"));
+
+        let mut color = ColorHistoryEntry::new("AABBCC");
+        color.captured_at_unix_ms = 10;
+        let mut other_color = ColorHistoryEntry::new("AABBCC");
+        other_color.captured_at_unix_ms = 11;
+        let mut ocr = OcrHistoryEntry::new("recognized text");
+        ocr.captured_at_unix_ms = 20;
+        let mut other_ocr = OcrHistoryEntry::new("recognized text");
+        other_ocr.captured_at_unix_ms = 21;
+        let mut code = CodeHistoryEntry::new("https://example.test", "QR_CODE");
+        code.captured_at_unix_ms = 30;
+        let mut other_code = CodeHistoryEntry::new("https://example.test", "QR_CODE");
+        other_code.captured_at_unix_ms = 31;
+
+        store.append_color_entry(color).expect("append color");
+        store
+            .append_color_entry(other_color)
+            .expect("append other color");
+        store.append_ocr_entry(ocr).expect("append OCR");
+        store.append_ocr_entry(other_ocr).expect("append other OCR");
+        store.append_code_entry(code).expect("append code");
+        store
+            .append_code_entry(other_code)
+            .expect("append other code");
+
+        store
+            .remove_color_entry("aabbcc", 10)
+            .expect("remove color");
+        store
+            .remove_ocr_entry("recognized text", 20)
+            .expect("remove OCR");
+        let index = store
+            .remove_code_entry("https://example.test", "qr_code", 30)
+            .expect("remove code");
+
+        assert_eq!(index.colors.len(), 1);
+        assert_eq!(index.colors[0].captured_at_unix_ms, 11);
+        assert_eq!(index.ocr_entries.len(), 1);
+        assert_eq!(index.ocr_entries[0].captured_at_unix_ms, 21);
+        assert_eq!(index.code_entries.len(), 1);
+        assert_eq!(index.code_entries[0].captured_at_unix_ms, 31);
         let _ = fs::remove_dir_all(root);
     }
 

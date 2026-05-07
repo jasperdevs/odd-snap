@@ -39,7 +39,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS and Linux have command-backed text clipboard adapters for copied links and color/history text.
 - Windows can sample the cursor pixel color, format it as OddSnap-compatible hex, and copy it to the clipboard from the GPUI shell or tray color picker command.
 - macOS can sample the cursor pixel color through AppKit/JXA cursor coordinates plus a 1x1 `screencapture` sample, and the GPUI color action routes to that adapter on macOS.
-- Rust history stores recent color picks separately from file-backed media history and exposes recent-color copy actions in the GPUI shell.
+- Rust history stores recent color picks separately from file-backed media history and exposes recent-color copy/remove actions in the GPUI shell.
 - Shared capture persistence can save generated captures into a stable output directory.
 - GPUI shell exposes full-screen and active-window capture smoke controls with a local recent-captures list.
 - Rust app settings can load capture output and clipboard preferences from a JSON settings file.
@@ -109,6 +109,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI history rows show media kind and legacy upload metadata, can copy saved file paths, can copy saved image captures back to the system clipboard, and can copy or open stored upload links.
 - GPUI history rows can remove entries from the persisted Rust history index without deleting the original media file.
 - GPUI history rows can manually retry upload using the current upload destination and persist the new upload URL/error.
+- GPUI generated-history rows can remove color, OCR text, and QR/barcode entries from the persisted Rust history index without touching media files.
 - GPUI feature routing has a dedicated action model module for capture modes, recording targets, settings actions, pending tool parity messages, and cross-platform hotkey events.
 - Imported AI Redirect hotkeys can open configured chat providers that do not require hosted-image upload, copying the newest saved image first.
 - Google Lens AI Redirect can upload the newest saved image through the configured AI temporary host destination, persist the returned upload link in history, and open the Lens URL.
@@ -138,7 +139,8 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS OCR now tries a native Vision `VNRecognizeTextRequest` Swift command path before falling back to Tesseract.
 - The GPUI shell now shows an inline OCR result panel for the latest recognized text, with copy and translate actions, so OCR results are inspectable instead of only copied/truncated in recent rows.
 - The GPUI shell can open a detached OCR result window with scrollable text and a copy action.
-- Rust now has a QR/barcode scan foundation that captures a selected region, decodes QR/Aztec/Data Matrix/PDF417 and common 1D formats through a Rust ZXing-style decoder, copies decoded text, and persists recent scan history.
+- Recent OCR history rows can open the detached result window and remove individual persisted text entries.
+- Rust now has a QR/barcode scan foundation that captures a selected region, decodes QR/Aztec/Data Matrix/PDF417 and common 1D formats through a Rust ZXing-style decoder, copies decoded text, and persists recent scan history with individual remove actions.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Recent OCR text rows can run the Google Translate API path through curl when a migrated API key is present, then copy the translated text.
 - Recent OCR text rows can run Argos Translate through the Python-backed legacy language-pack install/translate script when the runtime is marked installed.
@@ -161,7 +163,7 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, OCR sound/toast polish, full cancellable image-search reindex queue details, full history actions, full sticker/upscale settings UI, release packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, OCR sound/toast polish, full cancellable image-search reindex queue details, remaining legacy history filters/detail views, full sticker/upscale settings UI, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.

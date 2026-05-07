@@ -1120,7 +1120,17 @@ impl OddSnapRustApp {
                                 .text_size(px(12.0))
                                 .child(SharedString::from(format!("#{}", entry.hex))),
                         )
-                        .child(self.copy_color_hex_button(cx, entry.hex.clone())),
+                        .child(
+                            div()
+                                .flex()
+                                .gap(px(6.0))
+                                .child(self.copy_color_hex_button(cx, entry.hex.clone()))
+                                .child(self.remove_color_history_button(
+                                    cx,
+                                    entry.hex.clone(),
+                                    entry.captured_at_unix_ms,
+                                )),
+                        ),
                 );
             }
         }
@@ -1155,7 +1165,13 @@ impl OddSnapRustApp {
                                 .flex()
                                 .gap(px(8.0))
                                 .child(self.copy_ocr_text_button(cx, entry.text.clone()))
-                                .child(self.translate_ocr_text_button(cx, entry.text.clone())),
+                                .child(self.open_ocr_result_window_button(cx, entry.text.clone()))
+                                .child(self.translate_ocr_text_button(cx, entry.text.clone()))
+                                .child(self.remove_ocr_history_button(
+                                    cx,
+                                    entry.text.clone(),
+                                    entry.captured_at_unix_ms,
+                                )),
                         ),
                 );
             }
@@ -1196,7 +1212,18 @@ impl OddSnapRustApp {
                                 .text_size(px(12.0))
                                 .child(SharedString::from(entry.text.clone())),
                         )
-                        .child(self.copy_code_text_button(cx, entry.text.clone())),
+                        .child(
+                            div()
+                                .flex()
+                                .gap(px(8.0))
+                                .child(self.copy_code_text_button(cx, entry.text.clone()))
+                                .child(self.remove_code_history_button(
+                                    cx,
+                                    entry.text.clone(),
+                                    entry.format.clone(),
+                                    entry.captured_at_unix_ms,
+                                )),
+                        ),
                 );
             }
         }
@@ -1857,6 +1884,26 @@ impl OddSnapRustApp {
         }))
     }
 
+    fn remove_color_history_button(
+        &self,
+        cx: &mut Context<Self>,
+        hex: String,
+        captured_at_unix_ms: u64,
+    ) -> impl IntoElement {
+        ui::action_button_style(
+            div().id(SharedString::from(format!(
+                "remove-color-{hex}-{captured_at_unix_ms}"
+            ))),
+            ui::ButtonVariant::History,
+        )
+        .child("Remove")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.remove_color_history_entry(hex.clone(), captured_at_unix_ms);
+            cx.notify();
+        }))
+    }
+
     fn copy_ocr_text_button(&self, cx: &mut Context<Self>, text: String) -> impl IntoElement {
         ui::action_button_style(
             div().id(SharedString::from(format!(
@@ -1893,6 +1940,27 @@ impl OddSnapRustApp {
         }))
     }
 
+    fn remove_ocr_history_button(
+        &self,
+        cx: &mut Context<Self>,
+        text: String,
+        captured_at_unix_ms: u64,
+    ) -> impl IntoElement {
+        ui::action_button_style(
+            div().id(SharedString::from(format!(
+                "remove-ocr-{}-{captured_at_unix_ms}",
+                stable_text_key(&text)
+            ))),
+            ui::ButtonVariant::History,
+        )
+        .child("Remove")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.remove_ocr_history_entry(text.clone(), captured_at_unix_ms);
+            cx.notify();
+        }))
+    }
+
     fn translate_ocr_text_button(&self, cx: &mut Context<Self>, text: String) -> impl IntoElement {
         ui::action_button_style(
             div().id(SharedString::from(format!(
@@ -1921,6 +1989,28 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.copy_code_history_text(text.clone());
+            cx.notify();
+        }))
+    }
+
+    fn remove_code_history_button(
+        &self,
+        cx: &mut Context<Self>,
+        text: String,
+        format: String,
+        captured_at_unix_ms: u64,
+    ) -> impl IntoElement {
+        ui::action_button_style(
+            div().id(SharedString::from(format!(
+                "remove-code-{}-{captured_at_unix_ms}",
+                stable_text_key(&text)
+            ))),
+            ui::ButtonVariant::History,
+        )
+        .child("Remove")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.remove_code_history_entry(text.clone(), format.clone(), captured_at_unix_ms);
             cx.notify();
         }))
     }
@@ -3526,12 +3616,40 @@ impl OddSnapRustApp {
         };
     }
 
+    fn remove_color_history_entry(&mut self, hex: String, captured_at_unix_ms: u64) {
+        self.capture_status = match self
+            .history_store
+            .remove_color_entry(&hex, captured_at_unix_ms)
+        {
+            Ok(index) => {
+                self.color_history = history_entries_to_color_history(index);
+                format!("Removed color #{hex} from history.")
+            }
+            Err(error) => format!("Remove color failed: {error}"),
+        };
+    }
+
     fn copy_ocr_history_text(&mut self, text: String) {
         let result = copy_text_to_host_clipboard(&text);
 
         self.capture_status = match result {
             Ok(()) => "OCR text copied.".into(),
             Err(error) => format!("Copy OCR text failed: {error}"),
+        };
+    }
+
+    fn remove_ocr_history_entry(&mut self, text: String, captured_at_unix_ms: u64) {
+        self.capture_status = match self
+            .history_store
+            .remove_ocr_entry(&text, captured_at_unix_ms)
+        {
+            Ok(index) => {
+                let entries = history_entries_to_ocr_history(index);
+                self.latest_ocr_result = entries.first().map(|entry| entry.text.clone());
+                self.ocr_history = entries;
+                "Removed OCR text from history.".into()
+            }
+            Err(error) => format!("Remove OCR text failed: {error}"),
         };
     }
 
@@ -3567,6 +3685,27 @@ impl OddSnapRustApp {
             Ok(()) => "QR/barcode text copied.".into(),
             Err(error) => format!("Copy QR/barcode text failed: {error}"),
         };
+    }
+
+    fn remove_code_history_entry(
+        &mut self,
+        text: String,
+        format: String,
+        captured_at_unix_ms: u64,
+    ) {
+        self.capture_status =
+            match self
+                .history_store
+                .remove_code_entry(&text, &format, captured_at_unix_ms)
+            {
+                Ok(index) => {
+                    let entries = history_entries_to_code_history(index);
+                    self.latest_scan_result = entries.first().cloned();
+                    self.code_history = entries;
+                    "Removed QR/barcode scan from history.".into()
+                }
+                Err(error) => format!("Remove QR/barcode scan failed: {error}"),
+            };
     }
 
     fn translate_ocr_history_text(&mut self, text: String) {

@@ -106,7 +106,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows cursor color sampling and clipboard copy foundation.
 - [x] macOS cursor color sampling and clipboard copy foundation.
 - [x] Linux cursor color sampling and clipboard copy foundation.
-- [x] Rust color history persistence and recent-color copy actions.
+- [x] Rust color history persistence with recent-color copy and remove actions.
 - [x] Cross-platform image clipboard foundation.
 - [x] Cross-platform text clipboard.
 - [x] GPUI recent-captures list for capture smoke results.
@@ -158,12 +158,12 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Core OCR line-layout text formatter ported from the legacy Windows OCR result flow.
 - [x] Cross-platform OCR service boundary and Tesseract CLI runtime foundation wired into OCR button, hotkey, tray/menu, and default-capture flow.
 - [x] Windows OCR adapter now tries native WinRT OCR before falling back to Tesseract.
-- [x] Rust OCR text history persistence and recent text copy actions.
+- [x] Rust OCR text history persistence with recent text copy, open, translate, and remove actions.
 - [x] GPUI inline OCR result panel with copy and translate actions for the latest recognized text.
 - [x] GPUI detached OCR result window with scrollable text and copy action.
 - [x] macOS Vision OCR command-backed foundation before Tesseract fallback.
 - [ ] macOS OCR language discovery/install status, translation polish, sound/toast polish, and production cleanup.
-- [x] QR/barcode scan foundation decodes captured regions with a Rust ZXing-style decoder, copies decoded text, and persists recent scan history.
+- [x] QR/barcode scan foundation decodes captured regions with a Rust ZXing-style decoder, copies decoded text, and persists recent scan history with copy/remove actions.
 - [ ] Translation.
 - [x] Core translation model, supported-language normalization, source/target resolution, and runtime configuration error rules ported from legacy.
 - [x] Google Translate API curl request/response path wired to recent OCR text rows when a migrated API key is present.
