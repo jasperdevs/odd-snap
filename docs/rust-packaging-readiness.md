@@ -30,6 +30,7 @@ Current Linux runtime foundations also expect optional host tools for feature us
 - X11 active window and color picker: `xdotool`
 - X11 monitor geometry: `xrandr`
 - clipboard: `wl-copy`, `xclip`, or `xsel`
+- X11 recording: `ffmpeg` with `x11grab` support and a valid `DISPLAY`
 
 ## macOS runner and release notes
 

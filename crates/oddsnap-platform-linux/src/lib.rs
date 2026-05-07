@@ -1,12 +1,16 @@
 use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::{
-    io::Write,
+    fs,
+    io::{Read, Write},
     path::PathBuf,
-    process::{Command, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
+    process::{Child, Command, Stdio},
+    thread,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(any(target_os = "linux", test))]
+use oddsnap_core::{build_recording_output_args, FfmpegRecordingRequest};
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
@@ -603,10 +607,224 @@ impl VideoRecordingService for LinuxPlatform {
         &self,
         request: VideoRecordingRequest,
     ) -> Result<Box<dyn oddsnap_platform::VideoRecordingHandle>, PlatformError> {
-        let _ = request;
-        Err(PlatformError::Unsupported(
-            "Linux desktop recording is not implemented yet",
-        ))
+        #[cfg(target_os = "linux")]
+        {
+            start_linux_desktop_recording(request)
+                .map(|handle| Box::new(handle) as Box<dyn oddsnap_platform::VideoRecordingHandle>)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "Linux desktop recording is only available on Linux",
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct LinuxVideoRecordingHandle {
+    child: Option<Child>,
+    output_path: PathBuf,
+    stderr_thread: Option<thread::JoinHandle<String>>,
+}
+
+#[cfg(target_os = "linux")]
+impl oddsnap_platform::VideoRecordingHandle for LinuxVideoRecordingHandle {
+    fn output_path(&self) -> &Path {
+        &self.output_path
+    }
+
+    fn stop(&mut self) -> Result<oddsnap_platform::VideoRecordingResult, PlatformError> {
+        let Some(mut child) = self.child.take() else {
+            return Ok(oddsnap_platform::VideoRecordingResult {
+                output_path: self.output_path.clone(),
+            });
+        };
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            let _ = stdin.write_all(b"q\n");
+            let _ = stdin.flush();
+        }
+
+        let status = wait_for_linux_child_exit(&mut child, Duration::from_secs(30))?;
+        let stderr = self
+            .stderr_thread
+            .take()
+            .and_then(|thread| thread.join().ok())
+            .unwrap_or_default();
+
+        if !status.success() {
+            return Err(PlatformError::Failed(format!(
+                "FFmpeg recording failed with exit code {:?}: {}",
+                status.code(),
+                stderr.trim()
+            )));
+        }
+
+        let metadata = fs::metadata(&self.output_path).map_err(|source| {
+            PlatformError::Failed(format!(
+                "recording output was not created at {}: {source}",
+                self.output_path.display()
+            ))
+        })?;
+        if metadata.len() == 0 {
+            return Err(PlatformError::Failed(format!(
+                "recording output is empty: {}",
+                self.output_path.display()
+            )));
+        }
+
+        Ok(oddsnap_platform::VideoRecordingResult {
+            output_path: self.output_path.clone(),
+        })
+    }
+
+    fn cancel(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        if let Some(thread) = self.stderr_thread.take() {
+            let _ = thread.join();
+        }
+        let _ = fs::remove_file(&self.output_path);
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for LinuxVideoRecordingHandle {
+    fn drop(&mut self) {
+        if self.child.is_some() {
+            self.cancel();
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn start_linux_desktop_recording(
+    request: VideoRecordingRequest,
+) -> Result<LinuxVideoRecordingHandle, PlatformError> {
+    if request.record_microphone || request.record_desktop_audio {
+        return Err(PlatformError::Unsupported(
+            "Linux audio recording is not implemented yet",
+        ));
+    }
+
+    if let Some(parent) = request.output_path.parent() {
+        fs::create_dir_all(parent).map_err(|source| {
+            PlatformError::Failed(format!("failed to create recording directory: {source}"))
+        })?;
+    }
+
+    let tools = oddsnap_core::discover_ffmpeg_tools()
+        .ok_or_else(|| PlatformError::Failed("FFmpeg not found on PATH".into()))?;
+    let args = linux_desktop_recording_args(&request);
+    let mut child = Command::new(&tools.ffmpeg)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|source| PlatformError::Failed(format!("failed to start FFmpeg: {source}")))?;
+
+    let stderr = child.stderr.take();
+    let stderr_thread = stderr.map(|mut stderr| {
+        thread::spawn(move || {
+            let mut buffer = String::new();
+            let _ = stderr.read_to_string(&mut buffer);
+            buffer
+        })
+    });
+
+    Ok(LinuxVideoRecordingHandle {
+        child: Some(child),
+        output_path: request.output_path,
+        stderr_thread,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn linux_desktop_recording_args(request: &VideoRecordingRequest) -> Vec<String> {
+    linux_desktop_recording_args_for_display(request, &linux_x11_display_name())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_desktop_recording_args_for_display(
+    request: &VideoRecordingRequest,
+    display: &str,
+) -> Vec<String> {
+    let fps = request.fps.clamp(1, 240).to_string();
+    let mut input_args = vec![
+        "-hide_banner".into(),
+        "-f".into(),
+        "x11grab".into(),
+        "-draw_mouse".into(),
+        "1".into(),
+        "-framerate".into(),
+        fps,
+    ];
+    if let Some(region) = &request.region {
+        input_args.extend([
+            "-video_size".into(),
+            format!("{}x{}", region.width, region.height),
+        ]);
+    }
+    input_args.extend([
+        "-i".into(),
+        linux_x11grab_input(display, request.region.as_ref()),
+    ]);
+
+    build_recording_output_args(&FfmpegRecordingRequest {
+        input_args,
+        output_path: request.output_path.clone(),
+        format: request.format,
+        quality: request.quality,
+        fps: request.fps,
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn linux_x11_display_name() -> String {
+    std::env::var("DISPLAY")
+        .ok()
+        .filter(|display| !display.trim().is_empty())
+        .unwrap_or_else(|| ":0.0".into())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_x11grab_input(display: &str, region: Option<&CaptureRegion>) -> String {
+    match region {
+        Some(region) => format!("{display}+{},{}", region.x, region.y),
+        None => display.into(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_linux_child_exit(
+    child: &mut Child,
+    timeout: Duration,
+) -> Result<std::process::ExitStatus, PlatformError> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|source| PlatformError::Failed(format!("FFmpeg wait failed: {source}")))?
+        {
+            return Ok(status);
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(PlatformError::Failed(
+                "FFmpeg recording did not stop within 30 seconds".into(),
+            ));
+        }
+
+        thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -1087,7 +1305,8 @@ mod tests {
     }
 
     #[test]
-    fn linux_recording_service_is_explicitly_unimplemented() {
+    #[cfg(not(target_os = "linux"))]
+    fn linux_recording_service_reports_wrong_host() {
         let adapter = LinuxPlatform;
 
         let result = adapter.start_desktop_recording(VideoRecordingRequest {
@@ -1106,7 +1325,114 @@ mod tests {
             Err(error) => error,
         };
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on Linux"));
+    }
+
+    #[test]
+    fn linux_recording_args_use_x11grab_region_input() {
+        let args = super::linux_desktop_recording_args_for_display(
+            &VideoRecordingRequest {
+                output_path: std::path::PathBuf::from("/tmp/oddsnap-recording.webm"),
+                region: Some(oddsnap_platform::CaptureRegion {
+                    x: -12,
+                    y: 34,
+                    width: 800,
+                    height: 600,
+                }),
+                format: RecordingFormat::WebM,
+                quality: RecordingQuality::P720,
+                fps: 144,
+                record_microphone: false,
+                record_desktop_audio: false,
+                microphone_device_id: None,
+                desktop_audio_device_id: None,
+            },
+            ":1",
+        );
+
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-f".to_string(), "x11grab".to_string()]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-video_size".to_string(), "800x600".to_string()]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i".to_string(), ":1+-12,34".to_string()]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-vf".to_string(), "scale=-2:720".to_string()]));
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("/tmp/oddsnap-recording.webm")
+        );
+    }
+
+    #[test]
+    fn linux_recording_args_allow_full_display_input() {
+        let args = super::linux_desktop_recording_args_for_display(
+            &VideoRecordingRequest {
+                output_path: std::path::PathBuf::from("/tmp/oddsnap-recording.mp4"),
+                region: None,
+                format: RecordingFormat::Mp4,
+                quality: RecordingQuality::Original,
+                fps: 30,
+                record_microphone: false,
+                record_desktop_audio: false,
+                microphone_device_id: None,
+                desktop_audio_device_id: None,
+            },
+            ":0",
+        );
+
+        assert!(!args.iter().any(|arg| arg == "-video_size"));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["-i".to_string(), ":0".to_string()]));
+    }
+
+    #[test]
+    #[ignore = "starts a short local X11 FFmpeg recording if DISPLAY and ffmpeg are available"]
+    #[cfg(target_os = "linux")]
+    fn linux_recording_can_start_and_cancel() {
+        if oddsnap_core::discover_ffmpeg_tools().is_none() {
+            return;
+        }
+        if std::env::var("DISPLAY")
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
+            return;
+        }
+
+        let output_path = std::env::temp_dir().join(format!(
+            "oddsnap-linux-recording-test-{}.mp4",
+            std::process::id()
+        ));
+        let adapter = LinuxPlatform;
+        let mut handle = adapter
+            .start_desktop_recording(VideoRecordingRequest {
+                output_path: output_path.clone(),
+                region: Some(oddsnap_platform::CaptureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 64,
+                    height: 64,
+                }),
+                format: RecordingFormat::Mp4,
+                quality: RecordingQuality::Original,
+                fps: 5,
+                record_microphone: false,
+                record_desktop_audio: false,
+                microphone_device_id: None,
+                desktop_audio_device_id: None,
+            })
+            .expect("start Linux recording");
+
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        handle.cancel();
+        let _ = std::fs::remove_file(output_path);
     }
 
     #[test]

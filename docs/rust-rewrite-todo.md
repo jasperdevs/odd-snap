@@ -65,7 +65,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows still-capture cursor inclusion preference.
 - [ ] Cross-platform region capture.
 - [x] Windows active-window capture foundation.
-- [ ] Cross-platform window capture.
+- [x] Cross-platform active-window capture foundation.
 - [ ] Production region selection overlay.
 - [x] Windows primitive drag region selection capture path.
 - [x] Windows primitive region-selection frame and crosshair visual feedback.
@@ -100,6 +100,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] GIF recording.
 - [x] Windows FFmpeg-backed desktop video recording start/stop foundation.
 - [x] Windows FFmpeg recording can target an explicit capture region.
+- [x] Linux X11 FFmpeg-backed desktop video recording start/cancel/stop foundation.
+- [x] Linux X11 FFmpeg recording can target an explicit capture region.
 - [ ] Region GIF recording.
 - [x] GPUI active-window recording uses the explicit-region FFmpeg path.
 - [ ] Freeform region MP4/WebM recording.

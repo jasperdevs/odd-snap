@@ -71,6 +71,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust core can build format-specific FFmpeg output arguments for GIF, MP4, WebM, and MKV recording targets.
 - Windows has a Rust platform service boundary for starting/stopping FFmpeg-backed desktop video recordings from the GPUI shell.
 - Windows FFmpeg recording requests can carry capture-region bounds into `gdigrab` offset/video-size arguments.
+- Linux has an X11 FFmpeg-backed desktop recording foundation through `x11grab`, including explicit-region bounds for full-screen and active-window recording requests.
 - GPUI can start active-window recording through the explicit-region FFmpeg path.
 - Rust recording history can store FFmpeg-generated JPG thumbnails for saved GIF/video entries.
 - GPUI can persistently cycle implemented recording preferences for format and quality.
@@ -82,7 +83,8 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, packaging, or update behavior.
+Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present, but the Rust menu still routes text capture and scroll capture to pending-status messages until those feature backends land.
 The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, or sound/toast polish.
 The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair/window-detection feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, or annotation tools.

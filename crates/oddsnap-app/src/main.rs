@@ -1543,40 +1543,14 @@ impl OddSnapRustApp {
 
     fn start_recording(&mut self, target: RecordingTarget) {
         #[cfg(target_os = "windows")]
-        let result = (|| {
-            let adapter = oddsnap_platform_windows::WindowsPlatform;
-            let region = match target {
-                RecordingTarget::FullScreen => {
-                    let monitors = adapter.monitors()?;
-                    virtual_screen_region(&monitors).ok_or_else(|| {
-                        oddsnap_platform::PlatformError::Failed(
-                            "no monitors available for recording".into(),
-                        )
-                    })?
-                }
-                RecordingTarget::ActiveWindow => adapter.active_window()?.bounds,
-            };
-            let output_path = self.recording_destination(region.width, region.height);
-            let fps = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
-                self.settings.gif_fps
-            } else {
-                self.settings.recording_fps
-            };
-            let handle = adapter.start_desktop_recording(VideoRecordingRequest {
-                output_path,
-                region: Some(region.clone()),
-                format: self.settings.recording_format,
-                quality: self.settings.recording_quality,
-                fps,
-                record_microphone: self.settings.record_microphone,
-                record_desktop_audio: self.settings.record_desktop_audio,
-                microphone_device_id: self.settings.microphone_device_id.clone(),
-                desktop_audio_device_id: self.settings.desktop_audio_device_id.clone(),
-            })?;
-            Ok::<_, oddsnap_platform::PlatformError>((handle, region.width, region.height, target))
-        })();
+        let result =
+            self.start_recording_with_adapter(oddsnap_platform_windows::WindowsPlatform, target);
 
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "linux")]
+        let result =
+            self.start_recording_with_adapter(oddsnap_platform_linux::LinuxPlatform, target);
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
         let result: Result<
             (Box<dyn VideoRecordingHandle>, u32, u32, RecordingTarget),
             oddsnap_platform::PlatformError,
@@ -1597,6 +1571,50 @@ impl OddSnapRustApp {
             }
             Err(error) => format!("Recording failed to start: {error}"),
         };
+    }
+
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    fn start_recording_with_adapter<T>(
+        &self,
+        adapter: T,
+        target: RecordingTarget,
+    ) -> Result<
+        (Box<dyn VideoRecordingHandle>, u32, u32, RecordingTarget),
+        oddsnap_platform::PlatformError,
+    >
+    where
+        T: ScreenCaptureService + WindowPickerService + VideoRecordingService,
+    {
+        let region = match target {
+            RecordingTarget::FullScreen => {
+                let monitors = adapter.monitors()?;
+                virtual_screen_region(&monitors).ok_or_else(|| {
+                    oddsnap_platform::PlatformError::Failed(
+                        "no monitors available for recording".into(),
+                    )
+                })?
+            }
+            RecordingTarget::ActiveWindow => adapter.active_window()?.bounds,
+        };
+        let output_path = self.recording_destination(region.width, region.height);
+        let fps = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
+            self.settings.gif_fps
+        } else {
+            self.settings.recording_fps
+        };
+        let handle = adapter.start_desktop_recording(VideoRecordingRequest {
+            output_path,
+            region: Some(region.clone()),
+            format: self.settings.recording_format,
+            quality: self.settings.recording_quality,
+            fps,
+            record_microphone: self.settings.record_microphone,
+            record_desktop_audio: self.settings.record_desktop_audio,
+            microphone_device_id: self.settings.microphone_device_id.clone(),
+            desktop_audio_device_id: self.settings.desktop_audio_device_id.clone(),
+        })?;
+
+        Ok((handle, region.width, region.height, target))
     }
 
     fn stop_recording(&mut self) {

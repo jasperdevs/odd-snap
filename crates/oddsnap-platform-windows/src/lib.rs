@@ -1,14 +1,18 @@
-use oddsnap_core::{
-    build_recording_output_args, discover_ffmpeg_tools, CapabilityState, FfmpegRecordingRequest,
-    NativeUiProfile, PlatformCapabilities, PlatformCapability,
-};
+use std::path::Path;
+
+#[cfg(target_os = "windows")]
+use oddsnap_core::{build_recording_output_args, discover_ffmpeg_tools, FfmpegRecordingRequest};
+use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
+#[cfg(target_os = "windows")]
+use oddsnap_platform::image_file_to_windows_dib_bytes;
+#[cfg(target_os = "windows")]
+use oddsnap_platform::VideoRecordingResult;
 use oddsnap_platform::{
-    image_file_to_windows_dib_bytes, CaptureRegion, CaptureRequest, CaptureResult,
-    ClipboardImageService, ClipboardTextService, ColorPickerService, ColorSample, HotkeyService,
-    MonitorInfo, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter, PlatformError,
-    RegionOverlayService, RegionSelectionService, ScreenCaptureService, ScreenshotExclusionService,
-    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult, VideoRecordingService,
-    WindowInfo, WindowPickerService,
+    CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
+    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle,
+    OverlayWindowRequest, PlatformAdapter, PlatformError, RegionOverlayService,
+    RegionSelectionService, ScreenCaptureService, ScreenshotExclusionService, VideoRecordingHandle,
+    VideoRecordingRequest, VideoRecordingService, WindowInfo, WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -20,7 +24,7 @@ use std::{
     fs,
     io::{Read, Write},
     mem,
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
         mpsc::{self, Sender},
