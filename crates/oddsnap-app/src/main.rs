@@ -24,15 +24,15 @@ use oddsnap_core::{
     default_settings_path, discover_ffmpeg_tools, format_file_name_template,
     history_entry_can_be_image_indexed, humanize_barcode_format,
     image_search_record_matches_history_entry, image_search_record_needs_ocr,
-    pending_image_search_record_from_history_entry, retain_indexed_image_paths,
-    upsert_image_search_record, AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat,
-    CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry,
-    HistoryIndex, HistoryKind, HistoryStore, ImageSearchIndex, ImageSearchIndexRecord,
-    ImageSearchIndexStore, ImageSearchOcrState, ImageSearchSources, OcrHistoryEntry,
-    PlatformCapability, RecordingFormat, RecordingQuality, ScrollingCaptureMode, SettingsStore,
-    StickerProvider, StickerSettings, TranslationModel, UpdatePlatform, UploadDestination,
-    UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings, LATEST_RELEASE_API_URL,
-    RELEASES_PAGE_URL, SUPPORTED_TRANSLATION_LANGUAGES,
+    orphan_video_thumbnail_paths, pending_image_search_record_from_history_entry,
+    retain_indexed_image_paths, upsert_image_search_record, AiChatProvider, AppSettings,
+    CapabilityState, CaptureImageFormat, CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode,
+    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
+    ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchOcrState,
+    ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
+    ScrollingCaptureMode, SettingsStore, StickerProvider, StickerSettings, TranslationModel,
+    UpdatePlatform, UploadDestination, UploadPreflight, UploadSettings, UpscaleProvider,
+    UpscaleSettings, LATEST_RELEASE_API_URL, RELEASES_PAGE_URL, SUPPORTED_TRANSLATION_LANGUAGES,
 };
 use oddsnap_platform::{
     default_capture_directory, image_file_dimensions, persist_capture_to_path_as,
@@ -1512,6 +1512,12 @@ impl OddSnapRustApp {
             .child(self.history_kind_filter_button(cx))
             .child(self.history_upload_filter_button(cx))
             .child(self.copy_filtered_history_paths_button(cx))
+            .child(self.settings_button(
+                cx,
+                "clean-video-thumbnail-cache-button",
+                "Clean thumbs".into(),
+                SettingsAction::CleanVideoThumbnailCache,
+            ))
             .child(self.copy_filtered_upload_links_button(cx))
             .child(self.upload_filtered_history_button(cx))
             .when(filtered_count > 0, |bar| {
@@ -3646,6 +3652,9 @@ impl OddSnapRustApp {
                     on_off(self.settings.auto_index_images)
                 ));
             }
+            SettingsAction::CleanVideoThumbnailCache => {
+                self.cleanup_video_thumbnail_cache();
+            }
             SettingsAction::StartImageSearchReindexQueue => {
                 self.start_image_search_reindex_queue();
             }
@@ -4407,6 +4416,22 @@ impl OddSnapRustApp {
         self.capture_status = match copy_text_to_host_clipboard(&text) {
             Ok(()) => format!("{path_count} {label} history paths copied."),
             Err(error) => format!("Copy {label} history paths failed: {error}"),
+        };
+    }
+
+    fn cleanup_video_thumbnail_cache(&mut self) {
+        let index = match self.history_store.load_or_default() {
+            Ok(index) => index,
+            Err(error) => {
+                self.media_status = format!("Video thumbnail cleanup failed: {error}");
+                return;
+            }
+        };
+
+        self.media_status = match cleanup_orphan_video_thumbnails(&self.history_store, &index) {
+            Ok(0) => "No orphan video thumbnails found.".into(),
+            Ok(count) => format!("Removed {count} orphan video thumbnails."),
+            Err(error) => format!("Video thumbnail cleanup failed: {error}"),
         };
     }
 
@@ -6792,6 +6817,57 @@ fn video_thumbnail_path(history_store: &HistoryStore, media_path: &Path) -> Opti
     Some(directory.join(format!("{}.jpg", stable_path_key(media_path))))
 }
 
+fn cleanup_orphan_video_thumbnails(
+    history_store: &HistoryStore,
+    index: &HistoryIndex,
+) -> Result<usize, String> {
+    let candidates = managed_video_thumbnail_candidates(history_store)?;
+    let orphan_paths = orphan_video_thumbnail_paths(index, candidates);
+    let mut removed = 0usize;
+    for path in orphan_paths {
+        match fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!("failed to remove {}: {error}", path.display()));
+            }
+        }
+    }
+    Ok(removed)
+}
+
+fn managed_video_thumbnail_candidates(
+    history_store: &HistoryStore,
+) -> Result<Vec<PathBuf>, String> {
+    let Some(directory) = history_store
+        .path()
+        .parent()
+        .map(|parent| parent.join("thumbs"))
+    else {
+        return Ok(Vec::new());
+    };
+    if !directory.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = fs::read_dir(&directory)
+        .map_err(|error| format!("failed to read {}: {error}", directory.display()))?;
+    let mut candidates = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "failed to inspect thumbnail in {}: {error}",
+                directory.display()
+            )
+        })?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("jpg") {
+            candidates.push(path);
+        }
+    }
+    Ok(candidates)
+}
+
 fn stable_path_key(path: &Path) -> String {
     let mut hash = 0xcbf29ce484222325u64;
     for byte in path.display().to_string().to_ascii_lowercase().bytes() {
@@ -7878,6 +7954,58 @@ mod tests {
         );
         first.path = " ".into();
         assert_eq!(history_paths_text(&[first]), None);
+    }
+
+    #[test]
+    fn cleanup_orphan_video_thumbnails_only_removes_unreferenced_jpgs() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-video-thumb-cleanup-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let thumbs = root.join("thumbs");
+        fs::create_dir_all(&thumbs).expect("create thumbnail dir");
+
+        let live = thumbs.join("live.jpg");
+        let orphan = thumbs.join("orphan.jpg");
+        let non_jpg = thumbs.join("notes.txt");
+        fs::write(&live, b"live").expect("write live thumb");
+        fs::write(&orphan, b"orphan").expect("write orphan thumb");
+        fs::write(&non_jpg, b"keep").expect("write non-jpg");
+
+        let store = HistoryStore::new(root.join("rust-history.json"));
+        let index = HistoryIndex {
+            entries: vec![HistoryEntry {
+                file_path: root.join("clip.mp4"),
+                file_name: "clip.mp4".into(),
+                captured_at_unix_ms: 1,
+                width: 10,
+                height: 10,
+                file_size_bytes: 10,
+                kind: HistoryKind::Video,
+                upload_url: None,
+                upload_provider: None,
+                upload_error: None,
+                thumbnail_path: Some(live.clone()),
+            }],
+            ..HistoryIndex::default()
+        };
+
+        assert_eq!(
+            managed_video_thumbnail_candidates(&store)
+                .expect("list managed thumbnails")
+                .len(),
+            2
+        );
+        assert_eq!(
+            cleanup_orphan_video_thumbnails(&store, &index).expect("cleanup thumbnails"),
+            1
+        );
+        assert!(live.exists());
+        assert!(!orphan.exists());
+        assert!(non_jpg.exists());
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

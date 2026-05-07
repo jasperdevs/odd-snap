@@ -68,6 +68,7 @@ pub(crate) enum SettingsAction {
     ToggleImageSearchExactMatch,
     ToggleImageSearchDiagnostics,
     ToggleImageSearchAutoIndex,
+    CleanVideoThumbnailCache,
     StartImageSearchReindexQueue,
     CancelImageSearchReindexQueue,
     TranslationModel,
