@@ -119,6 +119,36 @@ pub(crate) fn filtered_capture_history(
         .collect()
 }
 
+pub(crate) fn history_selection_contains(selected_paths: &[String], path: &str) -> bool {
+    selected_paths
+        .iter()
+        .any(|selected_path| selected_path == path)
+}
+
+pub(crate) fn toggle_selected_history_path(selected_paths: &mut Vec<String>, path: String) -> bool {
+    if let Some(index) = selected_paths
+        .iter()
+        .position(|selected_path| selected_path == &path)
+    {
+        selected_paths.remove(index);
+        false
+    } else {
+        selected_paths.push(path);
+        true
+    }
+}
+
+pub(crate) fn retain_selected_history_paths(
+    selected_paths: &mut Vec<String>,
+    available_paths: &[String],
+) {
+    selected_paths.retain(|selected_path| {
+        available_paths
+            .iter()
+            .any(|available_path| available_path == selected_path)
+    });
+}
+
 pub(crate) fn next_media_history_visible_limit(current: usize, total: usize) -> usize {
     current
         .max(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT)
@@ -265,5 +295,29 @@ mod tests {
         assert_eq!(format_storage_size(1024 * 1024 * 3), "3.0 MB");
         assert_eq!(format_history_age(0, 60_000), "this session");
         assert_eq!(format_history_age(1, 60_000 * 10), "9m ago");
+    }
+
+    #[test]
+    fn history_selection_toggles_and_discards_missing_paths() {
+        let mut selected_paths = vec!["one.png".into()];
+
+        assert!(history_selection_contains(&selected_paths, "one.png"));
+        assert!(toggle_selected_history_path(
+            &mut selected_paths,
+            "two.png".into()
+        ));
+        assert_eq!(selected_paths, vec!["one.png", "two.png"]);
+
+        assert!(!toggle_selected_history_path(
+            &mut selected_paths,
+            "one.png".into()
+        ));
+        assert_eq!(selected_paths, vec!["two.png"]);
+
+        retain_selected_history_paths(&mut selected_paths, &["three.png".into(), "two.png".into()]);
+        assert_eq!(selected_paths, vec!["two.png"]);
+
+        retain_selected_history_paths(&mut selected_paths, &["three.png".into()]);
+        assert!(selected_paths.is_empty());
     }
 }

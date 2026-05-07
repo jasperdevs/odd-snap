@@ -13,7 +13,7 @@ This rewrite should behave like a native shell over reusable feature modules, no
 - `crates/oddsnap-app/src/ui.rs`: reusable GPUI skin, colors, spacing, and button variants.
 - `crates/oddsnap-app/src/hotkeys.rs`: imported hotkey accelerator mapping, duplicate checks, cross-platform listener startup, and Linux session gating.
 - `crates/oddsnap-app/src/image_search.rs`: GPUI-facing image-search state and view helpers.
-- `crates/oddsnap-app/src/media_history.rs`: GPUI-facing media-history filters, visible-row limits, and display metadata helpers.
+- `crates/oddsnap-app/src/media_history.rs`: GPUI-facing media-history filters, selection helpers, visible-row limits, and display metadata helpers.
 - `crates/oddsnap-app/src/ocr_translation.rs`: GPUI-facing OCR translation workflow.
 - `crates/oddsnap-app/src/main.rs`: application composition, state ownership, render tree, and orchestration. New feature logic should move out once it grows beyond simple wiring.
 

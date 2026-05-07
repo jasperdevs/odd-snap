@@ -68,8 +68,9 @@ use hotkeys::{
 use hotkeys::{start_capture_hotkey_listener, ImportedHotkeyAccelerators};
 use image_search::{ImageSearchOcrHydrationSummary, ImageSearchReindexQueueState};
 use media_history::{
-    filtered_capture_history, media_history_count_text, media_history_detail_line,
-    media_history_group_label, next_media_history_visible_limit, HistoryKindFilter,
+    filtered_capture_history, history_selection_contains, media_history_count_text,
+    media_history_detail_line, media_history_group_label, next_media_history_visible_limit,
+    retain_selected_history_paths, toggle_selected_history_path, HistoryKindFilter,
     HistoryUploadFilter, DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT,
     IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT,
 };
@@ -152,6 +153,7 @@ struct OddSnapRustApp {
     history_kind_filter: HistoryKindFilter,
     history_upload_filter: HistoryUploadFilter,
     media_history_visible_limit: usize,
+    selected_history_paths: Vec<String>,
     image_search_reindex_queue: ImageSearchReindexQueueState,
     last_auto_image_search_ocr_unix_ms: u64,
     focus_handle: gpui::FocusHandle,
@@ -448,6 +450,7 @@ impl OddSnapRustApp {
             history_kind_filter: HistoryKindFilter::All,
             history_upload_filter: HistoryUploadFilter::All,
             media_history_visible_limit: DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT,
+            selected_history_paths: Vec::new(),
             image_search_reindex_queue: ImageSearchReindexQueueState::default(),
             last_auto_image_search_ocr_unix_ms: 0,
             focus_handle: cx.focus_handle(),
@@ -1457,6 +1460,7 @@ impl OddSnapRustApp {
                             .child(self.open_history_file_button(cx, entry.path.clone()))
                             .child(self.open_history_button(cx, entry.path.clone()))
                             .child(self.copy_history_path_button(cx, entry.path.clone()))
+                            .child(self.select_history_button(cx, entry.path.clone()))
                             .when(entry.kind == HistoryKind::Image, |row| {
                                 row.child(self.copy_history_image_button(cx, entry.path.clone()))
                             })
@@ -1486,6 +1490,7 @@ impl OddSnapRustApp {
             .sum();
         let filter_active = self.history_kind_filter != HistoryKindFilter::All
             || self.history_upload_filter != HistoryUploadFilter::All;
+        let selected_count = self.selected_history_paths.len();
 
         div()
             .flex()
@@ -1495,6 +1500,16 @@ impl OddSnapRustApp {
             .child(self.history_upload_filter_button(cx))
             .child(self.copy_filtered_upload_links_button(cx))
             .child(self.upload_filtered_history_button(cx))
+            .when(selected_count > 0, |bar| {
+                bar.child(self.remove_selected_history_button(cx))
+                    .child(self.clear_history_selection_button(cx))
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(rgb(0x8b93a3))
+                            .child(SharedString::from(format!("{selected_count} selected"))),
+                    )
+            })
             .when(
                 filtered_count > DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT
                     && self.media_history_visible_limit < filtered_count,
@@ -1531,6 +1546,7 @@ impl OddSnapRustApp {
             cx.stop_propagation();
             this.history_kind_filter = this.history_kind_filter.next();
             this.media_history_visible_limit = DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT;
+            this.selected_history_paths.clear();
             this.capture_status =
                 format!("History kind filter: {}.", this.history_kind_filter.label());
             cx.notify();
@@ -1591,6 +1607,7 @@ impl OddSnapRustApp {
             cx.stop_propagation();
             this.history_upload_filter = this.history_upload_filter.next();
             this.media_history_visible_limit = DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT;
+            this.selected_history_paths.clear();
             this.capture_status = format!(
                 "History upload filter: {}.",
                 this.history_upload_filter.label()
@@ -2158,6 +2175,21 @@ impl OddSnapRustApp {
         }))
     }
 
+    fn select_history_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
+        let selected = history_selection_contains(&self.selected_history_paths, &path);
+        let label = if selected { "Selected" } else { "Select" };
+        ui::action_button_style(
+            div().id(SharedString::from(format!("select-history-{path}"))),
+            ui::ButtonVariant::History,
+        )
+        .child(label)
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.toggle_history_selection(path.clone());
+            cx.notify();
+        }))
+    }
+
     fn remove_history_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
         ui::action_button_style(
             div().id(SharedString::from(format!("remove-history-{path}"))),
@@ -2167,6 +2199,32 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.remove_history_entry(path.clone());
+            cx.notify();
+        }))
+    }
+
+    fn remove_selected_history_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("remove-selected-history-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Remove selected")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.remove_selected_history_entries();
+            cx.notify();
+        }))
+    }
+
+    fn clear_history_selection_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("clear-history-selection-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Clear selection")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.clear_history_selection();
             cx.notify();
         }))
     }
@@ -4185,6 +4243,25 @@ impl OddSnapRustApp {
         };
     }
 
+    fn toggle_history_selection(&mut self, path: String) {
+        let selected = toggle_selected_history_path(&mut self.selected_history_paths, path.clone());
+        self.media_status = if selected {
+            format!("Selected {path}.")
+        } else {
+            format!("Unselected {path}.")
+        };
+    }
+
+    fn clear_history_selection(&mut self) {
+        let selected_count = self.selected_history_paths.len();
+        self.selected_history_paths.clear();
+        self.media_status = if selected_count == 0 {
+            "No selected history rows to clear.".into()
+        } else {
+            format!("Cleared {selected_count} selected history rows.")
+        };
+    }
+
     fn run_ai_redirect(&mut self) {
         let upload_settings =
             UploadSettings::from_json_value(self.settings.image_upload_settings.as_ref());
@@ -4262,6 +4339,31 @@ impl OddSnapRustApp {
                 format!("Removed {path} from history.")
             }
             Err(error) => format!("Remove from history failed: {error}"),
+        };
+    }
+
+    fn remove_selected_history_entries(&mut self) {
+        let paths = self
+            .selected_history_paths
+            .iter()
+            .map(PathBuf::from)
+            .collect::<Vec<_>>();
+
+        if paths.is_empty() {
+            self.capture_status = "No selected history entries to remove.".into();
+            return;
+        }
+
+        self.capture_status = match self.history_store.remove_entries(paths.iter()) {
+            Ok(index) => {
+                for path in &paths {
+                    let _ = self.image_search_index_store.remove_record(path);
+                }
+                let removed_count = paths.len();
+                self.refresh_capture_history(index);
+                format!("Removed {removed_count} selected history entries.")
+            }
+            Err(error) => format!("Remove selected history failed: {error}"),
         };
     }
 
@@ -5249,6 +5351,12 @@ impl OddSnapRustApp {
             .unwrap_or_default();
         self.capture_history =
             history_entries_to_capture_history(history_index, &image_search_index);
+        let available_paths = self
+            .capture_history
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+        retain_selected_history_paths(&mut self.selected_history_paths, &available_paths);
     }
 
     fn sync_pending_image_search_entry(&mut self, entry: &HistoryEntry) -> String {
