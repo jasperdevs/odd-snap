@@ -37,7 +37,10 @@ impl PlatformAdapter for LinuxPlatform {
                     CapabilityState::InProgress,
                 ),
                 (PlatformCapability::RegionOverlay, CapabilityState::Planned),
-                (PlatformCapability::WindowCapture, CapabilityState::Planned),
+                (
+                    PlatformCapability::WindowCapture,
+                    CapabilityState::InProgress,
+                ),
                 (
                     PlatformCapability::ScreenshotExclusion,
                     CapabilityState::Planned,
@@ -241,10 +244,110 @@ fn linux_capture_output_path() -> PathBuf {
 
 impl WindowPickerService for LinuxPlatform {
     fn active_window(&self) -> Result<WindowInfo, PlatformError> {
-        Err(PlatformError::Unsupported(
-            "Linux active-window detection is not implemented yet",
-        ))
+        #[cfg(target_os = "linux")]
+        {
+            run_linux_active_window_detection()
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(PlatformError::Unsupported(
+                "Linux active-window detection is only available on Linux",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn run_linux_active_window_detection() -> Result<WindowInfo, PlatformError> {
+    let window_id = run_linux_command_stdout("xdotool", &["getactivewindow"])?;
+    let window_id = window_id.trim();
+    if window_id.is_empty() {
+        return Err(PlatformError::Failed(
+            "xdotool did not report an active window id".into(),
+        ));
+    }
+
+    let geometry =
+        run_linux_command_stdout("xdotool", &["getwindowgeometry", "--shell", window_id])?;
+    let title = run_linux_command_stdout("xdotool", &["getwindowname", window_id])
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    parse_xdotool_window_geometry(window_id, &title, &geometry)
+}
+
+#[cfg(target_os = "linux")]
+fn run_linux_command_stdout(program: &str, args: &[&str]) -> Result<String, PlatformError> {
+    let output = Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|source| PlatformError::Failed(format!("failed to start {program}: {source}")))?;
+
+    if !output.status.success() {
+        return Err(PlatformError::Failed(format!(
+            "{program} exited with status {}",
+            output.status
+        )));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xdotool_window_geometry(
+    window_id: &str,
+    title: &str,
+    geometry: &str,
+) -> Result<WindowInfo, PlatformError> {
+    let x = parse_xdotool_i32(geometry, "X")?;
+    let y = parse_xdotool_i32(geometry, "Y")?;
+    let width = parse_xdotool_u32(geometry, "WIDTH")?;
+    let height = parse_xdotool_u32(geometry, "HEIGHT")?;
+    if width == 0 || height == 0 {
+        return Err(PlatformError::Failed(
+            "xdotool reported an empty active-window rectangle".into(),
+        ));
+    }
+
+    Ok(WindowInfo {
+        id: window_id.trim().into(),
+        title: title.trim().into(),
+        bounds: CaptureRegion {
+            x,
+            y,
+            width,
+            height,
+        },
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xdotool_i32(geometry: &str, key: &str) -> Result<i32, PlatformError> {
+    parse_xdotool_value(geometry, key)?
+        .parse::<i32>()
+        .map_err(|source| {
+            PlatformError::Failed(format!("xdotool reported invalid {key} value: {source}"))
+        })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xdotool_u32(geometry: &str, key: &str) -> Result<u32, PlatformError> {
+    parse_xdotool_value(geometry, key)?
+        .parse::<u32>()
+        .map_err(|source| {
+            PlatformError::Failed(format!("xdotool reported invalid {key} value: {source}"))
+        })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xdotool_value<'a>(geometry: &'a str, key: &str) -> Result<&'a str, PlatformError> {
+    geometry
+        .lines()
+        .filter_map(|line| line.split_once('='))
+        .find_map(|(candidate, value)| (candidate == key).then_some(value.trim()))
+        .ok_or_else(|| PlatformError::Failed(format!("xdotool output missing {key}")))
 }
 
 impl ClipboardImageService for LinuxPlatform {
@@ -428,7 +531,7 @@ mod tests {
     use oddsnap_platform::{
         ClipboardImageService, ClipboardTextService, ColorPickerService, HotkeyService,
         OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
-        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
+        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
     };
 
     use super::LinuxPlatform;
@@ -468,6 +571,18 @@ mod tests {
     }
 
     #[test]
+    fn linux_window_capture_capability_is_in_progress() {
+        let adapter = LinuxPlatform;
+
+        assert_eq!(
+            adapter
+                .capabilities()
+                .state(oddsnap_core::PlatformCapability::WindowCapture),
+            oddsnap_core::CapabilityState::InProgress
+        );
+    }
+
+    #[test]
     #[cfg(not(target_os = "linux"))]
     fn linux_capture_services_report_wrong_host() {
         let adapter = LinuxPlatform;
@@ -485,6 +600,45 @@ mod tests {
             })
             .expect_err("Linux capture wrong host");
         assert!(error.to_string().contains("only available on Linux"));
+
+        let error = adapter
+            .active_window()
+            .expect_err("Linux active window wrong host");
+        assert!(error.to_string().contains("only available on Linux"));
+    }
+
+    #[test]
+    fn linux_active_window_parser_reads_xdotool_shell_geometry() {
+        let window = super::parse_xdotool_window_geometry(
+            "10485763",
+            "OddSnap",
+            "WINDOW=10485763\nX=-20\nY=40\nWIDTH=1280\nHEIGHT=720\nSCREEN=0\n",
+        )
+        .expect("parse xdotool geometry");
+
+        assert_eq!(window.id, "10485763");
+        assert_eq!(window.title, "OddSnap");
+        assert_eq!(
+            window.bounds,
+            oddsnap_platform::CaptureRegion {
+                x: -20,
+                y: 40,
+                width: 1280,
+                height: 720,
+            }
+        );
+    }
+
+    #[test]
+    fn linux_active_window_parser_rejects_empty_geometry() {
+        let error = super::parse_xdotool_window_geometry(
+            "10485763",
+            "OddSnap",
+            "WINDOW=10485763\nX=0\nY=0\nWIDTH=0\nHEIGHT=720\n",
+        )
+        .expect_err("empty xdotool geometry rejected");
+
+        assert!(error.to_string().contains("empty active-window"));
     }
 
     #[test]

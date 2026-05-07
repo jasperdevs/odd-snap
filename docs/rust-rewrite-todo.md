@@ -52,6 +52,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Linux Wayland global hotkey support.
 - [x] Linux explicit unsupported capture/clipboard adapter surfaces.
 - [x] Linux command-backed still screenshot capture foundation.
+- [x] Linux X11 active-window discovery foundation through `xdotool`.
 
 ## Milestone 3 - Capture Core
 
