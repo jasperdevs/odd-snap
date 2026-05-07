@@ -31,6 +31,7 @@ use oddsnap_core::{
     ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
     ScrollingCaptureMode, SettingsStore, StickerProvider, StickerSettings, TranslationModel,
     UploadDestination, UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings,
+    SUPPORTED_TRANSLATION_LANGUAGES,
 };
 use oddsnap_platform::{
     default_capture_directory, image_file_dimensions, persist_capture_to_path_as,
@@ -707,6 +708,50 @@ impl OddSnapRustApp {
                     .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(
                         ocr_translation::translation_runtime_status_summary(&self.settings),
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "translation-model-button",
+                        format!(
+                            "Translate {}",
+                            TranslationModel::from_legacy_value(self.settings.translation_model)
+                                .label()
+                        ),
+                        SettingsAction::TranslationModel,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "translation-source-button",
+                        format!(
+                            "From {}",
+                            oddsnap_core::translation_language_name(
+                                &oddsnap_core::resolve_translation_source_language(Some(
+                                    &self.settings.ocr_default_translate_from
+                                ))
+                            )
+                        ),
+                        SettingsAction::TranslationSourceLanguage,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "translation-target-button",
+                        format!(
+                            "To {}",
+                            oddsnap_core::translation_language_name(
+                                &oddsnap_core::resolve_translation_target_language(
+                                    Some(&self.settings.ocr_default_translate_to),
+                                    Some(&self.settings.interface_language),
+                                    None,
+                                )
+                            )
+                        ),
+                        SettingsAction::TranslationTargetLanguage,
                     )),
             )
             .child(
@@ -3293,6 +3338,38 @@ impl OddSnapRustApp {
             SettingsAction::CancelImageSearchReindexQueue => {
                 self.cancel_image_search_reindex_queue();
             }
+            SettingsAction::TranslationModel => {
+                self.settings.translation_model =
+                    next_translation_model(self.settings.translation_model) as u32;
+                self.persist_translation_settings(format!(
+                    "Translation model set to {}",
+                    TranslationModel::from_legacy_value(self.settings.translation_model).label()
+                ));
+            }
+            SettingsAction::TranslationSourceLanguage => {
+                self.settings.ocr_default_translate_from =
+                    next_supported_translation_language(&self.settings.ocr_default_translate_from);
+                let source = oddsnap_core::resolve_translation_source_language(Some(
+                    &self.settings.ocr_default_translate_from,
+                ));
+                self.persist_translation_settings(format!(
+                    "Translation source set to {}",
+                    oddsnap_core::translation_language_name(&source)
+                ));
+            }
+            SettingsAction::TranslationTargetLanguage => {
+                self.settings.ocr_default_translate_to =
+                    next_supported_translation_language(&self.settings.ocr_default_translate_to);
+                let target = oddsnap_core::resolve_translation_target_language(
+                    Some(&self.settings.ocr_default_translate_to),
+                    Some(&self.settings.interface_language),
+                    None,
+                );
+                self.persist_translation_settings(format!(
+                    "Translation target set to {}",
+                    oddsnap_core::translation_language_name(&target)
+                ));
+            }
             SettingsAction::InstallArgosTranslationRuntime => {
                 self.capture_status = match ocr_translation::install_argos_runtime() {
                     Ok(()) => "Argos Translate installed.".into(),
@@ -3472,6 +3549,16 @@ impl OddSnapRustApp {
         self.image_search.refresh_status();
         self.capture_status = match self.settings_store.save(&self.settings) {
             Ok(()) => format!("{message}."),
+            Err(error) => format!("Settings save failed: {error}"),
+        };
+    }
+
+    fn persist_translation_settings(&mut self, message: String) {
+        self.capture_status = match self.settings_store.save(&self.settings) {
+            Ok(()) => format!(
+                "{message}. {}",
+                ocr_translation::translation_runtime_status_summary(&self.settings)
+            ),
             Err(error) => format!("Settings save failed: {error}"),
         };
     }
@@ -5592,6 +5679,25 @@ fn advanced_settings_summary_text(settings: &AppSettings) -> String {
     summary
 }
 
+fn next_translation_model(current: u32) -> TranslationModel {
+    match TranslationModel::from_legacy_value(current) {
+        TranslationModel::Argos => TranslationModel::Google,
+        TranslationModel::Google => TranslationModel::OpenSourceLocal,
+        TranslationModel::OpenSourceLocal => TranslationModel::Argos,
+    }
+}
+
+fn next_supported_translation_language(current: &str) -> String {
+    let normalized = oddsnap_core::normalize_supported_translation_language(current)
+        .unwrap_or_else(|| "auto".into());
+    let current_index = SUPPORTED_TRANSLATION_LANGUAGES
+        .iter()
+        .position(|(code, _)| code.eq_ignore_ascii_case(&normalized))
+        .unwrap_or(0);
+    let next_index = (current_index + 1) % SUPPORTED_TRANSLATION_LANGUAGES.len();
+    SUPPORTED_TRANSLATION_LANGUAGES[next_index].0.to_string()
+}
+
 fn lifecycle_settings_summary(settings: &AppSettings) -> String {
     let startup = if settings.start_with_windows {
         "startup requested"
@@ -7159,6 +7265,26 @@ mod tests {
             advanced_settings_summary_text(&settings),
             "Advanced prefs: OCR en-US · translate auto->fr via Google Translate · image search file/exact · upload Catbox ready · 2 tools · 1 custom hotkeys"
         );
+    }
+
+    #[test]
+    fn translation_setting_cycles_use_supported_core_values() {
+        assert_eq!(
+            next_translation_model(TranslationModel::Argos as u32),
+            TranslationModel::Google
+        );
+        assert_eq!(
+            next_translation_model(TranslationModel::Google as u32),
+            TranslationModel::OpenSourceLocal
+        );
+        assert_eq!(
+            next_translation_model(TranslationModel::OpenSourceLocal as u32),
+            TranslationModel::Argos
+        );
+
+        assert_eq!(next_supported_translation_language("auto"), "ar");
+        assert_eq!(next_supported_translation_language("fr-CA"), "ga");
+        assert_eq!(next_supported_translation_language("unknown"), "ar");
     }
 
     #[test]
