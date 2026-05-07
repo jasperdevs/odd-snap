@@ -5,6 +5,7 @@ pub mod jobs;
 pub mod media;
 pub mod native_ui;
 pub mod settings;
+pub mod upload;
 
 pub use capabilities::{CapabilityState, PlatformCapabilities, PlatformCapability};
 pub use filename_template::{
@@ -26,4 +27,8 @@ pub use settings::{
     default_settings_path, AppSettings, CaptureImageFormat, DefaultCaptureMode, RecordingFormat,
     RecordingQuality, SettingDefinition, SettingsOptionDefinition, SettingsPageDefinition,
     SettingsSectionDefinition, SettingsStore, SettingsStoreError, SettingsValueKind, ToastPosition,
+};
+pub use upload::{
+    build_google_lens_url, normalize_ai_chat_upload_destination, should_upload_media,
+    upload_preflight_for_media, AiChatProvider, UploadDestination, UploadPreflight, UploadSettings,
 };

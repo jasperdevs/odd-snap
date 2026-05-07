@@ -145,6 +145,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Translation.
 - [ ] Image search.
 - [ ] Production color picker overlay polish.
+- [x] Upload destination model, credential/HTTPS preflight, size limits, AI Redirect routing, and explicit history status for auto-upload attempts.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.
