@@ -139,6 +139,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust now persists image-search index records to JSON, syncs pending index records from history at startup, updates/removes index records when history changes, and feeds those records into GPUI diagnostics.
 - GPUI can manually hydrate image-search OCR records through the OCR service, persisting searchable OCR text and retry/failure status into the shared JSON index.
 - New saved image captures can automatically hydrate their image-search OCR text through the same OCR service, so OCR-backed search is not manual-only for fresh captures.
+- A background OCR refresh pump now hydrates due image-search records incrementally and updates the image-index status without requiring the manual button.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.
 - GPUI shows the newest saved image capture as an inline preview when the file still exists.
@@ -146,7 +147,7 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, detached OCR result window polish, background image-search OCR refresh workers/reindex progress, full history actions, sticker/upscale local runtime install/uninstall management, release packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, detached OCR result window polish, explicit image-search reindex progress UI/controls, full history actions, sticker/upscale local runtime install/uninstall management, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation, but scroll capture still reports pending status until that backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS and scroll capture still reports pending status until that backend lands.

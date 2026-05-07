@@ -373,6 +373,7 @@ impl OddSnapRustApp {
 
         app.start_hotkey_event_pump(hotkey_events, cx);
         app.start_tray_event_pump(tray_events, cx);
+        app.start_image_search_ocr_background_pump(cx);
         app
     }
 
@@ -2133,6 +2134,17 @@ impl OddSnapRustApp {
     where
         T: OcrTextService,
     {
+        self.hydrate_image_search_ocr_batch_with_adapter(adapter, usize::MAX)
+    }
+
+    fn hydrate_image_search_ocr_batch_with_adapter<T>(
+        &mut self,
+        adapter: &T,
+        max_attempts: usize,
+    ) -> Result<ImageSearchOcrHydrationSummary, String>
+    where
+        T: OcrTextService,
+    {
         let mut index = self
             .image_search_index_store
             .load_or_default()
@@ -2141,6 +2153,9 @@ impl OddSnapRustApp {
         let mut summary = ImageSearchOcrHydrationSummary::default();
 
         for record in &mut index.records {
+            if summary.attempted >= max_attempts {
+                break;
+            }
             hydrate_image_search_record_ocr(
                 record,
                 adapter,
@@ -2161,6 +2176,39 @@ impl OddSnapRustApp {
             .map_err(|error| error.to_string())?;
         self.refresh_capture_history(history_index);
         Ok(summary)
+    }
+
+    fn hydrate_image_search_ocr_background_tick(&mut self) -> Option<String> {
+        if !self.settings.auto_index_images {
+            return None;
+        }
+
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.hydrate_image_search_ocr_batch_with_adapter(&adapter, 1)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.hydrate_image_search_ocr_batch_with_adapter(&adapter, 1)
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.hydrate_image_search_ocr_batch_with_adapter(&adapter, 1)
+        };
+
+        match result {
+            Ok(summary) if summary.attempted > 0 => Some(format!(
+                "Image OCR background refresh: {} indexed, {} empty, {} failed.",
+                summary.indexed, summary.empty, summary.failed
+            )),
+            Ok(_) => None,
+            Err(error) => Some(format!("Image OCR background refresh failed: {error}")),
+        }
     }
 
     fn auto_hydrate_image_search_ocr_for_path(&mut self, path: &Path) -> String {
@@ -2515,6 +2563,22 @@ impl OddSnapRustApp {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(100))
                 .await;
+        })
+        .detach();
+    }
+
+    fn start_image_search_ocr_background_pump(&self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(5))
+                .await;
+
+            let _ = this.update(cx, |app, cx| {
+                if let Some(status) = app.hydrate_image_search_ocr_background_tick() {
+                    app.image_search_index_status = status;
+                    cx.notify();
+                }
+            });
         })
         .detach();
     }
