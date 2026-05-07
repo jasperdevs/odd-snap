@@ -181,6 +181,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] AI Redirect hotkey can open configured chat providers that do not require hosted-image upload and copies the newest saved image.
 - [x] Google Lens AI Redirect can upload the newest saved image through the configured AI temporary host and open the Lens URL.
 - [x] Upload destination model, credential/HTTPS preflight, size limits, AI Redirect routing, and explicit history status for auto-upload attempts.
+- [x] Remote sticker/background-removal provider foundation for Remove.bg and Photoroom.
+- [x] Remote DeepAI upscale provider foundation.
 - [x] Curl-backed public upload hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and temporary-host fallback.
 - [x] Curl-backed credentialed Imgur and ImgBB upload request/response support using imported upload settings.
 - [x] Curl-backed credentialed Gyazo and imgpile upload request/response support using imported upload settings.
@@ -195,8 +197,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed OneDrive upload/create-link flow with imported access token/folder settings.
 - [x] Curl-backed Google Drive multipart/resumable upload and permission flow with imported access token/folder settings.
 - [x] Upload destinations, with legacy transfer.sh preserved as an explicit unavailable-provider error.
-- [ ] Stickers/background removal.
-- [ ] Upscale.
+- [ ] Full stickers/background removal parity, including local rembg runtimes, model management, effects, and GPU fallback.
+- [ ] Full upscale parity, including local ONNX runtimes, model management, GPU fallback, scale selection, and preview window.
 - [ ] Local runtime management.
 - [ ] Update/install flow.
 

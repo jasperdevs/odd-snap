@@ -32,24 +32,25 @@ use oddsnap_core::{
     TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
-    default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
-    CaptureRequest, CaptureResult, CenterSelectionAspectRatio, ClipboardImageService,
-    ClipboardTextService, ColorPickerService, OcrTextRequest, OcrTextService, OverlayWindowRequest,
-    PlatformAdapter, RegionSelectionMode, RegionSelectionService, ScreenCaptureService,
-    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
+    default_capture_directory, image_file_dimensions, persist_capture_to_path_as,
+    virtual_screen_region, CaptureRegion, CaptureRequest, CaptureResult,
+    CenterSelectionAspectRatio, ClipboardImageService, ClipboardTextService, ColorPickerService,
+    OcrTextRequest, OcrTextService, OverlayWindowRequest, PlatformAdapter, RegionSelectionMode,
+    RegionSelectionService, ScreenCaptureService, VideoRecordingHandle, VideoRecordingRequest,
+    VideoRecordingService, WindowPickerService,
 };
 
 mod actions;
 mod image_search;
 mod ocr_translation;
+mod sticker_upscale;
 mod ui;
 
 #[cfg(any(test, not(target_os = "windows")))]
 use actions::CrossPlatformHotkeyEvent;
 use actions::{
-    default_capture_action, pending_default_capture_status, pending_tool_hotkey_status,
-    pending_tool_trigger_status, CaptureMode, DefaultCaptureAction, PendingTool, RecordingTarget,
-    SettingsAction,
+    default_capture_action, pending_tool_hotkey_status, pending_tool_trigger_status, CaptureMode,
+    DefaultCaptureAction, PendingTool, RecordingTarget, SettingsAction,
 };
 
 #[cfg(any(target_os = "windows", test))]
@@ -179,6 +180,35 @@ impl image_search::ImageSearchItem for CaptureHistoryEntry {
 struct CaptureRunResult {
     capture: oddsnap_platform::CaptureResult,
     copy_error: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+enum ProcessedCaptureTool {
+    Sticker,
+    Upscale,
+}
+
+impl ProcessedCaptureTool {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Sticker => "Sticker",
+            Self::Upscale => "Upscale",
+        }
+    }
+
+    fn slug(self) -> &'static str {
+        match self {
+            Self::Sticker => "sticker",
+            Self::Upscale => "upscale",
+        }
+    }
+
+    fn history_kind(self) -> HistoryKind {
+        match self {
+            Self::Sticker => HistoryKind::Sticker,
+            Self::Upscale => HistoryKind::Image,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -1700,7 +1730,7 @@ impl OddSnapRustApp {
     where
         T: ScreenCaptureService + WindowPickerService + RegionSelectionService,
     {
-        let capture = match mode {
+        match mode {
             CaptureMode::Rectangle => {
                 let bounds = match adapter.monitors() {
                     Ok(monitors) => virtual_screen_region(&monitors).ok_or_else(|| {
@@ -1745,9 +1775,7 @@ impl OddSnapRustApp {
                     include_cursor: self.settings.show_cursor,
                 })
             }),
-        };
-
-        capture
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -2065,6 +2093,195 @@ impl OddSnapRustApp {
         })
     }
 
+    fn run_sticker_capture(&mut self, trigger: &'static str) {
+        self.run_processed_capture(trigger, ProcessedCaptureTool::Sticker);
+    }
+
+    fn run_upscale_capture(&mut self, trigger: &'static str) {
+        self.run_processed_capture(trigger, ProcessedCaptureTool::Upscale);
+    }
+
+    fn run_processed_capture(&mut self, trigger: &'static str, tool: ProcessedCaptureTool) {
+        if self.settings.capture_delay_seconds > 0 {
+            self.capture_status = format!(
+                "Waiting {}s before {} capture.",
+                self.settings.capture_delay_seconds,
+                tool.slug()
+            );
+            thread::sleep(Duration::from_secs(
+                self.settings.capture_delay_seconds as u64,
+            ));
+        }
+
+        let platform = host_platform();
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.run_processed_capture_with_adapter(&adapter, tool)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = Err(format!(
+            "macOS {} selection needs the production overlay",
+            tool.slug()
+        ));
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.run_processed_capture_with_adapter(&adapter, tool)
+        };
+
+        self.capture_status = match result {
+            Ok((result, provider_name)) => {
+                let path = result.capture.image_path.display().to_string();
+                let history_status = self.save_capture_history_with_kind(
+                    &result.capture,
+                    CaptureMode::Rectangle,
+                    tool.history_kind(),
+                );
+                let copy_status = match (
+                    self.settings.copy_captures_to_clipboard,
+                    result.copy_error.as_deref(),
+                ) {
+                    (true, None) => "copied and saved".to_string(),
+                    (true, Some(error)) => format!("saved; clipboard copy failed ({error})"),
+                    (false, _) => "saved".to_string(),
+                };
+                format!(
+                    "{trigger} received. {} {} via {provider_name} {copy_status} {path}{history_status}",
+                    platform.name(),
+                    tool.label()
+                )
+            }
+            Err(error) => format!(
+                "{} {} capture failed: {error}",
+                platform.name(),
+                tool.label()
+            ),
+        };
+    }
+
+    fn run_processed_capture_with_adapter<T>(
+        &self,
+        adapter: &T,
+        tool: ProcessedCaptureTool,
+    ) -> Result<(CaptureRunResult, String), String>
+    where
+        T: ScreenCaptureService + ClipboardImageService + RegionSelectionService,
+    {
+        let bounds = match adapter.monitors() {
+            Ok(monitors) => virtual_screen_region(&monitors)
+                .ok_or_else(|| "no monitors available for selection".to_string())?,
+            #[cfg(target_os = "linux")]
+            Err(error) => {
+                let _ = error;
+                CaptureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 1,
+                    height: 1,
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            Err(error) => return Err(error.to_string()),
+        };
+        let Some(region) = adapter
+            .select_region(OverlayWindowRequest {
+                bounds,
+                opacity: 24,
+                click_through: false,
+                show_crosshair_guides: self.settings.show_crosshair_guides,
+                detect_windows: self.settings.detect_windows,
+                selection_mode: RegionSelectionMode::Rectangle,
+            })
+            .map_err(|error| error.to_string())?
+        else {
+            return Err(format!("{} selection canceled", tool.slug()));
+        };
+
+        let capture = adapter
+            .capture_region_with_options(CaptureRequest {
+                region,
+                include_cursor: self.settings.show_cursor,
+            })
+            .map_err(|error| error.to_string())?;
+        let input_path = temporary_processed_capture_path(tool, "input.png");
+        let output_path = temporary_processed_capture_path(tool, "output.png");
+        let source = persist_capture_to_path_as(
+            &capture,
+            &input_path,
+            CaptureImageFormat::Png,
+            self.settings.jpeg_quality,
+        )
+        .map_err(|error| error.to_string())?;
+
+        let process_result = match tool {
+            ProcessedCaptureTool::Sticker => sticker_upscale::process_sticker_capture(
+                &self.settings,
+                &source.image_path,
+                &output_path,
+            ),
+            ProcessedCaptureTool::Upscale => sticker_upscale::process_upscale_capture(
+                &self.settings,
+                &source.image_path,
+                &output_path,
+            ),
+        };
+        let provider_name = match process_result {
+            Ok(provider_name) => provider_name,
+            Err(error) => {
+                let _ = fs::remove_file(&input_path);
+                let _ = fs::remove_file(&output_path);
+                return Err(error);
+            }
+        };
+
+        let (width, height) = image_file_dimensions(&output_path).map_err(|error| {
+            let _ = fs::remove_file(&input_path);
+            let _ = fs::remove_file(&output_path);
+            error.to_string()
+        })?;
+        let processed_capture = oddsnap_platform::CaptureResult {
+            image_path: output_path.clone(),
+            region: CaptureRegion {
+                x: source.region.x,
+                y: source.region.y,
+                width,
+                height,
+            },
+        };
+        let destination = self.capture_destination_with_extension(&processed_capture, "png");
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create capture directory: {error}"))?;
+        }
+        fs::copy(&output_path, &destination)
+            .map_err(|error| format!("failed to save {} capture: {error}", tool.slug()))?;
+        let _ = fs::remove_file(&input_path);
+        let _ = fs::remove_file(&output_path);
+
+        let saved = oddsnap_platform::CaptureResult {
+            image_path: destination,
+            region: processed_capture.region,
+        };
+        let copy_error = if self.settings.copy_captures_to_clipboard {
+            adapter
+                .copy_image_to_clipboard(&saved.image_path)
+                .err()
+                .map(|error| error.to_string())
+        } else {
+            None
+        };
+        Ok((
+            CaptureRunResult {
+                capture: saved,
+                copy_error,
+            },
+            provider_name,
+        ))
+    }
+
     fn run_center_capture(&mut self, trigger: &'static str) {
         if self.settings.capture_delay_seconds > 0 {
             self.capture_status = format!(
@@ -2186,14 +2403,17 @@ impl OddSnapRustApp {
             DefaultCaptureAction::Scan => {
                 self.run_scan_capture(trigger);
             }
+            DefaultCaptureAction::Sticker => {
+                self.run_sticker_capture(trigger);
+            }
+            DefaultCaptureAction::Upscale => {
+                self.run_upscale_capture(trigger);
+            }
             DefaultCaptureAction::Center => {
                 self.run_center_capture(trigger);
             }
             DefaultCaptureAction::Ruler => {
                 self.run_ruler_measure(trigger);
-            }
-            DefaultCaptureAction::Pending(tool) => {
-                self.capture_status = pending_default_capture_status(trigger, tool);
             }
         }
     }
@@ -3005,10 +3225,10 @@ impl OddSnapRustApp {
                 self.run_scan_capture("Scan hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Sticker => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Sticker);
+                self.run_sticker_capture("Sticker hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Upscale => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Upscale);
+                self.run_upscale_capture("Upscale hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Center => {
                 self.run_center_capture("Center hotkey");
@@ -3054,10 +3274,10 @@ impl OddSnapRustApp {
                 self.run_scan_capture("Scan hotkey");
             }
             CrossPlatformHotkeyEvent::Sticker => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Sticker);
+                self.run_sticker_capture("Sticker hotkey");
             }
             CrossPlatformHotkeyEvent::Upscale => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Upscale);
+                self.run_upscale_capture("Upscale hotkey");
             }
             CrossPlatformHotkeyEvent::Center => {
                 self.run_center_capture("Center hotkey");
@@ -3172,16 +3392,23 @@ impl OddSnapRustApp {
     }
 
     fn capture_destination(&self, capture: &oddsnap_platform::CaptureResult) -> std::path::PathBuf {
+        self.capture_destination_with_extension(
+            capture,
+            self.settings.capture_image_format.extension(),
+        )
+    }
+
+    fn capture_destination_with_extension(
+        &self,
+        capture: &oddsnap_platform::CaptureResult,
+        extension: &str,
+    ) -> std::path::PathBuf {
         let stem = format_file_name_template(
             &self.settings.file_name_template,
             capture.region.width,
             capture.region.height,
         );
-        let file_name = format!(
-            "{}.{}",
-            stem,
-            self.settings.capture_image_format.extension()
-        );
+        let file_name = format!("{stem}.{extension}");
         build_available_capture_path(
             &self.capture_output_directory(),
             &file_name,
@@ -3645,13 +3872,22 @@ impl OddSnapRustApp {
         capture: &oddsnap_platform::CaptureResult,
         mode: CaptureMode,
     ) -> String {
+        self.save_capture_history_with_kind(capture, mode, HistoryKind::Image)
+    }
+
+    fn save_capture_history_with_kind(
+        &mut self,
+        capture: &oddsnap_platform::CaptureResult,
+        mode: CaptureMode,
+        kind: HistoryKind,
+    ) -> String {
         if !self.settings.save_history {
-            let upload = self.upload_metadata(HistoryKind::Image, &capture.image_path, false);
+            let upload = self.upload_metadata(kind, &capture.image_path, false);
             self.capture_history.insert(
                 0,
                 CaptureHistoryEntry {
                     mode,
-                    kind: HistoryKind::Image,
+                    kind,
                     path: capture.image_path.display().to_string(),
                     file_name: file_name_for_path(&capture.image_path),
                     preview_path: preview_path_for_capture(&capture.image_path),
@@ -3673,12 +3909,12 @@ impl OddSnapRustApp {
             capture.image_path.clone(),
             capture.region.width,
             capture.region.height,
-            HistoryKind::Image,
+            kind,
         ) {
             Ok(entry) => entry,
             Err(error) => return format!("; history failed: {error}"),
         };
-        let upload = self.upload_metadata(HistoryKind::Image, &entry.file_path, false);
+        let upload = self.upload_metadata(kind, &entry.file_path, false);
         entry.upload_url = upload.url;
         entry.upload_provider = upload.provider;
         entry.upload_error = upload.error;
@@ -4322,6 +4558,14 @@ fn center_selection_aspect_ratio(value: &str) -> CenterSelectionAspectRatio {
         }
         _ => CenterSelectionAspectRatio::Free,
     }
+}
+
+fn temporary_processed_capture_path(tool: ProcessedCaptureTool, suffix: &str) -> PathBuf {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!("oddsnap-{}-{}-{suffix}", tool.slug(), timestamp))
 }
 
 fn advanced_settings_summary_text(settings: &AppSettings) -> String {
@@ -5117,6 +5361,14 @@ mod tests {
             DefaultCaptureAction::Scan
         ));
         assert!(matches!(
+            default_capture_action(DefaultCaptureMode::Sticker),
+            DefaultCaptureAction::Sticker
+        ));
+        assert!(matches!(
+            default_capture_action(DefaultCaptureMode::Upscale),
+            DefaultCaptureAction::Upscale
+        ));
+        assert!(matches!(
             default_capture_action(DefaultCaptureMode::Center),
             DefaultCaptureAction::Center
         ));
@@ -5124,22 +5376,12 @@ mod tests {
             default_capture_action(DefaultCaptureMode::Ruler),
             DefaultCaptureAction::Ruler
         ));
-
-        for (mode, tool) in [
-            (DefaultCaptureMode::Sticker, PendingTool::Sticker),
-            (DefaultCaptureMode::Upscale, PendingTool::Upscale),
-        ] {
-            assert!(matches!(
-                default_capture_action(mode),
-                DefaultCaptureAction::Pending(pending_tool) if pending_tool == tool
-            ));
-        }
     }
 
     #[test]
     fn pending_default_capture_status_is_explicit() {
         assert_eq!(
-            pending_default_capture_status("Capture hotkey", PendingTool::Sticker),
+            actions::pending_default_capture_status("Capture hotkey", PendingTool::Sticker),
             "Capture hotkey received; default capture mode 'Sticker' needs Rust sticker/background removal parity."
         );
     }

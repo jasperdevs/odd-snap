@@ -146,6 +146,7 @@ impl PendingTool {
         }
     }
 
+    #[cfg(test)]
     fn default_capture_mode(self) -> Option<DefaultCaptureMode> {
         match self {
             Self::Ocr => Some(DefaultCaptureMode::Ocr),
@@ -158,6 +159,7 @@ impl PendingTool {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn from_default_capture_mode(mode: DefaultCaptureMode) -> Option<Self> {
         Self::ALL
             .into_iter()
@@ -185,9 +187,10 @@ pub(crate) enum DefaultCaptureAction {
     ColorPicker,
     Ocr,
     Scan,
+    Sticker,
+    Upscale,
     Center,
     Ruler,
-    Pending(PendingTool),
 }
 
 pub(crate) fn default_capture_action(default_mode: DefaultCaptureMode) -> DefaultCaptureAction {
@@ -200,12 +203,10 @@ pub(crate) fn default_capture_action(default_mode: DefaultCaptureMode) -> Defaul
         DefaultCaptureMode::ColorPicker => DefaultCaptureAction::ColorPicker,
         DefaultCaptureMode::Ocr => DefaultCaptureAction::Ocr,
         DefaultCaptureMode::Scan => DefaultCaptureAction::Scan,
+        DefaultCaptureMode::Sticker => DefaultCaptureAction::Sticker,
+        DefaultCaptureMode::Upscale => DefaultCaptureAction::Upscale,
         DefaultCaptureMode::Center => DefaultCaptureAction::Center,
         DefaultCaptureMode::Ruler => DefaultCaptureAction::Ruler,
-        DefaultCaptureMode::Sticker | DefaultCaptureMode::Upscale => DefaultCaptureAction::Pending(
-            PendingTool::from_default_capture_mode(default_mode)
-                .expect("advanced default capture mode has pending tool spec"),
-        ),
     }
 }
 
@@ -220,6 +221,7 @@ pub(crate) fn pending_tool_trigger_status(trigger: &str, tool: PendingTool) -> S
     )
 }
 
+#[cfg(test)]
 pub(crate) fn pending_default_capture_status(trigger: &str, tool: PendingTool) -> String {
     format!(
         "{trigger} received; default capture mode '{}' needs Rust {} parity.",

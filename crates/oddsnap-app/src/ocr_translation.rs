@@ -98,7 +98,7 @@ fn run_translation_curl_request(request: &CurlTranslationRequest) -> Result<Stri
 
 fn run_argos_translate(text: &str, source: &str, target: &str) -> Result<String, String> {
     let command = build_argos_translate_command(text, source, target);
-    let output = Command::new(&command.program)
+    let output = Command::new(command.program)
         .args(&command.args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -221,7 +221,7 @@ fn run_open_source_local_translate(
     }
 
     let command = build_open_source_local_translate_command(text, source, target, &paths);
-    let output = Command::new(&command.program)
+    let output = Command::new(command.program)
         .args(&command.args)
         .env("PYTHONUTF8", "1")
         .stdin(Stdio::null())

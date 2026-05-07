@@ -8,6 +8,7 @@ pub mod native_ui;
 pub mod ocr;
 pub mod scan;
 pub mod settings;
+pub mod sticker_upscale;
 pub mod translation;
 pub mod upload;
 
@@ -47,6 +48,11 @@ pub use settings::{
     default_settings_path, AppSettings, CaptureImageFormat, DefaultCaptureMode, RecordingFormat,
     RecordingQuality, SettingDefinition, SettingsOptionDefinition, SettingsPageDefinition,
     SettingsSectionDefinition, SettingsStore, SettingsStoreError, SettingsValueKind, ToastPosition,
+};
+pub use sticker_upscale::{
+    build_deepai_upscale_curl_request, build_image_download_curl_request,
+    build_sticker_api_curl_request, parse_deepai_upscale_output, parse_image_output_curl_status,
+    StickerProvider, StickerSettings, UpscaleProvider, UpscaleSettings,
 };
 pub use translation::{
     build_google_translate_curl_request, normalize_supported_translation_language,

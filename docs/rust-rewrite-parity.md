@@ -66,7 +66,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.
-- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, OCR routes to the Rust OCR capture foundation, Scan routes to the Rust QR/barcode scan foundation, Windows Center routes to symmetric center selection, ruler routes to region measurement, and sticker/upscale report explicit pending parity.
+- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, OCR routes to the Rust OCR capture foundation, Scan routes to the Rust QR/barcode scan foundation, remote sticker/upscale providers route through the Rust processing foundation where region selection is available, Windows Center routes to symmetric center selection, and ruler routes to region measurement.
 - Windows hotkey listener can dispatch imported full-screen and active-window capture hotkeys into the GPUI shell.
 - Windows hotkey listener can dispatch the imported color-picker hotkey into the Rust color sampling path.
 - macOS has an app-level global hotkey listener foundation through `global-hotkey`; the manager is created during GPUI app startup so it stays on the main application thread.
@@ -76,7 +76,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Imported OCR hotkeys are registered and routed on Windows/macOS/Linux startup; they start the Rust OCR capture foundation instead of being silently dropped.
 - Default capture mode `OCR` is modeled as an implemented OCR action instead of a pending advanced-tool fallback.
 - Imported ruler hotkeys and default ruler mode can now select a region, copy `widthxheight px @ x,y`, and report the measured dimensions.
-- Imported scan, sticker, upscale, center, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; Scan starts the Rust QR/barcode scan foundation, Windows Center starts the symmetric center-selection capture foundation, while sticker/upscale/scroll-capture still report explicit pending parity statuses instead of being silently dropped.
+- Imported scan, sticker, upscale, center, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; Scan starts the Rust QR/barcode scan foundation, sticker/upscale start the Rust remote-provider processing foundation where region selection is available, Windows Center starts the symmetric center-selection capture foundation, while scroll-capture still reports explicit pending parity status instead of being silently dropped.
 - Pending advanced tool metadata is centralized in the Rust app registry for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
 - Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.
@@ -112,6 +112,8 @@ The Rust rewrite must not replace the current app until this document and the li
 - Imported AI Redirect hotkeys can open configured chat providers that do not require hosted-image upload, copying the newest saved image first.
 - Google Lens AI Redirect can upload the newest saved image through the configured AI temporary host destination, persist the returned upload link in history, and open the Lens URL.
 - Rust preserves the legacy upload destination list, credential/HTTPS preflight rules, file-size limits, AI Redirect upload routing, and stores explicit upload pending/configuration errors in history instead of silently dropping auto-upload settings.
+- Rust can run configured remote sticker/background-removal providers (Remove.bg and Photoroom) through curl, save PNG sticker history entries, and copy the processed output to the clipboard; local rembg runtime parity is still pending.
+- Rust can run configured remote DeepAI upscale providers through curl, download the returned output image, save the processed PNG, and copy it to the clipboard; local ONNX upscale runtime parity and preview-window parity are still pending.
 - Rust can auto-upload saved media to curl-backed public hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and the temporary-host fallback chain, then persist the returned link in history.
 - Rust can build and parse curl-backed Imgur and ImgBB uploads from imported upload settings, including Imgur Client-ID/Bearer auth and ImgBB API-key uploads.
 - Rust can build and parse curl-backed Gyazo and imgpile uploads from imported upload settings, including Gyazo access-token and imgpile bearer-token uploads.
@@ -156,6 +158,7 @@ The rewrite does not yet implement the full production capture overlay, annotati
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation, but scroll capture still reports pending status until that backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS and scroll capture still reports pending status until that backend lands.
+Sticker/upscale parity is remote-provider-only in Rust right now and still depends on the current platform region selector; local rembg/ONNX runtime install, cached model management, GPU fallback, presentation effects, and upscale preview UI still need to land before full feature parity can be claimed.
 The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, or sound/toast polish.
 The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair/window-detection feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, or annotation tools.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.
