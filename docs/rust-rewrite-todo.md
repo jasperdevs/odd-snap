@@ -91,6 +91,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Magnifier.
 - [ ] Annotation drawing.
 - [x] Ruler foundation measures selected regions and copies pixel dimensions.
+- [x] Rust core scrolling-capture stitcher ports legacy overlap detection, duplicate filtering, automatic/manual frame acceptance, and session state tests.
 - [x] Shared save-to-file persistence helper.
 - [x] User-configurable save destination.
 - [x] Legacy file-name template persistence for saved captures.
@@ -112,6 +113,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Rust settings store for capture output and clipboard preferences.
 - [x] GPUI persisted controls for image format, clipboard copy, and cursor inclusion.
 - [x] GPUI persisted controls for default capture mode, delay, crosshair, magnifier, and window detection preferences.
+- [x] GPUI persisted control for legacy automatic/manual scrolling-capture mode.
 - [x] Rust JSON media history store for saved image captures.
 - [x] Startup reports corrupt/unreadable Rust history instead of silently showing empty history.
 - [x] Post-capture image preview.

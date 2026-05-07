@@ -28,8 +28,8 @@ use oddsnap_core::{
     CapabilityState, CaptureImageFormat, CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode,
     FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
     ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchSources,
-    OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore,
-    TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
+    OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality, ScrollingCaptureMode,
+    SettingsStore, TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, image_file_dimensions, persist_capture_to_path_as,
@@ -837,6 +837,18 @@ impl OddSnapRustApp {
                         "window-detection-button",
                         format!("Detect windows {}", on_off(self.settings.detect_windows)),
                         SettingsAction::ToggleWindowDetection,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "scrolling-capture-mode-button",
+                        format!(
+                            "Scroll {}",
+                            ScrollingCaptureMode::from_setting(
+                                &self.settings.scrolling_capture_mode
+                            )
+                            .label()
+                        ),
+                        SettingsAction::ScrollingCaptureMode,
                     )),
             )
             .child(
@@ -2618,6 +2630,15 @@ impl OddSnapRustApp {
                 self.persist_capture_settings(format!(
                     "Window detection {}",
                     on_off(self.settings.detect_windows)
+                ));
+            }
+            SettingsAction::ScrollingCaptureMode => {
+                self.settings.scrolling_capture_mode =
+                    next_scrolling_capture_mode(&self.settings.scrolling_capture_mode);
+                self.persist_capture_settings(format!(
+                    "Scrolling capture mode set to {}",
+                    ScrollingCaptureMode::from_setting(&self.settings.scrolling_capture_mode)
+                        .label()
                 ));
             }
             SettingsAction::RecordingFormat => {
@@ -5098,6 +5119,13 @@ fn next_default_capture_mode(mode: DefaultCaptureMode) -> DefaultCaptureMode {
     }
 }
 
+fn next_scrolling_capture_mode(mode: &str) -> String {
+    match ScrollingCaptureMode::from_setting(mode) {
+        ScrollingCaptureMode::Automatic => "Manual".into(),
+        ScrollingCaptureMode::Manual => "Automatic".into(),
+    }
+}
+
 fn next_capture_delay_seconds(delay: u32) -> u32 {
     match delay {
         0 => 1,
@@ -5365,6 +5393,9 @@ mod tests {
         assert_eq!(next_capture_delay_seconds(3), 5);
         assert_eq!(next_capture_delay_seconds(5), 10);
         assert_eq!(next_capture_delay_seconds(10), 0);
+        assert_eq!(next_scrolling_capture_mode("Automatic"), "Manual");
+        assert_eq!(next_scrolling_capture_mode("Manual"), "Automatic");
+        assert_eq!(next_scrolling_capture_mode("InvalidLegacyValue"), "Manual");
     }
 
     #[test]

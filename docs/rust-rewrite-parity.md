@@ -77,6 +77,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Default capture mode `OCR` is modeled as an implemented OCR action instead of a pending advanced-tool fallback.
 - Imported ruler hotkeys and default ruler mode can now select a region, copy `widthxheight px @ x,y`, and report the measured dimensions.
 - Imported scan, sticker, upscale, center, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; Scan starts the Rust QR/barcode scan foundation, sticker/upscale start the Rust remote-provider processing foundation where region selection is available, Windows Center starts the symmetric center-selection capture foundation, while scroll-capture still reports explicit pending parity status instead of being silently dropped.
+- Rust core now ports the legacy scrolling-capture frame stitcher, including vertical overlap detection, duplicate-frame rejection, automatic/manual minimum-new-content rules, pending automatic frame handling, and the 32000px stitched-height cap.
 - Pending advanced tool metadata is centralized in the Rust app registry for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
 - Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.
@@ -84,7 +85,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.
 - GPUI capture smoke honors the imported capture delay and surfaces imported capture UX preferences.
 - GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
-- GPUI can persistently cycle implemented default capture mode, capture delay, crosshair, magnifier, and window-detection preferences.
+- GPUI can persistently cycle implemented default capture mode, capture delay, crosshair, magnifier, window-detection, and automatic/manual scrolling-capture preferences.
 - Rust settings preserve advanced legacy preferences for OCR, translation, uploads, image search, tool visibility, custom tool hotkeys, toast timing, screenshot styling, setup state, and open-with apps.
 - Rust settings preserve the legacy last capture mode and raw toast button layout metadata so migration does not drop those UI preferences before the production toast skin lands.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
@@ -158,8 +159,8 @@ The Rust rewrite must not replace the current app until this document and the li
 
 The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, detached OCR result window polish, explicit image-search reindex progress UI/controls, full history actions, full sticker/upscale settings UI, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
-The Windows tray foundation is present and routes text capture to the OCR foundation, but scroll capture still reports pending status until that backend lands.
-The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS and scroll capture still reports pending status until that backend lands.
+The Windows tray foundation is present and routes text capture to the OCR foundation; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
+The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS; scroll capture has core stitching/settings parity, but still reports pending status until the interactive selector/control-bar backend lands.
 Sticker/upscale parity still depends on the current platform region selector; the Rust local rembg/ONNX runtime foundation is present, but full settings-panel model management, preview-window parity, and real-device runtime smoke verification still need to land before full feature parity can be claimed.
 The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, or sound/toast polish.
 The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair/window-detection feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, or annotation tools.

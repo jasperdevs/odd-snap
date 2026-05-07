@@ -7,6 +7,7 @@ pub mod media;
 pub mod native_ui;
 pub mod ocr;
 pub mod scan;
+pub mod scroll_capture;
 pub mod settings;
 pub mod sticker_upscale;
 pub mod translation;
@@ -43,6 +44,11 @@ pub use native_ui::{NativeMaterial, NativeUiProfile};
 pub use ocr::{format_recognized_ocr_text, OcrLineLayout};
 pub use scan::{
     decode_barcode_image, humanize_barcode_format, BarcodeScanError, BarcodeScanResult,
+};
+pub use scroll_capture::{
+    append_scrolling_frame, are_frames_duplicate, estimate_new_content_height, should_keep_frame,
+    try_estimate_new_content_height, ScrollAppendHints, ScrollAppendPlan, ScrollCaptureSession,
+    ScrollFrameCaptureResult, ScrollingCaptureMode,
 };
 pub use settings::{
     default_settings_path, AppSettings, CaptureImageFormat, DefaultCaptureMode, RecordingFormat,

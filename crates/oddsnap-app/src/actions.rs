@@ -52,6 +52,7 @@ pub(crate) enum SettingsAction {
     ToggleCrosshair,
     ToggleMagnifier,
     ToggleWindowDetection,
+    ScrollingCaptureMode,
     RecordingFormat,
     RecordingQuality,
     ToggleImageSearchBar,
