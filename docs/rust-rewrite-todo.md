@@ -40,7 +40,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows dedicated full-screen and active-window hotkey routing.
 - [x] Windows imported color-picker hotkey routing.
 - [x] Imported OCR hotkey routing starts the Rust OCR capture path instead of being dropped.
-- [x] Imported scan/sticker/upscale/center/ruler/scroll/AI hotkey routing reports pending parity instead of being dropped.
+- [x] Imported ruler hotkey routing measures a selected region and copies dimensions.
+- [x] Imported scan/sticker/upscale/center/scroll/AI hotkey routing reports pending parity instead of being dropped.
 - [x] Pending advanced tool metadata is centralized for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - [x] Duplicate imported hotkeys are rejected before platform registration.
 - [x] Windows topmost transparent overlay window foundation.
@@ -86,6 +87,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Production crosshair guides across overlay tools.
 - [ ] Magnifier.
 - [ ] Annotation drawing.
+- [x] Ruler foundation measures selected regions and copies pixel dimensions.
 - [x] Shared save-to-file persistence helper.
 - [x] User-configurable save destination.
 - [x] Legacy file-name template persistence for saved captures.

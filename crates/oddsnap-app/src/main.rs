@@ -1879,10 +1879,63 @@ impl OddSnapRustApp {
             DefaultCaptureAction::Ocr => {
                 self.run_ocr_capture(trigger);
             }
+            DefaultCaptureAction::Ruler => {
+                self.run_ruler_measure(trigger);
+            }
             DefaultCaptureAction::Pending(tool) => {
                 self.capture_status = pending_default_capture_status(trigger, tool);
             }
         }
+    }
+
+    fn run_ruler_measure(&mut self, trigger: &'static str) {
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.run_ruler_measure_with_adapter(&adapter)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.run_ruler_measure_with_adapter(&adapter)
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.run_ruler_measure_with_adapter(&adapter)
+        };
+
+        self.capture_status = match result {
+            Ok(measurement) => format!("{trigger} received. Ruler measured {measurement}."),
+            Err(error) => format!("Ruler failed: {error}"),
+        };
+    }
+
+    fn run_ruler_measure_with_adapter<T>(
+        &self,
+        adapter: &T,
+    ) -> Result<String, oddsnap_platform::PlatformError>
+    where
+        T: ScreenCaptureService + RegionSelectionService + ClipboardTextService,
+    {
+        let bounds = ruler_selection_bounds(adapter)?;
+        let Some(region) = adapter.select_region(OverlayWindowRequest {
+            bounds,
+            opacity: 24,
+            click_through: false,
+            show_crosshair_guides: true,
+            detect_windows: self.settings.detect_windows,
+        })?
+        else {
+            return Err(oddsnap_platform::PlatformError::Failed(
+                "ruler selection canceled".into(),
+            ));
+        };
+        let measurement = ruler_measurement_text(region);
+        adapter.copy_text_to_clipboard(&measurement)?;
+        Ok(measurement)
     }
 
     fn save_color_history(&mut self, bare_hex: String) -> String {
@@ -2621,7 +2674,7 @@ impl OddSnapRustApp {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::Center);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Ruler => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Ruler);
+                self.run_ruler_measure("Ruler hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::ScrollCapture => {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::ScrollCapture);
@@ -2670,7 +2723,7 @@ impl OddSnapRustApp {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::Center);
             }
             CrossPlatformHotkeyEvent::Ruler => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Ruler);
+                self.run_ruler_measure("Ruler hotkey");
             }
             CrossPlatformHotkeyEvent::ScrollCapture => {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::ScrollCapture);
@@ -3880,6 +3933,38 @@ fn newest_history_image_path(history: &[CaptureHistoryEntry]) -> Option<PathBuf>
         .find(|path| path.exists())
 }
 
+fn ruler_selection_bounds<T>(adapter: &T) -> Result<CaptureRegion, oddsnap_platform::PlatformError>
+where
+    T: ScreenCaptureService,
+{
+    match adapter.monitors() {
+        Ok(monitors) => virtual_screen_region(&monitors).ok_or_else(|| {
+            oddsnap_platform::PlatformError::Failed(
+                "no monitors available for ruler selection".into(),
+            )
+        }),
+        #[cfg(target_os = "linux")]
+        Err(error) => {
+            let _ = error;
+            Ok(CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            })
+        }
+        #[cfg(not(target_os = "linux"))]
+        Err(error) => Err(error),
+    }
+}
+
+fn ruler_measurement_text(region: CaptureRegion) -> String {
+    format!(
+        "{}x{} px @ {},{}",
+        region.width, region.height, region.x, region.y
+    )
+}
+
 fn advanced_settings_summary_text(settings: &AppSettings) -> String {
     let upload = if settings.auto_upload_screenshots
         || settings.auto_upload_gifs
@@ -4667,13 +4752,16 @@ mod tests {
             default_capture_action(DefaultCaptureMode::Ocr),
             DefaultCaptureAction::Ocr
         ));
+        assert!(matches!(
+            default_capture_action(DefaultCaptureMode::Ruler),
+            DefaultCaptureAction::Ruler
+        ));
 
         for (mode, tool) in [
             (DefaultCaptureMode::Scan, PendingTool::Scan),
             (DefaultCaptureMode::Sticker, PendingTool::Sticker),
             (DefaultCaptureMode::Upscale, PendingTool::Upscale),
             (DefaultCaptureMode::Center, PendingTool::Center),
-            (DefaultCaptureMode::Ruler, PendingTool::Ruler),
         ] {
             assert!(matches!(
                 default_capture_action(mode),
@@ -4687,6 +4775,19 @@ mod tests {
         assert_eq!(
             pending_default_capture_status("Capture hotkey", PendingTool::Scan),
             "Capture hotkey received; default capture mode 'Scan' needs Rust scan parity."
+        );
+    }
+
+    #[test]
+    fn ruler_measurement_text_includes_size_and_origin() {
+        assert_eq!(
+            ruler_measurement_text(CaptureRegion {
+                x: -10,
+                y: 20,
+                width: 640,
+                height: 480,
+            }),
+            "640x480 px @ -10,20"
         );
     }
 
