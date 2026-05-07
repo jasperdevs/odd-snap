@@ -241,6 +241,7 @@ impl UploadDestination {
                 | Self::AzureBlob
                 | Self::Ftp
                 | Self::S3Compatible
+                | Self::Sftp
         )
     }
 }
@@ -902,6 +903,29 @@ pub fn build_curl_upload_request_with_settings(
                 object_url,
             ]);
         }
+        UploadDestination::Sftp => {
+            let file_name = upload_file_name(file_path)?;
+            let upload_url = sftp_upload_url(settings, &file_name)?;
+            let username = settings.sftp_username.trim();
+            if username.is_empty() {
+                return Err(missing_upload_setting("SFTP username"));
+            }
+            let host_key = hex_sha256_fingerprint_to_base64(&settings.sftp_host_key_fingerprint)?;
+            success_url = Some(if settings.sftp_public_url.trim().is_empty() {
+                upload_url.clone()
+            } else {
+                append_url_path(settings.sftp_public_url.trim(), &file_name)
+            });
+            args.extend([
+                "--hostpubsha256".into(),
+                host_key,
+                "--user".into(),
+                format!("{username}:{}", settings.sftp_password),
+                "--upload-file".into(),
+                file_path.display().to_string(),
+                upload_url,
+            ]);
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -1248,6 +1272,30 @@ fn ftp_upload_url(base_url: &str, file_name: &str) -> Result<String, String> {
     Ok(append_url_path(&normalized, file_name))
 }
 
+fn sftp_upload_url(settings: &UploadSettings, file_name: &str) -> Result<String, String> {
+    let host = settings
+        .sftp_host
+        .trim()
+        .trim_start_matches("sftp://")
+        .trim_matches('/');
+    if host.is_empty() {
+        return Err(missing_upload_setting("SFTP host"));
+    }
+
+    let port = if settings.sftp_port == 0 {
+        22
+    } else {
+        settings.sftp_port
+    };
+    let base = format!("sftp://{host}:{port}");
+    let remote_path = settings.sftp_remote_path.trim().trim_matches('/');
+    if remote_path.is_empty() {
+        Ok(append_url_path(&base, file_name))
+    } else {
+        Ok(append_url_path_segments(&base, [remote_path, file_name]))
+    }
+}
+
 fn s3_endpoint_url(endpoint: &str) -> Result<String, String> {
     let mut normalized = endpoint.trim().trim_end_matches('/').to_string();
     if normalized.is_empty() {
@@ -1285,6 +1333,53 @@ fn percent_encode_path_component(value: &str) -> String {
             }
         })
         .collect()
+}
+
+fn hex_sha256_fingerprint_to_base64(value: &str) -> Result<String, String> {
+    let hex = value
+        .chars()
+        .filter(|character| character.is_ascii_hexdigit())
+        .collect::<String>();
+    if hex.len() != 64 {
+        return Err(
+            "SFTP host key fingerprint not configured or invalid (expected 64 hex chars.).".into(),
+        );
+    }
+
+    let mut bytes = Vec::with_capacity(32);
+    for index in (0..hex.len()).step_by(2) {
+        let byte = u8::from_str_radix(&hex[index..index + 2], 16).map_err(|_| {
+            "SFTP host key fingerprint not configured or invalid (expected 64 hex chars.)."
+                .to_string()
+        })?;
+        bytes.push(byte);
+    }
+    Ok(base64_encode(&bytes))
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0];
+        let second = *chunk.get(1).unwrap_or(&0);
+        let third = *chunk.get(2).unwrap_or(&0);
+        let combined = ((first as u32) << 16) | ((second as u32) << 8) | third as u32;
+
+        encoded.push(ALPHABET[((combined >> 18) & 0x3f) as usize] as char);
+        encoded.push(ALPHABET[((combined >> 12) & 0x3f) as usize] as char);
+        encoded.push(if chunk.len() >= 2 {
+            ALPHABET[((combined >> 6) & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() == 3 {
+            ALPHABET[(combined & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    encoded
 }
 
 fn split_curl_body_and_status(output: &str) -> Result<(&str, u16), String> {
@@ -1867,6 +1962,34 @@ mod tests {
         assert_eq!(
             s3.success_url.as_deref(),
             Some("https://cdn.example.test/captures/oddsnap/capture.png")
+        );
+
+        let sftp = build_curl_upload_request_with_settings(
+            UploadDestination::Sftp,
+            &path,
+            &UploadSettings {
+                sftp_host: "sftp.example.test".into(),
+                sftp_port: 2222,
+                sftp_username: "user".into(),
+                sftp_password: "pass".into(),
+                sftp_remote_path: "/uploads".into(),
+                sftp_public_url: "https://cdn.example.test/uploads".into(),
+                sftp_host_key_fingerprint:
+                    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build sftp");
+        assert!(sftp
+            .args
+            .contains(&"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=".into()));
+        assert!(sftp.args.contains(&"user:pass".into()));
+        assert!(sftp
+            .args
+            .contains(&"sftp://sftp.example.test:2222/uploads/capture.png".into()));
+        assert_eq!(
+            sftp.success_url.as_deref(),
+            Some("https://cdn.example.test/uploads/capture.png")
         );
     }
 

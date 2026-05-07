@@ -164,6 +164,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed WebDAV and Azure Blob SAS uploads with imported credentials/URLs and empty-success response handling.
 - [x] Curl-backed FTP/FTPS uploads with imported credentials/public URL and empty-success response handling.
 - [x] Curl-backed S3-compatible uploads using curl SigV4 support with imported endpoint/bucket/keys/public URL.
+- [x] Curl-backed SFTP uploads with imported credentials/public URL and host-key SHA-256 fingerprint pinning.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.
