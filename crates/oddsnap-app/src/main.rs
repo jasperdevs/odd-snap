@@ -125,6 +125,7 @@ struct ActiveRecording {
     handle: Box<dyn VideoRecordingHandle>,
     width: u32,
     height: u32,
+    target: RecordingTarget,
 }
 
 struct RecordingStart {
@@ -304,6 +305,7 @@ impl Drop for CrossPlatformHotkeyListener {
 enum RecordingTarget {
     FullScreen,
     ActiveWindow,
+    Region,
 }
 
 impl RecordingTarget {
@@ -311,6 +313,15 @@ impl RecordingTarget {
         match self {
             Self::FullScreen => "desktop",
             Self::ActiveWindow => "active window",
+            Self::Region => "region",
+        }
+    }
+
+    fn capture_mode(self) -> CaptureMode {
+        match self {
+            Self::FullScreen => CaptureMode::FullScreen,
+            Self::ActiveWindow => CaptureMode::ActiveWindow,
+            Self::Region => CaptureMode::Rectangle,
         }
     }
 }
@@ -626,7 +637,8 @@ impl OddSnapRustApp {
                             ))
                             .child(self.color_picker_button(cx))
                             .child(self.recording_button(cx))
-                            .child(self.recording_target_button(cx)),
+                            .child(self.recording_target_button(cx))
+                            .child(self.recording_region_button(cx)),
                     ),
             )
             .child(
@@ -1322,6 +1334,33 @@ impl OddSnapRustApp {
                 cx.stop_propagation();
                 if this.active_recording.is_none() {
                     this.start_recording(RecordingTarget::ActiveWindow);
+                }
+                cx.notify();
+            }))
+    }
+
+    fn recording_region_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let label = if self.active_recording.is_some() {
+            "Region busy"
+        } else {
+            "Record region"
+        };
+
+        div()
+            .id("recording-region-button")
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(rgb(0x4f4436))
+            .bg(rgb(0x31281f))
+            .hover(|this| this.bg(rgb(0x3d3124)))
+            .px(px(10.0))
+            .py(px(6.0))
+            .text_size(px(11.0))
+            .child(label)
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                if this.active_recording.is_none() {
+                    this.start_recording(RecordingTarget::Region);
                 }
                 cx.notify();
             }))
@@ -2216,6 +2255,7 @@ impl OddSnapRustApp {
                     handle: start.handle,
                     width: start.width,
                     height: start.height,
+                    target: start.target,
                 });
                 self.sync_tray_recording_state();
                 match start.note {
@@ -2239,7 +2279,10 @@ impl OddSnapRustApp {
         target: RecordingTarget,
     ) -> Result<RecordingStart, oddsnap_platform::PlatformError>
     where
-        T: ScreenCaptureService + WindowPickerService + VideoRecordingService,
+        T: ScreenCaptureService
+            + WindowPickerService
+            + VideoRecordingService
+            + RegionSelectionService,
     {
         let region = match target {
             RecordingTarget::FullScreen => {
@@ -2251,6 +2294,7 @@ impl OddSnapRustApp {
                 })?
             }
             RecordingTarget::ActiveWindow => adapter.active_window()?.bounds,
+            RecordingTarget::Region => select_recording_region(&adapter, &self.settings)?,
         };
         let output_path = self.recording_destination(region.width, region.height);
         let fps = if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
@@ -2291,8 +2335,12 @@ impl OddSnapRustApp {
         self.recording_status = match active.handle.stop() {
             Ok(result) => {
                 let path = result.output_path.display().to_string();
-                let history_status =
-                    self.save_recording_history(result.output_path, active.width, active.height);
+                let history_status = self.save_recording_history(
+                    result.output_path,
+                    active.width,
+                    active.height,
+                    active.target,
+                );
                 self.sync_tray_recording_state();
                 format!("Recording saved: {path}{history_status}")
             }
@@ -2509,7 +2557,13 @@ impl OddSnapRustApp {
         }
     }
 
-    fn save_recording_history(&mut self, path: PathBuf, width: u32, height: u32) -> String {
+    fn save_recording_history(
+        &mut self,
+        path: PathBuf,
+        width: u32,
+        height: u32,
+        target: RecordingTarget,
+    ) -> String {
         if !self.settings.save_history {
             let preview_path = create_video_thumbnail(&self.history_store, &path)
                 .or_else(|| preview_path_for_capture(&path));
@@ -2518,7 +2572,7 @@ impl OddSnapRustApp {
             self.capture_history.insert(
                 0,
                 CaptureHistoryEntry {
-                    mode: CaptureMode::FullScreen,
+                    mode: target.capture_mode(),
                     kind,
                     path: path.display().to_string(),
                     preview_path,
@@ -3075,6 +3129,45 @@ fn run_curl_upload(
             format!("{error}; curl: {stderr}")
         }
     })
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+fn select_recording_region<T>(
+    adapter: &T,
+    settings: &AppSettings,
+) -> Result<CaptureRegion, oddsnap_platform::PlatformError>
+where
+    T: ScreenCaptureService + RegionSelectionService,
+{
+    let bounds = match adapter.monitors() {
+        Ok(monitors) => virtual_screen_region(&monitors).ok_or_else(|| {
+            oddsnap_platform::PlatformError::Failed(
+                "no monitors available for region recording".into(),
+            )
+        })?,
+        #[cfg(target_os = "linux")]
+        Err(error) => {
+            let _ = error;
+            CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        Err(error) => return Err(error),
+    };
+
+    adapter
+        .select_region(OverlayWindowRequest {
+            bounds,
+            opacity: 24,
+            click_through: false,
+            show_crosshair_guides: settings.show_crosshair_guides,
+            detect_windows: settings.detect_windows,
+        })?
+        .ok_or_else(|| oddsnap_platform::PlatformError::Failed("region recording canceled".into()))
 }
 
 fn external_url_command(url: &str) -> (&'static str, Vec<String>) {
@@ -3781,6 +3874,8 @@ mod tests {
     fn recording_target_labels_are_stable() {
         assert_eq!(RecordingTarget::FullScreen.label(), "desktop");
         assert_eq!(RecordingTarget::ActiveWindow.label(), "active window");
+        assert_eq!(RecordingTarget::Region.label(), "region");
+        assert_eq!(RecordingTarget::Region.capture_mode().label(), "Rectangle");
     }
 
     #[test]

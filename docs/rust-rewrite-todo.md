@@ -122,9 +122,9 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Linux recording falls back to video-only when imported audio settings are enabled.
 - [x] macOS desktop video recording start/cancel/stop foundation through `screencapture` plus FFmpeg conversion.
 - [x] Recording handles fail explicitly when stop is called without a running process.
-- [ ] Freeform region GIF recording.
+- [x] Freeform region GIF recording through the GPUI region recording action and shared FFmpeg path.
 - [x] GPUI active-window recording uses the explicit-region FFmpeg path.
-- [ ] Freeform region MP4/WebM recording.
+- [x] Freeform region MP4/WebM recording through the GPUI region recording action and shared FFmpeg path.
 - [x] FFmpeg discovery.
 - [x] Bundled/AppData FFmpeg discovery parity before PATH fallback.
 - [x] Rust recording settings import and FFmpeg output argument model.
