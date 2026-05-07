@@ -16,6 +16,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
 - macOS has a command-backed `screencapture` still-capture foundation for full-screen and explicit-region PNG captures.
 - macOS has command-backed Screen & System Audio Recording permission detection through the platform permissions service, plus capture-failure guidance that points users to the current System Settings location.
+- Linux has an X11 monitor-enumeration foundation through `xrandr --query`, including multi-monitor and negative-offset virtual desktop geometry.
 - Linux has command-backed still-capture foundations for common screenshot tools (`grim`, `gnome-screenshot`, `spectacle`, or `scrot`).
 - Linux has an X11 active-window discovery foundation through `xdotool`; active-window capture can reuse the command-backed region screenshot path when `xdotool` and a screenshot backend are available.
 - Linux has an X11 color-picker foundation through `xdotool` cursor coordinates plus a 1x1 screenshot sample, and the GPUI color action routes to that adapter on Linux.

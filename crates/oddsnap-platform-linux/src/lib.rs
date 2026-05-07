@@ -67,9 +67,17 @@ impl PlatformAdapter for LinuxPlatform {
 
 impl ScreenCaptureService for LinuxPlatform {
     fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError> {
-        Err(PlatformError::Unsupported(
-            "Linux monitor enumeration is not implemented yet",
-        ))
+        #[cfg(target_os = "linux")]
+        {
+            run_linux_monitor_enumeration()
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(PlatformError::Unsupported(
+                "Linux monitor enumeration is only available on Linux",
+            ))
+        }
     }
 
     fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
@@ -114,6 +122,70 @@ impl ScreenCaptureService for LinuxPlatform {
             ))
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn run_linux_monitor_enumeration() -> Result<Vec<MonitorInfo>, PlatformError> {
+    let output = run_linux_command_stdout("xrandr", &["--query"])?;
+    let monitors = parse_xrandr_query_monitors(&output)?;
+    if monitors.is_empty() {
+        Err(PlatformError::Failed(
+            "xrandr did not report any connected monitors".into(),
+        ))
+    } else {
+        Ok(monitors)
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xrandr_query_monitors(output: &str) -> Result<Vec<MonitorInfo>, PlatformError> {
+    let mut monitors = Vec::new();
+    for line in output.lines() {
+        let Some(monitor) = parse_xrandr_connected_monitor(line) else {
+            continue;
+        };
+        monitors.push(monitor);
+    }
+    Ok(monitors)
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xrandr_connected_monitor(line: &str) -> Option<MonitorInfo> {
+    let mut parts = line.split_whitespace();
+    let name = parts.next()?;
+    if parts.next()? != "connected" {
+        return None;
+    }
+
+    let (width, height, x, y) = parts.find_map(parse_xrandr_geometry)?;
+
+    Some(MonitorInfo {
+        id: name.into(),
+        name: name.into(),
+        x,
+        y,
+        width,
+        height,
+        scale_percent: 100,
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xrandr_geometry(token: &str) -> Option<(u32, u32, i32, i32)> {
+    let x_separator = token.find('x')?;
+    let width = token[..x_separator].parse::<u32>().ok()?;
+    let rest = &token[x_separator + 1..];
+    let first_sign = rest.find(['+', '-'])?;
+    let height = rest[..first_sign].parse::<u32>().ok()?;
+    let coordinates = &rest[first_sign..];
+    let second_sign = coordinates[1..].find(['+', '-']).map(|index| index + 1)?;
+    let x = coordinates[..second_sign].parse::<i32>().ok()?;
+    let y = coordinates[second_sign..].parse::<i32>().ok()?;
+
+    if width == 0 || height == 0 {
+        return None;
+    }
+    Some((width, height, x, y))
 }
 
 #[cfg(target_os = "linux")]
@@ -621,9 +693,9 @@ mod tests {
     fn linux_capture_services_report_wrong_host() {
         let adapter = LinuxPlatform;
 
-        let error = adapter.monitors().expect_err("Linux capture pending");
+        let error = adapter.monitors().expect_err("Linux capture wrong host");
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on Linux"));
 
         let error = adapter
             .capture_region(oddsnap_platform::CaptureRegion {
@@ -639,6 +711,53 @@ mod tests {
             .active_window()
             .expect_err("Linux active window wrong host");
         assert!(error.to_string().contains("only available on Linux"));
+    }
+
+    #[test]
+    fn linux_xrandr_parser_reads_connected_monitors() {
+        let monitors = super::parse_xrandr_query_monitors(
+            "Screen 0: minimum 8 x 8, current 4480 x 1440, maximum 32767 x 32767\n\
+             DP-1 connected primary 2560x1440+0+0 (normal left inverted right x axis y axis) 597mm x 336mm\n\
+             HDMI-1 connected 1920x1080+2560+120 (normal left inverted right x axis y axis) 598mm x 336mm\n\
+             DP-2 disconnected (normal left inverted right x axis y axis)\n",
+        )
+        .expect("parse xrandr output");
+
+        assert_eq!(
+            monitors,
+            vec![
+                oddsnap_platform::MonitorInfo {
+                    id: "DP-1".into(),
+                    name: "DP-1".into(),
+                    x: 0,
+                    y: 0,
+                    width: 2560,
+                    height: 1440,
+                    scale_percent: 100,
+                },
+                oddsnap_platform::MonitorInfo {
+                    id: "HDMI-1".into(),
+                    name: "HDMI-1".into(),
+                    x: 2560,
+                    y: 120,
+                    width: 1920,
+                    height: 1080,
+                    scale_percent: 100,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn linux_xrandr_parser_accepts_negative_offsets() {
+        assert_eq!(
+            super::parse_xrandr_geometry("1920x1080-1920+0"),
+            Some((1920, 1080, -1920, 0))
+        );
+        assert_eq!(
+            super::parse_xrandr_geometry("3840x2160+0-2160"),
+            Some((3840, 2160, 0, -2160))
+        );
     }
 
     #[test]
