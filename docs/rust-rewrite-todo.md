@@ -242,4 +242,4 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] macOS package smoke validates the bundled binary includes the current Mac host architecture.
 - [x] macOS package smoke validates required privacy strings and Apple Events entitlement.
 - [x] Rust packaging readiness notes document current non-release boundary and host dependency caveats.
-- [ ] Release decision document.
+- [x] Release decision document.
