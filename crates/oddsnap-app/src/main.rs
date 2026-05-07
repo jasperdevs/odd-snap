@@ -175,6 +175,7 @@ struct CaptureHistoryEntry {
     preview_path: Option<PathBuf>,
     width: u32,
     height: u32,
+    file_size_bytes: u64,
     captured_at_unix_ms: u64,
     image_search_ocr_text: String,
     image_search_record: Option<ImageSearchIndexRecord>,
@@ -1372,6 +1373,7 @@ impl OddSnapRustApp {
             body = body.child(self.capture_preview(preview_path));
         }
 
+        let now_ms = app_unix_millis_now();
         for entry in &visible_history {
             let diagnostics = image_search::diagnostics(&self.settings, &self.image_search, entry);
             let match_summary = image_search::match_summary(&diagnostics);
@@ -1388,13 +1390,11 @@ impl OddSnapRustApp {
                     .bg(rgb(0x1d2027))
                     .px(px(10.0))
                     .py(px(8.0))
-                    .child(div().text_size(px(12.0)).child(SharedString::from(format!(
-                        "{} · {} · {}x{}",
-                        history_kind_label(entry.kind),
-                        entry.mode.label(),
-                        entry.width,
-                        entry.height
-                    ))))
+                    .child(
+                        div()
+                            .text_size(px(12.0))
+                            .child(SharedString::from(media_history_detail_line(entry, now_ms))),
+                    )
                     .child(
                         div()
                             .min_w_0()
@@ -1460,12 +1460,18 @@ impl OddSnapRustApp {
     }
 
     fn history_filter_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let filtered_count = filtered_capture_history(
+        let filtered_history = filtered_capture_history(
             &self.capture_history,
             self.history_kind_filter,
             self.history_upload_filter,
-        )
-        .len();
+        );
+        let filtered_count = filtered_history.len();
+        let filtered_bytes = filtered_history
+            .iter()
+            .map(|entry| entry.file_size_bytes)
+            .sum();
+        let filter_active = self.history_kind_filter != HistoryKindFilter::All
+            || self.history_upload_filter != HistoryUploadFilter::All;
 
         div()
             .flex()
@@ -1489,8 +1495,11 @@ impl OddSnapRustApp {
                 div()
                     .text_size(px(11.0))
                     .text_color(rgb(0x8b93a3))
-                    .child(SharedString::from(format!(
-                        "{filtered_count} visible before search"
+                    .child(SharedString::from(media_history_count_text(
+                        filtered_count,
+                        self.capture_history.len(),
+                        filtered_bytes,
+                        filter_active,
                     ))),
             )
     }
@@ -5273,6 +5282,7 @@ impl OddSnapRustApp {
                     preview_path,
                     width,
                     height,
+                    file_size_bytes: file_size_bytes_for_path(&path),
                     captured_at_unix_ms: 0,
                     image_search_ocr_text: String::new(),
                     image_search_record: None,
@@ -5341,6 +5351,7 @@ impl OddSnapRustApp {
                     preview_path: preview_path_for_capture(&capture.image_path),
                     width: capture.region.width,
                     height: capture.region.height,
+                    file_size_bytes: file_size_bytes_for_path(&capture.image_path),
                     captured_at_unix_ms: 0,
                     image_search_ocr_text: String::new(),
                     image_search_record: None,
@@ -5461,6 +5472,7 @@ fn history_entries_to_capture_history(
                 .or_else(|| preview_path_for_capture(&entry.file_path)),
             width: entry.width,
             height: entry.height,
+            file_size_bytes: entry.file_size_bytes,
             captured_at_unix_ms: entry.captured_at_unix_ms,
             image_search_ocr_text: String::new(),
             image_search_record: image_search_index
@@ -5676,6 +5688,12 @@ fn file_name_for_path(path: &Path) -> String {
         .to_string()
 }
 
+fn file_size_bytes_for_path(path: &Path) -> u64 {
+    fs::metadata(path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0)
+}
+
 fn history_entries_to_color_history(index: HistoryIndex) -> Vec<ColorHistoryEntry> {
     index.colors.into_iter().take(12).collect()
 }
@@ -5719,6 +5737,71 @@ fn history_upload_summary(entry: &CaptureHistoryEntry) -> String {
     }
 
     "No upload link".into()
+}
+
+fn media_history_detail_line(entry: &CaptureHistoryEntry, now_ms: u64) -> String {
+    format!(
+        "{} · {} · {}x{} · {} · {}",
+        history_kind_label(entry.kind),
+        entry.mode.label(),
+        entry.width,
+        entry.height,
+        format_storage_size(entry.file_size_bytes),
+        format_history_age(entry.captured_at_unix_ms, now_ms)
+    )
+}
+
+fn media_history_count_text(
+    visible_count: usize,
+    total_count: usize,
+    total_bytes: u64,
+    filter_active: bool,
+) -> String {
+    let size = format_storage_size(total_bytes);
+    if filter_active {
+        format!("{visible_count} of {total_count} rows before search · {size}")
+    } else {
+        format!("{visible_count} rows before search · {size}")
+    }
+}
+
+fn format_storage_size(bytes: u64) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = KIB * 1024.0;
+    const GIB: f64 = MIB * 1024.0;
+
+    let bytes_f = bytes as f64;
+    if bytes < 1024 {
+        format!("{bytes} B")
+    } else if bytes_f < MIB {
+        format!("{:.1} KB", bytes_f / KIB)
+    } else if bytes_f < GIB {
+        format!("{:.1} MB", bytes_f / MIB)
+    } else {
+        format!("{:.1} GB", bytes_f / GIB)
+    }
+}
+
+fn format_history_age(captured_at_unix_ms: u64, now_ms: u64) -> String {
+    if captured_at_unix_ms == 0 {
+        return "this session".into();
+    }
+
+    let elapsed_seconds = now_ms.saturating_sub(captured_at_unix_ms) / 1000;
+    if elapsed_seconds < 60 {
+        "just now".into()
+    } else if elapsed_seconds < 60 * 60 {
+        let minutes = elapsed_seconds / 60;
+        format!("{minutes}m ago")
+    } else if elapsed_seconds < 60 * 60 * 24 {
+        let hours = elapsed_seconds / (60 * 60);
+        format!("{hours}h ago")
+    } else if elapsed_seconds < 60 * 60 * 24 * 7 {
+        let days = elapsed_seconds / (60 * 60 * 24);
+        format!("{days}d ago")
+    } else {
+        "older".into()
+    }
 }
 
 fn newest_history_image_path(history: &[CaptureHistoryEntry]) -> Option<PathBuf> {
@@ -7299,6 +7382,7 @@ mod tests {
             preview_path: None,
             width: 10,
             height: 10,
+            file_size_bytes: 1024,
             captured_at_unix_ms: 1,
             image_search_ocr_text: String::new(),
             image_search_record: None,
@@ -7324,6 +7408,21 @@ mod tests {
             "Upload pending: Rust upload backend for Catbox is pending."
         );
         assert_eq!(history_kind_label(HistoryKind::Sticker), "Sticker");
+        assert_eq!(
+            media_history_detail_line(&entry, 60_000),
+            "Image · Full screen · 10x10 · 1.0 KB · just now"
+        );
+        assert_eq!(
+            media_history_count_text(3, 9, 3 * 1024 * 1024, true),
+            "3 of 9 rows before search · 3.0 MB"
+        );
+        assert_eq!(
+            media_history_count_text(9, 9, 0, false),
+            "9 rows before search · 0 B"
+        );
+        assert_eq!(format_storage_size(1024 * 1024 * 3), "3.0 MB");
+        assert_eq!(format_history_age(0, 60_000), "this session");
+        assert_eq!(format_history_age(1, 60_000 * 10), "9m ago");
     }
 
     #[test]
@@ -7336,6 +7435,7 @@ mod tests {
             preview_path: None,
             width: 10,
             height: 10,
+            file_size_bytes: 1024,
             captured_at_unix_ms: 1,
             image_search_ocr_text: String::new(),
             image_search_record: None,
@@ -7400,6 +7500,7 @@ mod tests {
             preview_path: None,
             width: 10,
             height: 10,
+            file_size_bytes: 1024,
             captured_at_unix_ms: 1,
             image_search_ocr_text: String::new(),
             image_search_record: None,
@@ -7548,6 +7649,7 @@ mod tests {
             preview_path: None,
             width: 10,
             height: 10,
+            file_size_bytes: 1024,
             captured_at_unix_ms: 1,
             image_search_ocr_text: String::new(),
             image_search_record: None,
@@ -7594,6 +7696,7 @@ mod tests {
                 preview_path: None,
                 width: 10,
                 height: 10,
+                file_size_bytes: 1024,
                 captured_at_unix_ms: 1,
                 image_search_ocr_text: String::new(),
                 image_search_record: None,
@@ -7609,6 +7712,7 @@ mod tests {
                 preview_path: None,
                 width: 10,
                 height: 10,
+                file_size_bytes: 1024,
                 captured_at_unix_ms: 2,
                 image_search_ocr_text: String::new(),
                 image_search_record: None,
@@ -7624,6 +7728,7 @@ mod tests {
                 preview_path: None,
                 width: 10,
                 height: 10,
+                file_size_bytes: 1024,
                 captured_at_unix_ms: 3,
                 image_search_ocr_text: String::new(),
                 image_search_record: None,

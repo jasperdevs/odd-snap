@@ -159,6 +159,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI media history can bulk-remove currently filtered rows from the persisted Rust history index without deleting media files.
 - [x] GPUI media history can bulk-copy upload links from the currently filtered rows.
 - [x] GPUI media history can expand and reset the visible row window for large imported histories without changing persisted files.
+- [x] GPUI media history rows and filtered counts surface captured-age and storage-size metadata from the persisted index.
 - [ ] Full media history UI details, bulk actions, and large-history polish.
 - [x] GPUI app has a dedicated action model module for capture modes, recording targets, pending tool routes, hotkey events, and settings actions.
 
