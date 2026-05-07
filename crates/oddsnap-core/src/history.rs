@@ -140,6 +140,28 @@ pub struct HistoryIndex {
     pub code_entries: Vec<CodeHistoryEntry>,
 }
 
+pub fn expected_video_thumbnail_paths(index: &HistoryIndex) -> HashSet<PathBuf> {
+    index
+        .entries
+        .iter()
+        .filter(|entry| entry.kind == HistoryKind::Video)
+        .filter_map(|entry| entry.thumbnail_path.clone())
+        .collect()
+}
+
+pub fn orphan_video_thumbnail_paths<I, P>(index: &HistoryIndex, candidates: I) -> Vec<PathBuf>
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
+    let expected = expected_video_thumbnail_paths(index);
+    candidates
+        .into_iter()
+        .map(|candidate| candidate.as_ref().to_path_buf())
+        .filter(|candidate| !expected.contains(candidate))
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 pub struct HistoryStore {
     path: PathBuf,
@@ -348,11 +370,11 @@ fn unix_millis_now() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{collections::HashSet, fs, path::PathBuf};
 
     use super::{
-        CodeHistoryEntry, ColorHistoryEntry, HistoryEntry, HistoryKind, HistoryStore,
-        OcrHistoryEntry,
+        expected_video_thumbnail_paths, orphan_video_thumbnail_paths, CodeHistoryEntry,
+        ColorHistoryEntry, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, OcrHistoryEntry,
     };
 
     #[test]
@@ -608,5 +630,51 @@ mod tests {
         let index = store.load_or_default().expect("load missing history");
 
         assert!(index.entries.is_empty());
+    }
+
+    #[test]
+    fn video_thumbnail_helpers_identify_orphan_managed_thumbnails() {
+        let expected = PathBuf::from("cache/video-thumbs/live.jpg");
+        let orphan = PathBuf::from("cache/video-thumbs/orphan.jpg");
+        let index = HistoryIndex {
+            entries: vec![
+                HistoryEntry {
+                    file_path: PathBuf::from("clip.mp4"),
+                    file_name: "clip.mp4".into(),
+                    captured_at_unix_ms: 1,
+                    width: 10,
+                    height: 10,
+                    file_size_bytes: 10,
+                    kind: HistoryKind::Video,
+                    upload_url: None,
+                    upload_provider: None,
+                    upload_error: None,
+                    thumbnail_path: Some(expected.clone()),
+                },
+                HistoryEntry {
+                    file_path: PathBuf::from("capture.png"),
+                    file_name: "capture.png".into(),
+                    captured_at_unix_ms: 2,
+                    width: 10,
+                    height: 10,
+                    file_size_bytes: 10,
+                    kind: HistoryKind::Image,
+                    upload_url: None,
+                    upload_provider: None,
+                    upload_error: None,
+                    thumbnail_path: Some(PathBuf::from("cache/video-thumbs/not-video.jpg")),
+                },
+            ],
+            ..HistoryIndex::default()
+        };
+
+        assert_eq!(
+            expected_video_thumbnail_paths(&index),
+            HashSet::from([expected.clone()])
+        );
+        assert_eq!(
+            orphan_video_thumbnail_paths(&index, [&expected, &orphan]),
+            vec![orphan]
+        );
     }
 }

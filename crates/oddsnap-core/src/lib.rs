@@ -26,8 +26,9 @@ pub use filename_template::{
     DEFAULT_FILE_NAME_TEMPLATE, LEGACY_DEFAULT_FILE_NAME_TEMPLATE,
 };
 pub use history::{
-    default_history_path, CodeHistoryEntry, ColorHistoryEntry, HistoryEntry, HistoryIndex,
-    HistoryKind, HistoryStore, HistoryStoreError, OcrHistoryEntry,
+    default_history_path, expected_video_thumbnail_paths, orphan_video_thumbnail_paths,
+    CodeHistoryEntry, ColorHistoryEntry, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
+    HistoryStoreError, OcrHistoryEntry,
 };
 pub use image_search::{
     apply_image_search_ocr_error, apply_image_search_ocr_success, build_image_search_text,
