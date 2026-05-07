@@ -1387,24 +1387,26 @@ impl OddSnapRustApp {
     }
 
     fn history_filter_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let filtered_count = filtered_capture_history(
+            &self.capture_history,
+            self.history_kind_filter,
+            self.history_upload_filter,
+        )
+        .len();
+
         div()
             .flex()
             .flex_wrap()
             .gap(px(8.0))
             .child(self.history_kind_filter_button(cx))
             .child(self.history_upload_filter_button(cx))
+            .child(self.remove_filtered_history_button(cx))
             .child(
                 div()
                     .text_size(px(11.0))
                     .text_color(rgb(0x8b93a3))
                     .child(SharedString::from(format!(
-                        "{} visible before search",
-                        filtered_capture_history(
-                            &self.capture_history,
-                            self.history_kind_filter,
-                            self.history_upload_filter,
-                        )
-                        .len()
+                        "{filtered_count} visible before search"
                     ))),
             )
     }
@@ -1989,6 +1991,19 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.remove_history_entry(path.clone());
+            cx.notify();
+        }))
+    }
+
+    fn remove_filtered_history_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("remove-filtered-history-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Remove filtered")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.remove_filtered_history_entries();
             cx.notify();
         }))
     }
@@ -3925,6 +3940,34 @@ impl OddSnapRustApp {
                 format!("Removed {path} from history.")
             }
             Err(error) => format!("Remove from history failed: {error}"),
+        };
+    }
+
+    fn remove_filtered_history_entries(&mut self) {
+        let paths = filtered_capture_history(
+            &self.capture_history,
+            self.history_kind_filter,
+            self.history_upload_filter,
+        )
+        .into_iter()
+        .map(|entry| PathBuf::from(entry.path))
+        .collect::<Vec<_>>();
+
+        if paths.is_empty() {
+            self.capture_status = "No filtered history entries to remove.".into();
+            return;
+        }
+
+        self.capture_status = match self.history_store.remove_entries(paths.iter()) {
+            Ok(index) => {
+                for path in &paths {
+                    let _ = self.image_search_index_store.remove_record(path);
+                }
+                let removed_count = paths.len();
+                self.refresh_capture_history(index);
+                format!("Removed {removed_count} filtered history entries.")
+            }
+            Err(error) => format!("Remove filtered history failed: {error}"),
         };
     }
 

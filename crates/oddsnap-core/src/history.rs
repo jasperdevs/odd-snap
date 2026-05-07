@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -186,6 +187,27 @@ impl HistoryStore {
         index
             .entries
             .retain(|existing| existing.file_path != file_path);
+        self.save(&index)?;
+        Ok(index)
+    }
+
+    pub fn remove_entries<I, P>(&self, file_paths: I) -> Result<HistoryIndex, HistoryStoreError>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let paths = file_paths
+            .into_iter()
+            .map(|path| path.as_ref().to_path_buf())
+            .collect::<HashSet<_>>();
+        let mut index = self.load_or_default()?;
+        if paths.is_empty() {
+            return Ok(index);
+        }
+
+        index
+            .entries
+            .retain(|existing| !paths.contains(&existing.file_path));
         self.save(&index)?;
         Ok(index)
     }
@@ -410,6 +432,40 @@ mod tests {
         assert_eq!(index.entries[0].file_path, second_path);
         assert!(first_path.exists());
         assert!(second_path.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_store_removes_multiple_entries_without_deleting_files() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-history-remove-bulk-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let store = HistoryStore::new(root.join("history.json"));
+        let first_path = root.join("first.bmp");
+        let second_path = root.join("second.bmp");
+        let third_path = root.join("third.bmp");
+        fs::write(&first_path, b"first").expect("write first");
+        fs::write(&second_path, b"second").expect("write second");
+        fs::write(&third_path, b"third").expect("write third");
+
+        for path in [&first_path, &second_path, &third_path] {
+            let entry = HistoryEntry::from_capture_file(path.clone(), 1, 1, HistoryKind::Image)
+                .expect("build history entry");
+            store.append_entry(entry).expect("append");
+        }
+
+        let index = store
+            .remove_entries([first_path.as_path(), third_path.as_path()])
+            .expect("remove entries");
+
+        assert_eq!(index.entries.len(), 1);
+        assert_eq!(index.entries[0].file_path, second_path);
+        assert!(first_path.exists());
+        assert!(second_path.exists());
+        assert!(third_path.exists());
         let _ = fs::remove_dir_all(root);
     }
 
