@@ -4,10 +4,11 @@ use oddsnap_core::{
 };
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
-    HotkeyService, MonitorInfo, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter,
-    PlatformError, RegionOverlayService, RegionSelectionService, ScreenCaptureService,
-    ScreenshotExclusionService, VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult,
-    VideoRecordingService, WindowInfo, WindowPickerService,
+    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle,
+    OverlayWindowRequest, PlatformAdapter, PlatformError, RegionOverlayService,
+    RegionSelectionService, ScreenCaptureService, ScreenshotExclusionService, VideoRecordingHandle,
+    VideoRecordingRequest, VideoRecordingResult, VideoRecordingService, WindowInfo,
+    WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -43,9 +44,9 @@ use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateSolidBrush, DeleteDC,
     DeleteObject, EndPaint, EnumDisplayMonitors, FillRect, FrameRect, GetDC, GetDIBits,
-    GetMonitorInfoW, InvalidateRect, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-    CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, HMONITOR, MONITORINFO, PAINTSTRUCT, ROP_CODE,
-    SRCCOPY,
+    GetMonitorInfoW, GetPixel, InvalidateRect, ReleaseDC, SelectObject, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, HMONITOR, MONITORINFO,
+    PAINTSTRUCT, ROP_CODE, SRCCOPY,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::System::DataExchange::{
@@ -418,6 +419,22 @@ impl ClipboardTextService for WindowsPlatform {
             let _ = text;
             Err(PlatformError::Unsupported(
                 "Windows text clipboard is only available on Windows",
+            ))
+        }
+    }
+}
+
+impl ColorPickerService for WindowsPlatform {
+    fn sample_cursor_color(&self) -> Result<ColorSample, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            sample_cursor_color()
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(PlatformError::Unsupported(
+                "Windows color picker is only available on Windows",
             ))
         }
     }
@@ -2122,6 +2139,46 @@ fn capture_region_to_bmp(
 }
 
 #[cfg(target_os = "windows")]
+fn sample_cursor_color() -> Result<ColorSample, PlatformError> {
+    let mut point = POINT::default();
+    unsafe {
+        GetCursorPos(&mut point)
+            .map_err(|error| PlatformError::Failed(format!("GetCursorPos failed: {error}")))?;
+        sample_screen_color_at(point.x, point.y)
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn sample_screen_color_at(x: i32, y: i32) -> Result<ColorSample, PlatformError> {
+    let screen_dc = unsafe { GetDC(None) };
+    if screen_dc.is_invalid() {
+        return Err(PlatformError::Failed("GetDC failed for the desktop".into()));
+    }
+
+    let color = unsafe { GetPixel(screen_dc, x, y) };
+    unsafe {
+        ReleaseDC(None, screen_dc);
+    }
+
+    colorref_to_color_sample(color)
+}
+
+#[cfg(target_os = "windows")]
+fn colorref_to_color_sample(color: COLORREF) -> Result<ColorSample, PlatformError> {
+    if color.0 == u32::MAX {
+        return Err(PlatformError::Failed(
+            "GetPixel failed for cursor point".into(),
+        ));
+    }
+
+    Ok(ColorSample {
+        r: (color.0 & 0x0000_00ff) as u8,
+        g: ((color.0 & 0x0000_ff00) >> 8) as u8,
+        b: ((color.0 & 0x00ff_0000) >> 16) as u8,
+    })
+}
+
+#[cfg(target_os = "windows")]
 unsafe fn read_screen_bgra(
     x: i32,
     y: i32,
@@ -2385,7 +2442,7 @@ fn write_bmp(path: &Path, width: u32, height: u32, bgra: &[u8]) -> Result<(), Pl
 mod tests {
     use oddsnap_core::{CapabilityState, PlatformCapability, RecordingFormat, RecordingQuality};
     #[cfg(target_os = "windows")]
-    use oddsnap_platform::ScreenshotExclusionService;
+    use oddsnap_platform::{ColorPickerService, ScreenshotExclusionService};
     use oddsnap_platform::{
         OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
         VideoRecordingRequest, VideoRecordingService,
@@ -2531,6 +2588,39 @@ mod tests {
         assert_eq!((paint_rect.left, paint_rect.top), (20, 30));
         assert_eq!((paint_rect.right, paint_rect.bottom), (220, 180));
         assert!(super::selection_client_rect_from_points((4, 4), (4, 9)).is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn colorref_to_color_sample_extracts_rgb_channels() {
+        let sample =
+            super::colorref_to_color_sample(windows::Win32::Foundation::COLORREF(0x00CC_550A))
+                .expect("sample");
+
+        assert_eq!(
+            sample,
+            oddsnap_platform::ColorSample {
+                r: 0x0A,
+                g: 0x55,
+                b: 0xCC,
+            }
+        );
+        assert!(
+            super::colorref_to_color_sample(windows::Win32::Foundation::COLORREF(u32::MAX))
+                .is_err()
+        );
+    }
+
+    #[test]
+    #[ignore = "samples one pixel from the local desktop at the current cursor position"]
+    #[cfg(target_os = "windows")]
+    fn windows_color_picker_can_sample_cursor_color() {
+        let sample = WindowsPlatform
+            .sample_cursor_color()
+            .expect("cursor color sample");
+
+        assert_eq!(sample.bare_hex_rgb().len(), 6);
+        assert!(sample.hex_rgb().starts_with('#'));
     }
 
     #[test]

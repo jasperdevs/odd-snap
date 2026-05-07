@@ -50,6 +50,23 @@ pub struct CaptureRequest {
     pub include_cursor: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColorSample {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl ColorSample {
+    pub fn hex_rgb(self) -> String {
+        format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
+    }
+
+    pub fn bare_hex_rgb(self) -> String {
+        format!("{:02X}{:02X}{:02X}", self.r, self.g, self.b)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowInfo {
     pub id: String,
@@ -139,6 +156,10 @@ pub trait ClipboardImageService: Send + Sync {
 
 pub trait ClipboardTextService: Send + Sync {
     fn copy_text_to_clipboard(&self, text: &str) -> Result<(), PlatformError>;
+}
+
+pub trait ColorPickerService: Send + Sync {
+    fn sample_cursor_color(&self) -> Result<ColorSample, PlatformError>;
 }
 
 pub trait VideoRecordingHandle: Send {
@@ -373,9 +394,21 @@ mod tests {
 
     use super::{
         persist_capture_to_directory, persist_capture_to_directory_as, persist_capture_to_path_as,
-        virtual_screen_region, CaptureRegion, CaptureResult, MonitorInfo,
+        virtual_screen_region, CaptureRegion, CaptureResult, ColorSample, MonitorInfo,
     };
     use oddsnap_core::CaptureImageFormat;
+
+    #[test]
+    fn color_sample_formats_hash_and_bare_hex() {
+        let sample = ColorSample {
+            r: 3,
+            g: 172,
+            b: 255,
+        };
+
+        assert_eq!(sample.hex_rgb(), "#03ACFF");
+        assert_eq!(sample.bare_hex_rgb(), "03ACFF");
+    }
 
     #[test]
     fn virtual_screen_region_combines_negative_and_positive_monitors() {

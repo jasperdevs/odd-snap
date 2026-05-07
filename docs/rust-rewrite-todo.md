@@ -70,6 +70,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Capture image format persistence for PNG/JPEG/BMP.
 - [x] Windows image clipboard foundation.
 - [x] Windows text clipboard foundation.
+- [x] Windows cursor color sampling and clipboard copy foundation.
 - [ ] Cross-platform image clipboard.
 - [ ] Cross-platform text clipboard.
 - [x] GPUI recent-captures list for capture smoke results.
@@ -104,6 +105,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] OCR.
 - [ ] Translation.
 - [ ] Image search.
+- [ ] Production color picker overlay and color history.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.

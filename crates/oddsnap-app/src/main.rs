@@ -25,9 +25,9 @@ use oddsnap_core::{
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRequest,
-    ClipboardImageService, ClipboardTextService, OverlayWindowRequest, PlatformAdapter,
-    RegionSelectionService, ScreenCaptureService, VideoRecordingHandle, VideoRecordingRequest,
-    VideoRecordingService, WindowPickerService,
+    ClipboardImageService, ClipboardTextService, ColorPickerService, OverlayWindowRequest,
+    PlatformAdapter, RegionSelectionService, ScreenCaptureService, VideoRecordingHandle,
+    VideoRecordingRequest, VideoRecordingService, WindowPickerService,
 };
 
 fn main() {
@@ -380,6 +380,7 @@ impl OddSnapRustApp {
                                 "capture-window-button",
                                 CaptureMode::ActiveWindow,
                             ))
+                            .child(self.color_picker_button(cx))
                             .child(self.recording_button(cx))
                             .child(self.recording_target_button(cx)),
                     ),
@@ -775,6 +776,25 @@ impl OddSnapRustApp {
             }))
     }
 
+    fn color_picker_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("color-picker-button")
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(rgb(0x4a5262))
+            .bg(rgb(0x242936))
+            .hover(|this| this.bg(rgb(0x303746)))
+            .px(px(10.0))
+            .py(px(6.0))
+            .text_size(px(11.0))
+            .child("Color")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.run_color_picker();
+                cx.notify();
+            }))
+    }
+
     fn settings_button(
         &self,
         cx: &mut Context<Self>,
@@ -976,6 +996,32 @@ impl OddSnapRustApp {
                 )
             }
             Err(error) => format!("{} capture failed: {error}", platform.name()),
+        };
+    }
+
+    fn run_color_picker(&mut self) {
+        let platform = host_platform();
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            adapter.sample_cursor_color().map(|sample| {
+                let copied = adapter
+                    .copy_text_to_clipboard(&sample.bare_hex_rgb())
+                    .is_ok();
+                (sample.hex_rgb(), copied)
+            })
+        };
+
+        #[cfg(not(target_os = "windows"))]
+        let result: Result<(String, bool), oddsnap_platform::PlatformError> =
+            Err(oddsnap_platform::PlatformError::Unsupported(
+                "color picker is pending on this platform",
+            ));
+
+        self.capture_status = match result {
+            Ok((hex, true)) => format!("Picked color {hex} and copied it to clipboard."),
+            Ok((hex, false)) => format!("Picked color {hex}; clipboard copy failed."),
+            Err(error) => format!("{} color picker failed: {error}", platform.name()),
         };
     }
 
@@ -1199,7 +1245,8 @@ impl OddSnapRustApp {
                 self.capture_status = "Tray text capture is pending Rust OCR parity.".into();
             }
             oddsnap_platform_windows::WindowsTrayEvent::ColorPicker => {
-                self.capture_status = "Tray color picker is pending Rust overlay parity.".into();
+                self.capture_status = "Tray color picker received.".into();
+                self.run_color_picker();
             }
             oddsnap_platform_windows::WindowsTrayEvent::ScrollCapture => {
                 self.capture_status = "Tray scroll capture is pending Rust overlay parity.".into();

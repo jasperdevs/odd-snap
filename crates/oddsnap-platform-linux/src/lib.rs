@@ -2,10 +2,11 @@ use std::path::Path;
 
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, HotkeyService,
-    MonitorInfo, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter, PlatformError,
-    RegionOverlayService, RegionSelectionService, ScreenCaptureService, VideoRecordingRequest,
-    VideoRecordingService, WindowInfo, WindowPickerService,
+    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, ColorPickerService,
+    ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle, OverlayWindowRequest,
+    PlatformAdapter, PlatformError, RegionOverlayService, RegionSelectionService,
+    ScreenCaptureService, VideoRecordingRequest, VideoRecordingService, WindowInfo,
+    WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -89,6 +90,14 @@ impl ClipboardTextService for LinuxPlatform {
     }
 }
 
+impl ColorPickerService for LinuxPlatform {
+    fn sample_cursor_color(&self) -> Result<ColorSample, PlatformError> {
+        Err(PlatformError::Unsupported(
+            "Linux color picker is not implemented yet",
+        ))
+    }
+}
+
 impl HotkeyService for LinuxPlatform {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError> {
         let _ = accelerator;
@@ -138,9 +147,9 @@ impl RegionSelectionService for LinuxPlatform {
 mod tests {
     use oddsnap_core::{NativeMaterial, RecordingFormat, RecordingQuality};
     use oddsnap_platform::{
-        ClipboardImageService, ClipboardTextService, HotkeyService, OverlayWindowRequest,
-        PlatformAdapter, RegionOverlayService, RegionSelectionService, ScreenCaptureService,
-        VideoRecordingRequest, VideoRecordingService,
+        ClipboardImageService, ClipboardTextService, ColorPickerService, HotkeyService,
+        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
+        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
     };
 
     use super::LinuxPlatform;
@@ -182,6 +191,17 @@ mod tests {
         let error = adapter
             .copy_text_to_clipboard("capture text")
             .expect_err("Linux text clipboard pending");
+
+        assert!(error.to_string().contains("not implemented yet"));
+    }
+
+    #[test]
+    fn linux_color_picker_service_is_explicitly_unimplemented() {
+        let adapter = LinuxPlatform;
+
+        let error = adapter
+            .sample_cursor_color()
+            .expect_err("Linux color picker pending");
 
         assert!(error.to_string().contains("not implemented yet"));
     }
