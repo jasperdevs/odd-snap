@@ -788,13 +788,10 @@ pub fn start_oddsnap_tray_icon(
             break;
         }
 
-        match menu_receiver.recv_timeout(Duration::from_millis(50)) {
-            Ok(event) => {
-                if let Some(mapped) = macos_tray_event_for_menu_id(event.id().as_ref()) {
-                    let _ = events.send(mapped);
-                }
+        if let Ok(event) = menu_receiver.recv_timeout(Duration::from_millis(50)) {
+            if let Some(mapped) = macos_tray_event_for_menu_id(event.id().as_ref()) {
+                let _ = events.send(mapped);
             }
-            Err(_) => {}
         }
     });
 
