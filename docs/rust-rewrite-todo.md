@@ -59,7 +59,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Cross-platform window capture.
 - [ ] Production region selection overlay.
 - [x] Windows primitive drag region selection capture path.
-- [ ] Crosshair guides.
+- [x] Windows primitive region-selection frame and crosshair visual feedback.
+- [ ] Production crosshair guides across overlay tools.
 - [ ] Magnifier.
 - [ ] Annotation drawing.
 - [x] Shared save-to-file persistence helper.

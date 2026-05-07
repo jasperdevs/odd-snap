@@ -80,6 +80,7 @@ pub struct OverlayWindowRequest {
     pub bounds: CaptureRegion,
     pub opacity: u8,
     pub click_through: bool,
+    pub show_crosshair_guides: bool,
 }
 
 pub trait PlatformAdapter: Send + Sync {

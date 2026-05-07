@@ -232,6 +232,7 @@ mod tests {
             },
             opacity: 1,
             click_through: true,
+            show_crosshair_guides: false,
         }) {
             Ok(_) => panic!("macOS overlay should be pending"),
             Err(error) => error,
@@ -252,6 +253,7 @@ mod tests {
             },
             opacity: 1,
             click_through: false,
+            show_crosshair_guides: false,
         }) {
             Ok(_) => panic!("macOS region selection should be pending"),
             Err(error) => error,

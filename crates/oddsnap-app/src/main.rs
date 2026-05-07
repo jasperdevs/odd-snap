@@ -919,6 +919,7 @@ impl OddSnapRustApp {
                         bounds,
                         opacity: 24,
                         click_through: false,
+                        show_crosshair_guides: self.settings.show_crosshair_guides,
                     })? {
                         Some(region) => adapter.capture_region_with_options(CaptureRequest {
                             region,

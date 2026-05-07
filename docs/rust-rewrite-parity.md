@@ -26,6 +26,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS and Linux adapters expose explicit pending capture/window/clipboard service implementations instead of missing trait surfaces.
 - Windows monitor enumeration now reports real display entries with DPI-derived scale percentages.
 - Windows has a region-overlay service boundary that can create and destroy a topmost layered tool window in virtual-screen coordinates, with screenshot exclusion applied.
+- Windows primitive region selection now paints a dimmed native overlay, live selection frame, and optional crosshair guides using the imported crosshair preference.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - GPUI recent-capture rows can reveal saved files through the host file browser.
 - Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
@@ -64,5 +65,5 @@ The Rust rewrite must not replace the current app until this document and the li
 
 The rewrite does not yet implement the full production capture overlay, annotation, region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, packaging, or update behavior.
 The Windows tray foundation is present, but the Rust menu still routes text capture, color picker, and scroll capture to pending-status messages until those feature backends land.
-The Windows overlay foundation proves native window lifecycle only; the current region selector is primitive and does not yet include the production screenshot-backed overlay, crosshair, magnifier, toolbar, snap-to-window behavior, or annotation tools.
+The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, snap-to-window behavior, or annotation tools.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.

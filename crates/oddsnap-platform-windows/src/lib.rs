@@ -41,10 +41,11 @@ use windows::Win32::Foundation::{
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Gdi::{
-    BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject,
-    EnumDisplayMonitors, GetDC, GetDIBits, GetMonitorInfoW, ReleaseDC, SelectObject, BITMAPINFO,
-    BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, HMONITOR, MONITORINFO,
-    ROP_CODE, SRCCOPY,
+    BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateSolidBrush, DeleteDC,
+    DeleteObject, EndPaint, EnumDisplayMonitors, FillRect, FrameRect, GetDC, GetDIBits,
+    GetMonitorInfoW, InvalidateRect, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
+    CAPTUREBLT, DIB_RGB_COLORS, HBITMAP, HDC, HMONITOR, MONITORINFO, PAINTSTRUCT, ROP_CODE,
+    SRCCOPY,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::System::DataExchange::{
@@ -83,9 +84,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     ICONINFO, IDI_APPLICATION, LWA_ALPHA, MF_SEPARATOR, MF_STRING, MSG, PM_NOREMOVE,
     SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE,
     SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOW, TPM_LEFTALIGN, TPM_RETURNCMD,
-    WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY, WINDOW_EX_STYLE, WM_APP, WM_HOTKEY,
-    WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_OVERLAPPED, WS_POPUP,
+    WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY, WINDOW_EX_STYLE, WM_APP,
+    WM_ERASEBKGND, WM_HOTKEY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT,
+    WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT, WS_OVERLAPPED, WS_POPUP,
 };
 
 #[derive(Debug, Default)]
@@ -130,6 +132,7 @@ const TRAY_MENU_QUIT_ID: usize = 0x1008;
 #[derive(Debug, Clone)]
 struct WindowsRegionSelectionState {
     bounds: CaptureRegion,
+    show_crosshair_guides: bool,
     start: Option<(i32, i32)>,
     current: Option<(i32, i32)>,
     result: Option<Option<CaptureRegion>>,
@@ -1018,11 +1021,15 @@ fn run_region_selection_loop(
             hwnd_key(hwnd),
             WindowsRegionSelectionState {
                 bounds: request.bounds.clone(),
+                show_crosshair_guides: request.show_crosshair_guides,
                 start: None,
                 current: None,
                 result: None,
             },
         );
+    }
+    unsafe {
+        let _ = InvalidateRect(Some(hwnd), None, false);
     }
 
     let mut message = MSG::default();
@@ -1133,16 +1140,18 @@ unsafe extern "system" fn region_selection_window_proc(
             });
             unsafe {
                 let _ = SetCapture(hwnd);
+                let _ = InvalidateRect(Some(hwnd), None, false);
             }
             LRESULT(0)
         }
         WM_MOUSEMOVE => {
             let point = selection_lparam_point(lparam);
             update_region_selection_state(hwnd, |state| {
-                if state.start.is_some() {
-                    state.current = Some(clamp_selection_point(point, &state.bounds));
-                }
+                state.current = Some(clamp_selection_point(point, &state.bounds));
             });
+            unsafe {
+                let _ = InvalidateRect(Some(hwnd), None, false);
+            }
             LRESULT(0)
         }
         WM_LBUTTONUP => {
@@ -1159,6 +1168,7 @@ unsafe extern "system" fn region_selection_window_proc(
             });
             unsafe {
                 let _ = ReleaseCapture();
+                let _ = InvalidateRect(Some(hwnd), None, false);
                 PostQuitMessage(0);
             }
             LRESULT(0)
@@ -1171,6 +1181,11 @@ unsafe extern "system" fn region_selection_window_proc(
             cancel_region_selection(hwnd);
             LRESULT(0)
         }
+        WM_PAINT => {
+            paint_region_selection_window(hwnd);
+            LRESULT(0)
+        }
+        WM_ERASEBKGND => LRESULT(1),
         _ => unsafe { DefWindowProcW(hwnd, message, wparam, lparam) },
     }
 }
@@ -1182,6 +1197,7 @@ fn cancel_region_selection(hwnd: HWND) {
     });
     unsafe {
         let _ = ReleaseCapture();
+        let _ = InvalidateRect(Some(hwnd), None, false);
         PostQuitMessage(0);
     }
 }
@@ -1194,6 +1210,100 @@ fn update_region_selection_state(
     if let Ok(mut states) = region_selection_states().lock() {
         if let Some(state) = states.get_mut(&hwnd_key(hwnd)) {
             update(state);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn paint_region_selection_window(hwnd: HWND) {
+    let state = region_selection_states()
+        .lock()
+        .ok()
+        .and_then(|states| states.get(&hwnd_key(hwnd)).cloned());
+
+    let mut paint = PAINTSTRUCT::default();
+    let hdc = unsafe { BeginPaint(hwnd, &mut paint) };
+    if let Some(state) = state {
+        fill_region_rect(
+            hdc,
+            RECT {
+                left: 0,
+                top: 0,
+                right: state.bounds.width as i32,
+                bottom: state.bounds.height as i32,
+            },
+            COLORREF(0x000000),
+        );
+
+        if state.show_crosshair_guides {
+            if let Some(cursor) = state.current {
+                paint_crosshair_guides(hdc, &state.bounds, cursor);
+            }
+        }
+
+        if let (Some(start), Some(current)) = (state.start, state.current) {
+            if let Some(rect) = selection_client_rect_from_points(start, current) {
+                frame_region_rect(hdc, rect, COLORREF(0x00ffffff));
+                frame_region_rect(hdc, inset_rect(rect, 1), COLORREF(0x00d5972d));
+            }
+        }
+    }
+    unsafe {
+        let _ = EndPaint(hwnd, &paint);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn paint_crosshair_guides(hdc: HDC, bounds: &CaptureRegion, cursor: (i32, i32)) {
+    let x = cursor.0.clamp(0, bounds.width as i32);
+    let y = cursor.1.clamp(0, bounds.height as i32);
+    let color = COLORREF(0x00ffffff);
+    fill_region_rect(
+        hdc,
+        RECT {
+            left: (x - 1).max(0),
+            top: 0,
+            right: (x + 2).min(bounds.width as i32),
+            bottom: bounds.height as i32,
+        },
+        color,
+    );
+    fill_region_rect(
+        hdc,
+        RECT {
+            left: 0,
+            top: (y - 1).max(0),
+            right: bounds.width as i32,
+            bottom: (y + 2).min(bounds.height as i32),
+        },
+        color,
+    );
+}
+
+#[cfg(target_os = "windows")]
+fn fill_region_rect(hdc: HDC, rect: RECT, color: COLORREF) {
+    if rect.right <= rect.left || rect.bottom <= rect.top {
+        return;
+    }
+    unsafe {
+        let brush = CreateSolidBrush(color);
+        if !brush.is_invalid() {
+            let _ = FillRect(hdc, &rect, brush);
+            let _ = DeleteObject(brush.into());
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn frame_region_rect(hdc: HDC, rect: RECT, color: COLORREF) {
+    if rect.right <= rect.left || rect.bottom <= rect.top {
+        return;
+    }
+    unsafe {
+        let brush = CreateSolidBrush(color);
+        if !brush.is_invalid() {
+            let _ = FrameRect(hdc, &rect, brush);
+            let _ = DeleteObject(brush.into());
         }
     }
 }
@@ -1236,6 +1346,33 @@ fn selection_region_from_points(
         width,
         height,
     })
+}
+
+#[cfg(target_os = "windows")]
+fn selection_client_rect_from_points(start: (i32, i32), end: (i32, i32)) -> Option<RECT> {
+    let left = start.0.min(end.0);
+    let top = start.1.min(end.1);
+    let right = start.0.max(end.0);
+    let bottom = start.1.max(end.1);
+    if right <= left || bottom <= top {
+        return None;
+    }
+    Some(RECT {
+        left,
+        top,
+        right,
+        bottom,
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn inset_rect(rect: RECT, amount: i32) -> RECT {
+    RECT {
+        left: rect.left + amount,
+        top: rect.top + amount,
+        right: rect.right - amount,
+        bottom: rect.bottom - amount,
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -2355,6 +2492,7 @@ mod tests {
             },
             opacity: 1,
             click_through: true,
+            show_crosshair_guides: false,
         }) {
             Ok(_) => panic!("empty overlay should fail"),
             Err(error) => error,
@@ -2387,6 +2525,12 @@ mod tests {
         );
         assert!(super::selection_region_from_points(&bounds, (10, 10), (10, 20)).is_none());
         assert_eq!(super::clamp_selection_point((-10, 700), &bounds), (0, 600));
+
+        let paint_rect =
+            super::selection_client_rect_from_points((220, 180), (20, 30)).expect("paint rect");
+        assert_eq!((paint_rect.left, paint_rect.top), (20, 30));
+        assert_eq!((paint_rect.right, paint_rect.bottom), (220, 180));
+        assert!(super::selection_client_rect_from_points((4, 4), (4, 9)).is_none());
     }
 
     #[test]
@@ -2402,6 +2546,7 @@ mod tests {
             },
             opacity: 24,
             click_through: false,
+            show_crosshair_guides: false,
         }) {
             Ok(_) => panic!("empty selection bounds should fail"),
             Err(error) => error,
@@ -2425,6 +2570,7 @@ mod tests {
                 },
                 opacity: 1,
                 click_through: true,
+                show_crosshair_guides: false,
             })
             .expect("overlay window");
 
