@@ -789,6 +789,7 @@ impl OddSnapRustApp {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .gap(px(8.0))
                             .child(self.open_history_button(cx, entry.path.clone()))
                             .child(self.copy_history_path_button(cx, entry.path.clone()))
