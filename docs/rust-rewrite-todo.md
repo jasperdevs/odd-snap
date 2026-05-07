@@ -70,6 +70,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Cross-platform text clipboard.
 - [x] GPUI recent-captures list for capture smoke results.
 - [x] Rust settings store for capture output and clipboard preferences.
+- [x] GPUI persisted controls for image format, clipboard copy, and cursor inclusion.
 - [x] Rust JSON media history store for saved image captures.
 - [x] Post-capture image preview.
 
@@ -83,6 +84,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] FFmpeg discovery.
 - [x] Bundled/AppData FFmpeg discovery parity before PATH fallback.
 - [x] Rust recording settings import and FFmpeg output argument model.
+- [x] GPUI persisted controls for recording format and quality.
 - [ ] Microphone recording.
 - [ ] System audio recording where supported.
 - [x] Video thumbnail generation for Rust recording history.

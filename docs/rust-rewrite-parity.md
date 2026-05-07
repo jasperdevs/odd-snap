@@ -34,6 +34,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.
 - GPUI capture smoke honors the imported capture delay and surfaces imported capture UX preferences.
+- GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
 - Rust FFmpeg discovery also checks bundled executable and legacy AppData locations before PATH.
 - Rust startup can import legacy recording format, quality, FPS, and audio-device preferences.
@@ -41,6 +42,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows has a Rust platform service boundary for starting/stopping FFmpeg-backed desktop video recordings from the GPUI shell.
 - Windows FFmpeg recording requests can carry capture-region bounds into `gdigrab` offset/video-size arguments.
 - Rust recording history can store FFmpeg-generated JPG thumbnails for saved GIF/video entries.
+- GPUI can persistently cycle implemented recording preferences for format and quality.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.
 - GPUI shows the newest saved image capture as an inline preview when the file still exists.

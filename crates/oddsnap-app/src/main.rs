@@ -18,8 +18,9 @@ use gpui_platform::application;
 use oddsnap_core::{
     build_available_capture_path, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
     default_history_path, default_settings_path, discover_ffmpeg_tools, format_file_name_template,
-    AppSettings, CapabilityState, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind,
-    HistoryStore, PlatformCapability, SettingsStore,
+    AppSettings, CapabilityState, CaptureImageFormat, FfmpegThumbnailRequest, HistoryEntry,
+    HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, RecordingFormat, RecordingQuality,
+    SettingsStore,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRequest,
@@ -64,6 +65,7 @@ struct OddSnapRustApp {
     capabilities: Vec<(PlatformCapability, CapabilityState)>,
     capture_status: String,
     settings: AppSettings,
+    settings_store: SettingsStore,
     settings_path: String,
     history_store: HistoryStore,
     history_path: String,
@@ -95,6 +97,15 @@ struct ActiveRecording {
 enum CaptureMode {
     FullScreen,
     ActiveWindow,
+}
+
+#[derive(Clone, Copy)]
+enum SettingsAction {
+    CaptureImageFormat,
+    ToggleClipboardCopy,
+    ToggleCursor,
+    RecordingFormat,
+    RecordingQuality,
 }
 
 impl CaptureMode {
@@ -153,6 +164,7 @@ impl OddSnapRustApp {
             capabilities,
             capture_status: combine_startup_status(capture_status, history_migration_status),
             settings,
+            settings_store,
             settings_path,
             history_store,
             history_path,
@@ -405,6 +417,58 @@ impl OddSnapRustApp {
             )
             .child(
                 div()
+                    .flex()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "capture-format-button",
+                        format!(
+                            "Image {}",
+                            self.settings.capture_image_format.label()
+                        ),
+                        SettingsAction::CaptureImageFormat,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "copy-capture-button",
+                        format!(
+                            "Copy {}",
+                            on_off(self.settings.copy_captures_to_clipboard)
+                        ),
+                        SettingsAction::ToggleClipboardCopy,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "cursor-capture-button",
+                        format!("Cursor {}", on_off(self.settings.show_cursor)),
+                        SettingsAction::ToggleCursor,
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "recording-format-button",
+                        format!(
+                            "Record {}",
+                            self.settings.recording_format.label()
+                        ),
+                        SettingsAction::RecordingFormat,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "recording-quality-button",
+                        format!(
+                            "Quality {}",
+                            self.settings.recording_quality.label()
+                        ),
+                        SettingsAction::RecordingQuality,
+                    )),
+            )
+            .child(
+                div()
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(self.recording_status.clone())),
@@ -598,6 +662,31 @@ impl OddSnapRustApp {
             }))
     }
 
+    fn settings_button(
+        &self,
+        cx: &mut Context<Self>,
+        element_id: &'static str,
+        label: String,
+        action: SettingsAction,
+    ) -> impl IntoElement {
+        div()
+            .id(element_id)
+            .rounded(px(7.0))
+            .border_1()
+            .border_color(rgb(0x3d4654))
+            .bg(rgb(0x202631))
+            .hover(|this| this.bg(rgb(0x2a3240)))
+            .px(px(10.0))
+            .py(px(6.0))
+            .text_size(px(11.0))
+            .child(SharedString::from(label))
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.apply_settings_action(action);
+                cx.notify();
+            }))
+    }
+
     fn recording_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let label = if self.active_recording.is_some() {
             "Stop recording"
@@ -685,6 +774,64 @@ impl OddSnapRustApp {
                 )
             }
             Err(error) => format!("{} capture failed: {error}", platform.name()),
+        };
+    }
+
+    fn apply_settings_action(&mut self, action: SettingsAction) {
+        match action {
+            SettingsAction::CaptureImageFormat => {
+                self.settings.capture_image_format =
+                    next_capture_image_format(self.settings.capture_image_format);
+                self.persist_capture_settings(format!(
+                    "Image format set to {}",
+                    self.settings.capture_image_format.label()
+                ));
+            }
+            SettingsAction::ToggleClipboardCopy => {
+                self.settings.copy_captures_to_clipboard =
+                    !self.settings.copy_captures_to_clipboard;
+                self.persist_capture_settings(format!(
+                    "Copy captures {}",
+                    on_off(self.settings.copy_captures_to_clipboard)
+                ));
+            }
+            SettingsAction::ToggleCursor => {
+                self.settings.show_cursor = !self.settings.show_cursor;
+                self.persist_capture_settings(format!(
+                    "Cursor capture {}",
+                    on_off(self.settings.show_cursor)
+                ));
+            }
+            SettingsAction::RecordingFormat => {
+                self.settings.recording_format =
+                    next_recording_format(self.settings.recording_format);
+                self.persist_recording_settings(format!(
+                    "Recording format set to {}",
+                    self.settings.recording_format.label()
+                ));
+            }
+            SettingsAction::RecordingQuality => {
+                self.settings.recording_quality =
+                    next_recording_quality(self.settings.recording_quality);
+                self.persist_recording_settings(format!(
+                    "Recording quality set to {}",
+                    self.settings.recording_quality.label()
+                ));
+            }
+        }
+    }
+
+    fn persist_capture_settings(&mut self, message: String) {
+        self.capture_status = match self.settings_store.save(&self.settings) {
+            Ok(()) => format!("{message}."),
+            Err(error) => format!("Settings save failed: {error}"),
+        };
+    }
+
+    fn persist_recording_settings(&mut self, message: String) {
+        self.recording_status = match self.settings_store.save(&self.settings) {
+            Ok(()) => format!("{message}."),
+            Err(error) => format!("Settings save failed: {error}"),
         };
     }
 
@@ -1117,10 +1264,77 @@ fn state_color(state: CapabilityState) -> u32 {
     }
 }
 
+fn next_capture_image_format(format: CaptureImageFormat) -> CaptureImageFormat {
+    match format {
+        CaptureImageFormat::Png => CaptureImageFormat::Jpeg,
+        CaptureImageFormat::Jpeg => CaptureImageFormat::Bmp,
+        CaptureImageFormat::Bmp => CaptureImageFormat::Png,
+    }
+}
+
+fn next_recording_format(format: RecordingFormat) -> RecordingFormat {
+    match format {
+        RecordingFormat::Gif => RecordingFormat::Mp4,
+        RecordingFormat::Mp4 => RecordingFormat::WebM,
+        RecordingFormat::WebM => RecordingFormat::Mkv,
+        RecordingFormat::Mkv => RecordingFormat::Gif,
+    }
+}
+
+fn next_recording_quality(quality: RecordingQuality) -> RecordingQuality {
+    match quality {
+        RecordingQuality::Original => RecordingQuality::P1080,
+        RecordingQuality::P1080 => RecordingQuality::P720,
+        RecordingQuality::P720 => RecordingQuality::P480,
+        RecordingQuality::P480 => RecordingQuality::Original,
+    }
+}
+
 fn on_off(value: bool) -> &'static str {
     if value {
         "on"
     } else {
         "off"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cycles_implemented_capture_setting_options() {
+        assert_eq!(
+            next_capture_image_format(CaptureImageFormat::Png),
+            CaptureImageFormat::Jpeg
+        );
+        assert_eq!(
+            next_capture_image_format(CaptureImageFormat::Jpeg),
+            CaptureImageFormat::Bmp
+        );
+        assert_eq!(
+            next_capture_image_format(CaptureImageFormat::Bmp),
+            CaptureImageFormat::Png
+        );
+    }
+
+    #[test]
+    fn cycles_implemented_recording_setting_options() {
+        assert_eq!(
+            next_recording_format(RecordingFormat::Gif),
+            RecordingFormat::Mp4
+        );
+        assert_eq!(
+            next_recording_format(RecordingFormat::Mkv),
+            RecordingFormat::Gif
+        );
+        assert_eq!(
+            next_recording_quality(RecordingQuality::Original),
+            RecordingQuality::P1080
+        );
+        assert_eq!(
+            next_recording_quality(RecordingQuality::P480),
+            RecordingQuality::Original
+        );
     }
 }
