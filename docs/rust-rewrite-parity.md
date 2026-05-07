@@ -60,6 +60,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.
+- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, while OCR/scan/sticker/upscale/center/ruler report explicit pending parity.
 - Windows hotkey listener can dispatch imported full-screen and active-window capture hotkeys into the GPUI shell.
 - Windows hotkey listener can dispatch the imported color-picker hotkey into the Rust color sampling path.
 - macOS has an app-level global hotkey listener foundation through `global-hotkey`; the manager is created during GPUI app startup so it stays on the main application thread.

@@ -1375,6 +1375,22 @@ impl OddSnapRustApp {
         };
     }
 
+    fn run_default_capture_command(&mut self, trigger: &'static str) {
+        match default_capture_action(self.settings.default_capture_mode) {
+            DefaultCaptureAction::Capture(mode) => {
+                self.capture_status = format!("{trigger} received.");
+                self.run_capture(mode);
+            }
+            DefaultCaptureAction::ColorPicker => {
+                self.capture_status = format!("{trigger} received.");
+                self.run_color_picker();
+            }
+            DefaultCaptureAction::Pending { label, parity_item } => {
+                self.capture_status = pending_default_capture_status(trigger, label, parity_item);
+            }
+        }
+    }
+
     fn save_color_history(&mut self, bare_hex: String) -> String {
         match self
             .history_store
@@ -1643,8 +1659,7 @@ impl OddSnapRustApp {
     fn handle_hotkey_event(&mut self, event: oddsnap_platform_windows::WindowsHotkeyEvent) {
         match event {
             oddsnap_platform_windows::WindowsHotkeyEvent::Capture => {
-                self.capture_status = "Capture hotkey received.".into();
-                self.run_capture(hotkey_capture_mode(self.settings.default_capture_mode));
+                self.run_default_capture_command("Capture hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Recording => {
                 self.recording_status = "Recording hotkey received.".into();
@@ -1695,8 +1710,7 @@ impl OddSnapRustApp {
     fn handle_hotkey_event(&mut self, event: CrossPlatformHotkeyEvent) {
         match event {
             CrossPlatformHotkeyEvent::Capture => {
-                self.capture_status = "Capture hotkey received.".into();
-                self.run_capture(hotkey_capture_mode(self.settings.default_capture_mode));
+                self.run_default_capture_command("Capture hotkey");
             }
             CrossPlatformHotkeyEvent::Recording => {
                 self.recording_status = "Recording hotkey received.".into();
@@ -1755,8 +1769,7 @@ impl OddSnapRustApp {
                     self.recording_status = "Tray stop recording received.".into();
                     self.stop_recording();
                 } else {
-                    self.capture_status = "Tray capture received.".into();
-                    self.run_capture(hotkey_capture_mode(self.settings.default_capture_mode));
+                    self.run_default_capture_command("Tray capture");
                 }
             }
             oddsnap_platform_windows::WindowsTrayEvent::ToggleRecording => {
@@ -1800,8 +1813,7 @@ impl OddSnapRustApp {
                     self.recording_status = "Menu bar stop recording received.".into();
                     self.stop_recording();
                 } else {
-                    self.capture_status = "Menu bar capture received.".into();
-                    self.run_capture(hotkey_capture_mode(self.settings.default_capture_mode));
+                    self.run_default_capture_command("Menu bar capture");
                 }
             }
             oddsnap_platform_macos::MacosTrayEvent::ToggleRecording => {
@@ -2779,18 +2791,48 @@ fn recording_audio_request_for_host(_: &AppSettings) -> (bool, bool, Option<&'st
     (false, false, None)
 }
 
-fn hotkey_capture_mode(default_mode: DefaultCaptureMode) -> CaptureMode {
+#[derive(Clone, Copy)]
+enum DefaultCaptureAction {
+    Capture(CaptureMode),
+    ColorPicker,
+    Pending {
+        label: &'static str,
+        parity_item: &'static str,
+    },
+}
+
+fn default_capture_action(default_mode: DefaultCaptureMode) -> DefaultCaptureAction {
     match default_mode {
-        DefaultCaptureMode::ActiveWindow => CaptureMode::ActiveWindow,
-        DefaultCaptureMode::Fullscreen => CaptureMode::FullScreen,
-        DefaultCaptureMode::Rectangle => CaptureMode::Rectangle,
-        DefaultCaptureMode::ColorPicker
-        | DefaultCaptureMode::Ocr
-        | DefaultCaptureMode::Scan
-        | DefaultCaptureMode::Sticker
-        | DefaultCaptureMode::Upscale
-        | DefaultCaptureMode::Center
-        | DefaultCaptureMode::Ruler => CaptureMode::FullScreen,
+        DefaultCaptureMode::ActiveWindow => {
+            DefaultCaptureAction::Capture(CaptureMode::ActiveWindow)
+        }
+        DefaultCaptureMode::Fullscreen => DefaultCaptureAction::Capture(CaptureMode::FullScreen),
+        DefaultCaptureMode::Rectangle => DefaultCaptureAction::Capture(CaptureMode::Rectangle),
+        DefaultCaptureMode::ColorPicker => DefaultCaptureAction::ColorPicker,
+        DefaultCaptureMode::Ocr => DefaultCaptureAction::Pending {
+            label: "OCR",
+            parity_item: "OCR",
+        },
+        DefaultCaptureMode::Scan => DefaultCaptureAction::Pending {
+            label: "Scan",
+            parity_item: "scan",
+        },
+        DefaultCaptureMode::Sticker => DefaultCaptureAction::Pending {
+            label: "Sticker",
+            parity_item: "sticker/background removal",
+        },
+        DefaultCaptureMode::Upscale => DefaultCaptureAction::Pending {
+            label: "Upscale",
+            parity_item: "upscale",
+        },
+        DefaultCaptureMode::Center => DefaultCaptureAction::Pending {
+            label: "Center",
+            parity_item: "center selection",
+        },
+        DefaultCaptureMode::Ruler => DefaultCaptureAction::Pending {
+            label: "Ruler",
+            parity_item: "ruler",
+        },
     }
 }
 
@@ -2892,6 +2934,10 @@ fn pending_tool_hotkey_status(label: &str, parity_item: &str) -> String {
     format!("{label} hotkey received; Rust {parity_item} parity is pending.")
 }
 
+fn pending_default_capture_status(trigger: &str, label: &str, parity_item: &str) -> String {
+    format!("{trigger} received; default capture mode '{label}' needs Rust {parity_item} parity.")
+}
+
 fn on_off(value: bool) -> &'static str {
     if value {
         "on"
@@ -2974,19 +3020,52 @@ mod tests {
     }
 
     #[test]
-    fn hotkey_uses_supported_imported_default_capture_modes() {
+    fn default_capture_action_routes_imported_default_modes_without_false_fallbacks() {
         assert!(matches!(
-            hotkey_capture_mode(DefaultCaptureMode::ActiveWindow),
-            CaptureMode::ActiveWindow
+            default_capture_action(DefaultCaptureMode::ActiveWindow),
+            DefaultCaptureAction::Capture(CaptureMode::ActiveWindow)
         ));
         assert!(matches!(
-            hotkey_capture_mode(DefaultCaptureMode::Fullscreen),
-            CaptureMode::FullScreen
+            default_capture_action(DefaultCaptureMode::Fullscreen),
+            DefaultCaptureAction::Capture(CaptureMode::FullScreen)
         ));
         assert!(matches!(
-            hotkey_capture_mode(DefaultCaptureMode::Rectangle),
-            CaptureMode::Rectangle
+            default_capture_action(DefaultCaptureMode::Rectangle),
+            DefaultCaptureAction::Capture(CaptureMode::Rectangle)
         ));
+        assert!(matches!(
+            default_capture_action(DefaultCaptureMode::ColorPicker),
+            DefaultCaptureAction::ColorPicker
+        ));
+
+        for (mode, label, parity_item) in [
+            (DefaultCaptureMode::Ocr, "OCR", "OCR"),
+            (DefaultCaptureMode::Scan, "Scan", "scan"),
+            (
+                DefaultCaptureMode::Sticker,
+                "Sticker",
+                "sticker/background removal",
+            ),
+            (DefaultCaptureMode::Upscale, "Upscale", "upscale"),
+            (DefaultCaptureMode::Center, "Center", "center selection"),
+            (DefaultCaptureMode::Ruler, "Ruler", "ruler"),
+        ] {
+            assert!(matches!(
+                default_capture_action(mode),
+                DefaultCaptureAction::Pending {
+                    label: pending_label,
+                    parity_item: pending_parity_item,
+                } if pending_label == label && pending_parity_item == parity_item
+            ));
+        }
+    }
+
+    #[test]
+    fn pending_default_capture_status_is_explicit() {
+        assert_eq!(
+            pending_default_capture_status("Capture hotkey", "OCR", "OCR"),
+            "Capture hotkey received; default capture mode 'OCR' needs Rust OCR parity."
+        );
     }
 
     #[test]

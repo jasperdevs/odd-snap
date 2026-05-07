@@ -34,6 +34,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Legacy capture/recording hotkey settings import.
 - [x] Windows recording hotkey event loop integration.
 - [x] Capture hotkey honors supported imported default capture modes.
+- [x] Unsupported imported default capture modes report pending parity instead of silently falling back to full-screen.
 - [x] Windows dedicated full-screen and active-window hotkey routing.
 - [x] Windows imported color-picker hotkey routing.
 - [x] Imported OCR hotkey routing reports pending OCR parity instead of being dropped.
