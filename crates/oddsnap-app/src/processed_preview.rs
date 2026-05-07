@@ -16,7 +16,25 @@ pub(crate) struct ProcessedResultPreviewWindow {
     provider_name: String,
     original_path: Option<PathBuf>,
     result_path: PathBuf,
+    mode: PreviewMode,
     status: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PreviewMode {
+    Split,
+    Before,
+    After,
+}
+
+impl PreviewMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Split => "Split",
+            Self::Before => "Before",
+            Self::After => "After",
+        }
+    }
 }
 
 impl ProcessedResultPreviewWindow {
@@ -31,6 +49,7 @@ impl ProcessedResultPreviewWindow {
             provider_name,
             original_path,
             result_path,
+            mode: PreviewMode::Split,
             status: format!("{} result ready.", tool.label()),
         }
     }
@@ -55,6 +74,11 @@ impl ProcessedResultPreviewWindow {
             Ok(action) => format!("{action} {}.", self.result_path.display()),
             Err(error) => format!("Open failed: {error}"),
         };
+    }
+
+    fn set_preview_mode(&mut self, mode: PreviewMode) {
+        self.mode = mode;
+        self.status = format!("Preview mode: {}.", mode.label());
     }
 
     fn preview_image_panel(&self, label: &'static str, path: Option<PathBuf>) -> impl IntoElement {
@@ -157,6 +181,24 @@ impl ProcessedResultPreviewWindow {
             cx.notify();
         }))
     }
+
+    fn preview_mode_button(&self, cx: &mut Context<Self>, mode: PreviewMode) -> impl IntoElement {
+        let active = self.mode == mode;
+        crate::ui::action_button_style(
+            div().id(SharedString::from(format!(
+                "processed-preview-mode-{}",
+                mode.label().to_ascii_lowercase()
+            ))),
+            crate::ui::ButtonVariant::History,
+        )
+        .when(active, |button| button.bg(rgb(0x2d4f75)))
+        .child(mode.label())
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.set_preview_mode(mode);
+            cx.notify();
+        }))
+    }
 }
 
 impl Drop for ProcessedResultPreviewWindow {
@@ -172,6 +214,7 @@ impl Render for ProcessedResultPreviewWindow {
         let title = format!("{} preview", self.tool.label());
         let original_path = self.original_path.clone();
         let result_path = self.result_path.clone();
+        let mode = self.mode;
 
         div()
             .size_full()
@@ -205,7 +248,11 @@ impl Render for ProcessedResultPreviewWindow {
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .gap(px(8.0))
+                            .child(self.preview_mode_button(cx, PreviewMode::Split))
+                            .child(self.preview_mode_button(cx, PreviewMode::Before))
+                            .child(self.preview_mode_button(cx, PreviewMode::After))
                             .child(self.copy_result_image_button(cx))
                             .child(self.copy_result_path_button(cx))
                             .child(self.reveal_result_button(cx)),
@@ -215,11 +262,20 @@ impl Render for ProcessedResultPreviewWindow {
                 div()
                     .flex_1()
                     .min_h(px(0.0))
-                    .grid()
-                    .grid_cols(2)
                     .gap(px(10.0))
-                    .child(self.preview_image_panel("Before", original_path))
-                    .child(self.preview_image_panel("After", Some(result_path))),
+                    .when(mode == PreviewMode::Split, |panel| {
+                        panel
+                            .grid()
+                            .grid_cols(2)
+                            .child(self.preview_image_panel("Before", original_path.clone()))
+                            .child(self.preview_image_panel("After", Some(result_path.clone())))
+                    })
+                    .when(mode == PreviewMode::Before, |panel| {
+                        panel.child(self.preview_image_panel("Before", original_path.clone()))
+                    })
+                    .when(mode == PreviewMode::After, |panel| {
+                        panel.child(self.preview_image_panel("After", Some(result_path.clone())))
+                    }),
             )
             .child(
                 div()
@@ -227,5 +283,17 @@ impl Render for ProcessedResultPreviewWindow {
                     .text_color(crate::ui::skin::color(crate::ui::skin::MUTED_TEXT))
                     .child(SharedString::from(self.status.clone())),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PreviewMode;
+
+    #[test]
+    fn preview_mode_labels_are_stable() {
+        assert_eq!(PreviewMode::Split.label(), "Split");
+        assert_eq!(PreviewMode::Before.label(), "Before");
+        assert_eq!(PreviewMode::After.label(), "After");
     }
 }

@@ -206,6 +206,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI sticker controls can persist provider, Remove.bg/Photoroom API keys, local model, CPU/GPU execution, stroke, and shadow settings.
 - [x] GPUI upscale controls can persist provider, DeepAI API key, local model, CPU/GPU execution, scale, and preview-window preference.
 - [x] GPUI upscale preview window opens saved before/after result images when preview is enabled.
+- [x] GPUI upscale preview window can switch between split, before-only, and after-only preview modes.
 - [x] Curl-backed public upload hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and temporary-host fallback.
 - [x] Curl-backed credentialed Imgur and ImgBB upload request/response support using imported upload settings.
 - [x] Curl-backed credentialed Gyazo and imgpile upload request/response support using imported upload settings.
@@ -221,7 +222,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed Google Drive multipart/resumable upload and permission flow with imported access token/folder settings.
 - [x] Upload destinations, with legacy transfer.sh preserved as an explicit unavailable-provider error.
 - [ ] Full stickers/background removal parity, including complete model-management polish and real-runtime smoke verification.
-- [ ] Full upscale parity, including interactive before/after preview controls and real-runtime smoke verification.
+- [ ] Full upscale parity, including real-runtime smoke verification.
 - [x] Local runtime install/remove controls for active sticker/upscale runtimes.
 - [x] GPUI lifecycle controls expose and persist imported startup/update-check preferences with explicit non-release-channel status.
 - [ ] Update/install flow.
