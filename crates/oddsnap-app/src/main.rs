@@ -1698,17 +1698,45 @@ impl OddSnapRustApp {
                 "AI Redirect not configured; choose a provider in Settings -> Uploads.".into();
             return;
         }
-        if provider == AiChatProvider::GoogleLens {
-            self.capture_status =
-                "Google Lens AI Redirect needs Rust upload destination parity first.".into();
-            return;
-        }
 
         let Some(path) = newest_history_image_path(&self.capture_history) else {
             self.capture_status =
                 "AI Redirect needs a saved image capture in Rust history first.".into();
             return;
         };
+
+        if provider == AiChatProvider::GoogleLens {
+            let upload = self.upload_metadata(HistoryKind::Image, &path, true);
+            let history_status = self.update_history_upload_metadata(&path, &upload);
+            if let Some(error) = upload.error {
+                self.capture_status =
+                    format!("Google Lens upload failed: {error}.{history_status}");
+                return;
+            }
+
+            let Some(upload_url) = upload.url else {
+                self.capture_status = format!(
+                    "Google Lens AI Redirect needs an upload destination in Settings -> Uploads.{history_status}"
+                );
+                return;
+            };
+
+            let lens_url = match oddsnap_core::build_google_lens_url(&upload_url) {
+                Ok(url) => url,
+                Err(error) => {
+                    self.capture_status = format!("Google Lens URL build failed: {error}");
+                    return;
+                }
+            };
+
+            self.capture_status = match open_external_url(&lens_url) {
+                Ok(()) => {
+                    format!("Google Lens opened for uploaded image: {upload_url}.{history_status}")
+                }
+                Err(error) => format!("Google Lens open failed: {error}.{history_status}"),
+            };
+            return;
+        }
 
         let copy_status = match copy_image_to_host_clipboard(&path) {
             Ok(()) => "copied newest image",
@@ -2376,6 +2404,36 @@ impl OddSnapRustApp {
             provider: Some(UploadDestination::TempHosts.display_name()),
             error: Some(errors.join(" | ")),
             ..UploadMetadata::default()
+        }
+    }
+
+    fn update_history_upload_metadata(&mut self, path: &Path, upload: &UploadMetadata) -> String {
+        let path_text = path.display().to_string();
+        if let Some(entry) = self
+            .capture_history
+            .iter_mut()
+            .find(|entry| entry.path == path_text)
+        {
+            entry.upload_url = upload.url.clone();
+            entry.upload_provider = upload.provider.clone();
+            entry.upload_error = upload.error.clone();
+        }
+
+        if !self.settings.save_history {
+            return String::new();
+        }
+
+        match self.history_store.update_entry_upload(
+            path,
+            upload.url.clone(),
+            upload.provider.clone(),
+            upload.error.clone(),
+        ) {
+            Ok(index) => {
+                self.capture_history = history_entries_to_capture_history(index);
+                String::new()
+            }
+            Err(error) => format!(" History upload metadata update failed: {error}"),
         }
     }
 

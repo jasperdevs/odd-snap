@@ -154,6 +154,27 @@ impl HistoryStore {
         Ok(index)
     }
 
+    pub fn update_entry_upload(
+        &self,
+        file_path: &Path,
+        upload_url: Option<String>,
+        upload_provider: Option<String>,
+        upload_error: Option<String>,
+    ) -> Result<HistoryIndex, HistoryStoreError> {
+        let mut index = self.load_or_default()?;
+        if let Some(entry) = index
+            .entries
+            .iter_mut()
+            .find(|entry| entry.file_path == file_path)
+        {
+            entry.upload_url = upload_url;
+            entry.upload_provider = upload_provider;
+            entry.upload_error = upload_error;
+            self.save(&index)?;
+        }
+        Ok(index)
+    }
+
     pub fn append_color_entry(
         &self,
         entry: ColorHistoryEntry,
@@ -282,6 +303,39 @@ mod tests {
         assert_eq!(index.entries[0].file_path, second_path);
         assert!(first_path.exists());
         assert!(second_path.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_store_updates_upload_metadata_without_renaming_entry() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-history-upload-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let store = HistoryStore::new(root.join("history.json"));
+        let image = root.join("capture.png");
+        fs::write(&image, b"png").expect("write capture");
+        let entry = HistoryEntry::from_capture_file(image.clone(), 1, 1, HistoryKind::Image)
+            .expect("build history entry");
+        let original_name = entry.file_name.clone();
+        store.append_entry(entry).expect("append");
+
+        let index = store
+            .update_entry_upload(
+                &image,
+                Some("https://files.example.test/capture.png".into()),
+                Some("Catbox".into()),
+                None,
+            )
+            .expect("update upload metadata");
+
+        assert_eq!(index.entries[0].file_name, original_name);
+        assert_eq!(
+            index.entries[0].upload_url.as_deref(),
+            Some("https://files.example.test/capture.png")
+        );
+        assert_eq!(index.entries[0].upload_provider.as_deref(), Some("Catbox"));
+        assert_eq!(index.entries[0].upload_error, None);
         let _ = fs::remove_dir_all(root);
     }
 
