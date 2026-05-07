@@ -21,5 +21,11 @@ oddsnap-platform-linux = { path = "../oddsnap-platform-linux" }
 oddsnap-platform-macos = { path = "../oddsnap-platform-macos" }
 oddsnap-platform-windows = { path = "../oddsnap-platform-windows" }
 
+[target.'cfg(not(windows))'.dependencies]
+global-hotkey = "0.8.0"
+
+[dev-dependencies]
+global-hotkey = "0.8.0"
+
 [lints]
 workspace = true

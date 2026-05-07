@@ -81,6 +81,8 @@ struct OddSnapRustApp {
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
     _hotkey_listener: Option<oddsnap_platform_windows::WindowsHotkeyListener>,
+    #[cfg(not(target_os = "windows"))]
+    _hotkey_listener: Option<CrossPlatformHotkeyListener>,
     #[cfg(target_os = "windows")]
     tray_icon: Option<oddsnap_platform_windows::WindowsTrayIcon>,
 }
@@ -106,6 +108,35 @@ struct ActiveRecording {
     handle: Box<dyn VideoRecordingHandle>,
     width: u32,
     height: u32,
+}
+
+#[cfg(not(target_os = "windows"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CrossPlatformHotkeyEvent {
+    Capture,
+    Recording,
+    FullScreenCapture,
+    ActiveWindowCapture,
+    ColorPicker,
+}
+
+#[cfg(not(target_os = "windows"))]
+struct CrossPlatformHotkeyListener {
+    manager: global_hotkey::GlobalHotKeyManager,
+    hotkeys: Vec<global_hotkey::hotkey::HotKey>,
+    stop_sender: std::sync::mpsc::Sender<()>,
+    join_handle: Option<std::thread::JoinHandle<()>>,
+}
+
+#[cfg(not(target_os = "windows"))]
+impl Drop for CrossPlatformHotkeyListener {
+    fn drop(&mut self) {
+        let _ = self.stop_sender.send(());
+        let _ = self.manager.unregister_all(&self.hotkeys);
+        if let Some(join_handle) = self.join_handle.take() {
+            let _ = join_handle.join();
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -217,6 +248,8 @@ impl OddSnapRustApp {
             color_history,
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
+            _hotkey_listener: hotkey_listener,
+            #[cfg(not(target_os = "windows"))]
             _hotkey_listener: hotkey_listener,
             #[cfg(target_os = "windows")]
             tray_icon,
@@ -1281,7 +1314,29 @@ impl OddSnapRustApp {
     }
 
     #[cfg(not(target_os = "windows"))]
-    fn start_hotkey_event_pump(&self, _: Option<()>, _: &mut Context<Self>) {}
+    fn start_hotkey_event_pump(
+        &self,
+        receiver: Option<std::sync::mpsc::Receiver<CrossPlatformHotkeyEvent>>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(receiver) = receiver else {
+            return;
+        };
+
+        cx.spawn(async move |this, cx| loop {
+            while let Ok(event) = receiver.try_recv() {
+                let _ = this.update(cx, |app, cx| {
+                    app.handle_hotkey_event(event);
+                    cx.notify();
+                });
+            }
+
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(100))
+                .await;
+        })
+        .detach();
+    }
 
     #[cfg(target_os = "windows")]
     fn start_tray_event_pump(
@@ -1331,6 +1386,32 @@ impl OddSnapRustApp {
                 self.run_capture(CaptureMode::ActiveWindow);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::ColorPicker => {
+                self.capture_status = "Color-picker hotkey received.".into();
+                self.run_color_picker();
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn handle_hotkey_event(&mut self, event: CrossPlatformHotkeyEvent) {
+        match event {
+            CrossPlatformHotkeyEvent::Capture => {
+                self.capture_status = "Capture hotkey received.".into();
+                self.run_capture(hotkey_capture_mode(self.settings.default_capture_mode));
+            }
+            CrossPlatformHotkeyEvent::Recording => {
+                self.recording_status = "Recording hotkey received.".into();
+                self.toggle_recording(RecordingTarget::FullScreen);
+            }
+            CrossPlatformHotkeyEvent::FullScreenCapture => {
+                self.capture_status = "Full-screen hotkey received.".into();
+                self.run_capture(CaptureMode::FullScreen);
+            }
+            CrossPlatformHotkeyEvent::ActiveWindowCapture => {
+                self.capture_status = "Active-window hotkey received.".into();
+                self.run_capture(CaptureMode::ActiveWindow);
+            }
+            CrossPlatformHotkeyEvent::ColorPicker => {
                 self.capture_status = "Color-picker hotkey received.".into();
                 self.run_color_picker();
             }
@@ -1718,17 +1799,142 @@ fn start_capture_hotkey_listener(
     fullscreen_accelerator: Option<&str>,
     active_window_accelerator: Option<&str>,
     picker_accelerator: Option<&str>,
-) -> (String, Option<()>, Option<()>) {
-    let _ = accelerator;
-    let _ = recording_accelerator;
-    let _ = fullscreen_accelerator;
-    let _ = active_window_accelerator;
-    let _ = picker_accelerator;
+) -> (
+    String,
+    Option<CrossPlatformHotkeyListener>,
+    Option<std::sync::mpsc::Receiver<CrossPlatformHotkeyEvent>>,
+) {
+    match start_cross_platform_hotkey_listener(
+        accelerator,
+        recording_accelerator,
+        fullscreen_accelerator,
+        active_window_accelerator,
+        picker_accelerator,
+    ) {
+        Ok((listener, receiver)) => (
+            cross_platform_hotkey_status_summary(
+                accelerator,
+                recording_accelerator,
+                fullscreen_accelerator,
+                active_window_accelerator,
+                picker_accelerator,
+            ),
+            Some(listener),
+            Some(receiver),
+        ),
+        Err(error) => (format!("Hotkey listener unavailable: {error}"), None, None),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn start_cross_platform_hotkey_listener(
+    accelerator: &str,
+    recording_accelerator: Option<&str>,
+    fullscreen_accelerator: Option<&str>,
+    active_window_accelerator: Option<&str>,
+    picker_accelerator: Option<&str>,
+) -> Result<
     (
-        "Hotkey listener: pending on this platform.".into(),
-        None,
-        None,
-    )
+        CrossPlatformHotkeyListener,
+        std::sync::mpsc::Receiver<CrossPlatformHotkeyEvent>,
+    ),
+    String,
+> {
+    let mut registrations = vec![(accelerator, CrossPlatformHotkeyEvent::Capture)];
+    if let Some(recording) = non_empty_hotkey(recording_accelerator) {
+        registrations.push((recording, CrossPlatformHotkeyEvent::Recording));
+    }
+    if let Some(fullscreen) = non_empty_hotkey(fullscreen_accelerator) {
+        registrations.push((fullscreen, CrossPlatformHotkeyEvent::FullScreenCapture));
+    }
+    if let Some(active_window) = non_empty_hotkey(active_window_accelerator) {
+        registrations.push((active_window, CrossPlatformHotkeyEvent::ActiveWindowCapture));
+    }
+    if let Some(picker) = non_empty_hotkey(picker_accelerator) {
+        registrations.push((picker, CrossPlatformHotkeyEvent::ColorPicker));
+    }
+
+    let mut id_to_event = std::collections::HashMap::new();
+    let mut hotkeys = Vec::new();
+    for (accelerator, event) in registrations {
+        let hotkey = parse_cross_platform_hotkey(accelerator)?;
+        id_to_event.insert(hotkey.id(), event);
+        hotkeys.push(hotkey);
+    }
+
+    let manager = global_hotkey::GlobalHotKeyManager::new()
+        .map_err(|error| format!("failed to initialize global-hotkey manager: {error}"))?;
+    manager
+        .register_all(&hotkeys)
+        .map_err(|error| format!("failed to register hotkeys: {error}"))?;
+
+    let (event_sender, event_receiver) = std::sync::mpsc::channel();
+    let (stop_sender, stop_receiver) = std::sync::mpsc::channel();
+    let global_receiver = global_hotkey::GlobalHotKeyEvent::receiver().clone();
+    let join_handle = std::thread::spawn(move || loop {
+        if stop_receiver.try_recv().is_ok() {
+            break;
+        }
+
+        match global_receiver.recv_timeout(Duration::from_millis(50)) {
+            Ok(event) if event.state == global_hotkey::HotKeyState::Released => {
+                if let Some(mapped) = id_to_event.get(&event.id()).copied() {
+                    let _ = event_sender.send(mapped);
+                }
+            }
+            Ok(_) => {}
+            Err(_) => {}
+        }
+    });
+
+    Ok((
+        CrossPlatformHotkeyListener {
+            manager,
+            hotkeys,
+            stop_sender,
+            join_handle: Some(join_handle),
+        },
+        event_receiver,
+    ))
+}
+
+#[cfg(any(test, not(target_os = "windows")))]
+fn parse_cross_platform_hotkey(accelerator: &str) -> Result<global_hotkey::hotkey::HotKey, String> {
+    let hotkey = accelerator
+        .parse::<global_hotkey::hotkey::HotKey>()
+        .map_err(|error| format!("invalid hotkey {accelerator:?}: {error}"))?;
+    if hotkey.mods.is_empty() {
+        return Err(format!(
+            "invalid hotkey {accelerator:?}: global hotkeys must include a modifier"
+        ));
+    }
+    Ok(hotkey)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn non_empty_hotkey(value: Option<&str>) -> Option<&str> {
+    value.filter(|value| !value.trim().is_empty())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn cross_platform_hotkey_status_summary(
+    capture: &str,
+    recording: Option<&str>,
+    fullscreen: Option<&str>,
+    active_window: Option<&str>,
+    picker: Option<&str>,
+) -> String {
+    let status = hotkey_status_summary(capture, recording, fullscreen, active_window, picker);
+    #[cfg(target_os = "linux")]
+    {
+        let mut status = status;
+        status.push_str(" Linux global hotkeys use X11; Wayland support is still pending.");
+        status
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        status
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -2133,6 +2339,20 @@ mod tests {
             ),
             "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window, Alt+Shift+C color-picker."
         );
+    }
+
+    #[test]
+    fn cross_platform_hotkey_parser_accepts_legacy_accelerator_shape() {
+        let hotkey = parse_cross_platform_hotkey("Ctrl+Shift+S").expect("parse legacy accelerator");
+
+        assert!(!hotkey.mods.is_empty());
+    }
+
+    #[test]
+    fn cross_platform_hotkey_parser_rejects_modifierless_hotkeys() {
+        let error = parse_cross_platform_hotkey("S").expect_err("modifierless hotkey rejected");
+
+        assert!(error.contains("must include a modifier"));
     }
 
     #[test]

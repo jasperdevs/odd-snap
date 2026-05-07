@@ -43,12 +43,13 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Windows per-monitor DPI verification.
 - [ ] macOS screen recording permission detection.
 - [ ] macOS tray/menu bar presence.
-- [ ] macOS global hotkey.
+- [x] macOS app-level global hotkey listener foundation.
 - [x] macOS explicit unsupported capture/clipboard adapter surfaces.
 - [x] macOS command-backed still screenshot capture foundation.
 - [ ] Linux portal-aware screen capture plan.
 - [ ] Linux tray/appindicator strategy.
-- [ ] Linux global hotkey strategy.
+- [x] Linux app-level X11 global hotkey listener foundation.
+- [ ] Linux Wayland global hotkey support.
 - [x] Linux explicit unsupported capture/clipboard adapter surfaces.
 - [x] Linux command-backed still screenshot capture foundation.
 

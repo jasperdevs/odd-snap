@@ -42,7 +42,10 @@ impl PlatformAdapter for LinuxPlatform {
                     PlatformCapability::ScreenshotExclusion,
                     CapabilityState::Planned,
                 ),
-                (PlatformCapability::GlobalHotkeys, CapabilityState::Planned),
+                (
+                    PlatformCapability::GlobalHotkeys,
+                    CapabilityState::InProgress,
+                ),
                 (PlatformCapability::Tray, CapabilityState::Planned),
                 (PlatformCapability::Clipboard, CapabilityState::InProgress),
                 (PlatformCapability::FileDialogs, CapabilityState::Planned),
@@ -448,6 +451,18 @@ mod tests {
             adapter
                 .capabilities()
                 .state(oddsnap_core::PlatformCapability::ScreenCapture),
+            oddsnap_core::CapabilityState::InProgress
+        );
+    }
+
+    #[test]
+    fn linux_global_hotkey_capability_is_in_progress() {
+        let adapter = LinuxPlatform;
+
+        assert_eq!(
+            adapter
+                .capabilities()
+                .state(oddsnap_core::PlatformCapability::GlobalHotkeys),
             oddsnap_core::CapabilityState::InProgress
         );
     }
