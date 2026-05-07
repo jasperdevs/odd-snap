@@ -1498,13 +1498,15 @@ impl OddSnapRustApp {
             .gap(px(8.0))
             .child(self.history_kind_filter_button(cx))
             .child(self.history_upload_filter_button(cx))
+            .child(self.copy_filtered_history_paths_button(cx))
             .child(self.copy_filtered_upload_links_button(cx))
             .child(self.upload_filtered_history_button(cx))
             .when(filtered_count > 0, |bar| {
                 bar.child(self.select_filtered_history_button(cx))
             })
             .when(selected_count > 0, |bar| {
-                bar.child(self.copy_selected_upload_links_button(cx))
+                bar.child(self.copy_selected_history_paths_button(cx))
+                    .child(self.copy_selected_upload_links_button(cx))
                     .child(self.upload_selected_history_button(cx))
                     .child(self.remove_selected_history_button(cx))
                     .child(self.clear_history_selection_button(cx))
@@ -2167,6 +2169,19 @@ impl OddSnapRustApp {
         }))
     }
 
+    fn copy_filtered_history_paths_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("copy-filtered-history-paths-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy paths")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_filtered_history_paths();
+            cx.notify();
+        }))
+    }
+
     fn copy_filtered_upload_links_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         ui::action_button_style(
             div().id("copy-filtered-upload-links-button"),
@@ -2204,6 +2219,19 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.toggle_history_selection(path.clone());
+            cx.notify();
+        }))
+    }
+
+    fn copy_selected_history_paths_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("copy-selected-history-paths-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Copy selected paths")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.copy_selected_history_paths();
             cx.notify();
         }))
     }
@@ -4290,6 +4318,31 @@ impl OddSnapRustApp {
         };
     }
 
+    fn copy_filtered_history_paths(&mut self) {
+        let entries = filtered_capture_history(
+            &self.capture_history,
+            self.history_kind_filter,
+            self.history_upload_filter,
+        );
+        self.copy_history_paths(entries, "filtered");
+    }
+
+    fn copy_selected_history_paths(&mut self) {
+        self.copy_history_paths(self.selected_capture_history(), "selected");
+    }
+
+    fn copy_history_paths(&mut self, entries: Vec<CaptureHistoryEntry>, label: &str) {
+        let Some(text) = history_paths_text(&entries) else {
+            self.capture_status = format!("No {label} history paths to copy.");
+            return;
+        };
+        let path_count = text.lines().count();
+        self.capture_status = match copy_text_to_host_clipboard(&text) {
+            Ok(()) => format!("{path_count} {label} history paths copied."),
+            Err(error) => format!("Copy {label} history paths failed: {error}"),
+        };
+    }
+
     fn copy_selected_history_upload_links(&mut self) {
         let entries = self.selected_capture_history();
         let Some(text) = filtered_upload_links_text(&entries) else {
@@ -6314,6 +6367,15 @@ fn filtered_upload_links_text(entries: &[CaptureHistoryEntry]) -> Option<String>
     (!links.is_empty()).then(|| links.join("\n"))
 }
 
+fn history_paths_text(entries: &[CaptureHistoryEntry]) -> Option<String> {
+    let paths = entries
+        .iter()
+        .map(|entry| entry.path.trim())
+        .filter(|path| !path.is_empty())
+        .collect::<Vec<_>>();
+    (!paths.is_empty()).then(|| paths.join("\n"))
+}
+
 fn run_curl_upload(
     destination: UploadDestination,
     path: &Path,
@@ -7661,6 +7723,37 @@ mod tests {
         );
         first.upload_url = Some(" ".into());
         assert_eq!(filtered_upload_links_text(&[first]), None);
+    }
+
+    #[test]
+    fn history_paths_text_skips_empty_paths() {
+        let mut first = CaptureHistoryEntry {
+            mode: CaptureMode::FullScreen,
+            kind: HistoryKind::Image,
+            path: " C:\\captures\\a.png ".into(),
+            file_name: "a.png".into(),
+            preview_path: None,
+            width: 10,
+            height: 10,
+            file_size_bytes: 1024,
+            captured_at_unix_ms: 1,
+            image_search_ocr_text: String::new(),
+            image_search_record: None,
+            upload_url: None,
+            upload_provider: None,
+            upload_error: None,
+        };
+        let mut second = first.clone();
+        second.path = String::new();
+        let mut third = first.clone();
+        third.path = "C:\\captures\\b.png".into();
+
+        assert_eq!(
+            history_paths_text(&[first.clone(), second, third]).as_deref(),
+            Some("C:\\captures\\a.png\nC:\\captures\\b.png")
+        );
+        first.path = " ".into();
+        assert_eq!(history_paths_text(&[first]), None);
     }
 
     #[test]
