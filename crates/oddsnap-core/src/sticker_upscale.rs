@@ -23,6 +23,16 @@ impl StickerProvider {
             Self::Unknown(value) => value.clone(),
         }
     }
+
+    fn setting_name(&self) -> String {
+        match self {
+            Self::None => "None".into(),
+            Self::RemoveBg => "RemoveBg".into(),
+            Self::Photoroom => "Photoroom".into(),
+            Self::LocalCpu => "LocalCpu".into(),
+            Self::Unknown(value) => value.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +82,20 @@ impl StickerSettings {
             add_stroke: json_bool(value, "AddStroke"),
         }
     }
+
+    pub fn to_json_value(&self) -> Value {
+        serde_json::json!({
+            "Provider": self.provider.setting_name(),
+            "RemoveBgApiKey": self.remove_bg_api_key,
+            "PhotoroomApiKey": self.photoroom_api_key,
+            "LocalEngine": self.local_engine,
+            "LocalCpuEngine": self.local_cpu_engine,
+            "LocalGpuEngine": self.local_gpu_engine,
+            "LocalExecutionProvider": self.local_execution_provider,
+            "AddShadow": self.add_shadow,
+            "AddStroke": self.add_stroke,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +114,16 @@ impl UpscaleProvider {
             Self::Local => "Local".into(),
             Self::DeepAiSuperResolution => "DeepAI Super Resolution".into(),
             Self::DeepAiWaifu2x => "DeepAI Waifu2x".into(),
+            Self::Unknown(value) => value.clone(),
+        }
+    }
+
+    fn setting_name(&self) -> String {
+        match self {
+            Self::None => "None".into(),
+            Self::Local => "Local".into(),
+            Self::DeepAiSuperResolution => "DeepAiSuperResolution".into(),
+            Self::DeepAiWaifu2x => "DeepAiWaifu2x".into(),
             Self::Unknown(value) => value.clone(),
         }
     }
@@ -140,6 +174,19 @@ impl UpscaleSettings {
             scale_factor: json_u32(value, "ScaleFactor").unwrap_or(4),
             show_preview_window: json_bool_or(value, "ShowPreviewWindow", true),
         }
+    }
+
+    pub fn to_json_value(&self) -> Value {
+        serde_json::json!({
+            "Provider": self.provider.setting_name(),
+            "DeepAiApiKey": self.deep_ai_api_key,
+            "LocalEngine": self.local_engine,
+            "LocalCpuEngine": self.local_cpu_engine,
+            "LocalGpuEngine": self.local_gpu_engine,
+            "LocalExecutionProvider": self.local_execution_provider,
+            "ScaleFactor": self.scale_factor,
+            "ShowPreviewWindow": self.show_preview_window,
+        })
     }
 }
 
@@ -490,6 +537,43 @@ mod tests {
         assert_eq!(settings.deep_ai_api_key, "deep-key");
         assert_eq!(settings.scale_factor, 2);
         assert!(!settings.show_preview_window);
+    }
+
+    #[test]
+    fn sticker_settings_round_trip_rust_json_values() {
+        let settings = StickerSettings {
+            provider: StickerProvider::Photoroom,
+            photoroom_api_key: "photo-key".into(),
+            local_engine: "BiRefNetLite".into(),
+            local_cpu_engine: "U2Net".into(),
+            local_gpu_engine: "BiRefNetLite".into(),
+            local_execution_provider: "Gpu".into(),
+            add_shadow: true,
+            add_stroke: true,
+            ..StickerSettings::default()
+        };
+
+        let parsed = StickerSettings::from_json_value(Some(&settings.to_json_value()));
+
+        assert_eq!(parsed, settings);
+    }
+
+    #[test]
+    fn upscale_settings_round_trip_rust_json_values() {
+        let settings = UpscaleSettings {
+            provider: UpscaleProvider::DeepAiSuperResolution,
+            deep_ai_api_key: "deep-key".into(),
+            local_engine: "RealEsrganX4Plus".into(),
+            local_cpu_engine: "SwinIrRealWorld".into(),
+            local_gpu_engine: "RealEsrganX4Plus".into(),
+            local_execution_provider: "Gpu".into(),
+            scale_factor: 2,
+            show_preview_window: false,
+        };
+
+        let parsed = UpscaleSettings::from_json_value(Some(&settings.to_json_value()));
+
+        assert_eq!(parsed, settings);
     }
 
     #[test]

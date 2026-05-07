@@ -29,7 +29,8 @@ use oddsnap_core::{
     FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
     ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchSources,
     OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality, ScrollingCaptureMode,
-    SettingsStore, TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
+    SettingsStore, StickerProvider, StickerSettings, TranslationModel, UploadDestination,
+    UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, image_file_dimensions, persist_capture_to_path_as,
@@ -661,6 +662,92 @@ impl OddSnapRustApp {
                     .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(
                         ocr_translation::translation_runtime_status_summary(&self.settings),
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                    .child(SharedString::from(sticker_settings_summary_text(
+                        &self.settings,
+                    ))),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "sticker-provider-button",
+                        "Sticker Provider".into(),
+                        SettingsAction::StickerProvider,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "sticker-engine-button",
+                        "Sticker Model".into(),
+                        SettingsAction::StickerLocalEngine,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "sticker-execution-button",
+                        "Sticker CPU/GPU".into(),
+                        SettingsAction::StickerExecutionProvider,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "sticker-stroke-button",
+                        "Stroke".into(),
+                        SettingsAction::ToggleStickerStroke,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "sticker-shadow-button",
+                        "Shadow".into(),
+                        SettingsAction::ToggleStickerShadow,
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                    .child(SharedString::from(upscale_settings_summary_text(
+                        &self.settings,
+                    ))),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "upscale-provider-button",
+                        "Upscale Provider".into(),
+                        SettingsAction::UpscaleProvider,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "upscale-engine-button",
+                        "Upscale Model".into(),
+                        SettingsAction::UpscaleLocalEngine,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "upscale-execution-button",
+                        "Upscale CPU/GPU".into(),
+                        SettingsAction::UpscaleExecutionProvider,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "upscale-scale-button",
+                        "Scale".into(),
+                        SettingsAction::UpscaleScale,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "upscale-preview-button",
+                        "Preview".into(),
+                        SettingsAction::ToggleUpscalePreview,
                     )),
             )
             .child(
@@ -2739,6 +2826,43 @@ impl OddSnapRustApp {
                     Err(error) => format!("Open-source local runtime remove failed: {error}"),
                 };
             }
+            SettingsAction::StickerProvider => {
+                let mut settings = StickerSettings::from_json_value(
+                    self.settings.sticker_upload_settings.as_ref(),
+                );
+                settings.provider = next_sticker_provider(&settings.provider);
+                self.persist_sticker_settings(settings, "Sticker provider updated".into());
+            }
+            SettingsAction::StickerLocalEngine => {
+                let mut settings = StickerSettings::from_json_value(
+                    self.settings.sticker_upload_settings.as_ref(),
+                );
+                let next = next_sticker_local_engine(&settings.local_engine);
+                set_active_sticker_engine(&mut settings, next);
+                self.persist_sticker_settings(settings, "Sticker local model updated".into());
+            }
+            SettingsAction::StickerExecutionProvider => {
+                let mut settings = StickerSettings::from_json_value(
+                    self.settings.sticker_upload_settings.as_ref(),
+                );
+                settings.local_execution_provider =
+                    next_execution_provider(&settings.local_execution_provider);
+                self.persist_sticker_settings(settings, "Sticker local execution updated".into());
+            }
+            SettingsAction::ToggleStickerShadow => {
+                let mut settings = StickerSettings::from_json_value(
+                    self.settings.sticker_upload_settings.as_ref(),
+                );
+                settings.add_shadow = !settings.add_shadow;
+                self.persist_sticker_settings(settings, "Sticker shadow updated".into());
+            }
+            SettingsAction::ToggleStickerStroke => {
+                let mut settings = StickerSettings::from_json_value(
+                    self.settings.sticker_upload_settings.as_ref(),
+                );
+                settings.add_stroke = !settings.add_stroke;
+                self.persist_sticker_settings(settings, "Sticker stroke updated".into());
+            }
             SettingsAction::InstallStickerRuntime => {
                 self.capture_status =
                     match sticker_upscale::install_active_sticker_runtime(&self.settings) {
@@ -2752,6 +2876,43 @@ impl OddSnapRustApp {
                         Ok(status) => status,
                         Err(error) => format!("Sticker local runtime remove failed: {error}"),
                     };
+            }
+            SettingsAction::UpscaleProvider => {
+                let mut settings = UpscaleSettings::from_json_value(
+                    self.settings.upscale_upload_settings.as_ref(),
+                );
+                settings.provider = next_upscale_provider(&settings.provider);
+                self.persist_upscale_settings(settings, "Upscale provider updated".into());
+            }
+            SettingsAction::UpscaleLocalEngine => {
+                let mut settings = UpscaleSettings::from_json_value(
+                    self.settings.upscale_upload_settings.as_ref(),
+                );
+                let next = next_upscale_local_engine(&settings.local_engine);
+                set_active_upscale_engine(&mut settings, next);
+                self.persist_upscale_settings(settings, "Upscale local model updated".into());
+            }
+            SettingsAction::UpscaleExecutionProvider => {
+                let mut settings = UpscaleSettings::from_json_value(
+                    self.settings.upscale_upload_settings.as_ref(),
+                );
+                settings.local_execution_provider =
+                    next_execution_provider(&settings.local_execution_provider);
+                self.persist_upscale_settings(settings, "Upscale local execution updated".into());
+            }
+            SettingsAction::UpscaleScale => {
+                let mut settings = UpscaleSettings::from_json_value(
+                    self.settings.upscale_upload_settings.as_ref(),
+                );
+                settings.scale_factor = next_upscale_scale_factor(settings.scale_factor);
+                self.persist_upscale_settings(settings, "Upscale scale updated".into());
+            }
+            SettingsAction::ToggleUpscalePreview => {
+                let mut settings = UpscaleSettings::from_json_value(
+                    self.settings.upscale_upload_settings.as_ref(),
+                );
+                settings.show_preview_window = !settings.show_preview_window;
+                self.persist_upscale_settings(settings, "Upscale preview updated".into());
             }
             SettingsAction::InstallUpscaleRuntime => {
                 self.capture_status =
@@ -2788,6 +2949,22 @@ impl OddSnapRustApp {
         self.image_search.refresh_status();
         self.capture_status = match self.settings_store.save(&self.settings) {
             Ok(()) => format!("{message}."),
+            Err(error) => format!("Settings save failed: {error}"),
+        };
+    }
+
+    fn persist_sticker_settings(&mut self, settings: StickerSettings, message: String) {
+        self.settings.sticker_upload_settings = Some(settings.to_json_value());
+        self.capture_status = match self.settings_store.save(&self.settings) {
+            Ok(()) => format!("{message}: {}.", sticker_settings_summary(&settings)),
+            Err(error) => format!("Settings save failed: {error}"),
+        };
+    }
+
+    fn persist_upscale_settings(&mut self, settings: UpscaleSettings, message: String) {
+        self.settings.upscale_upload_settings = Some(settings.to_json_value());
+        self.capture_status = match self.settings_store.save(&self.settings) {
+            Ok(()) => format!("{message}: {}.", upscale_settings_summary(&settings)),
             Err(error) => format!("Settings save failed: {error}"),
         };
     }
@@ -4690,6 +4867,129 @@ fn advanced_settings_summary_text(settings: &AppSettings) -> String {
     )
 }
 
+fn sticker_settings_summary_text(settings: &AppSettings) -> String {
+    let sticker_settings =
+        StickerSettings::from_json_value(settings.sticker_upload_settings.as_ref());
+    format!(
+        "Sticker prefs: {}",
+        sticker_settings_summary(&sticker_settings)
+    )
+}
+
+fn upscale_settings_summary_text(settings: &AppSettings) -> String {
+    let upscale_settings =
+        UpscaleSettings::from_json_value(settings.upscale_upload_settings.as_ref());
+    format!(
+        "Upscale prefs: {}",
+        upscale_settings_summary(&upscale_settings)
+    )
+}
+
+fn sticker_settings_summary(settings: &StickerSettings) -> String {
+    format!(
+        "{} · model {} · {} · stroke {} · shadow {}",
+        settings.provider.label(),
+        settings.local_engine,
+        execution_provider_label(&settings.local_execution_provider),
+        on_off(settings.add_stroke),
+        on_off(settings.add_shadow)
+    )
+}
+
+fn upscale_settings_summary(settings: &UpscaleSettings) -> String {
+    format!(
+        "{} · model {} · {} · {}x · preview {}",
+        settings.provider.label(),
+        settings.local_engine,
+        execution_provider_label(&settings.local_execution_provider),
+        settings.scale_factor,
+        on_off(settings.show_preview_window)
+    )
+}
+
+fn next_sticker_provider(provider: &StickerProvider) -> StickerProvider {
+    match provider {
+        StickerProvider::LocalCpu => StickerProvider::RemoveBg,
+        StickerProvider::RemoveBg => StickerProvider::Photoroom,
+        StickerProvider::Photoroom => StickerProvider::None,
+        StickerProvider::None | StickerProvider::Unknown(_) => StickerProvider::LocalCpu,
+    }
+}
+
+fn next_upscale_provider(provider: &UpscaleProvider) -> UpscaleProvider {
+    match provider {
+        UpscaleProvider::Local => UpscaleProvider::DeepAiSuperResolution,
+        UpscaleProvider::DeepAiSuperResolution => UpscaleProvider::DeepAiWaifu2x,
+        UpscaleProvider::DeepAiWaifu2x => UpscaleProvider::None,
+        UpscaleProvider::None | UpscaleProvider::Unknown(_) => UpscaleProvider::Local,
+    }
+}
+
+fn next_sticker_local_engine(engine: &str) -> &'static str {
+    match engine.trim().to_ascii_lowercase().as_str() {
+        "u2netp" => "U2Net",
+        "u2net" => "BriaRmbg",
+        "briarmbg" | "bria-rmbg" | "bria" | "rmbg" => "BiRefNetLite",
+        "birefnetlite" | "birefnet-general-lite" => "IsNetGeneralUse",
+        _ => "U2Netp",
+    }
+}
+
+fn next_upscale_local_engine(engine: &str) -> &'static str {
+    match engine.trim().to_ascii_lowercase().as_str() {
+        "swinirrealworld" | "swinir-realworld" | "swinir" => "RealEsrganX4Plus",
+        _ => "SwinIrRealWorld",
+    }
+}
+
+fn next_execution_provider(provider: &str) -> String {
+    if provider.eq_ignore_ascii_case("gpu") {
+        "Cpu".into()
+    } else {
+        "Gpu".into()
+    }
+}
+
+fn execution_provider_label(provider: &str) -> &'static str {
+    if provider.eq_ignore_ascii_case("gpu") {
+        "GPU"
+    } else {
+        "CPU"
+    }
+}
+
+fn set_active_sticker_engine(settings: &mut StickerSettings, engine: &str) {
+    settings.local_engine = engine.into();
+    if settings
+        .local_execution_provider
+        .eq_ignore_ascii_case("gpu")
+    {
+        settings.local_gpu_engine = engine.into();
+    } else {
+        settings.local_cpu_engine = engine.into();
+    }
+}
+
+fn set_active_upscale_engine(settings: &mut UpscaleSettings, engine: &str) {
+    settings.local_engine = engine.into();
+    if settings
+        .local_execution_provider
+        .eq_ignore_ascii_case("gpu")
+    {
+        settings.local_gpu_engine = engine.into();
+    } else {
+        settings.local_cpu_engine = engine.into();
+    }
+}
+
+fn next_upscale_scale_factor(scale: u32) -> u32 {
+    match scale {
+        2 => 3,
+        3 => 4,
+        _ => 2,
+    }
+}
+
 fn image_search_settings_summary(settings: &AppSettings) -> String {
     image_search::settings_summary(settings)
 }
@@ -5416,6 +5716,47 @@ mod tests {
             next_recording_quality(RecordingQuality::P480),
             RecordingQuality::Original
         );
+    }
+
+    #[test]
+    fn cycles_sticker_and_upscale_settings_options() {
+        assert_eq!(
+            next_sticker_provider(&StickerProvider::LocalCpu),
+            StickerProvider::RemoveBg
+        );
+        assert_eq!(
+            next_sticker_provider(&StickerProvider::Photoroom),
+            StickerProvider::None
+        );
+        assert_eq!(next_sticker_local_engine("U2Netp"), "U2Net");
+        assert_eq!(next_sticker_local_engine("IsNetGeneralUse"), "U2Netp");
+
+        let mut sticker = StickerSettings::default();
+        set_active_sticker_engine(&mut sticker, "U2Net");
+        assert_eq!(sticker.local_engine, "U2Net");
+        assert_eq!(sticker.local_cpu_engine, "U2Net");
+
+        assert_eq!(
+            next_upscale_provider(&UpscaleProvider::Local),
+            UpscaleProvider::DeepAiSuperResolution
+        );
+        assert_eq!(
+            next_upscale_provider(&UpscaleProvider::DeepAiWaifu2x),
+            UpscaleProvider::None
+        );
+        assert_eq!(
+            next_upscale_local_engine("SwinIrRealWorld"),
+            "RealEsrganX4Plus"
+        );
+        assert_eq!(
+            next_upscale_local_engine("RealEsrganX4Plus"),
+            "SwinIrRealWorld"
+        );
+        assert_eq!(next_execution_provider("Cpu"), "Gpu");
+        assert_eq!(next_execution_provider("Gpu"), "Cpu");
+        assert_eq!(next_upscale_scale_factor(2), 3);
+        assert_eq!(next_upscale_scale_factor(3), 4);
+        assert_eq!(next_upscale_scale_factor(4), 2);
     }
 
     #[test]
