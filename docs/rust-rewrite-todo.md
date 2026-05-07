@@ -95,6 +95,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Rust settings expose imported annotation tool visibility and custom annotation hotkeys through typed core helpers.
 - [x] Rust app has a platform-neutral annotation workspace foundation for preview, select, move, scale, remove, undo, and redo state.
 - [x] Rust app can derive annotation toolbar tools and active-tool hotkey state from migrated settings before the production drawing surface is wired.
+- [x] GPUI shell owns persistent annotation workspace/tool state and renders a selectable annotation toolbar from migrated settings.
 - [x] Ruler foundation measures selected regions and copies pixel dimensions.
 - [x] Rust core scrolling-capture stitcher ports legacy overlap detection, duplicate filtering, automatic/manual frame acceptance, and session state tests.
 - [x] Shared save-to-file persistence helper.

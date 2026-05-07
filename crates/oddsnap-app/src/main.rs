@@ -61,6 +61,9 @@ use actions::{
     default_capture_action, pending_tool_hotkey_status, pending_tool_trigger_status, CaptureMode,
     DefaultCaptureAction, PendingTool, RecordingTarget, SettingsAction,
 };
+use annotation_workspace::{
+    annotation_toolbar_tools, AnnotationToolState, AnnotationToolbarTool, AnnotationWorkspace,
+};
 #[cfg(not(target_os = "windows"))]
 use hotkeys::CrossPlatformHotkeyListener;
 #[cfg(test)]
@@ -147,6 +150,8 @@ struct OddSnapRustApp {
     recording_status: String,
     active_recording: Option<ActiveRecording>,
     settings_text_input: Option<settings_text::SettingsTextInputState>,
+    annotation_workspace: AnnotationWorkspace,
+    annotation_tool_state: AnnotationToolState,
     capture_history: Vec<CaptureHistoryEntry>,
     color_history: Vec<ColorHistoryEntry>,
     ocr_history: Vec<OcrHistoryEntry>,
@@ -314,6 +319,7 @@ impl OddSnapRustApp {
         let code_history = history_entries_to_code_history(history_index);
         let latest_ocr_result = ocr_history.first().map(|entry| entry.text.clone());
         let latest_scan_result = code_history.first().cloned();
+        let annotation_tool_state = AnnotationToolState::new(&settings);
         let permission_status = host_permission_status();
         let media_status = match discover_ffmpeg_tools() {
             Some(tools) => {
@@ -372,6 +378,8 @@ impl OddSnapRustApp {
             recording_status: "No recording running.".into(),
             active_recording: None,
             settings_text_input: None,
+            annotation_workspace: AnnotationWorkspace::default(),
+            annotation_tool_state,
             capture_history,
             color_history,
             ocr_history,
@@ -645,6 +653,7 @@ impl OddSnapRustApp {
                     .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(self.advanced_settings_summary())),
             )
+            .child(self.annotation_tools_panel(cx))
             .child(
                 div()
                     .text_size(px(12.0))
@@ -1950,6 +1959,76 @@ impl OddSnapRustApp {
                 this.run_scan_capture("Scan button");
                 cx.notify();
             }))
+    }
+
+    fn annotation_tools_panel(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let tools = annotation_toolbar_tools(&self.settings);
+        let summary = annotation_session_summary_text(
+            &self.annotation_workspace,
+            &self.annotation_tool_state,
+            &self.settings,
+        );
+
+        let body = div()
+            .flex()
+            .flex_col()
+            .gap(px(6.0))
+            .rounded(px(6.0))
+            .bg(rgb(0x1d2027))
+            .px(px(10.0))
+            .py(px(8.0))
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::BODY_TEXT))
+                    .child(SharedString::from(summary)),
+            );
+
+        let mut toolbar = div().flex().flex_wrap().gap(px(8.0));
+        for tool in tools {
+            toolbar = toolbar.child(self.annotation_tool_button(cx, tool));
+        }
+
+        body.child(toolbar)
+    }
+
+    fn annotation_tool_button(
+        &self,
+        cx: &mut Context<Self>,
+        tool: AnnotationToolbarTool,
+    ) -> impl IntoElement {
+        let active = self
+            .annotation_tool_state
+            .active_tool_id()
+            .is_some_and(|active| active.eq_ignore_ascii_case(tool.id));
+        let hotkey = tool
+            .hotkey
+            .map(|(_, key)| format!(" {key:X}"))
+            .unwrap_or_default();
+        let label = if active {
+            format!("{}*", tool.label)
+        } else {
+            tool.label.to_string()
+        };
+        let tool_id = tool.id;
+
+        ui::action_button_style(
+            div().id(SharedString::from(format!("annotation-tool-{tool_id}"))),
+            ui::ButtonVariant::Capture,
+        )
+        .child(SharedString::from(format!("{label}{hotkey}")))
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            if this
+                .annotation_tool_state
+                .select_tool(tool_id, &this.settings)
+            {
+                this.capture_status = format!("Annotation tool selected: {tool_id}.");
+            } else {
+                this.capture_status = format!("Annotation tool unavailable: {tool_id}.");
+            }
+            cx.notify();
+        }))
     }
 
     fn settings_button(
@@ -6160,6 +6239,29 @@ fn advanced_settings_summary_text(settings: &AppSettings) -> String {
     summary
 }
 
+fn annotation_session_summary_text(
+    workspace: &AnnotationWorkspace,
+    tool_state: &AnnotationToolState,
+    settings: &AppSettings,
+) -> String {
+    let active_tool = tool_state.active_tool_id().unwrap_or("none");
+    let tool_count = annotation_toolbar_tools(settings).len();
+    let preview = if workspace.preview().is_some() {
+        "preview"
+    } else {
+        "no preview"
+    };
+    let selected = workspace
+        .selected_index()
+        .map(|index| format!("selected #{index}"))
+        .unwrap_or_else(|| "nothing selected".into());
+
+    format!(
+        "Annotation session: {tool_count} tools · active {active_tool} · {} committed · {preview} · {selected}",
+        workspace.annotations().len()
+    )
+}
+
 fn next_translation_model(current: u32) -> TranslationModel {
     match TranslationModel::from_legacy_value(current) {
         TranslationModel::Argos => TranslationModel::Google,
@@ -7886,6 +7988,21 @@ mod tests {
         assert_eq!(
             advanced_settings_summary_text(&settings),
             "Advanced prefs: OCR en-US · translate auto->fr via Google Translate · image search file/exact · upload Catbox ready · 2 tools · 1 custom hotkeys"
+        );
+    }
+
+    #[test]
+    fn annotation_session_summary_uses_workspace_and_migrated_tools() {
+        let settings = AppSettings {
+            enabled_tools: Some(vec!["arrow".into(), "text".into()]),
+            ..AppSettings::default()
+        };
+        let tool_state = AnnotationToolState::new(&settings);
+        let workspace = AnnotationWorkspace::default();
+
+        assert_eq!(
+            annotation_session_summary_text(&workspace, &tool_state, &settings),
+            "Annotation session: 2 tools · active arrow · 0 committed · no preview · nothing selected"
         );
     }
 
