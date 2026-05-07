@@ -18,9 +18,9 @@ use gpui_platform::application;
 use oddsnap_core::{
     build_available_capture_path, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
     default_history_path, default_settings_path, discover_ffmpeg_tools, format_file_name_template,
-    AppSettings, CapabilityState, CaptureImageFormat, FfmpegThumbnailRequest, HistoryEntry,
-    HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, RecordingFormat, RecordingQuality,
-    SettingsStore,
+    AppSettings, CapabilityState, CaptureImageFormat, DefaultCaptureMode, FfmpegThumbnailRequest,
+    HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, RecordingFormat,
+    RecordingQuality, SettingsStore,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRequest,
@@ -868,7 +868,7 @@ impl OddSnapRustApp {
         match event {
             oddsnap_platform_windows::WindowsHotkeyEvent::Capture => {
                 self.capture_status = "Capture hotkey received.".into();
-                self.run_capture(CaptureMode::FullScreen);
+                self.run_capture(hotkey_capture_mode(self.settings.default_capture_mode));
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Recording => {
                 self.recording_status = "Recording hotkey received.".into();
@@ -1290,6 +1290,21 @@ fn next_recording_quality(quality: RecordingQuality) -> RecordingQuality {
     }
 }
 
+fn hotkey_capture_mode(default_mode: DefaultCaptureMode) -> CaptureMode {
+    match default_mode {
+        DefaultCaptureMode::ActiveWindow => CaptureMode::ActiveWindow,
+        DefaultCaptureMode::Fullscreen => CaptureMode::FullScreen,
+        DefaultCaptureMode::Rectangle
+        | DefaultCaptureMode::ColorPicker
+        | DefaultCaptureMode::Ocr
+        | DefaultCaptureMode::Scan
+        | DefaultCaptureMode::Sticker
+        | DefaultCaptureMode::Upscale
+        | DefaultCaptureMode::Center
+        | DefaultCaptureMode::Ruler => CaptureMode::FullScreen,
+    }
+}
+
 fn on_off(value: bool) -> &'static str {
     if value {
         "on"
@@ -1336,5 +1351,21 @@ mod tests {
             next_recording_quality(RecordingQuality::P480),
             RecordingQuality::Original
         );
+    }
+
+    #[test]
+    fn hotkey_uses_supported_imported_default_capture_modes() {
+        assert!(matches!(
+            hotkey_capture_mode(DefaultCaptureMode::ActiveWindow),
+            CaptureMode::ActiveWindow
+        ));
+        assert!(matches!(
+            hotkey_capture_mode(DefaultCaptureMode::Fullscreen),
+            CaptureMode::FullScreen
+        ));
+        assert!(matches!(
+            hotkey_capture_mode(DefaultCaptureMode::Rectangle),
+            CaptureMode::FullScreen
+        ));
     }
 }
