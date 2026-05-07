@@ -1291,19 +1291,7 @@ impl OddSnapRustApp {
         }
 
         let search_active = image_search::is_active(&self.settings, &self.image_search);
-        let visible_limit = if search_active {
-            self.media_history_visible_limit
-                .max(IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT)
-        } else {
-            self.media_history_visible_limit
-        };
-        let visible_history = image_search::visible_items(
-            &self.settings,
-            &self.image_search,
-            &filtered_history,
-            visible_limit,
-            visible_limit,
-        );
+        let visible_history = self.visible_history_entries(&filtered_history);
 
         if visible_history.is_empty() && search_active {
             return body.child(div().text_size(px(12.0)).text_color(rgb(0x8b93a3)).child(
@@ -1428,7 +1416,9 @@ impl OddSnapRustApp {
             self.history_upload_filter,
         );
         let filtered_count = filtered_history.len();
-        let filtered_bytes = filtered_history
+        let visible_history = self.visible_history_entries(&filtered_history);
+        let visible_count = visible_history.len();
+        let visible_bytes = visible_history
             .iter()
             .map(|entry| entry.file_size_bytes)
             .sum();
@@ -1451,7 +1441,7 @@ impl OddSnapRustApp {
             ))
             .child(self.copy_filtered_upload_links_button(cx))
             .child(self.upload_filtered_history_button(cx))
-            .when(filtered_count > 0, |bar| {
+            .when(visible_count > 0, |bar| {
                 bar.child(self.select_filtered_history_button(cx))
             })
             .when(selected_count > 0, |bar| {
@@ -1482,12 +1472,42 @@ impl OddSnapRustApp {
                     .text_size(px(11.0))
                     .text_color(rgb(0x8b93a3))
                     .child(SharedString::from(media_history_count_text(
+                        visible_count,
                         filtered_count,
-                        self.capture_history.len(),
-                        filtered_bytes,
+                        visible_bytes,
                         filter_active,
                     ))),
             )
+    }
+
+    fn visible_filtered_history_entries(&self) -> Vec<CaptureHistoryEntry> {
+        let filtered_history = filtered_capture_history(
+            &self.capture_history,
+            self.history_kind_filter,
+            self.history_upload_filter,
+        );
+        self.visible_history_entries(&filtered_history)
+    }
+
+    fn visible_history_entries(
+        &self,
+        filtered_history: &[CaptureHistoryEntry],
+    ) -> Vec<CaptureHistoryEntry> {
+        let search_active = image_search::is_active(&self.settings, &self.image_search);
+        let visible_limit = if search_active {
+            self.media_history_visible_limit
+                .max(IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT)
+        } else {
+            self.media_history_visible_limit
+        };
+
+        image_search::visible_items(
+            &self.settings,
+            &self.image_search,
+            filtered_history,
+            visible_limit,
+            visible_limit,
+        )
     }
 
     fn history_kind_filter_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -2111,7 +2131,7 @@ impl OddSnapRustApp {
             div().id("upload-filtered-history-button"),
             ui::ButtonVariant::History,
         )
-        .child("Upload filtered")
+        .child("Upload visible")
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.retry_filtered_history_uploads();
@@ -2124,7 +2144,7 @@ impl OddSnapRustApp {
             div().id("copy-filtered-history-paths-button"),
             ui::ButtonVariant::History,
         )
-        .child("Copy paths")
+        .child("Copy visible paths")
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.copy_filtered_history_paths();
@@ -2137,7 +2157,7 @@ impl OddSnapRustApp {
             div().id("copy-filtered-upload-links-button"),
             ui::ButtonVariant::History,
         )
-        .child("Copy links")
+        .child("Copy visible links")
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.copy_filtered_history_upload_links();
@@ -2150,7 +2170,7 @@ impl OddSnapRustApp {
             div().id("select-filtered-history-button"),
             ui::ButtonVariant::History,
         )
-        .child("Select filtered")
+        .child("Select visible")
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.select_filtered_history_entries();
@@ -2256,7 +2276,7 @@ impl OddSnapRustApp {
             div().id("remove-filtered-history-button"),
             ui::ButtonVariant::History,
         )
-        .child("Remove filtered")
+        .child("Remove visible")
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.remove_filtered_history_entries();
@@ -4252,15 +4272,11 @@ impl OddSnapRustApp {
     }
 
     fn retry_filtered_history_uploads(&mut self) {
-        let entries = filtered_capture_history(
-            &self.capture_history,
-            self.history_kind_filter,
-            self.history_upload_filter,
-        );
+        let entries = self.visible_filtered_history_entries();
         self.retry_history_upload_entries(
             entries,
-            "No filtered history entries to upload.",
-            "Filtered",
+            "No visible history entries to upload.",
+            "Visible",
         );
     }
 
@@ -4309,29 +4325,21 @@ impl OddSnapRustApp {
     }
 
     fn copy_filtered_history_upload_links(&mut self) {
-        let entries = filtered_capture_history(
-            &self.capture_history,
-            self.history_kind_filter,
-            self.history_upload_filter,
-        );
+        let entries = self.visible_filtered_history_entries();
         let Some(text) = filtered_upload_links_text(&entries) else {
-            self.capture_status = "No upload links in filtered history.".into();
+            self.capture_status = "No upload links in visible history.".into();
             return;
         };
         let link_count = text.lines().count();
         self.capture_status = match copy_text_to_host_clipboard(&text) {
-            Ok(()) => format!("{link_count} upload links copied."),
-            Err(error) => format!("Copy filtered upload links failed: {error}"),
+            Ok(()) => format!("{link_count} visible upload links copied."),
+            Err(error) => format!("Copy visible upload links failed: {error}"),
         };
     }
 
     fn copy_filtered_history_paths(&mut self) {
-        let entries = filtered_capture_history(
-            &self.capture_history,
-            self.history_kind_filter,
-            self.history_upload_filter,
-        );
-        self.copy_history_paths(entries, "filtered");
+        let entries = self.visible_filtered_history_entries();
+        self.copy_history_paths(entries, "visible");
     }
 
     fn copy_selected_history_paths(&mut self) {
@@ -4407,23 +4415,19 @@ impl OddSnapRustApp {
     }
 
     fn select_filtered_history_entries(&mut self) {
-        let entries = filtered_capture_history(
-            &self.capture_history,
-            self.history_kind_filter,
-            self.history_upload_filter,
-        );
+        let entries = self.visible_filtered_history_entries();
         if entries.is_empty() {
-            self.media_status = "No filtered history rows to select.".into();
+            self.media_status = "No visible history rows to select.".into();
             return;
         }
 
-        let filtered_count = entries.len();
+        let visible_count = entries.len();
         let added_count = add_selected_history_paths(
             &mut self.selected_history_paths,
             entries.into_iter().map(|entry| entry.path),
         );
         self.media_status = format!(
-            "Selected {added_count} more history rows; {filtered_count} rows match the current filters."
+            "Selected {added_count} more history rows; {visible_count} rows are currently visible."
         );
     }
 
@@ -4551,17 +4555,14 @@ impl OddSnapRustApp {
     }
 
     fn remove_filtered_history_entries(&mut self) {
-        let paths = filtered_capture_history(
-            &self.capture_history,
-            self.history_kind_filter,
-            self.history_upload_filter,
-        )
-        .into_iter()
-        .map(|entry| PathBuf::from(entry.path))
-        .collect::<Vec<_>>();
+        let paths = self
+            .visible_filtered_history_entries()
+            .into_iter()
+            .map(|entry| PathBuf::from(entry.path))
+            .collect::<Vec<_>>();
 
         if paths.is_empty() {
-            self.capture_status = "No filtered history entries to remove.".into();
+            self.capture_status = "No visible history entries to remove.".into();
             return;
         }
 
@@ -4572,9 +4573,9 @@ impl OddSnapRustApp {
                 }
                 let removed_count = paths.len();
                 self.refresh_capture_history(index);
-                format!("Removed {removed_count} filtered history entries.")
+                format!("Removed {removed_count} visible history entries.")
             }
-            Err(error) => format!("Remove filtered history failed: {error}"),
+            Err(error) => format!("Remove visible history failed: {error}"),
         };
     }
 

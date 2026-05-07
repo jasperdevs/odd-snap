@@ -211,10 +211,16 @@ pub(crate) fn media_history_count_text(
     filter_active: bool,
 ) -> String {
     let size = format_storage_size(total_bytes);
-    if filter_active {
-        format!("{visible_count} of {total_count} rows before search · {size}")
+    if visible_count < total_count {
+        if filter_active {
+            format!("{visible_count} of {total_count} filtered rows · {size}")
+        } else {
+            format!("{visible_count} of {total_count} rows · {size}")
+        }
+    } else if filter_active {
+        format!("{visible_count} filtered rows · {size}")
     } else {
-        format!("{visible_count} rows before search · {size}")
+        format!("{visible_count} rows · {size}")
     }
 }
 
@@ -362,12 +368,17 @@ mod tests {
         assert_eq!(media_history_group_label(1, 60_000 * 60 * 24 * 10), "Older");
         assert_eq!(
             media_history_count_text(3, 9, 3 * 1024 * 1024, true),
-            "3 of 9 rows before search · 3.0 MB"
+            "3 of 9 filtered rows · 3.0 MB"
         );
         assert_eq!(
-            media_history_count_text(9, 9, 0, false),
-            "9 rows before search · 0 B"
+            media_history_count_text(3, 9, 3 * 1024 * 1024, false),
+            "3 of 9 rows · 3.0 MB"
         );
+        assert_eq!(
+            media_history_count_text(9, 9, 0, true),
+            "9 filtered rows · 0 B"
+        );
+        assert_eq!(media_history_count_text(9, 9, 0, false), "9 rows · 0 B");
         assert_eq!(format_storage_size(1024 * 1024 * 3), "3.0 MB");
         assert_eq!(format_history_age(0, 60_000), "this session");
         assert_eq!(format_history_age(1, 60_000 * 10), "9m ago");

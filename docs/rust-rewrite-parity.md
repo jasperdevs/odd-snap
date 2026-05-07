@@ -139,6 +139,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI media history can bulk-copy saved media paths for either the active filters or the selected rows.
 - Rust core can identify expected and orphan managed video-thumbnail cache paths so future cleanup can avoid deleting user media.
 - GPUI media history exposes a safe managed video-thumbnail cleanup action that removes orphan `.jpg` cache files without touching saved captures or user media.
+- GPUI media history bulk copy, upload, selection, and removal actions target the currently visible row window so limited/search-filtered large histories do not mutate hidden rows.
 - GPUI generated-history rows can remove color, OCR text, and QR/barcode entries from the persisted Rust history index without touching media files.
 - GPUI feature routing has a dedicated action model module for capture modes, recording targets, settings actions, pending tool parity messages, and cross-platform hotkey events.
 - GPUI shell-only OCR result window rendering, settings text input rendering, and capability status coloring are separated into a UI shell module so feature logic does not keep accumulating in the app entrypoint.
