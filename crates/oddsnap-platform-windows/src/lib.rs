@@ -103,6 +103,8 @@ const FULLSCREEN_HOTKEY_ID: i32 = 0x0dd8;
 #[cfg(target_os = "windows")]
 const ACTIVE_WINDOW_HOTKEY_ID: i32 = 0x0dd9;
 #[cfg(target_os = "windows")]
+const PICKER_HOTKEY_ID: i32 = 0x0dda;
+#[cfg(target_os = "windows")]
 const HOTKEY_STOP_MESSAGE: u32 = WM_APP + 0x0dd5;
 #[cfg(target_os = "windows")]
 const TRAY_ICON_ID: u32 = 0x0dd5;
@@ -145,6 +147,7 @@ pub enum WindowsHotkeyEvent {
     Recording,
     FullScreenCapture,
     ActiveWindowCapture,
+    ColorPicker,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -714,6 +717,7 @@ pub fn start_capture_and_recording_hotkey_listener(
         recording_accelerator,
         None,
         None,
+        None,
         events,
     )
 }
@@ -724,6 +728,7 @@ pub fn start_oddsnap_hotkey_listener(
     recording_accelerator: Option<&str>,
     fullscreen_accelerator: Option<&str>,
     active_window_accelerator: Option<&str>,
+    picker_accelerator: Option<&str>,
     events: Sender<WindowsHotkeyEvent>,
 ) -> Result<WindowsHotkeyListener, PlatformError> {
     let capture = parse_hotkey_accelerator(capture_accelerator)?;
@@ -739,6 +744,10 @@ pub fn start_oddsnap_hotkey_listener(
         .filter(|accelerator| !accelerator.trim().is_empty())
         .map(parse_hotkey_accelerator)
         .transpose()?;
+    let picker = picker_accelerator
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
     let (started_sender, started_receiver) = mpsc::sync_channel(1);
     let join_handle = thread::spawn(move || {
         run_hotkey_message_loop(
@@ -746,6 +755,7 @@ pub fn start_oddsnap_hotkey_listener(
             recording,
             fullscreen,
             active_window,
+            picker,
             events,
             started_sender,
         );
@@ -1613,6 +1623,7 @@ fn run_hotkey_message_loop(
     recording: Option<(HOT_KEY_MODIFIERS, u32)>,
     fullscreen: Option<(HOT_KEY_MODIFIERS, u32)>,
     active_window: Option<(HOT_KEY_MODIFIERS, u32)>,
+    picker: Option<(HOT_KEY_MODIFIERS, u32)>,
     events: Sender<WindowsHotkeyEvent>,
     started_sender: mpsc::SyncSender<Result<u32, String>>,
 ) {
@@ -1651,6 +1662,18 @@ fn run_hotkey_message_loop(
             return;
         }
     }
+    if let Some((modifiers, key)) = picker {
+        if let Err(error) = register_windows_hotkey(PICKER_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&[
+                CAPTURE_HOTKEY_ID,
+                RECORDING_HOTKEY_ID,
+                FULLSCREEN_HOTKEY_ID,
+                ACTIVE_WINDOW_HOTKEY_ID,
+            ]);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
 
     let _ = started_sender.send(Ok(thread_id));
 
@@ -1678,6 +1701,9 @@ fn run_hotkey_message_loop(
                 WPARAM(value) if value == ACTIVE_WINDOW_HOTKEY_ID as usize => {
                     let _ = events.send(WindowsHotkeyEvent::ActiveWindowCapture);
                 }
+                WPARAM(value) if value == PICKER_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::ColorPicker);
+                }
                 _ => {}
             }
         }
@@ -1688,6 +1714,7 @@ fn run_hotkey_message_loop(
         RECORDING_HOTKEY_ID,
         FULLSCREEN_HOTKEY_ID,
         ACTIVE_WINDOW_HOTKEY_ID,
+        PICKER_HOTKEY_ID,
     ]);
 }
 
@@ -3019,7 +3046,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "registers process-local dedicated capture hotkeys and posts synthetic WM_HOTKEY messages"]
+    #[ignore = "registers process-local dedicated capture and picker hotkeys and posts synthetic WM_HOTKEY messages"]
     #[cfg(target_os = "windows")]
     fn windows_hotkey_listener_dispatches_dedicated_capture_events() {
         use std::sync::mpsc;
@@ -3034,6 +3061,7 @@ mod tests {
             None,
             Some("Alt+Shift+F22"),
             Some("Alt+Shift+F23"),
+            Some("Alt+Shift+F24"),
             sender,
         )
         .expect("listener");
@@ -3052,6 +3080,13 @@ mod tests {
                 LPARAM(0),
             )
             .expect("post active-window hotkey message");
+            PostThreadMessageW(
+                listener.thread_id(),
+                WM_HOTKEY,
+                WPARAM(super::PICKER_HOTKEY_ID as usize),
+                LPARAM(0),
+            )
+            .expect("post picker hotkey message");
         }
 
         let first = receiver
@@ -3060,9 +3095,13 @@ mod tests {
         let second = receiver
             .recv_timeout(Duration::from_secs(2))
             .expect("receive active-window event");
+        let third = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("receive color-picker event");
 
         assert_eq!(first, super::WindowsHotkeyEvent::FullScreenCapture);
         assert_eq!(second, super::WindowsHotkeyEvent::ActiveWindowCapture);
+        assert_eq!(third, super::WindowsHotkeyEvent::ColorPicker);
     }
 
     #[test]

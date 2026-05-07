@@ -189,6 +189,7 @@ impl OddSnapRustApp {
             settings.recording_hotkey.as_deref(),
             settings.fullscreen_hotkey.as_deref(),
             settings.active_window_hotkey.as_deref(),
+            settings.picker_hotkey.as_deref(),
         );
         let (tray_status, tray_icon, tray_events) = start_tray_icon();
 
@@ -1218,6 +1219,10 @@ impl OddSnapRustApp {
                 self.capture_status = "Active-window hotkey received.".into();
                 self.run_capture(CaptureMode::ActiveWindow);
             }
+            oddsnap_platform_windows::WindowsHotkeyEvent::ColorPicker => {
+                self.capture_status = "Color-picker hotkey received.".into();
+                self.run_color_picker();
+            }
         }
     }
 
@@ -1565,6 +1570,7 @@ fn start_capture_hotkey_listener(
     recording_accelerator: Option<&str>,
     fullscreen_accelerator: Option<&str>,
     active_window_accelerator: Option<&str>,
+    picker_accelerator: Option<&str>,
 ) -> (
     String,
     Option<oddsnap_platform_windows::WindowsHotkeyListener>,
@@ -1576,6 +1582,7 @@ fn start_capture_hotkey_listener(
         recording_accelerator,
         fullscreen_accelerator,
         active_window_accelerator,
+        picker_accelerator,
         sender,
     ) {
         Ok(listener) => (
@@ -1584,6 +1591,7 @@ fn start_capture_hotkey_listener(
                 recording_accelerator,
                 fullscreen_accelerator,
                 active_window_accelerator,
+                picker_accelerator,
             ),
             Some(listener),
             Some(receiver),
@@ -1598,11 +1606,13 @@ fn start_capture_hotkey_listener(
     recording_accelerator: Option<&str>,
     fullscreen_accelerator: Option<&str>,
     active_window_accelerator: Option<&str>,
+    picker_accelerator: Option<&str>,
 ) -> (String, Option<()>, Option<()>) {
     let _ = accelerator;
     let _ = recording_accelerator;
     let _ = fullscreen_accelerator;
     let _ = active_window_accelerator;
+    let _ = picker_accelerator;
     (
         "Hotkey listener: pending on this platform.".into(),
         None,
@@ -1637,6 +1647,7 @@ fn hotkey_status_summary(
     recording: Option<&str>,
     fullscreen: Option<&str>,
     active_window: Option<&str>,
+    picker: Option<&str>,
 ) -> String {
     let mut parts = vec![format!("{capture} capture")];
     if let Some(recording) = recording {
@@ -1647,6 +1658,9 @@ fn hotkey_status_summary(
     }
     if let Some(active_window) = active_window {
         parts.push(format!("{active_window} active-window"));
+    }
+    if let Some(picker) = picker {
+        parts.push(format!("{picker} color-picker"));
     }
     format!("Hotkeys: {}.", parts.join(", "))
 }
@@ -1982,9 +1996,10 @@ mod tests {
                 "Alt+Shift+S",
                 Some("Alt+Shift+R"),
                 Some("Alt+Shift+F"),
-                Some("Alt+Shift+A")
+                Some("Alt+Shift+A"),
+                Some("Alt+Shift+C")
             ),
-            "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window."
+            "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window, Alt+Shift+C color-picker."
         );
     }
 
