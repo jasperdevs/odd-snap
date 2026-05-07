@@ -19,10 +19,10 @@ use gpui_platform::application;
 use oddsnap_core::{
     build_available_capture_path, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
     default_history_path, default_settings_path, discover_ffmpeg_tools, format_file_name_template,
-    AppSettings, CapabilityState, CaptureImageFormat, ColorHistoryEntry, DefaultCaptureMode,
-    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
-    PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore, UploadDestination,
-    UploadPreflight, UploadSettings,
+    AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat, ColorHistoryEntry,
+    DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind,
+    HistoryStore, PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore,
+    UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
@@ -1654,6 +1654,45 @@ impl OddSnapRustApp {
         };
     }
 
+    fn run_ai_redirect(&mut self) {
+        let upload_settings =
+            UploadSettings::from_json_value(self.settings.image_upload_settings.as_ref());
+        let provider = upload_settings.ai_chat_provider;
+        if provider == AiChatProvider::None {
+            self.capture_status =
+                "AI Redirect not configured; choose a provider in Settings -> Uploads.".into();
+            return;
+        }
+        if provider == AiChatProvider::GoogleLens {
+            self.capture_status =
+                "Google Lens AI Redirect needs Rust upload destination parity first.".into();
+            return;
+        }
+
+        let Some(path) = newest_history_image_path(&self.capture_history) else {
+            self.capture_status =
+                "AI Redirect needs a saved image capture in Rust history first.".into();
+            return;
+        };
+
+        let copy_status = match copy_image_to_host_clipboard(&path) {
+            Ok(()) => "copied newest image",
+            Err(error) => {
+                self.capture_status = format!("AI Redirect image copy failed: {error}");
+                return;
+            }
+        };
+
+        let start_url = provider.start_url();
+        self.capture_status = match open_external_url(start_url) {
+            Ok(()) => format!(
+                "AI Redirect opened {} and {copy_status}.",
+                provider.display_name()
+            ),
+            Err(error) => format!("AI Redirect open failed: {error}"),
+        };
+    }
+
     fn remove_history_entry(&mut self, path: String) {
         self.capture_status = match self.history_store.remove_entry(Path::new(&path)) {
             Ok(index) => {
@@ -1820,7 +1859,7 @@ impl OddSnapRustApp {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::ScrollCapture);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::AiRedirect => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::AiRedirect);
+                self.run_ai_redirect();
             }
         }
     }
@@ -1869,7 +1908,7 @@ impl OddSnapRustApp {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::ScrollCapture);
             }
             CrossPlatformHotkeyEvent::AiRedirect => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::AiRedirect);
+                self.run_ai_redirect();
             }
         }
     }
@@ -2724,6 +2763,14 @@ fn history_upload_summary(entry: &CaptureHistoryEntry) -> String {
     "No upload link".into()
 }
 
+fn newest_history_image_path(history: &[CaptureHistoryEntry]) -> Option<PathBuf> {
+    history
+        .iter()
+        .filter(|entry| matches!(entry.kind, HistoryKind::Image | HistoryKind::Sticker))
+        .map(|entry| PathBuf::from(&entry.path))
+        .find(|path| path.exists())
+}
+
 fn upload_settings_summary(settings: &AppSettings) -> String {
     let destination = UploadDestination::from_legacy_name(&settings.image_upload_destination);
     let upload_settings = UploadSettings::from_json_value(settings.image_upload_settings.as_ref());
@@ -2737,6 +2784,53 @@ fn upload_settings_summary(settings: &AppSettings) -> String {
     match effective_destination.configuration_error(&upload_settings) {
         Some(error) => format!("upload {label} blocked ({error})"),
         None => format!("upload {label} configured; backend pending"),
+    }
+}
+
+fn external_url_command(url: &str) -> (&'static str, Vec<String>) {
+    #[cfg(target_os = "windows")]
+    {
+        (
+            "rundll32.exe",
+            vec!["url.dll,FileProtocolHandler".into(), url.into()],
+        )
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        ("open", vec![url.into()])
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        ("xdg-open", vec![url.into()])
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(unix)))]
+    {
+        ("", Vec::new())
+    }
+}
+
+fn open_external_url(url: &str) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("external URL must be absolute HTTP(S)".into());
+    }
+
+    let (program, args) = external_url_command(url);
+    if program.is_empty() {
+        return Err("opening browser URLs is unsupported on this platform".into());
+    }
+
+    let status = Command::new(program)
+        .args(&args)
+        .status()
+        .map_err(|source| format!("failed to start browser command: {source}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("browser command exited with status {status}"))
     }
 }
 
@@ -3497,6 +3591,82 @@ mod tests {
             upload_settings_summary(&configured),
             "upload Catbox configured; backend pending"
         );
+    }
+
+    #[test]
+    fn newest_history_image_path_uses_existing_image_entries_only() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-ai-redirect-path-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp test root");
+        let image = root.join("capture.png");
+        std::fs::write(&image, b"image").expect("write image");
+        let missing = root.join("missing.png");
+
+        let history = vec![
+            CaptureHistoryEntry {
+                mode: CaptureMode::FullScreen,
+                kind: HistoryKind::Video,
+                path: root.join("capture.mp4").display().to_string(),
+                preview_path: None,
+                width: 10,
+                height: 10,
+                upload_url: None,
+                upload_provider: None,
+                upload_error: None,
+            },
+            CaptureHistoryEntry {
+                mode: CaptureMode::FullScreen,
+                kind: HistoryKind::Image,
+                path: missing.display().to_string(),
+                preview_path: None,
+                width: 10,
+                height: 10,
+                upload_url: None,
+                upload_provider: None,
+                upload_error: None,
+            },
+            CaptureHistoryEntry {
+                mode: CaptureMode::FullScreen,
+                kind: HistoryKind::Sticker,
+                path: image.display().to_string(),
+                preview_path: None,
+                width: 10,
+                height: 10,
+                upload_url: None,
+                upload_provider: None,
+                upload_error: None,
+            },
+        ];
+
+        assert_eq!(newest_history_image_path(&history), Some(image));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn external_url_command_uses_current_platform_browser_opener() {
+        let (program, args) = external_url_command("https://chatgpt.com/");
+
+        #[cfg(target_os = "windows")]
+        {
+            assert_eq!(program, "rundll32.exe");
+            assert_eq!(
+                args,
+                vec!["url.dll,FileProtocolHandler", "https://chatgpt.com/"]
+            );
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(program, "open");
+            assert_eq!(args, vec!["https://chatgpt.com/"]);
+        }
+
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            assert_eq!(program, "xdg-open");
+            assert_eq!(args, vec!["https://chatgpt.com/"]);
+        }
     }
 
     #[test]
