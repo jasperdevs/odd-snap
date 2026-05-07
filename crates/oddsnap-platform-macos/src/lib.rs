@@ -38,7 +38,10 @@ impl PlatformAdapter for MacosPlatform {
                     CapabilityState::InProgress,
                 ),
                 (PlatformCapability::RegionOverlay, CapabilityState::Planned),
-                (PlatformCapability::WindowCapture, CapabilityState::Planned),
+                (
+                    PlatformCapability::WindowCapture,
+                    CapabilityState::InProgress,
+                ),
                 (
                     PlatformCapability::ScreenshotExclusion,
                     CapabilityState::Planned,
@@ -215,10 +218,102 @@ fn macos_screen_recording_permission_probe() -> bool {
 
 impl WindowPickerService for MacosPlatform {
     fn active_window(&self) -> Result<WindowInfo, PlatformError> {
-        Err(PlatformError::Unsupported(
-            "macOS active-window detection is not implemented yet",
-        ))
+        #[cfg(target_os = "macos")]
+        {
+            run_macos_active_window_detection()
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            Err(PlatformError::Unsupported(
+                "macOS active-window detection is only available on macOS",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn run_macos_active_window_detection() -> Result<WindowInfo, PlatformError> {
+    let output = Command::new("osascript")
+        .args(macos_active_window_osascript_args())
+        .output()
+        .map_err(|source| PlatformError::Failed(format!("failed to start osascript: {source}")))?;
+
+    if !output.status.success() {
+        return Err(PlatformError::Failed(format!(
+            "osascript exited with status {}. Enable Accessibility access in System Settings > Privacy & Security > Accessibility if active-window detection is denied.",
+            output.status
+        )));
+    }
+
+    parse_macos_active_window_output(&String::from_utf8_lossy(&output.stdout))
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_active_window_osascript_args() -> [&'static str; 6] {
+    [
+        "-e",
+        "tell application \"System Events\"",
+        "-e",
+        "set frontApp to first application process whose frontmost is true\nset frontWindow to first window of frontApp\nset windowBounds to bounds of frontWindow\nreturn (name of frontApp) & linefeed & (name of frontWindow) & linefeed & ((item 1 of windowBounds) as text) & \",\" & ((item 2 of windowBounds) as text) & \",\" & ((item 3 of windowBounds) as text) & \",\" & ((item 4 of windowBounds) as text)",
+        "-e",
+        "end tell",
+    ]
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_active_window_output(output: &str) -> Result<WindowInfo, PlatformError> {
+    let mut lines = output.lines();
+    let app_name = lines
+        .next()
+        .ok_or_else(|| PlatformError::Failed("osascript output missing app name".into()))?
+        .trim();
+    let window_title = lines
+        .next()
+        .ok_or_else(|| PlatformError::Failed("osascript output missing window title".into()))?
+        .trim();
+    let bounds = lines
+        .next()
+        .ok_or_else(|| PlatformError::Failed("osascript output missing window bounds".into()))?;
+    let [left, top, right, bottom] = parse_macos_window_bounds(bounds)?;
+    let width = u32::try_from(right - left)
+        .map_err(|_| PlatformError::Failed("osascript reported invalid window width".into()))?;
+    let height = u32::try_from(bottom - top)
+        .map_err(|_| PlatformError::Failed("osascript reported invalid window height".into()))?;
+    if width == 0 || height == 0 {
+        return Err(PlatformError::Failed(
+            "osascript reported an empty active-window rectangle".into(),
+        ));
+    }
+
+    Ok(WindowInfo {
+        id: app_name.into(),
+        title: window_title.into(),
+        bounds: CaptureRegion {
+            x: left,
+            y: top,
+            width,
+            height,
+        },
+    })
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_window_bounds(bounds: &str) -> Result<[i32; 4], PlatformError> {
+    let values = bounds
+        .split(',')
+        .map(|value| {
+            value.trim().parse::<i32>().map_err(|source| {
+                PlatformError::Failed(format!(
+                    "osascript reported invalid window bounds: {source}"
+                ))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    values
+        .try_into()
+        .map_err(|_| PlatformError::Failed("osascript output must contain four bounds".into()))
 }
 
 impl ClipboardImageService for MacosPlatform {
@@ -353,6 +448,7 @@ mod tests {
         ClipboardImageService, ClipboardTextService, ColorPickerService, HotkeyService,
         OverlayWindowRequest, PermissionsService, PlatformAdapter, RegionOverlayService,
         RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
+        WindowPickerService,
     };
 
     use super::MacosPlatform;
@@ -392,6 +488,18 @@ mod tests {
     }
 
     #[test]
+    fn macos_window_capture_capability_is_in_progress() {
+        let adapter = MacosPlatform;
+
+        assert_eq!(
+            adapter
+                .capabilities()
+                .state(oddsnap_core::PlatformCapability::WindowCapture),
+            oddsnap_core::CapabilityState::InProgress
+        );
+    }
+
+    #[test]
     #[cfg(not(target_os = "macos"))]
     fn macos_capture_services_report_wrong_host() {
         let adapter = MacosPlatform;
@@ -409,6 +517,46 @@ mod tests {
             })
             .expect_err("macOS capture wrong host");
         assert!(error.to_string().contains("only available on macOS"));
+
+        let error = adapter
+            .active_window()
+            .expect_err("macOS active window wrong host");
+        assert!(error.to_string().contains("only available on macOS"));
+    }
+
+    #[test]
+    fn macos_active_window_parser_reads_osascript_output() {
+        let window =
+            super::parse_macos_active_window_output("OddSnap\nSettings\n100,200,900,700\n")
+                .expect("parse osascript output");
+
+        assert_eq!(window.id, "OddSnap");
+        assert_eq!(window.title, "Settings");
+        assert_eq!(
+            window.bounds,
+            oddsnap_platform::CaptureRegion {
+                x: 100,
+                y: 200,
+                width: 800,
+                height: 500,
+            }
+        );
+    }
+
+    #[test]
+    fn macos_active_window_parser_rejects_empty_bounds() {
+        let error = super::parse_macos_active_window_output("OddSnap\nSettings\n100,200,100,700\n")
+            .expect_err("empty window bounds rejected");
+
+        assert!(error.to_string().contains("empty active-window"));
+    }
+
+    #[test]
+    fn macos_active_window_osascript_uses_system_events() {
+        let args = super::macos_active_window_osascript_args();
+
+        assert!(args.iter().any(|arg| arg.contains("System Events")));
+        assert!(args.iter().any(|arg| arg.contains("bounds of frontWindow")));
     }
 
     #[test]
