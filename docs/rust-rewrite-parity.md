@@ -89,6 +89,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS has a `screencapture`-backed desktop recording foundation that records to a temporary MOV and transcodes to the requested OddSnap recording format through FFmpeg; microphone capture can request the default input, while system audio remains pending.
 - GPUI can start active-window recording through the explicit-region FFmpeg path.
 - Rust recording history can store FFmpeg-generated JPG thumbnails for saved GIF/video entries.
+- FFmpeg-generated recording thumbnails must be readable image files before they are attached to history entries.
 - GPUI can persistently cycle implemented recording preferences for format and quality.
 - GPUI history rows show media kind and legacy upload metadata, can copy saved file paths, can copy saved image captures back to the system clipboard, and can copy stored upload links.
 - GPUI history rows can remove entries from the persisted Rust history index without deleting the original media file.

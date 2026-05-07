@@ -128,6 +128,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Microphone recording.
 - [ ] System audio recording where supported.
 - [x] Video thumbnail generation for Rust recording history.
+- [x] Recording thumbnails are validated as decodable image files before being shown in history.
 - [x] Basic persisted media history index.
 - [x] GPUI history rows show media kind and legacy upload metadata, with upload-link copy action.
 - [x] GPUI history rows can copy saved file paths and image captures.

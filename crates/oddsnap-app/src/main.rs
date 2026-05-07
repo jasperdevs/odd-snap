@@ -2666,9 +2666,11 @@ fn run_ffmpeg_thumbnail(ffmpeg: &Path, args: Vec<String>, output_path: &Path) ->
     if !matches!(status, Ok(status) if status.success()) {
         return false;
     }
-    fs::metadata(output_path)
-        .map(|metadata| metadata.len() > 0)
-        .unwrap_or(false)
+    valid_thumbnail_output(output_path)
+}
+
+fn valid_thumbnail_output(output_path: &Path) -> bool {
+    oddsnap_platform::image_file_dimensions(output_path).is_ok()
 }
 
 fn preview_path_for_capture(path: &Path) -> Option<PathBuf> {
@@ -3306,6 +3308,32 @@ mod tests {
             "Upload failed: rate limited"
         );
         assert_eq!(history_kind_label(HistoryKind::Sticker), "Sticker");
+    }
+
+    #[test]
+    fn thumbnail_output_must_be_decodable_image() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-thumbnail-output-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp test root");
+
+        let invalid = root.join("invalid.jpg");
+        std::fs::write(&invalid, b"not a thumbnail").expect("write invalid thumbnail");
+        assert!(!valid_thumbnail_output(&invalid));
+
+        let valid = root.join("valid.bmp");
+        std::fs::write(
+            &valid,
+            [
+                0x42, 0x4d, 0x3a, 0, 0, 0, 0, 0, 0, 0, 0x36, 0, 0, 0, 0x28, 0, 0, 0, 1, 0, 0, 0, 1,
+                0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0x13, 0x0b, 0, 0, 0x13, 0x0b, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 0,
+            ],
+        )
+        .expect("write valid thumbnail");
+        assert!(valid_thumbnail_output(&valid));
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
