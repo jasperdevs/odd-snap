@@ -170,6 +170,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI media history can clean orphan managed video-thumbnail cache files without touching saved captures or user media.
 - [ ] Full media history UI details, bulk actions, and large-history polish.
 - [x] GPUI app has a dedicated action model module for capture modes, recording targets, pending tool routes, hotkey events, and settings actions.
+- [x] GPUI shell-only OCR result, settings text input, and capability color rendering are extracted from the app entrypoint.
 
 ## Milestone 5 - Advanced OddSnap Features
 

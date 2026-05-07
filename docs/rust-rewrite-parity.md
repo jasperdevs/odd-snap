@@ -139,6 +139,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI media history exposes a safe managed video-thumbnail cleanup action that removes orphan `.jpg` cache files without touching saved captures or user media.
 - GPUI generated-history rows can remove color, OCR text, and QR/barcode entries from the persisted Rust history index without touching media files.
 - GPUI feature routing has a dedicated action model module for capture modes, recording targets, settings actions, pending tool parity messages, and cross-platform hotkey events.
+- GPUI shell-only OCR result window rendering, settings text input rendering, and capability status coloring are separated into a UI shell module so feature logic does not keep accumulating in the app entrypoint.
 - Imported AI Redirect hotkeys can open configured chat providers that do not require hosted-image upload, copying the newest saved image first.
 - Google Lens AI Redirect can upload the newest saved image through the configured AI temporary host destination, persist the returned upload link in history, and open the Lens URL.
 - Rust preserves the legacy upload destination list, credential/HTTPS preflight rules, file-size limits, AI Redirect upload routing, and stores explicit upload pending/configuration errors in history instead of silently dropping auto-upload settings.
