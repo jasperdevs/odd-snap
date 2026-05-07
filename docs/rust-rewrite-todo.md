@@ -92,6 +92,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] System audio recording where supported.
 - [x] Video thumbnail generation for Rust recording history.
 - [x] Basic persisted media history index.
+- [x] GPUI history rows show media kind and legacy upload metadata, with upload-link copy action.
 - [ ] Full media history UI and actions.
 
 ## Milestone 5 - Advanced OddSnap Features

@@ -8,6 +8,7 @@ use std::{
     time::Duration,
 };
 
+use gpui::prelude::FluentBuilder;
 use gpui::{
     div, img, px, rgb, size, App, AppContext, Bounds, Context, InteractiveElement, IntoElement,
     ObjectFit, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
@@ -24,8 +25,8 @@ use oddsnap_core::{
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRequest,
-    ClipboardImageService, PlatformAdapter, ScreenCaptureService, VideoRecordingHandle,
-    VideoRecordingRequest, VideoRecordingService, WindowPickerService,
+    ClipboardImageService, ClipboardTextService, PlatformAdapter, ScreenCaptureService,
+    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
 };
 
 fn main() {
@@ -81,10 +82,14 @@ struct OddSnapRustApp {
 
 struct CaptureHistoryEntry {
     mode: CaptureMode,
+    kind: HistoryKind,
     path: String,
     preview_path: Option<PathBuf>,
     width: u32,
     height: u32,
+    upload_url: Option<String>,
+    upload_provider: Option<String>,
+    upload_error: Option<String>,
 }
 
 struct ActiveRecording {
@@ -554,7 +559,8 @@ impl OddSnapRustApp {
                     .px(px(10.0))
                     .py(px(8.0))
                     .child(div().text_size(px(12.0)).child(SharedString::from(format!(
-                        "{} · {}x{}",
+                        "{} · {} · {}x{}",
+                        history_kind_label(entry.kind),
                         entry.mode.label(),
                         entry.width,
                         entry.height
@@ -565,7 +571,21 @@ impl OddSnapRustApp {
                             .text_color(rgb(0x9ba3af))
                             .child(SharedString::from(entry.path.clone())),
                     )
-                    .child(self.open_history_button(cx, entry.path.clone())),
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(rgb(0x9ba3af))
+                            .child(SharedString::from(history_upload_summary(entry))),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(8.0))
+                            .child(self.open_history_button(cx, entry.path.clone()))
+                            .when_some(entry.upload_url.clone(), |row, url| {
+                                row.child(self.copy_upload_url_button(cx, url))
+                            }),
+                    ),
             );
         }
 
@@ -726,6 +746,26 @@ impl OddSnapRustApp {
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
                 this.open_history_path(PathBuf::from(&path));
+                cx.notify();
+            }))
+    }
+
+    fn copy_upload_url_button(&self, cx: &mut Context<Self>, url: String) -> impl IntoElement {
+        div()
+            .id(SharedString::from(format!("copy-upload-{url}")))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(rgb(0x354052))
+            .bg(rgb(0x202733))
+            .hover(|this| this.bg(rgb(0x2a3342)))
+            .px(px(8.0))
+            .py(px(4.0))
+            .text_size(px(11.0))
+            .text_color(rgb(0xd8dde6))
+            .child("Copy link")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.copy_history_upload_url(url.clone());
                 cx.notify();
             }))
     }
@@ -909,6 +949,22 @@ impl OddSnapRustApp {
         self.capture_status = match reveal_file_in_system_browser(&path) {
             Ok(()) => format!("Opened {}.", path.display()),
             Err(error) => format!("Open failed: {error}"),
+        };
+    }
+
+    fn copy_history_upload_url(&mut self, url: String) {
+        #[cfg(target_os = "windows")]
+        let result = oddsnap_platform_windows::WindowsPlatform.copy_text_to_clipboard(&url);
+
+        #[cfg(not(target_os = "windows"))]
+        let result: Result<(), oddsnap_platform::PlatformError> =
+            Err(oddsnap_platform::PlatformError::Unsupported(
+                "text clipboard is not implemented on this platform yet",
+            ));
+
+        self.capture_status = match result {
+            Ok(()) => "Upload link copied.".into(),
+            Err(error) => format!("Copy upload link failed: {error}"),
         };
     }
 
@@ -1148,10 +1204,18 @@ impl OddSnapRustApp {
                 0,
                 CaptureHistoryEntry {
                     mode: CaptureMode::FullScreen,
+                    kind: if self.settings.recording_format == oddsnap_core::RecordingFormat::Gif {
+                        HistoryKind::Gif
+                    } else {
+                        HistoryKind::Video
+                    },
                     path: path.display().to_string(),
                     preview_path,
                     width,
                     height,
+                    upload_url: None,
+                    upload_provider: None,
+                    upload_error: None,
                 },
             );
             self.capture_history.truncate(6);
@@ -1189,10 +1253,14 @@ impl OddSnapRustApp {
                 0,
                 CaptureHistoryEntry {
                     mode,
+                    kind: HistoryKind::Image,
                     path: capture.image_path.display().to_string(),
                     preview_path: preview_path_for_capture(&capture.image_path),
                     width: capture.region.width,
                     height: capture.region.height,
+                    upload_url: None,
+                    upload_provider: None,
+                    upload_error: None,
                 },
             );
             self.capture_history.truncate(6);
@@ -1269,6 +1337,7 @@ fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistory
         .take(6)
         .map(|entry| CaptureHistoryEntry {
             mode: CaptureMode::FullScreen,
+            kind: entry.kind,
             path: entry.file_path.display().to_string(),
             preview_path: entry
                 .thumbnail_path
@@ -1276,8 +1345,41 @@ fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistory
                 .or_else(|| preview_path_for_capture(&entry.file_path)),
             width: entry.width,
             height: entry.height,
+            upload_url: entry.upload_url,
+            upload_provider: entry.upload_provider,
+            upload_error: entry.upload_error,
         })
         .collect()
+}
+
+fn history_kind_label(kind: HistoryKind) -> &'static str {
+    match kind {
+        HistoryKind::Image => "Image",
+        HistoryKind::Gif => "GIF",
+        HistoryKind::Video => "Video",
+        HistoryKind::Sticker => "Sticker",
+    }
+}
+
+fn history_upload_summary(entry: &CaptureHistoryEntry) -> String {
+    if let Some(error) = entry
+        .upload_error
+        .as_deref()
+        .filter(|error| !error.is_empty())
+    {
+        return format!("Upload failed: {error}");
+    }
+
+    if let Some(url) = entry.upload_url.as_deref().filter(|url| !url.is_empty()) {
+        let provider = entry
+            .upload_provider
+            .as_deref()
+            .filter(|provider| !provider.is_empty())
+            .unwrap_or("uploaded");
+        return format!("{provider}: {url}");
+    }
+
+    "No upload link".into()
 }
 
 fn create_video_thumbnail(history_store: &HistoryStore, media_path: &Path) -> Option<PathBuf> {
@@ -1534,5 +1636,32 @@ mod tests {
     fn recording_target_labels_are_stable() {
         assert_eq!(RecordingTarget::FullScreen.label(), "desktop");
         assert_eq!(RecordingTarget::ActiveWindow.label(), "active window");
+    }
+
+    #[test]
+    fn history_upload_summary_reports_link_and_failure_states() {
+        let mut entry = CaptureHistoryEntry {
+            mode: CaptureMode::FullScreen,
+            kind: HistoryKind::Image,
+            path: "capture.png".into(),
+            preview_path: None,
+            width: 10,
+            height: 10,
+            upload_url: Some("https://example.test/capture.png".into()),
+            upload_provider: Some("Imgur".into()),
+            upload_error: None,
+        };
+
+        assert_eq!(
+            history_upload_summary(&entry),
+            "Imgur: https://example.test/capture.png"
+        );
+
+        entry.upload_error = Some("rate limited".into());
+        assert_eq!(
+            history_upload_summary(&entry),
+            "Upload failed: rate limited"
+        );
+        assert_eq!(history_kind_label(HistoryKind::Sticker), "Sticker");
     }
 }
