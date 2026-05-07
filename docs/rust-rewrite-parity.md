@@ -48,6 +48,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows has a region-overlay service boundary that can create and destroy a topmost layered tool window in virtual-screen coordinates, with screenshot exclusion applied.
 - Windows primitive region selection now paints a dimmed native overlay, live selection frame, optional crosshair guides, and detected-window hover frames using imported capture UX preferences.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
+- Rust startup reports corrupt/unreadable Rust history instead of silently treating it as empty history.
 - GPUI recent-capture rows can reveal saved files through the host file browser on Windows/macOS, and open the containing folder on Linux where the generic `xdg-open` fallback cannot select a file.
 - Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
 - Rust startup can import legacy capture image format and JPEG quality settings.

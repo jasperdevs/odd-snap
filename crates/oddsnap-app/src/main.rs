@@ -248,7 +248,13 @@ impl OddSnapRustApp {
         let history_store = HistoryStore::new(default_history_path());
         let history_path = history_store.path().display().to_string();
         let history_migration_status = import_legacy_history_if_needed(&history_store);
-        let history_index = history_store.load_or_default().unwrap_or_default();
+        let (history_index, history_load_status) = match history_store.load_or_default() {
+            Ok(index) => (index, None),
+            Err(error) => (
+                HistoryIndex::default(),
+                Some(format!("History load failed, using empty history: {error}")),
+            ),
+        };
         let capture_history = history_entries_to_capture_history(history_index.clone());
         let color_history = history_entries_to_color_history(history_index);
         let permission_status = host_permission_status();
@@ -289,7 +295,10 @@ impl OddSnapRustApp {
             native_ui_goal: profile.visual_goal,
             capabilities,
             capture_status: combine_startup_status(
-                combine_startup_status(capture_status, history_migration_status),
+                combine_startup_status(
+                    combine_startup_status(capture_status, history_migration_status),
+                    history_load_status,
+                ),
                 permission_status,
             ),
             settings,

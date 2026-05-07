@@ -105,6 +105,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI persisted controls for image format, clipboard copy, and cursor inclusion.
 - [x] GPUI persisted controls for default capture mode, delay, crosshair, magnifier, and window detection preferences.
 - [x] Rust JSON media history store for saved image captures.
+- [x] Startup reports corrupt/unreadable Rust history instead of silently showing empty history.
 - [x] Post-capture image preview.
 - [x] GPUI recent-captures list can reveal saved files on Windows/macOS and open their containing folder on Linux.
 
