@@ -35,7 +35,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows recording hotkey event loop integration.
 - [x] Capture hotkey honors supported imported default capture modes.
 - [x] Windows dedicated full-screen and active-window hotkey routing.
-- [ ] Windows topmost transparent overlay.
+- [x] Windows topmost transparent overlay window foundation.
 - [x] Windows screenshot exclusion service foundation.
 - [x] Windows monitor enumeration.
 - [x] Windows system DPI mapping for monitor scale.
@@ -57,7 +57,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Cross-platform region capture.
 - [x] Windows active-window capture foundation.
 - [ ] Cross-platform window capture.
-- [ ] Region selection overlay.
+- [ ] Production region selection overlay.
 - [ ] Crosshair guides.
 - [ ] Magnifier.
 - [ ] Annotation drawing.

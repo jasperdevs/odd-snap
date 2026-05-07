@@ -4,9 +4,10 @@ use oddsnap_core::{
 };
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
-    HotkeyService, MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService,
-    ScreenshotExclusionService, VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult,
-    VideoRecordingService, WindowInfo, WindowPickerService,
+    HotkeyService, MonitorInfo, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter,
+    PlatformError, RegionOverlayService, ScreenCaptureService, ScreenshotExclusionService,
+    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult, VideoRecordingService,
+    WindowInfo, WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -14,7 +15,7 @@ use std::os::windows::{ffi::OsStrExt, process::CommandExt};
 #[cfg(target_os = "windows")]
 use std::{
     collections::HashMap,
-    ffi::OsStr,
+    ffi::{c_void, OsStr},
     fs,
     io::{Read, Write},
     mem,
@@ -33,7 +34,9 @@ use windows::core::PCWSTR;
 #[cfg(target_os = "windows")]
 use windows::core::{w, BOOL};
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{
+    COLORREF, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
+};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
 #[cfg(target_os = "windows")]
@@ -74,11 +77,14 @@ use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, DrawIconEx, GetCursorInfo, GetCursorPos, GetForegroundWindow, GetIconInfo,
     GetMessageW, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, LoadIconW,
     PeekMessageW, PostThreadMessageW, RegisterClassW, SetForegroundWindow,
-    SetWindowDisplayAffinity, TrackPopupMenu, TranslateMessage, CURSORINFO, CURSOR_SHOWING,
-    DI_NORMAL, HMENU, HWND_MESSAGE, ICONINFO, IDI_APPLICATION, MF_SEPARATOR, MF_STRING, MSG,
-    PM_NOREMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
-    TPM_LEFTALIGN, TPM_RETURNCMD, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY,
-    WINDOW_EX_STYLE, WM_APP, WM_HOTKEY, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPED,
+    SetLayeredWindowAttributes, SetWindowDisplayAffinity, SetWindowPos, ShowWindow, TrackPopupMenu,
+    TranslateMessage, CURSORINFO, CURSOR_SHOWING, DI_NORMAL, HMENU, HWND_MESSAGE, HWND_TOPMOST,
+    ICONINFO, IDI_APPLICATION, LWA_ALPHA, MF_SEPARATOR, MF_STRING, MSG, PM_NOREMOVE,
+    SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOW, TPM_LEFTALIGN, TPM_RETURNCMD,
+    WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY, WINDOW_EX_STYLE, WM_APP, WM_HOTKEY,
+    WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_OVERLAPPED, WS_POPUP,
 };
 
 #[derive(Debug, Default)]
@@ -171,6 +177,37 @@ impl Drop for WindowsHotkeyListener {
 pub struct WindowsTrayIcon {
     thread_id: u32,
     join_handle: Option<JoinHandle<()>>,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug)]
+pub struct WindowsOverlayWindow {
+    hwnd: isize,
+}
+
+#[cfg(target_os = "windows")]
+impl WindowsOverlayWindow {
+    fn hwnd(&self) -> HWND {
+        HWND(self.hwnd as *mut c_void)
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl OverlayWindowHandle for WindowsOverlayWindow {
+    fn native_window_handle(&self) -> isize {
+        self.hwnd
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsOverlayWindow {
+    fn drop(&mut self) {
+        let hwnd = self.hwnd();
+        unsafe {
+            let _ = ShowWindow(hwnd, windows::Win32::UI::WindowsAndMessaging::SW_HIDE);
+            let _ = DestroyWindow(hwnd);
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -389,6 +426,27 @@ impl VideoRecordingService for WindowsPlatform {
             let _ = request;
             Err(PlatformError::Unsupported(
                 "Windows desktop recording is only available on Windows",
+            ))
+        }
+    }
+}
+
+impl RegionOverlayService for WindowsPlatform {
+    fn create_overlay_window(
+        &self,
+        request: OverlayWindowRequest,
+    ) -> Result<Box<dyn OverlayWindowHandle>, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            create_windows_overlay_window(request)
+                .map(|window| Box::new(window) as Box<dyn OverlayWindowHandle>)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "Windows region overlay is only available on Windows",
             ))
         }
     }
@@ -801,6 +859,98 @@ fn create_tray_message_window() -> Result<HWND, PlatformError> {
         )
         .map_err(|error| PlatformError::Failed(format!("CreateWindowExW failed: {error}")))
     }
+}
+
+#[cfg(target_os = "windows")]
+fn create_windows_overlay_window(
+    request: OverlayWindowRequest,
+) -> Result<WindowsOverlayWindow, PlatformError> {
+    if request.bounds.width == 0 || request.bounds.height == 0 {
+        return Err(PlatformError::Failed(
+            "overlay bounds must be non-empty".into(),
+        ));
+    }
+
+    let class_name = wide_null("OddSnapRustOverlayWindow");
+    let module = unsafe { GetModuleHandleW(None) }
+        .map_err(|error| PlatformError::Failed(format!("GetModuleHandleW failed: {error}")))?;
+    let instance = HINSTANCE(module.0);
+    let window_class = WNDCLASSW {
+        lpfnWndProc: Some(overlay_window_proc),
+        hInstance: instance,
+        lpszClassName: PCWSTR(class_name.as_ptr()),
+        ..Default::default()
+    };
+    unsafe {
+        let _ = RegisterClassW(&window_class);
+    }
+
+    let mut ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_NOACTIVATE;
+    if request.click_through {
+        ex_style |= WS_EX_TRANSPARENT;
+    }
+
+    let hwnd = unsafe {
+        CreateWindowExW(
+            ex_style,
+            PCWSTR(class_name.as_ptr()),
+            w!("OddSnap Rust Overlay"),
+            WS_POPUP,
+            request.bounds.x,
+            request.bounds.y,
+            request.bounds.width as i32,
+            request.bounds.height as i32,
+            None,
+            None,
+            Some(instance),
+            None,
+        )
+        .map_err(|error| PlatformError::Failed(format!("CreateWindowExW failed: {error}")))?
+    };
+
+    let setup_result = (|| {
+        unsafe {
+            SetLayeredWindowAttributes(hwnd, COLORREF(0), request.opacity, LWA_ALPHA).map_err(
+                |error| {
+                    PlatformError::Failed(format!("SetLayeredWindowAttributes failed: {error}"))
+                },
+            )?;
+            SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE).map_err(|error| {
+                PlatformError::Failed(format!("SetWindowDisplayAffinity failed: {error}"))
+            })?;
+            SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            )
+            .map_err(|error| PlatformError::Failed(format!("SetWindowPos failed: {error}")))?;
+            let _ = ShowWindow(hwnd, SW_SHOW);
+        }
+        Ok::<(), PlatformError>(())
+    })();
+
+    if let Err(error) = setup_result {
+        let _ = unsafe { DestroyWindow(hwnd) };
+        return Err(error);
+    }
+
+    Ok(WindowsOverlayWindow {
+        hwnd: hwnd.0 as isize,
+    })
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn overlay_window_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
 }
 
 #[cfg(target_os = "windows")]
@@ -1804,7 +1954,10 @@ mod tests {
     use oddsnap_core::{CapabilityState, PlatformCapability, RecordingFormat, RecordingQuality};
     #[cfg(target_os = "windows")]
     use oddsnap_platform::ScreenshotExclusionService;
-    use oddsnap_platform::{PlatformAdapter, VideoRecordingRequest, VideoRecordingService};
+    use oddsnap_platform::{
+        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, VideoRecordingRequest,
+        VideoRecordingService,
+    };
     #[cfg(target_os = "windows")]
     use windows::core::w;
     #[cfg(target_os = "windows")]
@@ -1832,6 +1985,10 @@ mod tests {
         );
         assert_eq!(
             capabilities.state(PlatformCapability::WindowCapture),
+            CapabilityState::InProgress
+        );
+        assert_eq!(
+            capabilities.state(PlatformCapability::RegionOverlay),
             CapabilityState::InProgress
         );
         assert_eq!(
@@ -1888,6 +2045,48 @@ mod tests {
             .expect_err("zero HWND should fail");
 
         assert!(error.to_string().contains("non-zero"));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn overlay_window_rejects_empty_bounds() {
+        let adapter = WindowsPlatform;
+        let error = match adapter.create_overlay_window(OverlayWindowRequest {
+            bounds: oddsnap_platform::CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 10,
+            },
+            opacity: 1,
+            click_through: true,
+        }) {
+            Ok(_) => panic!("empty overlay should fail"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("non-empty"));
+    }
+
+    #[test]
+    #[ignore = "creates a temporary topmost layered overlay window in the local desktop session"]
+    #[cfg(target_os = "windows")]
+    fn windows_overlay_window_can_create_exclude_and_destroy() {
+        let adapter = WindowsPlatform;
+        let overlay = adapter
+            .create_overlay_window(OverlayWindowRequest {
+                bounds: oddsnap_platform::CaptureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 8,
+                    height: 8,
+                },
+                opacity: 1,
+                click_through: true,
+            })
+            .expect("overlay window");
+
+        assert_ne!(overlay.native_window_handle(), 0);
     }
 
     #[test]

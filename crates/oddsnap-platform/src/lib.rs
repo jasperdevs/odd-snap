@@ -75,6 +75,13 @@ pub struct VideoRecordingResult {
     pub output_path: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OverlayWindowRequest {
+    pub bounds: CaptureRegion,
+    pub opacity: u8,
+    pub click_through: bool,
+}
+
 pub trait PlatformAdapter: Send + Sync {
     fn name(&self) -> &'static str;
     fn native_ui_profile(&self) -> NativeUiProfile;
@@ -144,6 +151,17 @@ pub trait VideoRecordingService: Send + Sync {
         &self,
         request: VideoRecordingRequest,
     ) -> Result<Box<dyn VideoRecordingHandle>, PlatformError>;
+}
+
+pub trait OverlayWindowHandle: Send {
+    fn native_window_handle(&self) -> isize;
+}
+
+pub trait RegionOverlayService: Send + Sync {
+    fn create_overlay_window(
+        &self,
+        request: OverlayWindowRequest,
+    ) -> Result<Box<dyn OverlayWindowHandle>, PlatformError>;
 }
 
 pub fn default_capture_directory() -> PathBuf {

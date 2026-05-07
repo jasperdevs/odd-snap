@@ -23,6 +23,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust app settings can load capture output and clipboard preferences from a JSON settings file.
 - macOS and Linux adapters expose explicit pending capture/window/clipboard service implementations instead of missing trait surfaces.
 - Windows monitor enumeration now reports real display entries with DPI-derived scale percentages.
+- Windows has a region-overlay service boundary that can create and destroy a topmost layered tool window in virtual-screen coordinates, with screenshot exclusion applied.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - GPUI recent-capture rows can reveal saved files through the host file browser.
 - Rust startup can import legacy save directory, history, and copy-after-capture settings when no Rust settings file exists.
@@ -60,4 +61,5 @@ The Rust rewrite must not replace the current app until this document and the li
 
 The rewrite does not yet implement the full production capture overlay, annotation, region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, packaging, or update behavior.
 The Windows tray foundation is present, but the Rust menu still routes text capture, color picker, and scroll capture to pending-status messages until those feature backends land.
+The Windows overlay foundation proves native window lifecycle only; production selection, crosshair, magnifier, toolbar, hit testing, and annotation are still pending.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.

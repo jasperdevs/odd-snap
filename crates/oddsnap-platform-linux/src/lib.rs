@@ -3,8 +3,9 @@ use std::path::Path;
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
     CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, HotkeyService,
-    MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService, VideoRecordingRequest,
-    VideoRecordingService, WindowInfo, WindowPickerService,
+    MonitorInfo, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter, PlatformError,
+    RegionOverlayService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
+    WindowInfo, WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -109,12 +110,25 @@ impl VideoRecordingService for LinuxPlatform {
     }
 }
 
+impl RegionOverlayService for LinuxPlatform {
+    fn create_overlay_window(
+        &self,
+        request: OverlayWindowRequest,
+    ) -> Result<Box<dyn OverlayWindowHandle>, PlatformError> {
+        let _ = request;
+        Err(PlatformError::Unsupported(
+            "Linux region overlay is not implemented yet",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use oddsnap_core::{NativeMaterial, RecordingFormat, RecordingQuality};
     use oddsnap_platform::{
-        ClipboardImageService, ClipboardTextService, HotkeyService, PlatformAdapter,
-        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
+        ClipboardImageService, ClipboardTextService, HotkeyService, OverlayWindowRequest,
+        PlatformAdapter, RegionOverlayService, ScreenCaptureService, VideoRecordingRequest,
+        VideoRecordingService,
     };
 
     use super::LinuxPlatform;
@@ -188,6 +202,26 @@ mod tests {
         });
         let error = match result {
             Ok(_) => panic!("Linux recording should be pending"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("not implemented yet"));
+    }
+
+    #[test]
+    fn linux_region_overlay_service_is_explicitly_unimplemented() {
+        let adapter = LinuxPlatform;
+        let error = match adapter.create_overlay_window(OverlayWindowRequest {
+            bounds: oddsnap_platform::CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10,
+            },
+            opacity: 1,
+            click_through: true,
+        }) {
+            Ok(_) => panic!("Linux overlay should be pending"),
             Err(error) => error,
         };
 
