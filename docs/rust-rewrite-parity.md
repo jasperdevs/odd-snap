@@ -17,6 +17,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS has a command-backed `screencapture` still-capture foundation for full-screen and explicit-region PNG captures.
 - macOS has command-backed Screen & System Audio Recording permission detection through the platform permissions service, plus capture-failure guidance that points users to the current System Settings location.
 - macOS has command-backed active-window bounds discovery through `osascript`/System Events, so active-window capture can reuse the `screencapture -R` region path when Accessibility and Screen & System Audio Recording permissions are granted.
+- macOS rectangle capture can use the native interactive `screencapture -i` selection flow from the GPUI shell; this is a system selection foundation, not the production OddSnap overlay.
 - Linux has an X11 monitor-enumeration foundation through `xrandr --query`, including multi-monitor and negative-offset virtual desktop geometry.
 - Linux has command-backed still-capture foundations for common screenshot tools (`grim`, `gnome-screenshot`, `spectacle`, or `scrot`).
 - Linux has command-backed interactive region selection through `slurp` on Wayland and `slop` on X11; the GPUI Region action can fall back to those selectors even when `xrandr` monitor enumeration is unavailable.

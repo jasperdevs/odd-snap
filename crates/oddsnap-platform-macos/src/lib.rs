@@ -20,6 +20,26 @@ use oddsnap_platform::{
 #[derive(Debug, Default)]
 pub struct MacosPlatform;
 
+impl MacosPlatform {
+    pub fn capture_interactive_selection(
+        &self,
+        include_cursor: bool,
+    ) -> Result<CaptureResult, PlatformError> {
+        #[cfg(target_os = "macos")]
+        {
+            run_macos_interactive_screencapture(include_cursor)
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = include_cursor;
+            Err(PlatformError::Unsupported(
+                "macOS interactive capture is only available on macOS",
+            ))
+        }
+    }
+}
+
 impl PlatformAdapter for MacosPlatform {
     fn name(&self) -> &'static str {
         "macOS"
@@ -156,6 +176,42 @@ fn run_macos_screencapture(
     })
 }
 
+#[cfg(target_os = "macos")]
+fn run_macos_interactive_screencapture(
+    include_cursor: bool,
+) -> Result<CaptureResult, PlatformError> {
+    let output_path = macos_capture_output_path();
+    let args = macos_interactive_screencapture_args(include_cursor, &output_path);
+    let status = Command::new("screencapture")
+        .args(&args)
+        .status()
+        .map_err(|source| {
+            PlatformError::Failed(format!("failed to start macOS screencapture: {source}"))
+        })?;
+    if !status.success() {
+        return Err(PlatformError::Failed(format!(
+            "macOS interactive capture exited with status {status}. {}",
+            macos_screen_recording_permission_hint()
+        )));
+    }
+    if !output_path.exists() {
+        return Err(PlatformError::Failed(
+            "macOS interactive capture canceled".into(),
+        ));
+    }
+
+    let (width, height) = oddsnap_platform::image_file_dimensions(&output_path)?;
+    Ok(CaptureResult {
+        image_path: output_path,
+        region: CaptureRegion {
+            x: 0,
+            y: 0,
+            width,
+            height,
+        },
+    })
+}
+
 #[cfg(any(target_os = "macos", test))]
 fn macos_screencapture_args(
     region: Option<&CaptureRegion>,
@@ -172,6 +228,16 @@ fn macos_screencapture_args(
             "{},{},{},{}",
             region.x, region.y, region.width, region.height
         ));
+    }
+    args.push(output_path.display().to_string());
+    args
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_interactive_screencapture_args(include_cursor: bool, output_path: &Path) -> Vec<String> {
+    let mut args = vec!["-x".to_string(), "-i".to_string()];
+    if include_cursor {
+        args.push("-C".into());
     }
     args.push(output_path.display().to_string());
     args
@@ -578,6 +644,28 @@ mod tests {
             args,
             vec!["-x", "-C", "-R", "-10,20,30,40", "/tmp/oddsnap-test.png"]
         );
+    }
+
+    #[test]
+    fn macos_interactive_screencapture_args_use_native_selection_mode() {
+        let path = std::path::Path::new("/tmp/oddsnap-selection.png");
+
+        let args = super::macos_interactive_screencapture_args(true, path);
+
+        assert_eq!(args, vec!["-x", "-i", "-C", "/tmp/oddsnap-selection.png"]);
+        assert!(!args.iter().any(|arg| arg == "-R"));
+    }
+
+    #[test]
+    #[cfg(not(target_os = "macos"))]
+    fn macos_interactive_capture_reports_wrong_host() {
+        let adapter = MacosPlatform;
+
+        let error = adapter
+            .capture_interactive_selection(false)
+            .expect_err("macOS interactive capture wrong host");
+
+        assert!(error.to_string().contains("only available on macOS"));
     }
 
     #[test]

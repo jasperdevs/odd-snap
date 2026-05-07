@@ -25,7 +25,7 @@ use oddsnap_core::{
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
-    CaptureRequest, ClipboardImageService, ClipboardTextService, ColorPickerService,
+    CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService, ColorPickerService,
     OverlayWindowRequest, PlatformAdapter, RegionSelectionService, ScreenCaptureService,
     VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
 };
@@ -1022,7 +1022,7 @@ impl OddSnapRustApp {
         #[cfg(target_os = "macos")]
         let result = {
             let adapter = oddsnap_platform_macos::MacosPlatform;
-            self.run_capture_with_adapter(&adapter, mode)
+            self.run_capture_with_macos_adapter(&adapter, mode)
         };
 
         #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
@@ -1112,26 +1112,59 @@ impl OddSnapRustApp {
             }),
         };
 
-        capture.and_then(|capture| {
-            let destination = self.capture_destination(&capture);
-            let saved = persist_capture_to_path_as(
-                &capture,
-                &destination,
-                self.settings.capture_image_format,
-                self.settings.jpeg_quality,
-            )?;
-            let copy_error = if self.settings.copy_captures_to_clipboard {
-                adapter
-                    .copy_image_to_clipboard(&saved.image_path)
-                    .err()
-                    .map(|error| error.to_string())
-            } else {
-                None
-            };
-            Ok(CaptureRunResult {
-                capture: saved,
-                copy_error,
-            })
+        capture.and_then(|capture| self.save_and_copy_capture(adapter, capture))
+    }
+
+    #[cfg(target_os = "macos")]
+    fn run_capture_with_macos_adapter(
+        &self,
+        adapter: &oddsnap_platform_macos::MacosPlatform,
+        mode: CaptureMode,
+    ) -> Result<CaptureRunResult, oddsnap_platform::PlatformError> {
+        let capture = match mode {
+            CaptureMode::Rectangle => {
+                adapter.capture_interactive_selection(self.settings.show_cursor)
+            }
+            CaptureMode::FullScreen => {
+                adapter.capture_all_screens_with_cursor(self.settings.show_cursor)
+            }
+            CaptureMode::ActiveWindow => adapter.active_window().and_then(|window| {
+                adapter.capture_region_with_options(CaptureRequest {
+                    region: window.bounds,
+                    include_cursor: self.settings.show_cursor,
+                })
+            }),
+        }?;
+
+        self.save_and_copy_capture(adapter, capture)
+    }
+
+    fn save_and_copy_capture<T>(
+        &self,
+        adapter: &T,
+        capture: CaptureResult,
+    ) -> Result<CaptureRunResult, oddsnap_platform::PlatformError>
+    where
+        T: ClipboardImageService,
+    {
+        let destination = self.capture_destination(&capture);
+        let saved = persist_capture_to_path_as(
+            &capture,
+            &destination,
+            self.settings.capture_image_format,
+            self.settings.jpeg_quality,
+        )?;
+        let copy_error = if self.settings.copy_captures_to_clipboard {
+            adapter
+                .copy_image_to_clipboard(&saved.image_path)
+                .err()
+                .map(|error| error.to_string())
+        } else {
+            None
+        };
+        Ok(CaptureRunResult {
+            capture: saved,
+            copy_error,
         })
     }
 
