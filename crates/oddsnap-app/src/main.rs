@@ -1198,14 +1198,7 @@ impl OddSnapRustApp {
     }
 
     fn copy_history_upload_url(&mut self, url: String) {
-        #[cfg(target_os = "windows")]
-        let result = oddsnap_platform_windows::WindowsPlatform.copy_text_to_clipboard(&url);
-
-        #[cfg(not(target_os = "windows"))]
-        let result: Result<(), oddsnap_platform::PlatformError> =
-            Err(oddsnap_platform::PlatformError::Unsupported(
-                "text clipboard is not implemented on this platform yet",
-            ));
+        let result = copy_text_to_host_clipboard(&url);
 
         self.capture_status = match result {
             Ok(()) => "Upload link copied.".into(),
@@ -1214,14 +1207,7 @@ impl OddSnapRustApp {
     }
 
     fn copy_color_history_hex(&mut self, hex: String) {
-        #[cfg(target_os = "windows")]
-        let result = oddsnap_platform_windows::WindowsPlatform.copy_text_to_clipboard(&hex);
-
-        #[cfg(not(target_os = "windows"))]
-        let result: Result<(), oddsnap_platform::PlatformError> =
-            Err(oddsnap_platform::PlatformError::Unsupported(
-                "text clipboard is not implemented on this platform yet",
-            ));
+        let result = copy_text_to_host_clipboard(&hex);
 
         self.capture_status = match result {
             Ok(()) => format!("Color {hex} copied."),
@@ -1991,6 +1977,23 @@ fn reveal_file_in_system_browser(path: &Path) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("failed to run {program}: {error}"))
+}
+
+fn copy_text_to_host_clipboard(text: &str) -> Result<(), oddsnap_platform::PlatformError> {
+    #[cfg(target_os = "windows")]
+    {
+        oddsnap_platform_windows::WindowsPlatform.copy_text_to_clipboard(text)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        oddsnap_platform_macos::MacosPlatform.copy_text_to_clipboard(text)
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        oddsnap_platform_linux::LinuxPlatform.copy_text_to_clipboard(text)
+    }
 }
 
 fn on_off(value: bool) -> &'static str {

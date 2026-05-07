@@ -1,4 +1,9 @@
 use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
 
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
@@ -34,7 +39,7 @@ impl PlatformAdapter for LinuxPlatform {
                 ),
                 (PlatformCapability::GlobalHotkeys, CapabilityState::Planned),
                 (PlatformCapability::Tray, CapabilityState::Planned),
-                (PlatformCapability::Clipboard, CapabilityState::Planned),
+                (PlatformCapability::Clipboard, CapabilityState::InProgress),
                 (PlatformCapability::FileDialogs, CapabilityState::Planned),
                 (
                     PlatformCapability::MicrophoneAudio,
@@ -83,10 +88,68 @@ impl ClipboardImageService for LinuxPlatform {
 
 impl ClipboardTextService for LinuxPlatform {
     fn copy_text_to_clipboard(&self, text: &str) -> Result<(), PlatformError> {
-        let _ = text;
-        Err(PlatformError::Unsupported(
-            "Linux text clipboard is not implemented yet",
-        ))
+        #[cfg(target_os = "linux")]
+        {
+            copy_text_to_linux_clipboard(text)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = text;
+            Err(PlatformError::Unsupported(
+                "Linux text clipboard is only available on Linux",
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn copy_text_to_linux_clipboard(text: &str) -> Result<(), PlatformError> {
+    let mut errors = Vec::new();
+
+    for (program, args) in [
+        ("wl-copy", &[] as &[&str]),
+        ("xclip", &["-selection", "clipboard"] as &[&str]),
+        ("xsel", &["--clipboard", "--input"] as &[&str]),
+    ] {
+        match run_clipboard_command(program, args, text) {
+            Ok(()) => return Ok(()),
+            Err(error) => errors.push(format!("{program}: {error}")),
+        }
+    }
+
+    Err(PlatformError::Failed(format!(
+        "no Linux clipboard command succeeded: {}",
+        errors.join("; ")
+    )))
+}
+
+#[cfg(target_os = "linux")]
+fn run_clipboard_command(program: &str, args: &[&str], text: &str) -> Result<(), PlatformError> {
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|source| PlatformError::Failed(format!("failed to start command: {source}")))?;
+
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| PlatformError::Failed("failed to open clipboard command stdin".into()))?;
+    stdin.write_all(text.as_bytes()).map_err(|source| {
+        PlatformError::Failed(format!("failed to write clipboard text: {source}"))
+    })?;
+    drop(stdin);
+
+    let status = child
+        .wait()
+        .map_err(|source| PlatformError::Failed(format!("failed to wait for command: {source}")))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(PlatformError::Failed(format!(
+            "exited with status {status}"
+        )))
     }
 }
 
@@ -185,14 +248,38 @@ mod tests {
     }
 
     #[test]
-    fn linux_text_clipboard_service_is_explicitly_unimplemented() {
+    fn linux_clipboard_capability_is_in_progress() {
+        let adapter = LinuxPlatform;
+
+        assert_eq!(
+            adapter
+                .capabilities()
+                .state(oddsnap_core::PlatformCapability::Clipboard),
+            oddsnap_core::CapabilityState::InProgress
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_os = "linux"))]
+    fn linux_text_clipboard_reports_wrong_host() {
         let adapter = LinuxPlatform;
 
         let error = adapter
             .copy_text_to_clipboard("capture text")
             .expect_err("Linux text clipboard pending");
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on Linux"));
+    }
+
+    #[test]
+    #[ignore = "writes text to the local Linux clipboard through wl-copy, xclip, or xsel"]
+    #[cfg(target_os = "linux")]
+    fn linux_text_clipboard_can_copy_text() {
+        let adapter = LinuxPlatform;
+
+        adapter
+            .copy_text_to_clipboard("OddSnap Linux clipboard smoke")
+            .expect("copy text");
     }
 
     #[test]

@@ -1,4 +1,9 @@
 use std::path::Path;
+#[cfg(target_os = "macos")]
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
 
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
@@ -34,7 +39,7 @@ impl PlatformAdapter for MacosPlatform {
                 ),
                 (PlatformCapability::GlobalHotkeys, CapabilityState::Planned),
                 (PlatformCapability::Tray, CapabilityState::Planned),
-                (PlatformCapability::Clipboard, CapabilityState::Planned),
+                (PlatformCapability::Clipboard, CapabilityState::InProgress),
                 (PlatformCapability::FileDialogs, CapabilityState::Planned),
                 (
                     PlatformCapability::MicrophoneAudio,
@@ -83,10 +88,46 @@ impl ClipboardImageService for MacosPlatform {
 
 impl ClipboardTextService for MacosPlatform {
     fn copy_text_to_clipboard(&self, text: &str) -> Result<(), PlatformError> {
-        let _ = text;
-        Err(PlatformError::Unsupported(
-            "macOS text clipboard is not implemented yet",
-        ))
+        #[cfg(target_os = "macos")]
+        {
+            copy_text_to_macos_clipboard(text)
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = text;
+            Err(PlatformError::Unsupported(
+                "macOS text clipboard is only available on macOS",
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn copy_text_to_macos_clipboard(text: &str) -> Result<(), PlatformError> {
+    let mut child = Command::new("pbcopy")
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|source| PlatformError::Failed(format!("failed to start pbcopy: {source}")))?;
+
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| PlatformError::Failed("failed to open pbcopy stdin".into()))?;
+    stdin.write_all(text.as_bytes()).map_err(|source| {
+        PlatformError::Failed(format!("failed to write clipboard text: {source}"))
+    })?;
+    drop(stdin);
+
+    let status = child
+        .wait()
+        .map_err(|source| PlatformError::Failed(format!("failed to wait for pbcopy: {source}")))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(PlatformError::Failed(format!(
+            "pbcopy exited with status {status}"
+        )))
     }
 }
 
@@ -185,14 +226,38 @@ mod tests {
     }
 
     #[test]
-    fn macos_text_clipboard_service_is_explicitly_unimplemented() {
+    fn macos_clipboard_capability_is_in_progress() {
+        let adapter = MacosPlatform;
+
+        assert_eq!(
+            adapter
+                .capabilities()
+                .state(oddsnap_core::PlatformCapability::Clipboard),
+            oddsnap_core::CapabilityState::InProgress
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_os = "macos"))]
+    fn macos_text_clipboard_reports_wrong_host() {
         let adapter = MacosPlatform;
 
         let error = adapter
             .copy_text_to_clipboard("capture text")
             .expect_err("macOS text clipboard pending");
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on macOS"));
+    }
+
+    #[test]
+    #[ignore = "writes text to the local macOS clipboard"]
+    #[cfg(target_os = "macos")]
+    fn macos_text_clipboard_can_copy_text() {
+        let adapter = MacosPlatform;
+
+        adapter
+            .copy_text_to_clipboard("OddSnap macOS clipboard smoke")
+            .expect("copy text");
     }
 
     #[test]
