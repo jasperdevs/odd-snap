@@ -120,6 +120,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI media history can bulk-retry uploads for the currently filtered media rows using the current upload destination.
 - GPUI media history can bulk-remove the currently filtered media rows from the persisted Rust history index without deleting original media files.
 - GPUI media history can bulk-copy uploaded links from the currently filtered media rows.
+- GPUI media history can expand and reset the visible row window for large imported histories without changing persisted files.
 - GPUI generated-history rows can remove color, OCR text, and QR/barcode entries from the persisted Rust history index without touching media files.
 - GPUI feature routing has a dedicated action model module for capture modes, recording targets, settings actions, pending tool parity messages, and cross-platform hotkey events.
 - Imported AI Redirect hotkeys can open configured chat providers that do not require hosted-image upload, copying the newest saved image first.

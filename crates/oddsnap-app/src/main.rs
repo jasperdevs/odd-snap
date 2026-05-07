@@ -80,6 +80,10 @@ const MACOS_MENU_BAR_FOUNDATION_STATUS: &str =
 const LINUX_TRAY_FOUNDATION_STATUS: &str =
     "Tray: Linux appindicator/status icon foundation active; OCR wired, scroll capture still pending.";
 
+const DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT: usize = 6;
+const MEDIA_HISTORY_VISIBLE_INCREMENT: usize = 12;
+const IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT: usize = 20;
+
 fn main() {
     application().run(|cx: &mut App| {
         let bounds = Bounds::centered(
@@ -146,6 +150,7 @@ struct OddSnapRustApp {
     image_search: image_search::ImageSearchUiState,
     history_kind_filter: HistoryKindFilter,
     history_upload_filter: HistoryUploadFilter,
+    media_history_visible_limit: usize,
     image_search_reindex_queue: ImageSearchReindexQueueState,
     last_auto_image_search_ocr_unix_ms: u64,
     focus_handle: gpui::FocusHandle,
@@ -440,6 +445,7 @@ impl OddSnapRustApp {
             image_search: image_search::ImageSearchUiState::new(),
             history_kind_filter: HistoryKindFilter::All,
             history_upload_filter: HistoryUploadFilter::All,
+            media_history_visible_limit: DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT,
             image_search_reindex_queue: ImageSearchReindexQueueState::default(),
             last_auto_image_search_ocr_unix_ms: 0,
             focus_handle: cx.focus_handle(),
@@ -1335,14 +1341,20 @@ impl OddSnapRustApp {
             ));
         }
 
+        let search_active = image_search::is_active(&self.settings, &self.image_search);
+        let visible_limit = if search_active {
+            self.media_history_visible_limit
+                .max(IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT)
+        } else {
+            self.media_history_visible_limit
+        };
         let visible_history = image_search::visible_items(
             &self.settings,
             &self.image_search,
             &filtered_history,
-            6,
-            20,
+            visible_limit,
+            visible_limit,
         );
-        let search_active = image_search::is_active(&self.settings, &self.image_search);
 
         if visible_history.is_empty() && search_active {
             return body.child(div().text_size(px(12.0)).text_color(rgb(0x8b93a3)).child(
@@ -1463,6 +1475,15 @@ impl OddSnapRustApp {
             .child(self.history_upload_filter_button(cx))
             .child(self.copy_filtered_upload_links_button(cx))
             .child(self.upload_filtered_history_button(cx))
+            .when(
+                filtered_count > DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT
+                    && self.media_history_visible_limit < filtered_count,
+                |bar| bar.child(self.show_more_history_button(cx, filtered_count)),
+            )
+            .when(
+                self.media_history_visible_limit > DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT,
+                |bar| bar.child(self.show_recent_history_button(cx)),
+            )
             .child(self.remove_filtered_history_button(cx))
             .child(
                 div()
@@ -1486,8 +1507,50 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.history_kind_filter = this.history_kind_filter.next();
+            this.media_history_visible_limit = DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT;
             this.capture_status =
                 format!("History kind filter: {}.", this.history_kind_filter.label());
+            cx.notify();
+        }))
+    }
+
+    fn show_more_history_button(
+        &self,
+        cx: &mut Context<Self>,
+        filtered_count: usize,
+    ) -> impl IntoElement {
+        let disabled = self.media_history_visible_limit >= filtered_count;
+        ui::action_button_style(
+            div().id("show-more-history-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Show more")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            if !disabled {
+                this.media_history_visible_limit = next_media_history_visible_limit(
+                    this.media_history_visible_limit,
+                    filtered_count,
+                );
+                this.media_status = format!(
+                    "Media history showing up to {} rows.",
+                    this.media_history_visible_limit.min(filtered_count)
+                );
+                cx.notify();
+            }
+        }))
+    }
+
+    fn show_recent_history_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("show-recent-history-button"),
+            ui::ButtonVariant::History,
+        )
+        .child("Show recent")
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.media_history_visible_limit = DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT;
+            this.media_status = "Media history reset to recent rows.".into();
             cx.notify();
         }))
     }
@@ -1504,6 +1567,7 @@ impl OddSnapRustApp {
         .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
             cx.stop_propagation();
             this.history_upload_filter = this.history_upload_filter.next();
+            this.media_history_visible_limit = DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT;
             this.capture_status = format!(
                 "History upload filter: {}.",
                 this.history_upload_filter.label()
@@ -6436,6 +6500,13 @@ fn next_toast_duration_seconds(seconds: f64) -> f64 {
     }
 }
 
+fn next_media_history_visible_limit(current: usize, total: usize) -> usize {
+    current
+        .max(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT)
+        .saturating_add(MEDIA_HISTORY_VISIBLE_INCREMENT)
+        .min(total.max(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT))
+}
+
 fn next_recording_format(format: RecordingFormat) -> RecordingFormat {
     match format {
         RecordingFormat::Gif => RecordingFormat::Mp4,
@@ -6725,6 +6796,12 @@ mod tests {
         assert_eq!(next_toast_duration_seconds(1.5), 2.5);
         assert_eq!(next_toast_duration_seconds(2.5), 4.5);
         assert_eq!(next_toast_duration_seconds(4.5), 1.5);
+        assert_eq!(
+            next_media_history_visible_limit(DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT, 40),
+            18
+        );
+        assert_eq!(next_media_history_visible_limit(18, 20), 20);
+        assert_eq!(next_media_history_visible_limit(2, 4), 6);
     }
 
     #[test]
