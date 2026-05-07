@@ -791,6 +791,10 @@ impl OddSnapRustApp {
                             .flex()
                             .gap(px(8.0))
                             .child(self.open_history_button(cx, entry.path.clone()))
+                            .child(self.copy_history_path_button(cx, entry.path.clone()))
+                            .when(entry.kind == HistoryKind::Image, |row| {
+                                row.child(self.copy_history_image_button(cx, entry.path.clone()))
+                            })
                             .when_some(entry.upload_url.clone(), |row, url| {
                                 row.child(self.copy_upload_url_button(cx, url))
                             })
@@ -975,6 +979,46 @@ impl OddSnapRustApp {
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
                 this.open_history_path(PathBuf::from(&path));
+                cx.notify();
+            }))
+    }
+
+    fn copy_history_path_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
+        div()
+            .id(SharedString::from(format!("copy-history-path-{path}")))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(rgb(0x354052))
+            .bg(rgb(0x202733))
+            .hover(|this| this.bg(rgb(0x2a3342)))
+            .px(px(8.0))
+            .py(px(4.0))
+            .text_size(px(11.0))
+            .text_color(rgb(0xd8dde6))
+            .child("Copy path")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.copy_history_path(path.clone());
+                cx.notify();
+            }))
+    }
+
+    fn copy_history_image_button(&self, cx: &mut Context<Self>, path: String) -> impl IntoElement {
+        div()
+            .id(SharedString::from(format!("copy-history-image-{path}")))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(rgb(0x354052))
+            .bg(rgb(0x202733))
+            .hover(|this| this.bg(rgb(0x2a3342)))
+            .px(px(8.0))
+            .py(px(4.0))
+            .text_size(px(11.0))
+            .text_color(rgb(0xd8dde6))
+            .child("Copy image")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.copy_history_image(PathBuf::from(&path));
                 cx.notify();
             }))
     }
@@ -1435,6 +1479,24 @@ impl OddSnapRustApp {
         self.capture_status = match result {
             Ok(()) => "Upload link copied.".into(),
             Err(error) => format!("Copy upload link failed: {error}"),
+        };
+    }
+
+    fn copy_history_path(&mut self, path: String) {
+        let result = copy_text_to_host_clipboard(&path);
+
+        self.capture_status = match result {
+            Ok(()) => "Capture path copied.".into(),
+            Err(error) => format!("Copy capture path failed: {error}"),
+        };
+    }
+
+    fn copy_history_image(&mut self, path: PathBuf) {
+        let result = copy_image_to_host_clipboard(&path);
+
+        self.capture_status = match result {
+            Ok(()) => "Capture image copied.".into(),
+            Err(error) => format!("Copy capture image failed: {error}"),
         };
     }
 
@@ -2760,6 +2822,23 @@ fn copy_text_to_host_clipboard(text: &str) -> Result<(), oddsnap_platform::Platf
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
         oddsnap_platform_linux::LinuxPlatform.copy_text_to_clipboard(text)
+    }
+}
+
+fn copy_image_to_host_clipboard(path: &Path) -> Result<(), oddsnap_platform::PlatformError> {
+    #[cfg(target_os = "windows")]
+    {
+        oddsnap_platform_windows::WindowsPlatform.copy_image_to_clipboard(path)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        oddsnap_platform_macos::MacosPlatform.copy_image_to_clipboard(path)
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        oddsnap_platform_linux::LinuxPlatform.copy_image_to_clipboard(path)
     }
 }
 
