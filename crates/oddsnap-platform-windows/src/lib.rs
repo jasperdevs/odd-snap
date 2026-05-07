@@ -2634,6 +2634,18 @@ mod tests {
 
     use super::WindowsPlatform;
 
+    #[cfg(target_os = "windows")]
+    static HOTKEY_TEST_MUTEX: std::sync::OnceLock<std::sync::Mutex<()>> =
+        std::sync::OnceLock::new();
+
+    #[cfg(target_os = "windows")]
+    fn hotkey_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        HOTKEY_TEST_MUTEX
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .expect("hotkey test mutex")
+    }
+
     #[test]
     fn windows_adapter_tracks_early_capture_work() {
         let adapter = WindowsPlatform;
@@ -3193,6 +3205,7 @@ mod tests {
     #[ignore = "registers and unregisters a process-local Windows global hotkey"]
     #[cfg(target_os = "windows")]
     fn windows_hotkey_can_register_and_unregister() {
+        let _guard = hotkey_test_lock();
         let (modifiers, key) =
             super::parse_hotkey_accelerator("Alt+Shift+F24").expect("parse hotkey");
 
@@ -3210,6 +3223,7 @@ mod tests {
         use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_HOTKEY};
 
+        let _guard = hotkey_test_lock();
         let (sender, receiver) = mpsc::channel();
         let listener =
             super::start_capture_hotkey_listener("Alt+Shift+F24", sender).expect("listener");
@@ -3240,6 +3254,7 @@ mod tests {
         use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_HOTKEY};
 
+        let _guard = hotkey_test_lock();
         let (sender, receiver) = mpsc::channel();
         let listener = super::start_capture_and_recording_hotkey_listener(
             "Alt+Shift+F23",
@@ -3274,6 +3289,7 @@ mod tests {
         use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_HOTKEY};
 
+        let _guard = hotkey_test_lock();
         let (sender, receiver) = mpsc::channel();
         let listener = super::start_oddsnap_hotkey_listener(
             "Alt+Shift+F21",
