@@ -147,6 +147,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] OCR.
 - [x] Core OCR line-layout text formatter ported from the legacy Windows OCR result flow.
 - [ ] Translation.
+- [x] Core translation model, supported-language normalization, source/target resolution, and runtime configuration error rules ported from legacy.
 - [ ] Image search.
 - [x] Core image-search query normalization, source filtering, scoring, and ranking ported from the legacy matcher.
 - [ ] Production color picker overlay polish.

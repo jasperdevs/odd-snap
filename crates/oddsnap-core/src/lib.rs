@@ -7,6 +7,7 @@ pub mod media;
 pub mod native_ui;
 pub mod ocr;
 pub mod settings;
+pub mod translation;
 pub mod upload;
 
 pub use capabilities::{CapabilityState, PlatformCapabilities, PlatformCapability};
@@ -34,6 +35,11 @@ pub use settings::{
     default_settings_path, AppSettings, CaptureImageFormat, DefaultCaptureMode, RecordingFormat,
     RecordingQuality, SettingDefinition, SettingsOptionDefinition, SettingsPageDefinition,
     SettingsSectionDefinition, SettingsStore, SettingsStoreError, SettingsValueKind, ToastPosition,
+};
+pub use translation::{
+    normalize_supported_translation_language, resolve_translation_source_language,
+    resolve_translation_target_language, translation_configuration_error,
+    translation_language_name, TranslationModel, SUPPORTED_TRANSLATION_LANGUAGES,
 };
 pub use upload::{
     build_curl_upload_request, build_google_lens_url, normalize_ai_chat_upload_destination,
