@@ -1607,8 +1607,22 @@ mod tests {
                     "OcrHotkeyKey": 79,
                     "PickerHotkeyModifiers": 1,
                     "PickerHotkeyKey": 67,
+                    "ScanHotkeyModifiers": 5,
+                    "ScanHotkeyKey": 78,
                     "StickerHotkeyModifiers": 1,
                     "StickerHotkeyKey": 83,
+                    "UpscaleHotkeyModifiers": 5,
+                    "UpscaleHotkeyKey": 85,
+                    "CenterHotkeyModifiers": 5,
+                    "CenterHotkeyKey": 69,
+                    "FullscreenHotkeyModifiers": 5,
+                    "FullscreenHotkeyKey": 70,
+                    "ActiveWindowHotkeyModifiers": 5,
+                    "ActiveWindowHotkeyKey": 87,
+                    "RulerHotkeyModifiers": 5,
+                    "RulerHotkeyKey": 76,
+                    "ScrollCaptureHotkeyModifiers": 5,
+                    "ScrollCaptureHotkeyKey": 80,
                     "AiRedirectHotkeyModifiers": 1,
                     "AiRedirectHotkeyKey": 65,
                     "OcrLanguageTag": "en-US",
@@ -1661,7 +1675,20 @@ mod tests {
 
         assert_eq!(settings.ocr_hotkey.as_deref(), Some("Alt+Shift+O"));
         assert_eq!(settings.picker_hotkey.as_deref(), Some("Alt+C"));
+        assert_eq!(settings.scan_hotkey.as_deref(), Some("Alt+Shift+N"));
         assert_eq!(settings.sticker_hotkey.as_deref(), Some("Alt+S"));
+        assert_eq!(settings.upscale_hotkey.as_deref(), Some("Alt+Shift+U"));
+        assert_eq!(settings.center_hotkey.as_deref(), Some("Alt+Shift+E"));
+        assert_eq!(settings.fullscreen_hotkey.as_deref(), Some("Alt+Shift+F"));
+        assert_eq!(
+            settings.active_window_hotkey.as_deref(),
+            Some("Alt+Shift+W")
+        );
+        assert_eq!(settings.ruler_hotkey.as_deref(), Some("Alt+Shift+L"));
+        assert_eq!(
+            settings.scroll_capture_hotkey.as_deref(),
+            Some("Alt+Shift+P")
+        );
         assert_eq!(settings.ai_redirect_hotkey.as_deref(), Some("Alt+A"));
         assert_eq!(settings.ocr_language_tag, "en-US");
         assert_eq!(settings.ocr_model_quality, 1);

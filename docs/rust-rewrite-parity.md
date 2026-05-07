@@ -70,6 +70,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can parse, register, listen for, and unregister process-local global hotkeys.
 - Windows has a Rust screenshot-exclusion service boundary backed by `SetWindowDisplayAffinity`.
 - Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
+- Migration tests cover all dedicated legacy hotkey modifier/key pairs and verify their Rust accelerator strings.
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.
 - Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, OCR routes to the Rust OCR capture foundation, Scan routes to the Rust QR/barcode scan foundation, remote sticker/upscale providers route through the Rust processing foundation where region selection is available, Windows Center routes to symmetric center selection, and ruler routes to region measurement.
