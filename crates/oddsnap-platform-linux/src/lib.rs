@@ -2,16 +2,18 @@ use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::{
     io::Write,
+    path::PathBuf,
     process::{Command, Stdio},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, ColorPickerService,
-    ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle, OverlayWindowRequest,
-    PlatformAdapter, PlatformError, RegionOverlayService, RegionSelectionService,
-    ScreenCaptureService, VideoRecordingRequest, VideoRecordingService, WindowInfo,
-    WindowPickerService,
+    CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
+    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OverlayWindowHandle,
+    OverlayWindowRequest, PlatformAdapter, PlatformError, RegionOverlayService,
+    RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
+    WindowInfo, WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -30,7 +32,10 @@ impl PlatformAdapter for LinuxPlatform {
         PlatformCapabilities {
             os: "linux".into(),
             items: vec![
-                (PlatformCapability::ScreenCapture, CapabilityState::Planned),
+                (
+                    PlatformCapability::ScreenCapture,
+                    CapabilityState::InProgress,
+                ),
                 (PlatformCapability::RegionOverlay, CapabilityState::Planned),
                 (PlatformCapability::WindowCapture, CapabilityState::Planned),
                 (
@@ -62,11 +67,173 @@ impl ScreenCaptureService for LinuxPlatform {
     }
 
     fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
-        let _ = region;
-        Err(PlatformError::Unsupported(
-            "Linux region capture is not implemented yet",
-        ))
+        self.capture_region_with_options(CaptureRequest {
+            region,
+            include_cursor: false,
+        })
     }
+
+    fn capture_region_with_options(
+        &self,
+        request: CaptureRequest,
+    ) -> Result<CaptureResult, PlatformError> {
+        #[cfg(target_os = "linux")]
+        {
+            run_linux_screenshot(Some(&request.region), request.include_cursor)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "Linux region capture is only available on Linux",
+            ))
+        }
+    }
+
+    fn capture_all_screens_with_cursor(
+        &self,
+        include_cursor: bool,
+    ) -> Result<CaptureResult, PlatformError> {
+        #[cfg(target_os = "linux")]
+        {
+            run_linux_screenshot(None, include_cursor)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = include_cursor;
+            Err(PlatformError::Unsupported(
+                "Linux full-screen capture is only available on Linux",
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn run_linux_screenshot(
+    region: Option<&CaptureRegion>,
+    include_cursor: bool,
+) -> Result<CaptureResult, PlatformError> {
+    let output_path = linux_capture_output_path();
+    let mut errors = Vec::new();
+
+    for (program, args) in linux_screenshot_commands(region, include_cursor, &output_path) {
+        match Command::new(&program).args(&args).status() {
+            Ok(status) if status.success() => {
+                let capture_region = match region {
+                    Some(region) => region.clone(),
+                    None => {
+                        let (width, height) =
+                            oddsnap_platform::image_file_dimensions(&output_path)?;
+                        CaptureRegion {
+                            x: 0,
+                            y: 0,
+                            width,
+                            height,
+                        }
+                    }
+                };
+
+                return Ok(CaptureResult {
+                    image_path: output_path,
+                    region: capture_region,
+                });
+            }
+            Ok(status) => errors.push(format!("{program} exited with status {status}")),
+            Err(error) => errors.push(format!("{program}: {error}")),
+        }
+    }
+
+    Err(PlatformError::Failed(format!(
+        "no Linux screenshot command succeeded: {}",
+        errors.join("; ")
+    )))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_screenshot_commands(
+    region: Option<&CaptureRegion>,
+    include_cursor: bool,
+    output_path: &Path,
+) -> Vec<(String, Vec<String>)> {
+    let path = output_path.display().to_string();
+    match region {
+        Some(region) => vec![
+            (
+                "grim".into(),
+                vec![
+                    "-g".into(),
+                    format!(
+                        "{},{} {}x{}",
+                        region.x, region.y, region.width, region.height
+                    ),
+                    path.clone(),
+                ],
+            ),
+            (
+                "scrot".into(),
+                scrot_args(Some(region), include_cursor, output_path),
+            ),
+        ],
+        None => vec![
+            ("grim".into(), vec![path.clone()]),
+            (
+                "gnome-screenshot".into(),
+                gnome_screenshot_args(include_cursor, output_path),
+            ),
+            (
+                "spectacle".into(),
+                vec!["-b".into(), "-n".into(), "-o".into(), path.clone()],
+            ),
+            (
+                "scrot".into(),
+                scrot_args(None, include_cursor, output_path),
+            ),
+        ],
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn gnome_screenshot_args(include_cursor: bool, output_path: &Path) -> Vec<String> {
+    let mut args = vec!["-f".into(), output_path.display().to_string()];
+    if include_cursor {
+        args.insert(0, "-p".into());
+    }
+    args
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn scrot_args(
+    region: Option<&CaptureRegion>,
+    include_cursor: bool,
+    output_path: &Path,
+) -> Vec<String> {
+    let mut args = Vec::new();
+    if include_cursor {
+        args.push("-p".into());
+    }
+    if let Some(region) = region {
+        args.push("-a".into());
+        args.push(format!(
+            "{},{},{},{}",
+            region.x, region.y, region.width, region.height
+        ));
+    }
+    args.push(output_path.display().to_string());
+    args
+}
+
+#[cfg(target_os = "linux")]
+fn linux_capture_output_path() -> PathBuf {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!(
+        "oddsnap-linux-capture-{}-{:09}.png",
+        duration.as_secs(),
+        duration.subsec_nanos()
+    ))
 }
 
 impl WindowPickerService for LinuxPlatform {
@@ -228,12 +395,94 @@ mod tests {
     }
 
     #[test]
-    fn linux_capture_services_are_explicitly_unimplemented() {
+    fn linux_screen_capture_capability_is_in_progress() {
+        let adapter = LinuxPlatform;
+
+        assert_eq!(
+            adapter
+                .capabilities()
+                .state(oddsnap_core::PlatformCapability::ScreenCapture),
+            oddsnap_core::CapabilityState::InProgress
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_os = "linux"))]
+    fn linux_capture_services_report_wrong_host() {
         let adapter = LinuxPlatform;
 
         let error = adapter.monitors().expect_err("Linux capture pending");
 
         assert!(error.to_string().contains("not implemented yet"));
+
+        let error = adapter
+            .capture_region(oddsnap_platform::CaptureRegion {
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10,
+            })
+            .expect_err("Linux capture wrong host");
+        assert!(error.to_string().contains("only available on Linux"));
+    }
+
+    #[test]
+    fn linux_screenshot_commands_cover_fullscreen_and_region_backends() {
+        let path = std::path::Path::new("/tmp/oddsnap-test.png");
+        let full = super::linux_screenshot_commands(None, true, path);
+
+        assert!(full.iter().any(|(program, args)| {
+            program == "gnome-screenshot" && args == &vec!["-p", "-f", "/tmp/oddsnap-test.png"]
+        }));
+        assert!(full.iter().any(|(program, args)| {
+            program == "spectacle" && args == &vec!["-b", "-n", "-o", "/tmp/oddsnap-test.png"]
+        }));
+
+        let region = oddsnap_platform::CaptureRegion {
+            x: -10,
+            y: 20,
+            width: 30,
+            height: 40,
+        };
+        let region_commands = super::linux_screenshot_commands(Some(&region), false, path);
+
+        assert_eq!(
+            region_commands[0],
+            (
+                "grim".into(),
+                vec![
+                    "-g".into(),
+                    "-10,20 30x40".into(),
+                    "/tmp/oddsnap-test.png".into()
+                ]
+            )
+        );
+        assert_eq!(
+            region_commands[1],
+            (
+                "scrot".into(),
+                vec![
+                    "-a".into(),
+                    "-10,20,30,40".into(),
+                    "/tmp/oddsnap-test.png".into()
+                ]
+            )
+        );
+    }
+
+    #[test]
+    #[ignore = "writes a screenshot file through the local Linux screenshot command if one is installed"]
+    #[cfg(target_os = "linux")]
+    fn linux_full_screen_capture_writes_image_file() {
+        let adapter = LinuxPlatform;
+        let capture = adapter
+            .capture_all_screens_with_cursor(false)
+            .expect("capture screen");
+
+        assert!(capture.image_path.exists());
+        assert!(capture.region.width > 0);
+        assert!(capture.region.height > 0);
+        std::fs::remove_file(capture.image_path).expect("remove captured image");
     }
 
     #[test]
