@@ -4,6 +4,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    thread,
+    time::Duration,
 };
 
 use gpui::{
@@ -363,6 +365,12 @@ impl OddSnapRustApp {
                 div()
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(self.capture_preferences_summary())),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(format!(
                         "Image format: {} · JPEG quality {}",
                         self.settings.capture_image_format.label(),
@@ -616,6 +624,16 @@ impl OddSnapRustApp {
     }
 
     fn run_capture(&mut self, mode: CaptureMode) {
+        if self.settings.capture_delay_seconds > 0 {
+            self.capture_status = format!(
+                "Waiting {}s before capture.",
+                self.settings.capture_delay_seconds
+            );
+            thread::sleep(Duration::from_secs(
+                self.settings.capture_delay_seconds as u64,
+            ));
+        }
+
         let platform = host_platform();
         #[cfg(target_os = "windows")]
         let result = {
@@ -849,6 +867,19 @@ impl OddSnapRustApp {
         format!("{base} · {microphone} · {desktop_audio}")
     }
 
+    fn capture_preferences_summary(&self) -> String {
+        format!(
+            "Capture prefs: default {} · delay {}s · cursor {} · crosshair {} · magnifier {} · toasts {} · UI scale {:.2}x",
+            self.settings.default_capture_mode.label(),
+            self.settings.capture_delay_seconds,
+            on_off(self.settings.show_cursor),
+            on_off(self.settings.show_crosshair_guides),
+            on_off(self.settings.show_capture_magnifier),
+            self.settings.toast_position.label(),
+            self.settings.ui_scale
+        )
+    }
+
     fn save_recording_history(&mut self, path: PathBuf, width: u32, height: u32) -> String {
         if !self.settings.save_history {
             let preview_path = create_video_thumbnail(&self.history_store, &path)
@@ -1076,5 +1107,13 @@ fn state_color(state: CapabilityState) -> u32 {
         CapabilityState::InProgress => 0xf4cf65,
         CapabilityState::Blocked => 0xff7a7a,
         CapabilityState::Planned => 0x8b93a3,
+    }
+}
+
+fn on_off(value: bool) -> &'static str {
+    if value {
+        "on"
+    } else {
+        "off"
     }
 }

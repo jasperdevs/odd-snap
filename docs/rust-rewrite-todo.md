@@ -102,6 +102,7 @@ Keep it updated whenever a rewrite milestone lands.
 ## Milestone 6 - Migration And Parity Closure
 
 - [x] Import existing save directory/history/copy/image-format/save-naming/recording settings into Rust settings.
+- [x] Import legacy capture UX preferences: delay, cursor, magnifier, crosshair, UI scale, toast position, default mode, startup/update toggles.
 - [ ] Import all existing settings.
 - [x] Import existing history.
 - [ ] Import existing media metadata where practical.

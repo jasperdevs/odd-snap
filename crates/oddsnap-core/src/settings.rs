@@ -95,6 +95,60 @@ impl RecordingQuality {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum DefaultCaptureMode {
+    #[default]
+    Rectangle,
+    Fullscreen,
+    ActiveWindow,
+    ColorPicker,
+    Ocr,
+    Scan,
+    Sticker,
+    Upscale,
+    Center,
+    Ruler,
+}
+
+impl DefaultCaptureMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Rectangle => "Rectangle",
+            Self::Fullscreen => "Fullscreen",
+            Self::ActiveWindow => "Active window",
+            Self::ColorPicker => "Color picker",
+            Self::Ocr => "OCR",
+            Self::Scan => "Scan",
+            Self::Sticker => "Sticker",
+            Self::Upscale => "Upscale",
+            Self::Center => "Center select",
+            Self::Ruler => "Ruler",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ToastPosition {
+    #[default]
+    Right,
+    Left,
+    TopLeft,
+    TopRight,
+}
+
+impl ToastPosition {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Right => "Right",
+            Self::Left => "Left",
+            Self::TopLeft => "Top left",
+            Self::TopRight => "Top right",
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum SettingsStoreError {
     #[error("failed to read settings: {0}")]
@@ -107,7 +161,7 @@ pub enum SettingsStoreError {
     Serialize(#[source] serde_json::Error),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppSettings {
     #[serde(default)]
     pub capture_output_directory: Option<PathBuf>,
@@ -143,6 +197,32 @@ pub struct AppSettings {
     pub capture_hotkey: String,
     #[serde(default)]
     pub recording_hotkey: Option<String>,
+    #[serde(default = "default_start_with_windows")]
+    pub start_with_windows: bool,
+    #[serde(default = "default_auto_check_for_updates")]
+    pub auto_check_for_updates: bool,
+    #[serde(default)]
+    pub capture_delay_seconds: u32,
+    #[serde(default)]
+    pub mute_sounds: bool,
+    #[serde(default)]
+    pub disable_animations: bool,
+    #[serde(default = "default_ui_scale")]
+    pub ui_scale: f64,
+    #[serde(default)]
+    pub show_crosshair_guides: bool,
+    #[serde(default)]
+    pub show_cursor: bool,
+    #[serde(default = "default_show_capture_magnifier")]
+    pub show_capture_magnifier: bool,
+    #[serde(default = "default_overlay_capture_all_monitors")]
+    pub overlay_capture_all_monitors: bool,
+    #[serde(default = "default_detect_windows")]
+    pub detect_windows: bool,
+    #[serde(default)]
+    pub default_capture_mode: DefaultCaptureMode,
+    #[serde(default)]
+    pub toast_position: ToastPosition,
 }
 
 impl Default for AppSettings {
@@ -165,6 +245,19 @@ impl Default for AppSettings {
             desktop_audio_device_id: None,
             capture_hotkey: default_capture_hotkey(),
             recording_hotkey: None,
+            start_with_windows: default_start_with_windows(),
+            auto_check_for_updates: default_auto_check_for_updates(),
+            capture_delay_seconds: 0,
+            mute_sounds: false,
+            disable_animations: false,
+            ui_scale: default_ui_scale(),
+            show_crosshair_guides: false,
+            show_cursor: false,
+            show_capture_magnifier: default_show_capture_magnifier(),
+            overlay_capture_all_monitors: default_overlay_capture_all_monitors(),
+            detect_windows: default_detect_windows(),
+            default_capture_mode: DefaultCaptureMode::Rectangle,
+            toast_position: ToastPosition::Right,
         }
     }
 }
@@ -212,6 +305,30 @@ fn default_record_desktop_audio() -> bool {
 
 fn default_capture_hotkey() -> String {
     "Alt+`".into()
+}
+
+fn default_start_with_windows() -> bool {
+    true
+}
+
+fn default_auto_check_for_updates() -> bool {
+    true
+}
+
+fn default_ui_scale() -> f64 {
+    1.0
+}
+
+fn default_show_capture_magnifier() -> bool {
+    true
+}
+
+fn default_overlay_capture_all_monitors() -> bool {
+    true
+}
+
+fn default_detect_windows() -> bool {
+    true
 }
 
 #[derive(Debug, Clone)]
@@ -326,7 +443,8 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        AppSettings, CaptureImageFormat, RecordingFormat, RecordingQuality, SettingsStore,
+        AppSettings, CaptureImageFormat, DefaultCaptureMode, RecordingFormat, RecordingQuality,
+        SettingsStore, ToastPosition,
     };
     use crate::{normalize_file_name_template, DEFAULT_FILE_NAME_TEMPLATE};
 
@@ -346,6 +464,19 @@ mod tests {
         assert!(settings.record_desktop_audio);
         assert_eq!(settings.capture_hotkey, "Alt+`");
         assert_eq!(settings.recording_hotkey, None);
+        assert!(settings.start_with_windows);
+        assert!(settings.auto_check_for_updates);
+        assert_eq!(settings.capture_delay_seconds, 0);
+        assert!(!settings.mute_sounds);
+        assert!(!settings.disable_animations);
+        assert_eq!(settings.ui_scale, 1.0);
+        assert!(!settings.show_crosshair_guides);
+        assert!(!settings.show_cursor);
+        assert!(settings.show_capture_magnifier);
+        assert!(settings.overlay_capture_all_monitors);
+        assert!(settings.detect_windows);
+        assert_eq!(settings.default_capture_mode, DefaultCaptureMode::Rectangle);
+        assert_eq!(settings.toast_position, ToastPosition::Right);
         assert!(settings.capture_output_directory.is_none());
     }
 
@@ -353,22 +484,7 @@ mod tests {
     fn capture_output_directory_uses_fallback_when_empty() {
         let settings = AppSettings {
             capture_output_directory: Some(PathBuf::new()),
-            copy_captures_to_clipboard: true,
-            save_history: true,
-            capture_image_format: CaptureImageFormat::Png,
-            jpeg_quality: 85,
-            save_in_monthly_folders: true,
-            file_name_template: DEFAULT_FILE_NAME_TEMPLATE.into(),
-            recording_format: RecordingFormat::Mp4,
-            recording_quality: RecordingQuality::Original,
-            recording_fps: 30,
-            gif_fps: 15,
-            record_microphone: false,
-            record_desktop_audio: true,
-            microphone_device_id: None,
-            desktop_audio_device_id: None,
-            capture_hotkey: "Alt+`".into(),
-            recording_hotkey: None,
+            ..AppSettings::default()
         };
 
         assert_eq!(
@@ -401,6 +517,19 @@ mod tests {
             desktop_audio_device_id: Some("desktop".into()),
             capture_hotkey: "Ctrl+Shift+S".into(),
             recording_hotkey: Some("Alt+R".into()),
+            start_with_windows: false,
+            auto_check_for_updates: false,
+            capture_delay_seconds: 5,
+            mute_sounds: true,
+            disable_animations: true,
+            ui_scale: 1.25,
+            show_crosshair_guides: true,
+            show_cursor: true,
+            show_capture_magnifier: false,
+            overlay_capture_all_monitors: false,
+            detect_windows: false,
+            default_capture_mode: DefaultCaptureMode::ActiveWindow,
+            toast_position: ToastPosition::TopRight,
         };
 
         store.save(&settings).expect("save settings");
@@ -428,22 +557,8 @@ mod tests {
     fn capture_image_format_uses_pascal_case_json() {
         let settings = AppSettings {
             capture_output_directory: None,
-            copy_captures_to_clipboard: true,
-            save_history: true,
             capture_image_format: CaptureImageFormat::Bmp,
-            jpeg_quality: 85,
-            save_in_monthly_folders: true,
-            file_name_template: DEFAULT_FILE_NAME_TEMPLATE.into(),
-            recording_format: RecordingFormat::Mp4,
-            recording_quality: RecordingQuality::Original,
-            recording_fps: 30,
-            gif_fps: 15,
-            record_microphone: false,
-            record_desktop_audio: true,
-            microphone_device_id: None,
-            desktop_audio_device_id: None,
-            capture_hotkey: "Alt+`".into(),
-            recording_hotkey: None,
+            ..AppSettings::default()
         };
 
         let json = serde_json::to_string(&settings).expect("serialize settings");
@@ -461,6 +576,14 @@ mod tests {
         assert_eq!(RecordingFormat::Mkv.extension(), "mkv");
         assert_eq!(RecordingQuality::P1080.max_height(), Some(1080));
         assert_eq!(RecordingQuality::Original.max_height(), None);
+    }
+
+    #[test]
+    fn capture_mode_and_toast_position_labels_are_stable() {
+        assert_eq!(DefaultCaptureMode::Rectangle.label(), "Rectangle");
+        assert_eq!(DefaultCaptureMode::ActiveWindow.label(), "Active window");
+        assert_eq!(ToastPosition::Right.label(), "Right");
+        assert_eq!(ToastPosition::TopLeft.label(), "Top left");
     }
 
     #[test]

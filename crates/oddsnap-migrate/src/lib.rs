@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use oddsnap_core::{
-    normalize_file_name_template, AppSettings, CaptureImageFormat, HistoryEntry, HistoryIndex,
-    HistoryKind, RecordingFormat, RecordingQuality,
+    normalize_file_name_template, AppSettings, CaptureImageFormat, DefaultCaptureMode,
+    HistoryEntry, HistoryIndex, HistoryKind, RecordingFormat, RecordingQuality, ToastPosition,
 };
 use rusqlite::Connection;
 use serde_json::Value;
@@ -236,6 +236,78 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
         import.raw.get("GifHotkeyModifiers"),
         import.raw.get("GifHotkeyKey"),
     );
+
+    if let Some(start_with_windows) = import.raw.get("StartWithWindows").and_then(Value::as_bool) {
+        settings.start_with_windows = start_with_windows;
+    }
+
+    if let Some(auto_check_for_updates) = import
+        .raw
+        .get("AutoCheckForUpdates")
+        .and_then(Value::as_bool)
+    {
+        settings.auto_check_for_updates = auto_check_for_updates;
+    }
+
+    if let Some(capture_delay_seconds) = import
+        .raw
+        .get("CaptureDelaySeconds")
+        .and_then(Value::as_u64)
+    {
+        settings.capture_delay_seconds = capture_delay_seconds.min(60) as u32;
+    }
+
+    if let Some(mute_sounds) = import.raw.get("MuteSounds").and_then(Value::as_bool) {
+        settings.mute_sounds = mute_sounds;
+    }
+
+    if let Some(disable_animations) = import.raw.get("DisableAnimations").and_then(Value::as_bool) {
+        settings.disable_animations = disable_animations;
+    }
+
+    if let Some(ui_scale) = import.raw.get("UiScale").and_then(Value::as_f64) {
+        settings.ui_scale = ui_scale.clamp(0.8, 1.4);
+    }
+
+    if let Some(show_crosshair_guides) = import
+        .raw
+        .get("ShowCrosshairGuides")
+        .and_then(Value::as_bool)
+    {
+        settings.show_crosshair_guides = show_crosshair_guides;
+    }
+
+    if let Some(show_cursor) = import.raw.get("ShowCursor").and_then(Value::as_bool) {
+        settings.show_cursor = show_cursor;
+    }
+
+    if let Some(show_capture_magnifier) = import
+        .raw
+        .get("ShowCaptureMagnifier")
+        .and_then(Value::as_bool)
+    {
+        settings.show_capture_magnifier = show_capture_magnifier;
+    }
+
+    if let Some(overlay_capture_all_monitors) = import
+        .raw
+        .get("OverlayCaptureAllMonitors")
+        .and_then(Value::as_bool)
+    {
+        settings.overlay_capture_all_monitors = overlay_capture_all_monitors;
+    }
+
+    if let Some(detect_windows) = import.raw.get("DetectWindows").and_then(Value::as_bool) {
+        settings.detect_windows = detect_windows;
+    }
+
+    if let Some(default_capture_mode) = import.raw.get("DefaultCaptureMode") {
+        settings.default_capture_mode = legacy_default_capture_mode(default_capture_mode);
+    }
+
+    if let Some(toast_position) = import.raw.get("ToastPosition") {
+        settings.toast_position = legacy_toast_position(toast_position);
+    }
 
     settings
 }
@@ -568,6 +640,54 @@ fn legacy_virtual_key_name(key: u32) -> Option<String> {
     }
 }
 
+fn legacy_default_capture_mode(value: &Value) -> DefaultCaptureMode {
+    match value {
+        Value::Number(number) => match number.as_u64() {
+            Some(1) => DefaultCaptureMode::Fullscreen,
+            Some(2) => DefaultCaptureMode::ActiveWindow,
+            Some(3) => DefaultCaptureMode::ColorPicker,
+            Some(4) => DefaultCaptureMode::Ocr,
+            Some(5) => DefaultCaptureMode::Scan,
+            Some(6) => DefaultCaptureMode::Sticker,
+            Some(7) => DefaultCaptureMode::Upscale,
+            Some(8) => DefaultCaptureMode::Center,
+            Some(9) => DefaultCaptureMode::Ruler,
+            _ => DefaultCaptureMode::Rectangle,
+        },
+        Value::String(name) if name.eq_ignore_ascii_case("Fullscreen") => {
+            DefaultCaptureMode::Fullscreen
+        }
+        Value::String(name) if name.eq_ignore_ascii_case("ActiveWindow") => {
+            DefaultCaptureMode::ActiveWindow
+        }
+        Value::String(name) if name.eq_ignore_ascii_case("ColorPicker") => {
+            DefaultCaptureMode::ColorPicker
+        }
+        Value::String(name) if name.eq_ignore_ascii_case("Ocr") => DefaultCaptureMode::Ocr,
+        Value::String(name) if name.eq_ignore_ascii_case("Scan") => DefaultCaptureMode::Scan,
+        Value::String(name) if name.eq_ignore_ascii_case("Sticker") => DefaultCaptureMode::Sticker,
+        Value::String(name) if name.eq_ignore_ascii_case("Upscale") => DefaultCaptureMode::Upscale,
+        Value::String(name) if name.eq_ignore_ascii_case("Center") => DefaultCaptureMode::Center,
+        Value::String(name) if name.eq_ignore_ascii_case("Ruler") => DefaultCaptureMode::Ruler,
+        _ => DefaultCaptureMode::Rectangle,
+    }
+}
+
+fn legacy_toast_position(value: &Value) -> ToastPosition {
+    match value {
+        Value::Number(number) => match number.as_u64() {
+            Some(1) => ToastPosition::Left,
+            Some(2) => ToastPosition::TopLeft,
+            Some(3) => ToastPosition::TopRight,
+            _ => ToastPosition::Right,
+        },
+        Value::String(name) if name.eq_ignore_ascii_case("Left") => ToastPosition::Left,
+        Value::String(name) if name.eq_ignore_ascii_case("TopLeft") => ToastPosition::TopLeft,
+        Value::String(name) if name.eq_ignore_ascii_case("TopRight") => ToastPosition::TopRight,
+        _ => ToastPosition::Right,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -575,7 +695,9 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{import_app_settings, read_legacy_settings, LegacyOddSnapPaths};
-    use oddsnap_core::{CaptureImageFormat, RecordingFormat, RecordingQuality};
+    use oddsnap_core::{
+        CaptureImageFormat, DefaultCaptureMode, RecordingFormat, RecordingQuality, ToastPosition,
+    };
 
     #[test]
     fn builds_paths_from_roaming_directory() {
@@ -616,7 +738,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}","RecordingFormat":2,"RecordingQuality":1,"RecordingFps":60,"GifFps":24,"RecordMicrophone":true,"RecordDesktopAudio":false,"MicrophoneDeviceId":"mic-1","DesktopAudioDeviceId":"desktop-1","HotkeyModifiers":5,"HotkeyKey":67,"GifHotkeyModifiers":1,"GifHotkeyKey":82}"#,
+            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}","RecordingFormat":2,"RecordingQuality":1,"RecordingFps":60,"GifFps":24,"RecordMicrophone":true,"RecordDesktopAudio":false,"MicrophoneDeviceId":"mic-1","DesktopAudioDeviceId":"desktop-1","HotkeyModifiers":5,"HotkeyKey":67,"GifHotkeyModifiers":1,"GifHotkeyKey":82,"StartWithWindows":false,"AutoCheckForUpdates":false,"CaptureDelaySeconds":5,"MuteSounds":true,"DisableAnimations":true,"UiScale":1.25,"ShowCrosshairGuides":true,"ShowCursor":true,"ShowCaptureMagnifier":false,"OverlayCaptureAllMonitors":false,"DetectWindows":false,"DefaultCaptureMode":"ActiveWindow","ToastPosition":3}"#,
         )
         .expect("write test settings");
 
@@ -647,6 +769,22 @@ mod tests {
         );
         assert_eq!(settings.capture_hotkey, "Alt+Shift+C");
         assert_eq!(settings.recording_hotkey.as_deref(), Some("Alt+R"));
+        assert!(!settings.start_with_windows);
+        assert!(!settings.auto_check_for_updates);
+        assert_eq!(settings.capture_delay_seconds, 5);
+        assert!(settings.mute_sounds);
+        assert!(settings.disable_animations);
+        assert_eq!(settings.ui_scale, 1.25);
+        assert!(settings.show_crosshair_guides);
+        assert!(settings.show_cursor);
+        assert!(!settings.show_capture_magnifier);
+        assert!(!settings.overlay_capture_all_monitors);
+        assert!(!settings.detect_windows);
+        assert_eq!(
+            settings.default_capture_mode,
+            DefaultCaptureMode::ActiveWindow
+        );
+        assert_eq!(settings.toast_position, ToastPosition::TopRight);
     }
 
     #[test]
@@ -718,6 +856,27 @@ mod tests {
 
         assert_eq!(settings.capture_hotkey, "Alt+`");
         assert_eq!(settings.recording_hotkey, None);
+    }
+
+    #[test]
+    fn imports_capture_preference_numbers_and_clamps_ui_values() {
+        let import = super::LegacySettingsImport {
+            source_path: PathBuf::from("settings.json"),
+            top_level_key_count: 4,
+            raw: serde_json::json!({
+                "CaptureDelaySeconds": 999,
+                "UiScale": 4.0,
+                "DefaultCaptureMode": 8,
+                "ToastPosition": "TopLeft"
+            }),
+        };
+
+        let settings = import_app_settings(&import);
+
+        assert_eq!(settings.capture_delay_seconds, 60);
+        assert_eq!(settings.ui_scale, 1.4);
+        assert_eq!(settings.default_capture_mode, DefaultCaptureMode::Center);
+        assert_eq!(settings.toast_position, ToastPosition::TopLeft);
     }
 
     #[test]

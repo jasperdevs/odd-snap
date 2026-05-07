@@ -22,7 +22,7 @@ pub use media::{
 };
 pub use native_ui::{NativeMaterial, NativeUiProfile};
 pub use settings::{
-    default_settings_path, AppSettings, CaptureImageFormat, RecordingFormat, RecordingQuality,
-    SettingDefinition, SettingsOptionDefinition, SettingsPageDefinition, SettingsSectionDefinition,
-    SettingsStore, SettingsStoreError, SettingsValueKind,
+    default_settings_path, AppSettings, CaptureImageFormat, DefaultCaptureMode, RecordingFormat,
+    RecordingQuality, SettingDefinition, SettingsOptionDefinition, SettingsPageDefinition,
+    SettingsSectionDefinition, SettingsStore, SettingsStoreError, SettingsValueKind, ToastPosition,
 };
