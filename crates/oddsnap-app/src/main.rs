@@ -1949,6 +1949,17 @@ fn start_capture_hotkey_listener(
     Option<oddsnap_platform_windows::WindowsHotkeyListener>,
     Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsHotkeyEvent>>,
 ) {
+    if let Err(error) = validate_unique_hotkey_bindings(
+        accelerator,
+        recording_accelerator,
+        fullscreen_accelerator,
+        active_window_accelerator,
+        picker_accelerator,
+        ocr_accelerator,
+    ) {
+        return (format!("Hotkey listener unavailable: {error}"), None, None);
+    }
+
     let (sender, receiver) = std::sync::mpsc::channel();
     match oddsnap_platform_windows::start_oddsnap_hotkey_listener(
         accelerator,
@@ -1988,6 +1999,17 @@ fn start_capture_hotkey_listener(
     Option<CrossPlatformHotkeyListener>,
     Option<std::sync::mpsc::Receiver<CrossPlatformHotkeyEvent>>,
 ) {
+    if let Err(error) = validate_unique_hotkey_bindings(
+        accelerator,
+        recording_accelerator,
+        fullscreen_accelerator,
+        active_window_accelerator,
+        picker_accelerator,
+        ocr_accelerator,
+    ) {
+        return (format!("Hotkey listener unavailable: {error}"), None, None);
+    }
+
     match start_cross_platform_hotkey_listener(
         accelerator,
         recording_accelerator,
@@ -2104,9 +2126,48 @@ fn parse_cross_platform_hotkey(accelerator: &str) -> Result<global_hotkey::hotke
     Ok(hotkey)
 }
 
-#[cfg(not(target_os = "windows"))]
 fn non_empty_hotkey(value: Option<&str>) -> Option<&str> {
     value.filter(|value| !value.trim().is_empty())
+}
+
+fn validate_unique_hotkey_bindings(
+    capture: &str,
+    recording: Option<&str>,
+    fullscreen: Option<&str>,
+    active_window: Option<&str>,
+    picker: Option<&str>,
+    ocr: Option<&str>,
+) -> Result<(), String> {
+    let mut seen = std::collections::HashMap::<String, &'static str>::new();
+    for (accelerator, label) in [
+        Some((capture, "capture")),
+        non_empty_hotkey(recording).map(|accelerator| (accelerator, "recording")),
+        non_empty_hotkey(fullscreen).map(|accelerator| (accelerator, "full-screen")),
+        non_empty_hotkey(active_window).map(|accelerator| (accelerator, "active-window")),
+        non_empty_hotkey(picker).map(|accelerator| (accelerator, "color-picker")),
+        non_empty_hotkey(ocr).map(|accelerator| (accelerator, "OCR")),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        let normalized = normalize_hotkey_for_duplicate_check(accelerator);
+        if let Some(previous) = seen.insert(normalized, label) {
+            return Err(format!(
+                "hotkey {accelerator} is assigned to both {previous} and {label}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_hotkey_for_duplicate_check(accelerator: &str) -> String {
+    let mut parts = accelerator
+        .split('+')
+        .map(|part| part.trim().to_ascii_lowercase())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    parts.sort();
+    parts.join("+")
 }
 
 #[cfg(target_os = "linux")]
@@ -2607,6 +2668,24 @@ mod tests {
                 Some("Alt+Shift+O")
             ),
             "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window, Alt+Shift+C color-picker, Alt+Shift+O OCR."
+        );
+    }
+
+    #[test]
+    fn duplicate_hotkeys_are_rejected_before_registration() {
+        let error = validate_unique_hotkey_bindings(
+            "Alt+Shift+S",
+            Some(" Shift + S + Alt "),
+            Some("Alt+Shift+F"),
+            None,
+            None,
+            None,
+        )
+        .expect_err("duplicate rejected");
+
+        assert_eq!(
+            error,
+            "hotkey  Shift + S + Alt  is assigned to both capture and recording"
         );
     }
 
