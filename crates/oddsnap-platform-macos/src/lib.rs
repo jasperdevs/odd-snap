@@ -1033,10 +1033,11 @@ mod tests {
     use oddsnap_core::{NativeMaterial, RecordingFormat, RecordingQuality};
     use oddsnap_platform::{
         ClipboardImageService, ClipboardTextService, ColorPickerService, HotkeyService,
-        OverlayWindowRequest, PermissionsService, PlatformAdapter, RegionOverlayService,
-        RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
-        WindowPickerService,
+        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
+        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
     };
+    #[cfg(not(target_os = "macos"))]
+    use oddsnap_platform::{PermissionsService, WindowPickerService};
 
     use super::MacosPlatform;
 

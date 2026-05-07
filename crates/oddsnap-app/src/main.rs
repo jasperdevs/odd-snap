@@ -2821,7 +2821,11 @@ mod tests {
 
     #[test]
     fn builds_history_reveal_command_for_current_platform() {
+        #[cfg(target_os = "windows")]
         let path = PathBuf::from(r"C:\captures\OddSnap.png");
+        #[cfg(not(target_os = "windows"))]
+        let path = PathBuf::from("/tmp/captures/OddSnap.png");
+
         let (program, args) = reveal_file_command(&path);
 
         #[cfg(target_os = "windows")]
@@ -2833,13 +2837,13 @@ mod tests {
         #[cfg(target_os = "macos")]
         {
             assert_eq!(program, "open");
-            assert_eq!(args, vec!["-R", r"C:\captures\OddSnap.png"]);
+            assert_eq!(args, vec!["-R", "/tmp/captures/OddSnap.png"]);
         }
 
         #[cfg(all(unix, not(target_os = "macos")))]
         {
             assert_eq!(program, "xdg-open");
-            assert_eq!(args, vec!["."]);
+            assert_eq!(args, vec!["/tmp/captures"]);
         }
     }
 

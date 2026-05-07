@@ -2785,12 +2785,16 @@ fn write_bmp(path: &Path, width: u32, height: u32, bgra: &[u8]) -> Result<(), Pl
 
 #[cfg(test)]
 mod tests {
-    use oddsnap_core::{CapabilityState, PlatformCapability, RecordingFormat, RecordingQuality};
+    use oddsnap_core::{CapabilityState, PlatformCapability};
+    #[cfg(target_os = "windows")]
+    use oddsnap_core::{RecordingFormat, RecordingQuality};
+    use oddsnap_platform::PlatformAdapter;
     #[cfg(target_os = "windows")]
     use oddsnap_platform::{ColorPickerService, ScreenshotExclusionService};
+    #[cfg(target_os = "windows")]
     use oddsnap_platform::{
-        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
-        VideoRecordingRequest, VideoRecordingService,
+        OverlayWindowRequest, RegionOverlayService, RegionSelectionService, VideoRecordingRequest,
+        VideoRecordingService,
     };
     #[cfg(target_os = "windows")]
     use windows::core::w;
