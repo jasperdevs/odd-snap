@@ -992,6 +992,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn macos_image_clipboard_reports_wrong_host() {
         let adapter = MacosPlatform;
 
@@ -1099,6 +1100,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "macos"))]
     fn macos_color_picker_reports_wrong_host() {
         let adapter = MacosPlatform;
 

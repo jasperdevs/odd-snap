@@ -20,8 +20,9 @@ Ubuntu runners need native desktop libraries before the GPUI app and future appi
 
 - `libgtk-3-dev`
 - `libxdo-dev`
-- `libappindicator3-dev`
 - `libayatana-appindicator3-dev`
+
+Do not install `libappindicator3-dev` and `libayatana-appindicator3-dev` together on Ubuntu 24.04 runners; their runtime packages conflict.
 
 Current Linux runtime foundations also expect optional host tools for feature use:
 

@@ -1063,6 +1063,7 @@ impl OddSnapRustApp {
         };
     }
 
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     fn run_capture_with_adapter<T>(
         &self,
         adapter: &T,
@@ -1562,6 +1563,10 @@ impl OddSnapRustApp {
         )
     }
 
+    #[cfg_attr(
+        all(not(target_os = "windows"), not(target_os = "linux")),
+        allow(dead_code)
+    )]
     fn recording_destination(&self, width: u32, height: u32) -> std::path::PathBuf {
         let stem = format_file_name_template(&self.settings.file_name_template, width, height);
         let file_name = format!("{}.{}", stem, self.settings.recording_format.extension());
@@ -1606,10 +1611,12 @@ impl OddSnapRustApp {
             self.start_recording_with_adapter(oddsnap_platform_linux::LinuxPlatform, target);
 
         #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
-        let result: Result<RecordingStart, oddsnap_platform::PlatformError> =
+        let result: Result<RecordingStart, oddsnap_platform::PlatformError> = {
+            let _ = target;
             Err(oddsnap_platform::PlatformError::Unsupported(
                 "desktop recording is not implemented on this platform yet",
-            ));
+            ))
+        };
 
         self.recording_status = match result {
             Ok(start) => {
