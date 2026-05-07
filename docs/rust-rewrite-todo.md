@@ -158,6 +158,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Google Translate API curl request/response path wired to recent OCR text rows when a migrated API key is present.
 - [x] Argos Translate runtime execution wired through the existing Python-backed legacy script flow.
 - [x] Open-source local translation runtime execution through the legacy M2M100/CTranslate2 Python runtime layout.
+- [x] GPUI controls can install/remove Argos and open-source local translation runtimes.
 - [ ] Image search.
 - [x] Core image-search query normalization, source filtering, scoring, and ranking ported from the legacy matcher.
 - [x] Core image-search index record, OCR status labels, diagnostics text, and match-source descriptions ported from legacy.

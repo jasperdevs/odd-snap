@@ -59,6 +59,10 @@ pub(crate) enum SettingsAction {
     ToggleImageSearchOcr,
     ToggleImageSearchExactMatch,
     ToggleImageSearchDiagnostics,
+    InstallArgosTranslationRuntime,
+    RemoveArgosTranslationRuntime,
+    InstallLocalTranslationRuntime,
+    RemoveLocalTranslationRuntime,
 }
 
 #[cfg(any(test, not(target_os = "windows")))]

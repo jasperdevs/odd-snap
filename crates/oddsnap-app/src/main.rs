@@ -623,6 +623,39 @@ impl OddSnapRustApp {
             )
             .child(
                 div()
+                    .flex()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "argos-translation-runtime-button",
+                        if ocr_translation::argos_runtime_is_installed() {
+                            "Remove Argos".into()
+                        } else {
+                            "Install Argos".into()
+                        },
+                        if ocr_translation::argos_runtime_is_installed() {
+                            SettingsAction::RemoveArgosTranslationRuntime
+                        } else {
+                            SettingsAction::InstallArgosTranslationRuntime
+                        },
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "local-translation-runtime-button",
+                        if ocr_translation::open_source_local_runtime_is_installed() {
+                            "Remove Local".into()
+                        } else {
+                            "Install Local".into()
+                        },
+                        if ocr_translation::open_source_local_runtime_is_installed() {
+                            SettingsAction::RemoveLocalTranslationRuntime
+                        } else {
+                            SettingsAction::InstallLocalTranslationRuntime
+                        },
+                    )),
+            )
+            .child(
+                div()
                     .text_size(px(12.0))
                     .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(format!(
@@ -1967,6 +2000,46 @@ impl OddSnapRustApp {
                     "Image search diagnostics {}",
                     on_off(self.settings.show_image_search_diagnostics)
                 ));
+            }
+            SettingsAction::InstallArgosTranslationRuntime => {
+                self.capture_status = match ocr_translation::install_argos_runtime() {
+                    Ok(()) => "Argos Translate installed.".into(),
+                    Err(error) => format!("Argos Translate install failed: {error}"),
+                };
+            }
+            SettingsAction::RemoveArgosTranslationRuntime => {
+                self.capture_status = match ocr_translation::remove_argos_runtime() {
+                    Ok(()) => "Argos Translate removed.".into(),
+                    Err(error) => format!("Argos Translate remove failed: {error}"),
+                };
+            }
+            SettingsAction::InstallLocalTranslationRuntime => {
+                self.capture_status = match ocr_translation::install_open_source_local_runtime() {
+                    Ok(()) => {
+                        self.settings.translation_runtime_installed = true;
+                        match self.settings_store.save(&self.settings) {
+                            Ok(()) => "Open-source local translation runtime installed.".into(),
+                            Err(error) => {
+                                format!("Open-source local runtime installed; settings save failed: {error}")
+                            }
+                        }
+                    }
+                    Err(error) => format!("Open-source local runtime install failed: {error}"),
+                };
+            }
+            SettingsAction::RemoveLocalTranslationRuntime => {
+                self.capture_status = match ocr_translation::remove_open_source_local_runtime() {
+                    Ok(()) => {
+                        self.settings.translation_runtime_installed = false;
+                        match self.settings_store.save(&self.settings) {
+                            Ok(()) => "Open-source local translation runtime removed.".into(),
+                            Err(error) => {
+                                format!("Open-source local runtime removed; settings save failed: {error}")
+                            }
+                        }
+                    }
+                    Err(error) => format!("Open-source local runtime remove failed: {error}"),
+                };
             }
         }
     }
