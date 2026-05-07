@@ -1610,7 +1610,15 @@ impl OddSnapRustApp {
         let result =
             self.start_recording_with_adapter(oddsnap_platform_linux::LinuxPlatform, target);
 
-        #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
+        #[cfg(target_os = "macos")]
+        let result =
+            self.start_recording_with_adapter(oddsnap_platform_macos::MacosPlatform, target);
+
+        #[cfg(all(
+            not(target_os = "windows"),
+            not(target_os = "linux"),
+            not(target_os = "macos")
+        ))]
         let result: Result<RecordingStart, oddsnap_platform::PlatformError> = {
             let _ = target;
             Err(oddsnap_platform::PlatformError::Unsupported(
@@ -2343,7 +2351,20 @@ fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Opti
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
+    if settings.record_desktop_audio {
+        (
+            settings.record_microphone,
+            false,
+            Some("system audio capture pending on macOS; recording without system audio"),
+        )
+    } else {
+        (settings.record_microphone, false, None)
+    }
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
 fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
     (
         settings.record_microphone,
@@ -2603,7 +2624,17 @@ mod tests {
             );
         }
 
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "macos")]
+        {
+            assert!(microphone);
+            assert!(!desktop_audio);
+            assert_eq!(
+                note,
+                Some("system audio capture pending on macOS; recording without system audio")
+            );
+        }
+
+        #[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
         {
             assert!(microphone);
             assert!(desktop_audio);

@@ -2,12 +2,15 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     path::PathBuf,
-    process::{Command, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
+    process::{Child, Command, Stdio},
+    thread,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(target_os = "macos")]
+use oddsnap_core::{build_recording_output_args, FfmpegRecordingRequest};
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
@@ -712,11 +715,286 @@ impl VideoRecordingService for MacosPlatform {
         &self,
         request: VideoRecordingRequest,
     ) -> Result<Box<dyn oddsnap_platform::VideoRecordingHandle>, PlatformError> {
-        let _ = request;
-        Err(PlatformError::Unsupported(
-            "macOS desktop recording is not implemented yet",
-        ))
+        #[cfg(target_os = "macos")]
+        {
+            start_macos_desktop_recording(request)
+                .map(|handle| Box::new(handle) as Box<dyn oddsnap_platform::VideoRecordingHandle>)
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = request;
+            Err(PlatformError::Unsupported(
+                "macOS desktop recording is only available on macOS",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug)]
+struct MacosVideoRecordingHandle {
+    child: Option<Child>,
+    temp_output_path: PathBuf,
+    output_path: PathBuf,
+    ffmpeg_path: PathBuf,
+    format: oddsnap_core::RecordingFormat,
+    quality: oddsnap_core::RecordingQuality,
+    fps: u32,
+    stderr_thread: Option<thread::JoinHandle<String>>,
+}
+
+#[cfg(target_os = "macos")]
+impl oddsnap_platform::VideoRecordingHandle for MacosVideoRecordingHandle {
+    fn output_path(&self) -> &Path {
+        &self.output_path
+    }
+
+    fn stop(&mut self) -> Result<oddsnap_platform::VideoRecordingResult, PlatformError> {
+        let Some(mut child) = self.child.take() else {
+            return Ok(oddsnap_platform::VideoRecordingResult {
+                output_path: self.output_path.clone(),
+            });
+        };
+
+        if let Err(error) = request_macos_recording_stop(&mut child) {
+            if let Some(thread) = self.stderr_thread.take() {
+                let _ = thread.join();
+            }
+            return Err(error);
+        }
+        let status = wait_for_macos_child_exit(&mut child, Duration::from_secs(30))?;
+        let stderr = self
+            .stderr_thread
+            .take()
+            .and_then(|thread| thread.join().ok())
+            .unwrap_or_default();
+
+        if !status.success() && !is_non_empty_file(&self.temp_output_path) {
+            return Err(PlatformError::Failed(format!(
+                "macOS screen recording failed with exit code {:?}: {}",
+                status.code(),
+                stderr.trim()
+            )));
+        }
+
+        transcode_macos_recording(
+            &self.ffmpeg_path,
+            &self.temp_output_path,
+            &self.output_path,
+            self.format,
+            self.quality,
+            self.fps,
+        )?;
+        let _ = fs::remove_file(&self.temp_output_path);
+
+        Ok(oddsnap_platform::VideoRecordingResult {
+            output_path: self.output_path.clone(),
+        })
+    }
+
+    fn cancel(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        if let Some(thread) = self.stderr_thread.take() {
+            let _ = thread.join();
+        }
+        let _ = fs::remove_file(&self.temp_output_path);
+        let _ = fs::remove_file(&self.output_path);
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for MacosVideoRecordingHandle {
+    fn drop(&mut self) {
+        if self.child.is_some() {
+            self.cancel();
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn start_macos_desktop_recording(
+    request: VideoRecordingRequest,
+) -> Result<MacosVideoRecordingHandle, PlatformError> {
+    if request.record_desktop_audio {
+        return Err(PlatformError::Unsupported(
+            "macOS system-audio recording is not implemented yet",
+        ));
+    }
+
+    if let Some(parent) = request.output_path.parent() {
+        fs::create_dir_all(parent).map_err(|source| {
+            PlatformError::Failed(format!("failed to create recording directory: {source}"))
+        })?;
+    }
+
+    let ffmpeg_path = oddsnap_core::discover_ffmpeg_tools()
+        .ok_or_else(|| PlatformError::Failed("FFmpeg not found on PATH".into()))?
+        .ffmpeg;
+    let temp_output_path = macos_recording_output_path();
+    let args = macos_screencapture_recording_args(&request, &temp_output_path);
+    let mut child = Command::new("screencapture")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|source| {
+            PlatformError::Failed(format!(
+                "failed to start macOS screencapture recording: {source}"
+            ))
+        })?;
+
+    let stderr = child.stderr.take();
+    let stderr_thread = stderr.map(|mut stderr| {
+        thread::spawn(move || {
+            let mut buffer = String::new();
+            let _ = stderr.read_to_string(&mut buffer);
+            buffer
+        })
+    });
+
+    Ok(MacosVideoRecordingHandle {
+        child: Some(child),
+        temp_output_path,
+        output_path: request.output_path,
+        ffmpeg_path,
+        format: request.format,
+        quality: request.quality,
+        fps: request.fps,
+        stderr_thread,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn macos_recording_output_path() -> PathBuf {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!(
+        "oddsnap-macos-recording-{}-{:09}.mov",
+        duration.as_secs(),
+        duration.subsec_nanos()
+    ))
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_screencapture_recording_args(
+    request: &VideoRecordingRequest,
+    output_path: &Path,
+) -> Vec<String> {
+    let fps = request.fps.clamp(1, 240).to_string();
+    let mut args = vec!["-x".to_string(), "-v".to_string(), "-F".to_string(), fps];
+    if let Some(region) = &request.region {
+        args.extend([
+            "-R".into(),
+            format!(
+                "{},{},{},{}",
+                region.x, region.y, region.width, region.height
+            ),
+        ]);
+    }
+    if request.record_microphone {
+        args.push("-g".into());
+    }
+    args.push(output_path.display().to_string());
+    args
+}
+
+#[cfg(target_os = "macos")]
+fn request_macos_recording_stop(child: &mut Child) -> Result<(), PlatformError> {
+    let status = Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .map_err(|source| {
+            PlatformError::Failed(format!("failed to request macOS recording stop: {source}"))
+        })?;
+    if status.success() {
+        Ok(())
+    } else {
+        let _ = child.kill();
+        Err(PlatformError::Failed(format!(
+            "failed to request macOS recording stop: kill exited with status {status}"
+        )))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_macos_child_exit(
+    child: &mut Child,
+    timeout: Duration,
+) -> Result<std::process::ExitStatus, PlatformError> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait().map_err(|source| {
+            PlatformError::Failed(format!("macOS recording wait failed: {source}"))
+        })? {
+            return Ok(status);
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(PlatformError::Failed(
+                "macOS screen recording did not stop within 30 seconds".into(),
+            ));
+        }
+
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn transcode_macos_recording(
+    ffmpeg_path: &Path,
+    input_path: &Path,
+    output_path: &Path,
+    format: oddsnap_core::RecordingFormat,
+    quality: oddsnap_core::RecordingQuality,
+    fps: u32,
+) -> Result<(), PlatformError> {
+    let args = build_recording_output_args(&FfmpegRecordingRequest {
+        input_args: vec![
+            "-hide_banner".into(),
+            "-i".into(),
+            input_path.display().to_string(),
+        ],
+        output_path: output_path.to_path_buf(),
+        format,
+        quality,
+        fps,
+    });
+    let output = Command::new(ffmpeg_path)
+        .args(args)
+        .output()
+        .map_err(|source| PlatformError::Failed(format!("failed to start FFmpeg: {source}")))?;
+
+    if !output.status.success() {
+        return Err(PlatformError::Failed(format!(
+            "FFmpeg macOS recording conversion failed with exit code {:?}: {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+
+    if is_non_empty_file(output_path) {
+        Ok(())
+    } else {
+        Err(PlatformError::Failed(format!(
+            "recording output is empty: {}",
+            output_path.display()
+        )))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn is_non_empty_file(path: &Path) -> bool {
+    fs::metadata(path)
+        .map(|metadata| metadata.len() > 0)
+        .unwrap_or(false)
 }
 
 impl RegionOverlayService for MacosPlatform {
@@ -1160,7 +1438,8 @@ mod tests {
     }
 
     #[test]
-    fn macos_recording_service_is_explicitly_unimplemented() {
+    #[cfg(not(target_os = "macos"))]
+    fn macos_recording_service_reports_wrong_host() {
         let adapter = MacosPlatform;
 
         let result = adapter.start_desktop_recording(VideoRecordingRequest {
@@ -1175,11 +1454,95 @@ mod tests {
             desktop_audio_device_id: None,
         });
         let error = match result {
-            Ok(_) => panic!("macOS recording should be pending"),
+            Ok(_) => panic!("macOS recording should be unavailable off macOS"),
             Err(error) => error,
         };
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on macOS"));
+    }
+
+    #[test]
+    fn macos_recording_args_use_native_video_capture() {
+        let args = super::macos_screencapture_recording_args(
+            &VideoRecordingRequest {
+                output_path: std::path::PathBuf::from("capture.mp4"),
+                region: Some(oddsnap_platform::CaptureRegion {
+                    x: -20,
+                    y: 30,
+                    width: 640,
+                    height: 480,
+                }),
+                format: RecordingFormat::Mp4,
+                quality: RecordingQuality::P720,
+                fps: 144,
+                record_microphone: true,
+                record_desktop_audio: false,
+                microphone_device_id: None,
+                desktop_audio_device_id: None,
+            },
+            std::path::Path::new("/tmp/oddsnap-recording.mov"),
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "-x",
+                "-v",
+                "-F",
+                "144",
+                "-R",
+                "-20,30,640,480",
+                "-g",
+                "/tmp/oddsnap-recording.mov"
+            ]
+        );
+    }
+
+    #[test]
+    #[ignore = "records the local macOS desktop through screencapture and FFmpeg"]
+    #[cfg(target_os = "macos")]
+    fn macos_desktop_recording_can_start_and_stop_if_ffmpeg_exists() {
+        if oddsnap_core::discover_ffmpeg_tools().is_none() {
+            return;
+        }
+
+        let adapter = MacosPlatform;
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-macos-recording-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp recording root");
+        let output_path = root.join("capture.mp4");
+        let mut handle = adapter
+            .start_desktop_recording(VideoRecordingRequest {
+                output_path: output_path.clone(),
+                region: Some(oddsnap_platform::CaptureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 320,
+                    height: 240,
+                }),
+                format: RecordingFormat::Mp4,
+                quality: RecordingQuality::Original,
+                fps: 30,
+                record_microphone: false,
+                record_desktop_audio: false,
+                microphone_device_id: None,
+                desktop_audio_device_id: None,
+            })
+            .expect("start macOS recording");
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let result = handle.stop().expect("stop macOS recording");
+
+        assert_eq!(result.output_path, output_path);
+        assert!(
+            std::fs::metadata(&result.output_path)
+                .expect("recording metadata")
+                .len()
+                > 0
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
