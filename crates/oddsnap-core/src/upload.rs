@@ -242,6 +242,7 @@ impl UploadDestination {
                 | Self::Ftp
                 | Self::S3Compatible
                 | Self::Sftp
+                | Self::GitHub
         )
     }
 }
@@ -485,6 +486,7 @@ pub struct CurlUploadRequest {
     pub provider_name: String,
     pub program: String,
     pub args: Vec<String>,
+    pub stdin_body: Option<Vec<u8>>,
     pub success_url: Option<String>,
 }
 
@@ -670,6 +672,7 @@ pub fn build_curl_upload_request_with_settings(
         "--write-out".into(),
         "\n%{http_code}".into(),
     ];
+    let mut stdin_body = None;
     let mut success_url = None;
 
     match destination {
@@ -926,6 +929,39 @@ pub fn build_curl_upload_request_with_settings(
                 upload_url,
             ]);
         }
+        UploadDestination::GitHub => {
+            let repo = github_repo(&settings.github_repo)?;
+            let token = settings.github_token.trim();
+            if token.is_empty() {
+                return Err(missing_upload_setting("GitHub token"));
+            }
+            let branch = github_branch(&settings.github_branch);
+            let path = github_upload_path(file_path, settings)?;
+            let body = std::fs::read(file_path)
+                .map_err(|error| format!("GitHub upload could not read file: {error}"))?;
+            let payload = serde_json::json!({
+                "message": format!("Add OddSnap upload {}", upload_file_name(file_path)?),
+                "content": base64_encode(&body),
+                "branch": branch,
+            });
+            stdin_body = Some(payload.to_string().into_bytes());
+            success_url = Some(github_raw_url(&repo, branch, &path));
+            args.extend([
+                "--request".into(),
+                "PUT".into(),
+                "--header".into(),
+                format!("Authorization: Bearer {token}"),
+                "--header".into(),
+                "Accept: application/vnd.github+json".into(),
+                "--header".into(),
+                "X-GitHub-Api-Version: 2022-11-28".into(),
+                "--header".into(),
+                "Content-Type: application/json".into(),
+                "--data-binary".into(),
+                "@-".into(),
+                github_contents_url(&repo, &path),
+            ]);
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -933,6 +969,7 @@ pub fn build_curl_upload_request_with_settings(
         provider_name: destination.display_name(),
         program: "curl".into(),
         args,
+        stdin_body,
         destination,
         success_url,
     })
@@ -1118,6 +1155,31 @@ pub fn parse_upload_response_with_settings(
                 }
             }
             Err(json_error_message("Gofile", &node))
+        }
+        UploadDestination::GitHub => {
+            let node: Value = serde_json::from_str(body)
+                .map_err(|error| format!("GitHub returned invalid JSON: {error}"))?;
+            let url = node
+                .get("content")
+                .and_then(|content| content.get("download_url"))
+                .and_then(Value::as_str);
+            if let Some(url) = url {
+                return parse_plain_url("GitHub", url)
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+
+            let path = node
+                .get("content")
+                .and_then(|content| content.get("path"))
+                .and_then(Value::as_str);
+            if let Some(path) = path {
+                let repo = github_repo(&settings.github_repo)?;
+                let branch = github_branch(&settings.github_branch);
+                return parse_plain_url("GitHub", &github_raw_url(&repo, branch, path))
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+
+            Err(json_error_message("GitHub", &node))
         }
         UploadDestination::CustomHttp => {
             let response_path = settings.custom_response_url_path.trim();
@@ -1318,6 +1380,50 @@ fn s3_object_key(file_path: &Path, settings: &UploadSettings) -> Result<String, 
     } else {
         format!("{prefix}/oddsnap/{file_name}")
     })
+}
+
+fn github_repo(value: &str) -> Result<String, String> {
+    let repo = value.trim().trim_matches('/');
+    if repo.is_empty() {
+        return Err(missing_upload_setting("GitHub repo"));
+    }
+    if repo.split('/').count() != 2 {
+        return Err("GitHub repo must use owner/name format.".into());
+    }
+    Ok(repo.into())
+}
+
+fn github_branch(value: &str) -> &str {
+    let branch = value.trim();
+    if branch.is_empty() {
+        "main"
+    } else {
+        branch
+    }
+}
+
+fn github_upload_path(file_path: &Path, settings: &UploadSettings) -> Result<String, String> {
+    let file_name = upload_file_name(file_path)?;
+    let prefix = settings.github_path_prefix.trim().trim_matches('/');
+    Ok(if prefix.is_empty() {
+        file_name
+    } else {
+        format!("{prefix}/{file_name}")
+    })
+}
+
+fn github_contents_url(repo: &str, path: &str) -> String {
+    append_url_path_segments(
+        &format!("https://api.github.com/repos/{repo}/contents"),
+        [path],
+    )
+}
+
+fn github_raw_url(repo: &str, branch: &str, path: &str) -> String {
+    append_url_path_segments(
+        &format!("https://raw.githubusercontent.com/{repo}/{branch}"),
+        [path],
+    )
 }
 
 fn percent_encode_path_component(value: &str) -> String {
@@ -1994,6 +2100,50 @@ mod tests {
     }
 
     #[test]
+    fn builds_github_curl_upload_request_with_json_stdin() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-github-upload-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let path = root.join("capture.png");
+        fs::write(&path, b"png").expect("write upload file");
+
+        let request = build_curl_upload_request_with_settings(
+            UploadDestination::GitHub,
+            &path,
+            &UploadSettings {
+                github_token: "ghp_secret".into(),
+                github_repo: "owner/repo".into(),
+                github_branch: "trunk".into(),
+                github_path_prefix: "captures".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build github");
+
+        assert!(request.args.contains(&"PUT".into()));
+        assert!(request
+            .args
+            .contains(&"Authorization: Bearer ghp_secret".into()));
+        assert!(request.args.contains(&"--data-binary".into()));
+        assert!(request.args.contains(&"@-".into()));
+        assert!(request.args.contains(
+            &"https://api.github.com/repos/owner/repo/contents/captures/capture.png".into()
+        ));
+        assert_eq!(
+            request.success_url.as_deref(),
+            Some("https://raw.githubusercontent.com/owner/repo/trunk/captures/capture.png")
+        );
+
+        let body = String::from_utf8(request.stdin_body.expect("json body")).expect("utf8 body");
+        assert!(body.contains("\"branch\":\"trunk\""));
+        assert!(body.contains("\"content\":\"cG5n\""));
+        assert!(body.contains("\"message\":\"Add OddSnap upload capture.png\""));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn parses_upload_responses_for_public_hosts() {
         assert_eq!(
             parse_upload_response(
@@ -2057,6 +2207,21 @@ mod tests {
             .expect("parse custom fallback response")
             .url,
             "https://cdn.example.test/fallback.png"
+        );
+
+        assert_eq!(
+            parse_upload_response_with_settings(
+                UploadDestination::GitHub,
+                r#"{"content":{"path":"captures/capture.png"}}"#,
+                &UploadSettings {
+                    github_repo: "owner/repo".into(),
+                    github_branch: "trunk".into(),
+                    ..UploadSettings::default()
+                },
+            )
+            .expect("parse github fallback response")
+            .url,
+            "https://raw.githubusercontent.com/owner/repo/trunk/captures/capture.png"
         );
 
         assert_eq!(

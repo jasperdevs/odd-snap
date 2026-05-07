@@ -2,6 +2,7 @@
 
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -2864,18 +2865,45 @@ fn run_curl_upload(
 ) -> Result<oddsnap_core::UploadSuccess, String> {
     let request =
         oddsnap_core::build_curl_upload_request_with_settings(destination, path, settings)?;
-    let output = Command::new(&request.program)
-        .args(&request.args)
-        .stdin(Stdio::null())
+    let mut command = Command::new(&request.program);
+    command.args(&request.args);
+    if request.stdin_body.is_some() {
+        command.stdin(Stdio::piped());
+    } else {
+        command.stdin(Stdio::null());
+    }
+    let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
         .map_err(|error| {
             format!(
                 "{} upload could not start curl: {error}",
                 request.provider_name
             )
         })?;
+
+    if let Some(body) = &request.stdin_body {
+        let mut stdin = child.stdin.take().ok_or_else(|| {
+            format!(
+                "{} upload could not open curl stdin.",
+                request.provider_name
+            )
+        })?;
+        stdin.write_all(body).map_err(|error| {
+            format!(
+                "{} upload could not write curl body: {error}",
+                request.provider_name
+            )
+        })?;
+    }
+
+    let output = child.wait_with_output().map_err(|error| {
+        format!(
+            "{} upload failed while waiting for curl: {error}",
+            request.provider_name
+        )
+    })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
