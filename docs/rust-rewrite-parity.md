@@ -76,6 +76,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows has a Rust platform service boundary for starting/stopping FFmpeg-backed desktop video recordings from the GPUI shell.
 - Windows FFmpeg recording requests can carry capture-region bounds into `gdigrab` offset/video-size arguments.
 - Linux has an X11 FFmpeg-backed desktop recording foundation through `x11grab`, including explicit-region bounds for full-screen and active-window recording requests.
+- Linux recording falls back to video-only when imported settings request microphone or desktop audio, instead of blocking the whole recording before audio capture parity lands.
 - GPUI can start active-window recording through the explicit-region FFmpeg path.
 - Rust recording history can store FFmpeg-generated JPG thumbnails for saved GIF/video entries.
 - GPUI can persistently cycle implemented recording preferences for format and quality.

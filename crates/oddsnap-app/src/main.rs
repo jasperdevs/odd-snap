@@ -110,6 +110,14 @@ struct ActiveRecording {
     height: u32,
 }
 
+struct RecordingStart {
+    handle: Box<dyn VideoRecordingHandle>,
+    width: u32,
+    height: u32,
+    target: RecordingTarget,
+    note: Option<&'static str>,
+}
+
 #[cfg(not(target_os = "windows"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CrossPlatformHotkeyEvent {
@@ -1598,23 +1606,29 @@ impl OddSnapRustApp {
             self.start_recording_with_adapter(oddsnap_platform_linux::LinuxPlatform, target);
 
         #[cfg(all(not(target_os = "windows"), not(target_os = "linux")))]
-        let result: Result<
-            (Box<dyn VideoRecordingHandle>, u32, u32, RecordingTarget),
-            oddsnap_platform::PlatformError,
-        > = Err(oddsnap_platform::PlatformError::Unsupported(
-            "desktop recording is not implemented on this platform yet",
-        ));
+        let result: Result<RecordingStart, oddsnap_platform::PlatformError> =
+            Err(oddsnap_platform::PlatformError::Unsupported(
+                "desktop recording is not implemented on this platform yet",
+            ));
 
         self.recording_status = match result {
-            Ok((handle, width, height, target)) => {
-                let path = handle.output_path().display().to_string();
+            Ok(start) => {
+                let path = start.handle.output_path().display().to_string();
                 self.active_recording = Some(ActiveRecording {
-                    handle,
-                    width,
-                    height,
+                    handle: start.handle,
+                    width: start.width,
+                    height: start.height,
                 });
                 self.sync_tray_recording_state();
-                format!("Recording {} started: {path}", target.label())
+                match start.note {
+                    Some(note) => {
+                        format!(
+                            "Recording {} started: {path} ({note})",
+                            start.target.label()
+                        )
+                    }
+                    None => format!("Recording {} started: {path}", start.target.label()),
+                }
             }
             Err(error) => format!("Recording failed to start: {error}"),
         };
@@ -1625,10 +1639,7 @@ impl OddSnapRustApp {
         &self,
         adapter: T,
         target: RecordingTarget,
-    ) -> Result<
-        (Box<dyn VideoRecordingHandle>, u32, u32, RecordingTarget),
-        oddsnap_platform::PlatformError,
-    >
+    ) -> Result<RecordingStart, oddsnap_platform::PlatformError>
     where
         T: ScreenCaptureService + WindowPickerService + VideoRecordingService,
     {
@@ -1649,19 +1660,28 @@ impl OddSnapRustApp {
         } else {
             self.settings.recording_fps
         };
+        let (record_microphone, record_desktop_audio, note) =
+            recording_audio_request_for_host(&self.settings);
+
         let handle = adapter.start_desktop_recording(VideoRecordingRequest {
             output_path,
             region: Some(region.clone()),
             format: self.settings.recording_format,
             quality: self.settings.recording_quality,
             fps,
-            record_microphone: self.settings.record_microphone,
-            record_desktop_audio: self.settings.record_desktop_audio,
+            record_microphone,
+            record_desktop_audio,
             microphone_device_id: self.settings.microphone_device_id.clone(),
             desktop_audio_device_id: self.settings.desktop_audio_device_id.clone(),
         })?;
 
-        Ok((handle, region.width, region.height, target))
+        Ok(RecordingStart {
+            handle,
+            width: region.width,
+            height: region.height,
+            target,
+            note,
+        })
     }
 
     fn stop_recording(&mut self) {
@@ -2265,6 +2285,28 @@ fn next_recording_quality(quality: RecordingQuality) -> RecordingQuality {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
+    if settings.record_microphone || settings.record_desktop_audio {
+        (
+            false,
+            false,
+            Some("audio capture pending on Linux; recording video only"),
+        )
+    } else {
+        (false, false, None)
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
+    (
+        settings.record_microphone,
+        settings.record_desktop_audio,
+        None,
+    )
+}
+
 fn hotkey_capture_mode(default_mode: DefaultCaptureMode) -> CaptureMode {
     match default_mode {
         DefaultCaptureMode::ActiveWindow => CaptureMode::ActiveWindow,
@@ -2469,6 +2511,33 @@ mod tests {
     fn recording_target_labels_are_stable() {
         assert_eq!(RecordingTarget::FullScreen.label(), "desktop");
         assert_eq!(RecordingTarget::ActiveWindow.label(), "active window");
+    }
+
+    #[test]
+    fn recording_audio_request_matches_host_support() {
+        let settings = AppSettings {
+            record_microphone: true,
+            record_desktop_audio: true,
+            ..AppSettings::default()
+        };
+        let (microphone, desktop_audio, note) = recording_audio_request_for_host(&settings);
+
+        #[cfg(target_os = "linux")]
+        {
+            assert!(!microphone);
+            assert!(!desktop_audio);
+            assert_eq!(
+                note,
+                Some("audio capture pending on Linux; recording video only")
+            );
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert!(microphone);
+            assert!(desktop_audio);
+            assert_eq!(note, None);
+        }
     }
 
     #[test]

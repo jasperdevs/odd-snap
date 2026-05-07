@@ -707,12 +707,6 @@ impl Drop for LinuxVideoRecordingHandle {
 fn start_linux_desktop_recording(
     request: VideoRecordingRequest,
 ) -> Result<LinuxVideoRecordingHandle, PlatformError> {
-    if request.record_microphone || request.record_desktop_audio {
-        return Err(PlatformError::Unsupported(
-            "Linux audio recording is not implemented yet",
-        ));
-    }
-
     if let Some(parent) = request.output_path.parent() {
         fs::create_dir_all(parent).map_err(|source| {
             PlatformError::Failed(format!("failed to create recording directory: {source}"))
@@ -1389,6 +1383,28 @@ mod tests {
         assert!(args
             .windows(2)
             .any(|pair| pair == ["-i".to_string(), ":0".to_string()]));
+    }
+
+    #[test]
+    fn linux_recording_args_ignore_audio_flags_until_audio_capture_lands() {
+        let args = super::linux_desktop_recording_args_for_display(
+            &VideoRecordingRequest {
+                output_path: std::path::PathBuf::from("/tmp/oddsnap-recording.mp4"),
+                region: None,
+                format: RecordingFormat::Mp4,
+                quality: RecordingQuality::Original,
+                fps: 30,
+                record_microphone: true,
+                record_desktop_audio: true,
+                microphone_device_id: Some("mic".into()),
+                desktop_audio_device_id: Some("desktop".into()),
+            },
+            ":0",
+        );
+
+        assert!(args.windows(2).any(|pair| pair == ["-f", "x11grab"]));
+        assert!(!args.iter().any(|arg| arg.contains("pulse")));
+        assert!(!args.iter().any(|arg| arg.contains("alsa")));
     }
 
     #[test]
