@@ -161,6 +161,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed credentialed Imgur and ImgBB upload request/response support using imported upload settings.
 - [x] Curl-backed credentialed Gyazo and imgpile upload request/response support using imported upload settings.
 - [x] Curl-backed custom HTTP multipart uploads with imported field name, headers, and response URL extraction.
+- [x] Curl-backed WebDAV and Azure Blob SAS uploads with imported credentials/URLs and empty-success response handling.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.

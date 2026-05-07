@@ -3052,15 +3052,20 @@ fn run_curl_upload(
         });
     }
 
-    oddsnap_core::parse_curl_upload_output_with_settings(request.destination, &stdout, settings)
-        .map_err(|error| {
-            let stderr = stderr.trim();
-            if stderr.is_empty() {
-                error
-            } else {
-                format!("{error}; curl: {stderr}")
-            }
-        })
+    oddsnap_core::parse_curl_upload_output_with_success_url(
+        request.destination,
+        &stdout,
+        settings,
+        request.success_url.as_deref(),
+    )
+    .map_err(|error| {
+        let stderr = stderr.trim();
+        if stderr.is_empty() {
+            error
+        } else {
+            format!("{error}; curl: {stderr}")
+        }
+    })
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]

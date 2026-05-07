@@ -213,6 +213,9 @@ impl UploadDestination {
             {
                 Some("S3 uploads require an HTTPS endpoint.".into())
             }
+            Self::AzureBlob if !is_https_url(&settings.azure_blob_sas_url) => {
+                Some("Azure Blob uploads require an HTTPS SAS URL.".into())
+            }
             Self::Unknown(value) => Some(format!(
                 "Unknown upload destination '{value}'. Choose a supported destination in Settings -> Uploads."
             )),
@@ -234,6 +237,8 @@ impl UploadDestination {
                 | Self::TmpFiles
                 | Self::Gofile
                 | Self::CustomHttp
+                | Self::WebDav
+                | Self::AzureBlob
         )
     }
 }
@@ -477,6 +482,7 @@ pub struct CurlUploadRequest {
     pub provider_name: String,
     pub program: String,
     pub args: Vec<String>,
+    pub success_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -661,6 +667,7 @@ pub fn build_curl_upload_request_with_settings(
         "--write-out".into(),
         "\n%{http_code}".into(),
     ];
+    let mut success_url = None;
 
     match destination {
         UploadDestination::Imgur => {
@@ -791,6 +798,50 @@ pub fn build_curl_upload_request_with_settings(
                 upload_url.into(),
             ]);
         }
+        UploadDestination::WebDav => {
+            let base_url = settings.web_dav_url.trim();
+            if base_url.is_empty() {
+                return Err(missing_upload_setting("WebDAV URL"));
+            }
+            if !is_https_url(base_url) {
+                return Err("WebDAV uploads require an HTTPS URL.".into());
+            }
+            let username = settings.web_dav_username.trim();
+            if username.is_empty() {
+                return Err(missing_upload_setting("WebDAV username"));
+            }
+            let file_name = upload_file_name(file_path)?;
+            let upload_url = append_url_path(base_url, &file_name);
+            success_url = Some(if settings.web_dav_public_url.trim().is_empty() {
+                upload_url.clone()
+            } else {
+                append_url_path(settings.web_dav_public_url.trim(), &file_name)
+            });
+            args.extend([
+                "--request".into(),
+                "PUT".into(),
+                "--user".into(),
+                format!("{username}:{}", settings.web_dav_password),
+                "--upload-file".into(),
+                file_path.display().to_string(),
+                upload_url,
+            ]);
+        }
+        UploadDestination::AzureBlob => {
+            let file_name = upload_file_name(file_path)?;
+            let (upload_url, public_url) =
+                azure_blob_urls(&settings.azure_blob_sas_url, &file_name)?;
+            success_url = Some(public_url);
+            args.extend([
+                "--request".into(),
+                "PUT".into(),
+                "--header".into(),
+                "x-ms-blob-type: BlockBlob".into(),
+                "--upload-file".into(),
+                file_path.display().to_string(),
+                upload_url,
+            ]);
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -799,6 +850,7 @@ pub fn build_curl_upload_request_with_settings(
         program: "curl".into(),
         args,
         destination,
+        success_url,
     })
 }
 
@@ -814,6 +866,15 @@ pub fn parse_curl_upload_output_with_settings(
     output: &str,
     settings: &UploadSettings,
 ) -> Result<UploadSuccess, String> {
+    parse_curl_upload_output_with_success_url(destination, output, settings, None)
+}
+
+pub fn parse_curl_upload_output_with_success_url(
+    destination: UploadDestination,
+    output: &str,
+    settings: &UploadSettings,
+    success_url: Option<&str>,
+) -> Result<UploadSuccess, String> {
     let (body, status_code) = split_curl_body_and_status(output)?;
     if !(200..300).contains(&status_code) {
         return Err(build_upload_error(
@@ -823,7 +884,20 @@ pub fn parse_curl_upload_output_with_settings(
         ));
     }
 
-    parse_upload_response_with_settings(destination, body, settings)
+    match parse_upload_response_with_settings(destination.clone(), body, settings) {
+        Ok(success) => Ok(success),
+        Err(error) if body.trim().is_empty() => {
+            if let Some(url) = success_url {
+                parse_plain_url(&destination.display_name(), url).map(|url| UploadSuccess {
+                    url,
+                    provider_name: destination.display_name(),
+                })
+            } else {
+                Err(error)
+            }
+        }
+        Err(error) => Err(error),
+    }
 }
 
 pub fn parse_upload_response(
@@ -1049,6 +1123,59 @@ fn percent_encode_url(value: &str) -> String {
 
 fn curl_file_form(field_name: &str, file_path: &Path) -> String {
     format!("{field_name}=@{}", file_path.display())
+}
+
+fn upload_file_name(file_path: &Path) -> Result<String, String> {
+    file_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "upload file path must include a file name.".into())
+}
+
+fn append_url_path(base_url: &str, file_name: &str) -> String {
+    format!(
+        "{}/{}",
+        base_url.trim_end_matches('/'),
+        percent_encode_path_component(file_name)
+    )
+}
+
+fn azure_blob_urls(sas_base_url: &str, file_name: &str) -> Result<(String, String), String> {
+    let trimmed = sas_base_url.trim();
+    if trimmed.is_empty() {
+        return Err(missing_upload_setting("Azure Blob SAS URL"));
+    }
+    if !is_https_url(trimmed) {
+        return Err("Azure Blob uploads require an HTTPS SAS URL.".into());
+    }
+
+    let (base, query) = trimmed
+        .split_once('?')
+        .map_or((trimmed, ""), |(base, query)| (base, query));
+    let public_url = append_url_path(base, file_name);
+    let upload_url = if query.is_empty() {
+        public_url.clone()
+    } else {
+        format!("{public_url}?{query}")
+    };
+    Ok((upload_url, public_url))
+}
+
+fn percent_encode_path_component(value: &str) -> String {
+    value
+        .bytes()
+        .flat_map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                vec![byte as char]
+            }
+            _ => {
+                let encoded = format!("%{byte:02X}");
+                encoded.chars().collect()
+            }
+        })
+        .collect()
 }
 
 fn split_curl_body_and_status(output: &str) -> Result<(&str, u16), String> {
@@ -1544,6 +1671,47 @@ mod tests {
             },
         )
         .is_err());
+
+        let webdav = build_curl_upload_request_with_settings(
+            UploadDestination::WebDav,
+            &path,
+            &UploadSettings {
+                web_dav_url: "https://dav.example.test/uploads".into(),
+                web_dav_username: "user".into(),
+                web_dav_password: "pass".into(),
+                web_dav_public_url: "https://cdn.example.test/uploads".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build webdav");
+        assert!(webdav.args.contains(&"PUT".into()));
+        assert!(webdav.args.contains(&"user:pass".into()));
+        assert!(webdav.args.contains(&"capture.png".into()));
+        assert!(webdav
+            .args
+            .contains(&"https://dav.example.test/uploads/capture.png".into()));
+        assert_eq!(
+            webdav.success_url.as_deref(),
+            Some("https://cdn.example.test/uploads/capture.png")
+        );
+
+        let azure = build_curl_upload_request_with_settings(
+            UploadDestination::AzureBlob,
+            &path,
+            &UploadSettings {
+                azure_blob_sas_url: "https://blob.example.test/container?sig=secret".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build azure");
+        assert!(azure.args.contains(&"x-ms-blob-type: BlockBlob".into()));
+        assert!(azure
+            .args
+            .contains(&"https://blob.example.test/container/capture.png?sig=secret".into()));
+        assert_eq!(
+            azure.success_url.as_deref(),
+            Some("https://blob.example.test/container/capture.png")
+        );
     }
 
     #[test]
@@ -1664,5 +1832,14 @@ mod tests {
                 .expect_err("status should fail"),
             "Catbox rate limit reached"
         );
+
+        let success = parse_curl_upload_output_with_success_url(
+            UploadDestination::WebDav,
+            "\n201",
+            &UploadSettings::default(),
+            Some("https://cdn.example.test/capture.png"),
+        )
+        .expect("parse empty success response");
+        assert_eq!(success.url, "https://cdn.example.test/capture.png");
     }
 }
