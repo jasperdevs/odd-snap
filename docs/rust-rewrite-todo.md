@@ -160,6 +160,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed public upload hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and temporary-host fallback.
 - [x] Curl-backed credentialed Imgur and ImgBB upload request/response support using imported upload settings.
 - [x] Curl-backed credentialed Gyazo and imgpile upload request/response support using imported upload settings.
+- [x] Curl-backed custom HTTP multipart uploads with imported field name, headers, and response URL extraction.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.

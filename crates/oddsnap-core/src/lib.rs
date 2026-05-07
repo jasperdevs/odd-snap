@@ -46,8 +46,9 @@ pub use translation::{
 };
 pub use upload::{
     build_curl_upload_request, build_curl_upload_request_with_settings, build_google_lens_url,
-    normalize_ai_chat_upload_destination, parse_curl_upload_output, parse_upload_response,
-    should_upload_media, temporary_host_fallbacks, upload_preflight_for_explicit_media,
-    upload_preflight_for_media, AiChatProvider, CurlUploadRequest, UploadDestination,
-    UploadPreflight, UploadSettings, UploadSuccess,
+    normalize_ai_chat_upload_destination, parse_curl_upload_output,
+    parse_curl_upload_output_with_settings, parse_upload_response,
+    parse_upload_response_with_settings, should_upload_media, temporary_host_fallbacks,
+    upload_preflight_for_explicit_media, upload_preflight_for_media, AiChatProvider,
+    CurlUploadRequest, UploadDestination, UploadPreflight, UploadSettings, UploadSuccess,
 };

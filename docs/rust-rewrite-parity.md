@@ -109,6 +109,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust can auto-upload saved media to curl-backed public hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and the temporary-host fallback chain, then persist the returned link in history.
 - Rust can build and parse curl-backed Imgur and ImgBB uploads from imported upload settings, including Imgur Client-ID/Bearer auth and ImgBB API-key uploads.
 - Rust can build and parse curl-backed Gyazo and imgpile uploads from imported upload settings, including Gyazo access-token and imgpile bearer-token uploads.
+- Rust can build and parse curl-backed custom HTTP multipart uploads from imported custom URL, field name, headers, and response URL path settings.
 - Rust core now ports the legacy OCR line-layout formatter that orders recognized lines, preserves paragraph gaps, and retains indentation in copied/viewed text.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Rust core now ports the legacy image-search query matcher for normalization, file-name/OCR source filtering, scoring, exact-match behavior, and newest-first tie-breaking.

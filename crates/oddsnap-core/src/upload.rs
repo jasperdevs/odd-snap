@@ -233,6 +233,7 @@ impl UploadDestination {
                 | Self::Uguu
                 | Self::TmpFiles
                 | Self::Gofile
+                | Self::CustomHttp
         )
     }
 }
@@ -765,6 +766,31 @@ pub fn build_curl_upload_request_with_settings(
                 "https://upload.gofile.io/uploadfile".into(),
             ]);
         }
+        UploadDestination::CustomHttp => {
+            let upload_url = settings.custom_upload_url.trim();
+            if upload_url.is_empty() {
+                return Err(missing_upload_setting("Custom upload URL"));
+            }
+            for line in settings
+                .custom_headers
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+            {
+                let (name, value) = parse_custom_upload_header(line)?;
+                args.extend(["--header".into(), format!("{name}: {value}")]);
+            }
+            let field_name = settings.custom_file_form_name.trim();
+            let field_name = if field_name.is_empty() {
+                "file"
+            } else {
+                field_name
+            };
+            args.extend([
+                "-F".into(),
+                curl_file_form(field_name, file_path),
+                upload_url.into(),
+            ]);
+        }
         _ => unreachable!("unsupported destinations returned early"),
     }
 
@@ -780,6 +806,14 @@ pub fn parse_curl_upload_output(
     destination: UploadDestination,
     output: &str,
 ) -> Result<UploadSuccess, String> {
+    parse_curl_upload_output_with_settings(destination, output, &UploadSettings::default())
+}
+
+pub fn parse_curl_upload_output_with_settings(
+    destination: UploadDestination,
+    output: &str,
+    settings: &UploadSettings,
+) -> Result<UploadSuccess, String> {
     let (body, status_code) = split_curl_body_and_status(output)?;
     if !(200..300).contains(&status_code) {
         return Err(build_upload_error(
@@ -789,12 +823,20 @@ pub fn parse_curl_upload_output(
         ));
     }
 
-    parse_upload_response(destination, body)
+    parse_upload_response_with_settings(destination, body, settings)
 }
 
 pub fn parse_upload_response(
     destination: UploadDestination,
     body: &str,
+) -> Result<UploadSuccess, String> {
+    parse_upload_response_with_settings(destination, body, &UploadSettings::default())
+}
+
+pub fn parse_upload_response_with_settings(
+    destination: UploadDestination,
+    body: &str,
+    settings: &UploadSettings,
 ) -> Result<UploadSuccess, String> {
     let provider_name = destination.display_name();
     match destination {
@@ -919,6 +961,31 @@ pub fn parse_upload_response(
             }
             Err(json_error_message("Gofile", &node))
         }
+        UploadDestination::CustomHttp => {
+            let response_path = settings.custom_response_url_path.trim();
+            if !response_path.is_empty() {
+                if let Some(url) = json_path_string(body, response_path) {
+                    return parse_plain_url("Custom", &url)
+                        .map(|url| UploadSuccess { url, provider_name });
+                }
+            }
+
+            let trimmed = body.trim();
+            if trimmed.starts_with("https://") || trimmed.starts_with("http://") {
+                return parse_plain_url("Custom", trimmed)
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+
+            if let Some(url) = first_http_url(trimmed) {
+                return parse_plain_url("Custom", url)
+                    .map(|url| UploadSuccess { url, provider_name });
+            }
+
+            Err(format!(
+                "Upload returned: {}",
+                trimmed.chars().take(180).collect::<String>()
+            ))
+        }
         _ => Err(format!(
             "{} upload is not implemented in the Rust curl backend yet.",
             provider_name
@@ -1020,6 +1087,80 @@ fn tmpfiles_download_url(value: &str) -> Option<String> {
     } else {
         Some(format!("{prefix}dl/{path}"))
     }
+}
+
+fn parse_custom_upload_header(line: &str) -> Result<(&str, &str), String> {
+    if line
+        .chars()
+        .any(|character| character == '\r' || character == '\n' || character.is_control())
+    {
+        return Err("Custom upload headers cannot contain control characters.".into());
+    }
+
+    let Some((name, value)) = line.split_once(':') else {
+        return Err("Custom upload headers must use Name: Value format.".into());
+    };
+    let name = name.trim();
+    let value = value.trim();
+    if name.is_empty() {
+        return Err("Custom upload headers must use Name: Value format.".into());
+    }
+    if !name
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || "!#$%&'*+-.^_`|~".contains(character))
+    {
+        return Err(format!(
+            "Custom upload header '{name}' has an invalid name."
+        ));
+    }
+    if forbidden_custom_upload_header(name) {
+        return Err(format!(
+            "Custom upload header '{name}' is managed by OddSnap and cannot be overridden."
+        ));
+    }
+    Ok((name, value))
+}
+
+fn forbidden_custom_upload_header(name: &str) -> bool {
+    matches!(
+        normalized_key(name).as_str(),
+        "connection"
+            | "contentlength"
+            | "contenttype"
+            | "expect"
+            | "host"
+            | "keepalive"
+            | "proxyconnection"
+            | "te"
+            | "trailer"
+            | "transferencoding"
+            | "upgrade"
+    )
+}
+
+fn json_path_string(body: &str, path: &str) -> Option<String> {
+    let node: Value = serde_json::from_str(body).ok()?;
+    let mut current = &node;
+    for part in path.split('.').filter(|part| !part.is_empty()) {
+        current = current.get(part)?;
+    }
+    current.as_str().map(str::to_string)
+}
+
+fn first_http_url(value: &str) -> Option<&str> {
+    let start = value.find("https://").or_else(|| value.find("http://"))?;
+    let candidate = &value[start..];
+    let end = candidate
+        .char_indices()
+        .find_map(|(index, character)| {
+            if character.is_whitespace() || matches!(character, '"' | '\'' | '}' | ']') {
+                Some(index)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(candidate.len());
+    Some(candidate[..end].trim_end_matches([',', '.', ';', ':']))
 }
 
 fn json_error_message(provider_name: &str, node: &Value) -> String {
@@ -1374,9 +1515,35 @@ mod tests {
             .args
             .contains(&"https://cdn.imgpile.com/api/v1/media".into()));
 
+        let custom = build_curl_upload_request_with_settings(
+            UploadDestination::CustomHttp,
+            &path,
+            &UploadSettings {
+                custom_upload_url: "https://upload.example.test".into(),
+                custom_file_form_name: "media".into(),
+                custom_headers: "X-Api-Key: secret\nX-Mode: test".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .expect("build custom upload");
+        assert!(custom.args.contains(&"X-Api-Key: secret".into()));
+        assert!(custom.args.contains(&"X-Mode: test".into()));
+        assert!(custom.args.contains(&"media=@capture.png".into()));
+        assert!(custom.args.contains(&"https://upload.example.test".into()));
+
         assert!(build_curl_upload_request(UploadDestination::Imgur, &path).is_err());
         assert!(build_curl_upload_request(UploadDestination::Gyazo, &path).is_err());
         assert!(build_curl_upload_request(UploadDestination::ImgPile, &path).is_err());
+        assert!(build_curl_upload_request_with_settings(
+            UploadDestination::CustomHttp,
+            &path,
+            &UploadSettings {
+                custom_upload_url: "https://upload.example.test".into(),
+                custom_headers: "Content-Type: image/png".into(),
+                ..UploadSettings::default()
+            },
+        )
+        .is_err());
     }
 
     #[test]
@@ -1419,6 +1586,30 @@ mod tests {
             .expect("parse imgpile")
             .url,
             "https://cdn.imgpile.com/a.png"
+        );
+
+        assert_eq!(
+            parse_upload_response_with_settings(
+                UploadDestination::CustomHttp,
+                r#"{"data":{"url":"https://cdn.example.test/a.png"}}"#,
+                &UploadSettings {
+                    custom_response_url_path: "data.url".into(),
+                    ..UploadSettings::default()
+                },
+            )
+            .expect("parse custom json response")
+            .url,
+            "https://cdn.example.test/a.png"
+        );
+
+        assert_eq!(
+            parse_upload_response(
+                UploadDestination::CustomHttp,
+                r#"{"ok":true,"url":"https://cdn.example.test/fallback.png"}"#,
+            )
+            .expect("parse custom fallback response")
+            .url,
+            "https://cdn.example.test/fallback.png"
         );
 
         assert_eq!(
