@@ -384,11 +384,89 @@ fn parse_macos_window_bounds(bounds: &str) -> Result<[i32; 4], PlatformError> {
 
 impl ClipboardImageService for MacosPlatform {
     fn copy_image_to_clipboard(&self, image_path: &Path) -> Result<(), PlatformError> {
-        let _ = image_path;
-        Err(PlatformError::Unsupported(
-            "macOS image clipboard is not implemented yet",
-        ))
+        #[cfg(target_os = "macos")]
+        {
+            copy_image_to_macos_clipboard(image_path)
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = image_path;
+            Err(PlatformError::Unsupported(
+                "macOS image clipboard is only available on macOS",
+            ))
+        }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn copy_image_to_macos_clipboard(image_path: &Path) -> Result<(), PlatformError> {
+    let tiff_path = macos_clipboard_tiff_path();
+    let sips_args = macos_sips_tiff_args(image_path, &tiff_path);
+    let sips_status = Command::new("sips")
+        .args(&sips_args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|source| PlatformError::Failed(format!("failed to start sips: {source}")))?;
+    if !sips_status.success() {
+        return Err(PlatformError::Failed(format!(
+            "sips image conversion exited with status {sips_status}"
+        )));
+    }
+
+    let script = macos_set_clipboard_to_tiff_script(&tiff_path);
+    let osascript_status = Command::new("osascript")
+        .args(["-e", script.as_str()])
+        .status()
+        .map_err(|source| PlatformError::Failed(format!("failed to start osascript: {source}")))?;
+    let _ = fs::remove_file(&tiff_path);
+
+    if osascript_status.success() {
+        Ok(())
+    } else {
+        Err(PlatformError::Failed(format!(
+            "osascript image clipboard exited with status {osascript_status}"
+        )))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_clipboard_tiff_path() -> PathBuf {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!(
+        "oddsnap-macos-clipboard-{}-{:09}.tiff",
+        duration.as_secs(),
+        duration.subsec_nanos()
+    ))
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_sips_tiff_args(source: &Path, destination: &Path) -> Vec<String> {
+    vec![
+        "-s".into(),
+        "format".into(),
+        "tiff".into(),
+        source.display().to_string(),
+        "--out".into(),
+        destination.display().to_string(),
+    ]
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn macos_set_clipboard_to_tiff_script(path: &Path) -> String {
+    format!(
+        "set the clipboard to (read (POSIX file {}) as TIFF picture)",
+        applescript_string_literal(&path.display().to_string())
+    )
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn applescript_string_literal(value: &str) -> String {
+    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
 }
 
 impl ClipboardTextService for MacosPlatform {
@@ -705,14 +783,75 @@ mod tests {
     }
 
     #[test]
-    fn macos_clipboard_service_is_explicitly_unimplemented() {
+    fn macos_image_clipboard_reports_wrong_host() {
         let adapter = MacosPlatform;
 
         let error = adapter
             .copy_image_to_clipboard(std::path::Path::new("capture.bmp"))
-            .expect_err("macOS clipboard pending");
+            .expect_err("macOS clipboard wrong host");
 
-        assert!(error.to_string().contains("not implemented yet"));
+        assert!(error.to_string().contains("only available on macOS"));
+    }
+
+    #[test]
+    fn macos_image_clipboard_uses_sips_tiff_conversion() {
+        let args = super::macos_sips_tiff_args(
+            std::path::Path::new("/tmp/source.png"),
+            std::path::Path::new("/tmp/out.tiff"),
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "-s",
+                "format",
+                "tiff",
+                "/tmp/source.png",
+                "--out",
+                "/tmp/out.tiff"
+            ]
+        );
+    }
+
+    #[test]
+    fn macos_image_clipboard_script_reads_tiff_picture() {
+        let script =
+            super::macos_set_clipboard_to_tiff_script(std::path::Path::new("/tmp/odd\"snap.tiff"));
+
+        assert_eq!(
+            script,
+            "set the clipboard to (read (POSIX file \"/tmp/odd\\\"snap.tiff\") as TIFF picture)"
+        );
+    }
+
+    #[test]
+    #[ignore = "writes a tiny image to the local macOS clipboard through sips and osascript"]
+    #[cfg(target_os = "macos")]
+    fn macos_image_clipboard_can_copy_png_data() {
+        let adapter = MacosPlatform;
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-macos-image-clipboard-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp test root");
+        let source = root.join("source.png");
+        std::fs::write(
+            &source,
+            [
+                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0,
+                1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 224,
+                18, 145, 251, 15, 0, 3, 74, 1, 66, 143, 246, 24, 176, 0, 0, 0, 0, 73, 69, 78, 68,
+                174, 66, 96, 130,
+            ],
+        )
+        .expect("write source png");
+
+        adapter
+            .copy_image_to_clipboard(&source)
+            .expect("copy image");
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

@@ -82,11 +82,12 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows image clipboard foundation.
 - [x] Windows image clipboard supports saved PNG/JPEG/BMP captures.
 - [x] Linux command-backed image clipboard foundation.
+- [x] macOS command-backed image clipboard foundation.
 - [x] Windows text clipboard foundation.
 - [x] macOS/Linux command-backed text clipboard foundation.
 - [x] Windows cursor color sampling and clipboard copy foundation.
 - [x] Rust color history persistence and recent-color copy actions.
-- [ ] Cross-platform image clipboard.
+- [x] Cross-platform image clipboard foundation.
 - [x] Cross-platform text clipboard.
 - [x] GPUI recent-captures list for capture smoke results.
 - [x] Rust settings store for capture output and clipboard preferences.
