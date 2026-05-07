@@ -69,8 +69,9 @@ use hotkeys::{start_capture_hotkey_listener, ImportedHotkeyAccelerators};
 use image_search::{ImageSearchOcrHydrationSummary, ImageSearchReindexQueueState};
 use media_history::{
     filtered_capture_history, media_history_count_text, media_history_detail_line,
-    next_media_history_visible_limit, HistoryKindFilter, HistoryUploadFilter,
-    DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT, IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT,
+    media_history_group_label, next_media_history_visible_limit, HistoryKindFilter,
+    HistoryUploadFilter, DEFAULT_MEDIA_HISTORY_VISIBLE_LIMIT,
+    IMAGE_SEARCH_MEDIA_HISTORY_VISIBLE_LIMIT,
 };
 use processed_preview::ProcessedResultPreviewWindow;
 
@@ -1374,7 +1375,20 @@ impl OddSnapRustApp {
         }
 
         let now_ms = app_unix_millis_now();
+        let mut previous_group_label: Option<&'static str> = None;
         for entry in &visible_history {
+            let group_label = media_history_group_label(entry.captured_at_unix_ms, now_ms);
+            if previous_group_label != Some(group_label) {
+                body = body.child(
+                    div()
+                        .text_size(px(11.0))
+                        .text_color(rgb(0x7f8795))
+                        .pt(px(4.0))
+                        .child(group_label),
+                );
+                previous_group_label = Some(group_label);
+            }
+
             let diagnostics = image_search::diagnostics(&self.settings, &self.image_search, entry);
             let match_summary = image_search::match_summary(&diagnostics);
             let details_text = diagnostics.details_text;

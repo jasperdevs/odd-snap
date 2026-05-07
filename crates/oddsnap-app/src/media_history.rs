@@ -138,6 +138,23 @@ pub(crate) fn media_history_detail_line(entry: &CaptureHistoryEntry, now_ms: u64
     )
 }
 
+pub(crate) fn media_history_group_label(captured_at_unix_ms: u64, now_ms: u64) -> &'static str {
+    if captured_at_unix_ms == 0 {
+        return "This session";
+    }
+
+    let elapsed_seconds = now_ms.saturating_sub(captured_at_unix_ms) / 1000;
+    if elapsed_seconds < 60 * 60 {
+        "Past hour"
+    } else if elapsed_seconds < 60 * 60 * 24 {
+        "Past day"
+    } else if elapsed_seconds < 60 * 60 * 24 * 7 {
+        "Past week"
+    } else {
+        "Older"
+    }
+}
+
 pub(crate) fn media_history_count_text(
     visible_count: usize,
     total_count: usize,
@@ -229,6 +246,14 @@ mod tests {
             media_history_detail_line(&entry, 60_000),
             "Image · Full screen · 10x10 · 1.0 KB · just now"
         );
+        assert_eq!(media_history_group_label(0, 60_000), "This session");
+        assert_eq!(media_history_group_label(1, 60_000), "Past hour");
+        assert_eq!(media_history_group_label(1, 60_000 * 60 * 2), "Past day");
+        assert_eq!(
+            media_history_group_label(1, 60_000 * 60 * 24 * 2),
+            "Past week"
+        );
+        assert_eq!(media_history_group_label(1, 60_000 * 60 * 24 * 10), "Older");
         assert_eq!(
             media_history_count_text(3, 9, 3 * 1024 * 1024, true),
             "3 of 9 rows before search · 3.0 MB"
