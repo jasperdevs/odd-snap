@@ -275,6 +275,14 @@ pub trait TrayService: Send + Sync {
     fn install_tray_icon(&self) -> Result<(), PlatformError>;
 }
 
+pub trait ScreenshotExclusionService: Send + Sync {
+    fn set_window_capture_excluded(
+        &self,
+        native_window_handle: isize,
+        excluded: bool,
+    ) -> Result<(), PlatformError>;
+}
+
 pub trait PermissionsService: Send + Sync {
     fn missing_permissions(&self) -> Vec<String>;
 }

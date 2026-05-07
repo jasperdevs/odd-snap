@@ -5,8 +5,8 @@ use oddsnap_core::{
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
     HotkeyService, MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService,
-    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult, VideoRecordingService,
-    WindowInfo, WindowPickerService,
+    ScreenshotExclusionService, VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult,
+    VideoRecordingService, WindowInfo, WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -58,8 +58,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     DrawIconEx, GetCursorInfo, GetForegroundWindow, GetIconInfo, GetMessageW, GetSystemMetrics,
     GetWindowRect, GetWindowTextLengthW, GetWindowTextW, PeekMessageW, PostThreadMessageW,
-    CURSORINFO, CURSOR_SHOWING, DI_NORMAL, ICONINFO, MSG, PM_NOREMOVE, SM_CXVIRTUALSCREEN,
-    SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, WM_APP, WM_HOTKEY,
+    SetWindowDisplayAffinity, CURSORINFO, CURSOR_SHOWING, DI_NORMAL, ICONINFO, MSG, PM_NOREMOVE,
+    SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY, WM_APP, WM_HOTKEY,
 };
 
 #[derive(Debug, Default)]
@@ -132,7 +133,7 @@ impl PlatformAdapter for WindowsPlatform {
                 ),
                 (
                     PlatformCapability::ScreenshotExclusion,
-                    CapabilityState::Planned,
+                    CapabilityState::InProgress,
                 ),
                 (
                     PlatformCapability::GlobalHotkeys,
@@ -214,6 +215,28 @@ impl WindowPickerService for WindowsPlatform {
         {
             Err(PlatformError::Unsupported(
                 "Windows active-window detection is only available on Windows",
+            ))
+        }
+    }
+}
+
+impl ScreenshotExclusionService for WindowsPlatform {
+    fn set_window_capture_excluded(
+        &self,
+        native_window_handle: isize,
+        excluded: bool,
+    ) -> Result<(), PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            set_window_capture_excluded(native_window_handle, excluded)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = native_window_handle;
+            let _ = excluded;
+            Err(PlatformError::Unsupported(
+                "Windows screenshot exclusion is only available on Windows",
             ))
         }
     }
@@ -825,6 +848,27 @@ fn window_title(hwnd: HWND) -> String {
 }
 
 #[cfg(target_os = "windows")]
+fn set_window_capture_excluded(
+    native_window_handle: isize,
+    excluded: bool,
+) -> Result<(), PlatformError> {
+    if native_window_handle == 0 {
+        return Err(PlatformError::Failed(
+            "window handle must be non-zero".into(),
+        ));
+    }
+
+    let hwnd = HWND(native_window_handle as *mut std::ffi::c_void);
+    let affinity: WINDOW_DISPLAY_AFFINITY = if excluded {
+        WDA_EXCLUDEFROMCAPTURE
+    } else {
+        WDA_NONE
+    };
+    unsafe { SetWindowDisplayAffinity(hwnd, affinity) }
+        .map_err(|error| PlatformError::Failed(format!("SetWindowDisplayAffinity failed: {error}")))
+}
+
+#[cfg(target_os = "windows")]
 fn copy_bmp_to_clipboard(path: &Path) -> Result<(), PlatformError> {
     let dib = bmp_file_to_dib_bytes(path)?;
     unsafe { copy_dib_to_clipboard(&dib) }
@@ -1245,7 +1289,18 @@ fn write_bmp(path: &Path, width: u32, height: u32, bgra: &[u8]) -> Result<(), Pl
 #[cfg(test)]
 mod tests {
     use oddsnap_core::{CapabilityState, PlatformCapability, RecordingFormat, RecordingQuality};
+    #[cfg(target_os = "windows")]
+    use oddsnap_platform::ScreenshotExclusionService;
     use oddsnap_platform::{PlatformAdapter, VideoRecordingRequest, VideoRecordingService};
+    #[cfg(target_os = "windows")]
+    use windows::core::w;
+    #[cfg(target_os = "windows")]
+    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+    #[cfg(target_os = "windows")]
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, WINDOW_EX_STYLE, WNDCLASSW,
+        WS_OVERLAPPED,
+    };
 
     use super::WindowsPlatform;
 
@@ -1309,6 +1364,69 @@ mod tests {
         let error = super::parse_hotkey_accelerator("F24").expect_err("missing modifier");
 
         assert!(error.to_string().contains("modifier"));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn screenshot_exclusion_rejects_empty_window_handle() {
+        let adapter = WindowsPlatform;
+        let error = adapter
+            .set_window_capture_excluded(0, true)
+            .expect_err("zero HWND should fail");
+
+        assert!(error.to_string().contains("non-zero"));
+    }
+
+    #[test]
+    #[ignore = "creates a temporary native test window in the local desktop session"]
+    #[cfg(target_os = "windows")]
+    fn screenshot_exclusion_can_apply_to_owned_window() {
+        unsafe extern "system" fn test_window_proc(
+            hwnd: HWND,
+            message: u32,
+            wparam: WPARAM,
+            lparam: LPARAM,
+        ) -> LRESULT {
+            unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+        }
+
+        let class_name = w!("OddSnapRustScreenshotExclusionTest");
+        let window_class = WNDCLASSW {
+            lpfnWndProc: Some(test_window_proc),
+            lpszClassName: class_name,
+            ..Default::default()
+        };
+        unsafe {
+            let _ = RegisterClassW(&window_class);
+        }
+        let hwnd = unsafe {
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                class_name,
+                w!("OddSnap Rust Test"),
+                WS_OVERLAPPED,
+                0,
+                0,
+                1,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
+            .expect("create test window")
+        };
+
+        let adapter = WindowsPlatform;
+        adapter
+            .set_window_capture_excluded(hwnd.0 as isize, true)
+            .expect("exclude active window");
+        adapter
+            .set_window_capture_excluded(hwnd.0 as isize, false)
+            .expect("restore active window");
+        unsafe {
+            DestroyWindow(hwnd).expect("destroy test window");
+        }
     }
 
     #[test]

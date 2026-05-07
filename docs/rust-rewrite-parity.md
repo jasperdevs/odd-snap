@@ -31,6 +31,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import existing image/media history from the current SQLite history database or legacy JSON indexes when no Rust history file exists.
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
 - Windows can parse, register, listen for, and unregister process-local global hotkeys.
+- Windows has a Rust screenshot-exclusion service boundary backed by `SetWindowDisplayAffinity`.
 - Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.

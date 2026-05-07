@@ -35,7 +35,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows recording hotkey event loop integration.
 - [x] Capture hotkey honors supported imported default capture modes.
 - [ ] Windows topmost transparent overlay.
-- [ ] Windows screenshot exclusion.
+- [x] Windows screenshot exclusion service foundation.
 - [x] Windows monitor enumeration.
 - [x] Windows system DPI mapping for monitor scale.
 - [ ] Windows per-monitor DPI verification.
