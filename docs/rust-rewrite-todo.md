@@ -121,6 +121,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Preserve legacy advanced settings for OCR, translation, uploads, image search, tools, toast timing, styling, and custom hotkeys.
 - [ ] Import all existing settings.
 - [x] Import existing history.
+- [x] Import existing color history.
 - [ ] Import existing media metadata where practical.
 - [ ] Windows full parity verification.
 - [ ] macOS full parity verification.

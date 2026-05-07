@@ -35,6 +35,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture image format and JPEG quality settings.
 - Rust startup can import legacy file-name template and monthly-folder save settings.
 - Rust startup can import existing image/media history from the current SQLite history database or legacy JSON indexes when no Rust history file exists.
+- Rust startup can import existing color history from the current SQLite history database or legacy color JSON indexes.
 - Windows can copy UTF-16 text payloads to the system clipboard through the shared clipboard trait.
 - Windows can parse, register, listen for, and unregister process-local global hotkeys.
 - Windows has a Rust screenshot-exclusion service boundary backed by `SetWindowDisplayAffinity`.

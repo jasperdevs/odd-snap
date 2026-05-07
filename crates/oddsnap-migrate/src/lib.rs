@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use oddsnap_core::{
-    normalize_file_name_template, AppSettings, CaptureImageFormat, DefaultCaptureMode,
-    HistoryEntry, HistoryIndex, HistoryKind, RecordingFormat, RecordingQuality, ToastPosition,
+    normalize_file_name_template, AppSettings, CaptureImageFormat, ColorHistoryEntry,
+    DefaultCaptureMode, HistoryEntry, HistoryIndex, HistoryKind, RecordingFormat, RecordingQuality,
+    ToastPosition,
 };
 use rusqlite::Connection;
 use serde_json::Value;
@@ -569,8 +570,11 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
 
 pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryIndex, MigrationError> {
     if paths.current_history_database_path.exists() {
-        let index = import_history_database(&paths.current_history_database_path)?;
-        if !index.entries.is_empty() {
+        let mut index = import_history_database(&paths.current_history_database_path)?;
+        if index.colors.is_empty() {
+            index.colors = import_first_color_history_json(paths)?;
+        }
+        if !index.entries.is_empty() || !index.colors.is_empty() {
             return Ok(index);
         }
     }
@@ -581,11 +585,22 @@ pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryInde
     ];
     for path in json_paths {
         if path.exists() {
-            let index = import_history_json(&path)?;
-            if !index.entries.is_empty() {
+            let mut index = import_history_json(&path)?;
+            if index.colors.is_empty() {
+                index.colors = import_first_color_history_json(paths)?;
+            }
+            if !index.entries.is_empty() || !index.colors.is_empty() {
                 return Ok(index);
             }
         }
+    }
+
+    let colors = import_first_color_history_json(paths)?;
+    if !colors.is_empty() {
+        return Ok(HistoryIndex {
+            entries: Vec::new(),
+            colors,
+        });
     }
 
     Ok(HistoryIndex::default())
@@ -646,10 +661,38 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
         }
     }
 
-    Ok(HistoryIndex {
-        entries,
-        colors: Vec::new(),
-    })
+    let colors = import_color_history_database(&connection).map_err(|source| {
+        MigrationError::ReadHistoryDatabase {
+            path: path.to_path_buf(),
+            source,
+        }
+    })?;
+
+    Ok(HistoryIndex { entries, colors })
+}
+
+fn import_color_history_database(
+    connection: &Connection,
+) -> Result<Vec<ColorHistoryEntry>, rusqlite::Error> {
+    let table_count: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'color_entries'",
+        [],
+        |row| row.get(0),
+    )?;
+    if table_count == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut statement = connection
+        .prepare("SELECT hex FROM color_entries ORDER BY captured_at_ticks DESC LIMIT 200")?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+    let mut colors = Vec::new();
+    for row in rows {
+        if let Some(hex) = normalize_color_hex(&row?) {
+            colors.push(ColorHistoryEntry::new(hex));
+        }
+    }
+    Ok(colors)
 }
 
 fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
@@ -716,6 +759,53 @@ fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
         entries,
         colors: Vec::new(),
     })
+}
+
+fn import_first_color_history_json(
+    paths: &LegacyOddSnapPaths,
+) -> Result<Vec<ColorHistoryEntry>, MigrationError> {
+    for path in [
+        paths.current_history_dir.join("color_index.json"),
+        paths.history_dir.join("color_index.json"),
+    ] {
+        if path.exists() {
+            let colors = import_color_history_json(&path)?;
+            if !colors.is_empty() {
+                return Ok(colors);
+            }
+        }
+    }
+
+    Ok(Vec::new())
+}
+
+fn import_color_history_json(path: &Path) -> Result<Vec<ColorHistoryEntry>, MigrationError> {
+    let json = fs::read_to_string(path).map_err(|source| MigrationError::ReadHistory {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let raw: Vec<Value> =
+        serde_json::from_str(&json).map_err(|source| MigrationError::ParseHistory {
+            path: path.to_path_buf(),
+            source,
+        })?;
+
+    Ok(raw
+        .into_iter()
+        .filter_map(|entry| {
+            let hex = entry.get("Hex").or_else(|| entry.get("hex"))?.as_str()?;
+            normalize_color_hex(hex).map(ColorHistoryEntry::new)
+        })
+        .take(200)
+        .collect())
+}
+
+fn normalize_color_hex(hex: &str) -> Option<String> {
+    let value = hex.trim().trim_start_matches('#');
+    if value.len() != 6 || !value.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(value.to_ascii_uppercase())
 }
 
 struct LegacyHistoryRecord {
@@ -1338,6 +1428,10 @@ mod tests {
                     upload_url TEXT NULL,
                     upload_provider TEXT NULL,
                     upload_error TEXT NULL
+                );
+                CREATE TABLE color_entries (
+                    hex TEXT NOT NULL,
+                    captured_at_ticks INTEGER NOT NULL
                 );",
             )
             .expect("create table");
@@ -1348,6 +1442,12 @@ mod tests {
                 [image.display().to_string()],
             )
             .expect("insert row");
+        connection
+            .execute(
+                "INSERT INTO color_entries(hex, captured_at_ticks) VALUES ('aabbcc', 456)",
+                [],
+            )
+            .expect("insert color row");
 
         let paths = LegacyOddSnapPaths {
             roaming_dir: root.join("roaming"),
@@ -1364,6 +1464,8 @@ mod tests {
         assert_eq!(index.entries[0].file_path, image);
         assert_eq!(index.entries[0].width, 12);
         assert_eq!(index.entries[0].kind, oddsnap_core::HistoryKind::Image);
+        assert_eq!(index.colors.len(), 1);
+        assert_eq!(index.colors[0].hex, "AABBCC");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1390,6 +1492,18 @@ mod tests {
             "Kind": "Image"
         }]);
         fs::write(&index_path, json.to_string()).expect("write json index");
+        let color_json = serde_json::json!([
+            {
+                "Hex": "#112233",
+                "CapturedAt": "2026-01-01T00:00:00"
+            },
+            {
+                "Hex": "not-a-color",
+                "CapturedAt": "2026-01-02T00:00:00"
+            }
+        ]);
+        fs::write(root.join("color_index.json"), color_json.to_string())
+            .expect("write color json index");
         let paths = LegacyOddSnapPaths {
             roaming_dir: root.join("roaming"),
             settings_path: root.join("roaming").join("settings.json"),
@@ -1404,6 +1518,8 @@ mod tests {
         assert_eq!(index.entries.len(), 1);
         assert_eq!(index.entries[0].file_path, image);
         assert_eq!(index.entries[0].height, 6);
+        assert_eq!(index.colors.len(), 1);
+        assert_eq!(index.colors[0].hex, "112233");
         let _ = fs::remove_dir_all(root);
     }
 }
