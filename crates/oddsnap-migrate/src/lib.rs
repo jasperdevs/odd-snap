@@ -645,7 +645,7 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
     })? {
         let mut statement = connection
             .prepare(
-                "SELECT file_name, file_path, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error \
+                "SELECT file_name, file_path, captured_at_ticks, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error \
                  FROM history_entries ORDER BY captured_at_ticks DESC",
             )
             .map_err(|source| MigrationError::ReadHistoryDatabase {
@@ -657,16 +657,18 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
             .query_map([], |row| {
                 let file_name: String = row.get(0)?;
                 let file_path: String = row.get(1)?;
-                let width: i64 = row.get(2)?;
-                let height: i64 = row.get(3)?;
-                let file_size_bytes: i64 = row.get(4)?;
-                let kind: i64 = row.get(5)?;
-                let upload_url: Option<String> = row.get(6)?;
-                let upload_provider: Option<String> = row.get(7)?;
-                let upload_error: Option<String> = row.get(8)?;
+                let captured_at_ticks: i64 = row.get(2)?;
+                let width: i64 = row.get(3)?;
+                let height: i64 = row.get(4)?;
+                let file_size_bytes: i64 = row.get(5)?;
+                let kind: i64 = row.get(6)?;
+                let upload_url: Option<String> = row.get(7)?;
+                let upload_provider: Option<String> = row.get(8)?;
+                let upload_error: Option<String> = row.get(9)?;
                 Ok(legacy_history_entry(LegacyHistoryRecord {
                     file_name,
                     file_path: PathBuf::from(file_path),
+                    captured_at_unix_ms: dotnet_datetime_binary_to_unix_ms(captured_at_ticks),
                     width,
                     height,
                     file_size_bytes,
@@ -846,6 +848,7 @@ fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
                     })
                     .to_string(),
                 file_path,
+                captured_at_unix_ms: legacy_captured_at_unix_ms(&entry),
                 width: entry
                     .get("Width")
                     .and_then(Value::as_i64)
@@ -1060,6 +1063,7 @@ fn normalize_color_hex(hex: &str) -> Option<String> {
 struct LegacyHistoryRecord {
     file_name: String,
     file_path: PathBuf,
+    captured_at_unix_ms: Option<u64>,
     width: i64,
     height: i64,
     file_size_bytes: i64,
@@ -1076,10 +1080,12 @@ fn legacy_history_entry(record: LegacyHistoryRecord) -> HistoryEntry {
     } else {
         metadata.as_ref().map_or(0, std::fs::Metadata::len)
     };
-    let captured_at_unix_ms = metadata
-        .and_then(|metadata| metadata.created().or_else(|_| metadata.modified()).ok())
-        .map(system_time_to_unix_ms)
-        .unwrap_or_default();
+    let captured_at_unix_ms = record.captured_at_unix_ms.unwrap_or_else(|| {
+        metadata
+            .and_then(|metadata| metadata.created().or_else(|_| metadata.modified()).ok())
+            .map(system_time_to_unix_ms)
+            .unwrap_or_default()
+    });
 
     HistoryEntry {
         file_name: record.file_name,
@@ -1708,8 +1714,8 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO history_entries(file_path, file_name, captured_at_ticks, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error)
-                 VALUES (?1, 'capture.png', 123, 12, 34, 3, 0, NULL, NULL, NULL)",
-                [image.display().to_string()],
+                 VALUES (?1, 'capture.png', ?2, 12, 34, 3, 0, 'https://example.test/capture.png', 'Catbox', NULL)",
+                rusqlite::params![image.display().to_string(), legacy_ocr_ticks],
             )
             .expect("insert row");
         connection
@@ -1745,7 +1751,16 @@ mod tests {
         assert_eq!(index.entries.len(), 1);
         assert_eq!(index.entries[0].file_path, image);
         assert_eq!(index.entries[0].width, 12);
+        assert_eq!(
+            index.entries[0].captured_at_unix_ms,
+            legacy_ocr_unix_ms as u64
+        );
         assert_eq!(index.entries[0].kind, oddsnap_core::HistoryKind::Image);
+        assert_eq!(
+            index.entries[0].upload_url.as_deref(),
+            Some("https://example.test/capture.png")
+        );
+        assert_eq!(index.entries[0].upload_provider.as_deref(), Some("Catbox"));
         assert_eq!(index.colors.len(), 1);
         assert_eq!(index.colors[0].hex, "AABBCC");
         assert_eq!(index.ocr_entries.len(), 1);
@@ -1784,7 +1799,10 @@ mod tests {
             "Width": 5,
             "Height": 6,
             "FileSizeBytes": 3,
-            "Kind": "Image"
+            "Kind": "Image",
+            "CapturedAt": "2026-01-02T03:04:05Z",
+            "UploadUrl": "https://example.test/capture.jpg",
+            "UploadProvider": "Imgur"
         }]);
         fs::write(&index_path, json.to_string()).expect("write json index");
         let color_json = serde_json::json!([
@@ -1823,6 +1841,12 @@ mod tests {
         assert_eq!(index.entries.len(), 1);
         assert_eq!(index.entries[0].file_path, image);
         assert_eq!(index.entries[0].height, 6);
+        assert_eq!(index.entries[0].captured_at_unix_ms, 1_767_323_045_000);
+        assert_eq!(
+            index.entries[0].upload_url.as_deref(),
+            Some("https://example.test/capture.jpg")
+        );
+        assert_eq!(index.entries[0].upload_provider.as_deref(), Some("Imgur"));
         assert_eq!(index.colors.len(), 1);
         assert_eq!(index.colors[0].hex, "112233");
         assert_eq!(index.ocr_entries.len(), 1);

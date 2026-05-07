@@ -232,6 +232,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Import existing color history.
 - [x] Import existing OCR history.
 - [x] Import existing QR/barcode scan history from the current SQLite history database.
+- [x] Import existing media captured timestamps and upload metadata from legacy SQLite/JSON history where present.
 - [ ] Import existing media metadata where practical.
 - [ ] Windows full parity verification.
 - [ ] macOS full parity verification.
