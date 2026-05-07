@@ -34,6 +34,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Legacy capture/recording hotkey settings import.
 - [x] Windows recording hotkey event loop integration.
 - [x] Capture hotkey honors supported imported default capture modes.
+- [x] Windows dedicated full-screen and active-window hotkey routing.
 - [ ] Windows topmost transparent overlay.
 - [x] Windows screenshot exclusion service foundation.
 - [x] Windows monitor enumeration.

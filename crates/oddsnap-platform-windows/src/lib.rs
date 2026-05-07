@@ -71,12 +71,18 @@ const CAPTURE_HOTKEY_ID: i32 = 0x0dd5;
 #[cfg(target_os = "windows")]
 const RECORDING_HOTKEY_ID: i32 = 0x0dd7;
 #[cfg(target_os = "windows")]
+const FULLSCREEN_HOTKEY_ID: i32 = 0x0dd8;
+#[cfg(target_os = "windows")]
+const ACTIVE_WINDOW_HOTKEY_ID: i32 = 0x0dd9;
+#[cfg(target_os = "windows")]
 const HOTKEY_STOP_MESSAGE: u32 = WM_APP + 0x0dd5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowsHotkeyEvent {
     Capture,
     Recording,
+    FullScreenCapture,
+    ActiveWindowCapture,
 }
 
 #[cfg(target_os = "windows")]
@@ -504,14 +510,46 @@ pub fn start_capture_and_recording_hotkey_listener(
     recording_accelerator: Option<&str>,
     events: Sender<WindowsHotkeyEvent>,
 ) -> Result<WindowsHotkeyListener, PlatformError> {
+    start_oddsnap_hotkey_listener(
+        capture_accelerator,
+        recording_accelerator,
+        None,
+        None,
+        events,
+    )
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_oddsnap_hotkey_listener(
+    capture_accelerator: &str,
+    recording_accelerator: Option<&str>,
+    fullscreen_accelerator: Option<&str>,
+    active_window_accelerator: Option<&str>,
+    events: Sender<WindowsHotkeyEvent>,
+) -> Result<WindowsHotkeyListener, PlatformError> {
     let capture = parse_hotkey_accelerator(capture_accelerator)?;
     let recording = recording_accelerator
         .filter(|accelerator| !accelerator.trim().is_empty())
         .map(parse_hotkey_accelerator)
         .transpose()?;
+    let fullscreen = fullscreen_accelerator
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
+    let active_window = active_window_accelerator
+        .filter(|accelerator| !accelerator.trim().is_empty())
+        .map(parse_hotkey_accelerator)
+        .transpose()?;
     let (started_sender, started_receiver) = mpsc::sync_channel(1);
     let join_handle = thread::spawn(move || {
-        run_hotkey_message_loop(capture, recording, events, started_sender);
+        run_hotkey_message_loop(
+            capture,
+            recording,
+            fullscreen,
+            active_window,
+            events,
+            started_sender,
+        );
     });
 
     match started_receiver.recv() {
@@ -536,6 +574,8 @@ pub fn start_capture_and_recording_hotkey_listener(
 fn run_hotkey_message_loop(
     capture: (HOT_KEY_MODIFIERS, u32),
     recording: Option<(HOT_KEY_MODIFIERS, u32)>,
+    fullscreen: Option<(HOT_KEY_MODIFIERS, u32)>,
+    active_window: Option<(HOT_KEY_MODIFIERS, u32)>,
     events: Sender<WindowsHotkeyEvent>,
     started_sender: mpsc::SyncSender<Result<u32, String>>,
 ) {
@@ -551,7 +591,25 @@ fn run_hotkey_message_loop(
     }
     if let Some((modifiers, key)) = recording {
         if let Err(error) = register_windows_hotkey(RECORDING_HOTKEY_ID, modifiers, key) {
-            let _ = unsafe { UnregisterHotKey(None, CAPTURE_HOTKEY_ID) };
+            unregister_registered_hotkeys(&[CAPTURE_HOTKEY_ID]);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = fullscreen {
+        if let Err(error) = register_windows_hotkey(FULLSCREEN_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&[CAPTURE_HOTKEY_ID, RECORDING_HOTKEY_ID]);
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    }
+    if let Some((modifiers, key)) = active_window {
+        if let Err(error) = register_windows_hotkey(ACTIVE_WINDOW_HOTKEY_ID, modifiers, key) {
+            unregister_registered_hotkeys(&[
+                CAPTURE_HOTKEY_ID,
+                RECORDING_HOTKEY_ID,
+                FULLSCREEN_HOTKEY_ID,
+            ]);
             let _ = started_sender.send(Err(error.to_string()));
             return;
         }
@@ -577,13 +635,30 @@ fn run_hotkey_message_loop(
                 WPARAM(value) if value == RECORDING_HOTKEY_ID as usize => {
                     let _ = events.send(WindowsHotkeyEvent::Recording);
                 }
+                WPARAM(value) if value == FULLSCREEN_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::FullScreenCapture);
+                }
+                WPARAM(value) if value == ACTIVE_WINDOW_HOTKEY_ID as usize => {
+                    let _ = events.send(WindowsHotkeyEvent::ActiveWindowCapture);
+                }
                 _ => {}
             }
         }
     }
 
-    let _ = unsafe { UnregisterHotKey(None, CAPTURE_HOTKEY_ID) };
-    let _ = unsafe { UnregisterHotKey(None, RECORDING_HOTKEY_ID) };
+    unregister_registered_hotkeys(&[
+        CAPTURE_HOTKEY_ID,
+        RECORDING_HOTKEY_ID,
+        FULLSCREEN_HOTKEY_ID,
+        ACTIVE_WINDOW_HOTKEY_ID,
+    ]);
+}
+
+#[cfg(target_os = "windows")]
+fn unregister_registered_hotkeys(ids: &[i32]) {
+    for id in ids {
+        let _ = unsafe { UnregisterHotKey(None, *id) };
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -1726,6 +1801,53 @@ mod tests {
             .expect("receive recording hotkey event");
 
         assert_eq!(event, super::WindowsHotkeyEvent::Recording);
+    }
+
+    #[test]
+    #[ignore = "registers process-local dedicated capture hotkeys and posts synthetic WM_HOTKEY messages"]
+    #[cfg(target_os = "windows")]
+    fn windows_hotkey_listener_dispatches_dedicated_capture_events() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_HOTKEY};
+
+        let (sender, receiver) = mpsc::channel();
+        let listener = super::start_oddsnap_hotkey_listener(
+            "Alt+Shift+F21",
+            None,
+            Some("Alt+Shift+F22"),
+            Some("Alt+Shift+F23"),
+            sender,
+        )
+        .expect("listener");
+        unsafe {
+            PostThreadMessageW(
+                listener.thread_id(),
+                WM_HOTKEY,
+                WPARAM(super::FULLSCREEN_HOTKEY_ID as usize),
+                LPARAM(0),
+            )
+            .expect("post fullscreen hotkey message");
+            PostThreadMessageW(
+                listener.thread_id(),
+                WM_HOTKEY,
+                WPARAM(super::ACTIVE_WINDOW_HOTKEY_ID as usize),
+                LPARAM(0),
+            )
+            .expect("post active-window hotkey message");
+        }
+
+        let first = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("receive full-screen event");
+        let second = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("receive active-window event");
+
+        assert_eq!(first, super::WindowsHotkeyEvent::FullScreenCapture);
+        assert_eq!(second, super::WindowsHotkeyEvent::ActiveWindowCapture);
     }
 
     #[test]

@@ -176,6 +176,8 @@ impl OddSnapRustApp {
         let (hotkey_status, hotkey_listener, hotkey_events) = start_capture_hotkey_listener(
             &settings.capture_hotkey,
             settings.recording_hotkey.as_deref(),
+            settings.fullscreen_hotkey.as_deref(),
+            settings.active_window_hotkey.as_deref(),
         );
 
         let app = Self {
@@ -1007,6 +1009,14 @@ impl OddSnapRustApp {
                 self.recording_status = "Recording hotkey received.".into();
                 self.toggle_recording(RecordingTarget::FullScreen);
             }
+            oddsnap_platform_windows::WindowsHotkeyEvent::FullScreenCapture => {
+                self.capture_status = "Full-screen hotkey received.".into();
+                self.run_capture(CaptureMode::FullScreen);
+            }
+            oddsnap_platform_windows::WindowsHotkeyEvent::ActiveWindowCapture => {
+                self.capture_status = "Active-window hotkey received.".into();
+                self.run_capture(CaptureMode::ActiveWindow);
+            }
         }
     }
 
@@ -1291,24 +1301,28 @@ impl OddSnapRustApp {
 fn start_capture_hotkey_listener(
     accelerator: &str,
     recording_accelerator: Option<&str>,
+    fullscreen_accelerator: Option<&str>,
+    active_window_accelerator: Option<&str>,
 ) -> (
     String,
     Option<oddsnap_platform_windows::WindowsHotkeyListener>,
     Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsHotkeyEvent>>,
 ) {
     let (sender, receiver) = std::sync::mpsc::channel();
-    match oddsnap_platform_windows::start_capture_and_recording_hotkey_listener(
+    match oddsnap_platform_windows::start_oddsnap_hotkey_listener(
         accelerator,
         recording_accelerator,
+        fullscreen_accelerator,
+        active_window_accelerator,
         sender,
     ) {
         Ok(listener) => (
-            match recording_accelerator {
-                Some(recording) => {
-                    format!("Hotkeys: {accelerator} capture, {recording} recording.")
-                }
-                None => format!("Hotkey: {accelerator} listener ready."),
-            },
+            hotkey_status_summary(
+                accelerator,
+                recording_accelerator,
+                fullscreen_accelerator,
+                active_window_accelerator,
+            ),
             Some(listener),
             Some(receiver),
         ),
@@ -1320,14 +1334,37 @@ fn start_capture_hotkey_listener(
 fn start_capture_hotkey_listener(
     accelerator: &str,
     recording_accelerator: Option<&str>,
+    fullscreen_accelerator: Option<&str>,
+    active_window_accelerator: Option<&str>,
 ) -> (String, Option<()>, Option<()>) {
     let _ = accelerator;
     let _ = recording_accelerator;
+    let _ = fullscreen_accelerator;
+    let _ = active_window_accelerator;
     (
         "Hotkey listener: pending on this platform.".into(),
         None,
         None,
     )
+}
+
+fn hotkey_status_summary(
+    capture: &str,
+    recording: Option<&str>,
+    fullscreen: Option<&str>,
+    active_window: Option<&str>,
+) -> String {
+    let mut parts = vec![format!("{capture} capture")];
+    if let Some(recording) = recording {
+        parts.push(format!("{recording} recording"));
+    }
+    if let Some(fullscreen) = fullscreen {
+        parts.push(format!("{fullscreen} full-screen"));
+    }
+    if let Some(active_window) = active_window {
+        parts.push(format!("{active_window} active-window"));
+    }
+    format!("Hotkeys: {}.", parts.join(", "))
 }
 
 fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistoryEntry> {
@@ -1606,6 +1643,19 @@ mod tests {
             hotkey_capture_mode(DefaultCaptureMode::Rectangle),
             CaptureMode::FullScreen
         ));
+    }
+
+    #[test]
+    fn hotkey_status_lists_dedicated_capture_hotkeys() {
+        assert_eq!(
+            hotkey_status_summary(
+                "Alt+Shift+S",
+                Some("Alt+Shift+R"),
+                Some("Alt+Shift+F"),
+                Some("Alt+Shift+A")
+            ),
+            "Hotkeys: Alt+Shift+S capture, Alt+Shift+R recording, Alt+Shift+F full-screen, Alt+Shift+A active-window."
+        );
     }
 
     #[test]

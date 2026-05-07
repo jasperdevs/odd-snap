@@ -35,6 +35,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.
+- Windows hotkey listener can dispatch imported full-screen and active-window capture hotkeys into the GPUI shell.
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.
 - GPUI capture smoke honors the imported capture delay and surfaces imported capture UX preferences.
 - GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
