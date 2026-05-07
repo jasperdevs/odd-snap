@@ -10,23 +10,30 @@ use oddsnap_platform::{
 };
 
 #[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
+use std::os::windows::{ffi::OsStrExt, process::CommandExt};
 #[cfg(target_os = "windows")]
 use std::{
+    collections::HashMap,
+    ffi::OsStr,
     fs,
     io::{Read, Write},
     mem,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::mpsc::{self, Sender},
+    sync::{
+        mpsc::{self, Sender},
+        Mutex, OnceLock,
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(target_os = "windows")]
-use windows::core::BOOL;
+use windows::core::PCWSTR;
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, RECT, WPARAM};
+use windows::core::{w, BOOL};
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 #[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_EXTENDED_FRAME_BOUNDS};
 #[cfg(target_os = "windows")]
@@ -40,6 +47,8 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
 };
+#[cfg(target_os = "windows")]
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 #[cfg(target_os = "windows")]
@@ -55,12 +64,21 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN,
 };
 #[cfg(target_os = "windows")]
+use windows::Win32::UI::Shell::{
+    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
+    NOTIFYICONDATAW,
+};
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    DrawIconEx, GetCursorInfo, GetForegroundWindow, GetIconInfo, GetMessageW, GetSystemMetrics,
-    GetWindowRect, GetWindowTextLengthW, GetWindowTextW, PeekMessageW, PostThreadMessageW,
-    SetWindowDisplayAffinity, CURSORINFO, CURSOR_SHOWING, DI_NORMAL, ICONINFO, MSG, PM_NOREMOVE,
-    SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
-    WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY, WM_APP, WM_HOTKEY,
+    AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
+    DispatchMessageW, DrawIconEx, GetCursorInfo, GetCursorPos, GetForegroundWindow, GetIconInfo,
+    GetMessageW, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, LoadIconW,
+    PeekMessageW, PostThreadMessageW, RegisterClassW, SetForegroundWindow,
+    SetWindowDisplayAffinity, TrackPopupMenu, TranslateMessage, CURSORINFO, CURSOR_SHOWING,
+    DI_NORMAL, HMENU, HWND_MESSAGE, ICONINFO, IDI_APPLICATION, MF_SEPARATOR, MF_STRING, MSG,
+    PM_NOREMOVE, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    TPM_LEFTALIGN, TPM_RETURNCMD, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WINDOW_DISPLAY_AFFINITY,
+    WINDOW_EX_STYLE, WM_APP, WM_HOTKEY, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPED,
 };
 
 #[derive(Debug, Default)]
@@ -76,6 +94,30 @@ const FULLSCREEN_HOTKEY_ID: i32 = 0x0dd8;
 const ACTIVE_WINDOW_HOTKEY_ID: i32 = 0x0dd9;
 #[cfg(target_os = "windows")]
 const HOTKEY_STOP_MESSAGE: u32 = WM_APP + 0x0dd5;
+#[cfg(target_os = "windows")]
+const TRAY_ICON_ID: u32 = 0x0dd5;
+#[cfg(target_os = "windows")]
+const TRAY_CALLBACK_MESSAGE: u32 = WM_APP + 0x0de0;
+#[cfg(target_os = "windows")]
+const TRAY_STOP_MESSAGE: u32 = WM_APP + 0x0de1;
+#[cfg(target_os = "windows")]
+const TRAY_RECORDING_STATE_MESSAGE: u32 = WM_APP + 0x0de2;
+#[cfg(target_os = "windows")]
+const TRAY_MENU_SCREENSHOT_ID: usize = 0x1001;
+#[cfg(target_os = "windows")]
+const TRAY_MENU_OCR_ID: usize = 0x1002;
+#[cfg(target_os = "windows")]
+const TRAY_MENU_COLOR_PICKER_ID: usize = 0x1003;
+#[cfg(target_os = "windows")]
+const TRAY_MENU_RECORD_ID: usize = 0x1004;
+#[cfg(target_os = "windows")]
+const TRAY_MENU_SCROLL_CAPTURE_ID: usize = 0x1005;
+#[cfg(target_os = "windows")]
+const TRAY_MENU_SETTINGS_ID: usize = 0x1006;
+#[cfg(target_os = "windows")]
+const TRAY_MENU_HISTORY_ID: usize = 0x1007;
+#[cfg(target_os = "windows")]
+const TRAY_MENU_QUIT_ID: usize = 0x1008;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowsHotkeyEvent {
@@ -83,6 +125,18 @@ pub enum WindowsHotkeyEvent {
     Recording,
     FullScreenCapture,
     ActiveWindowCapture,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowsTrayEvent {
+    Capture,
+    Ocr,
+    ColorPicker,
+    ToggleRecording,
+    ScrollCapture,
+    Settings,
+    History,
+    Quit,
 }
 
 #[cfg(target_os = "windows")]
@@ -104,6 +158,43 @@ impl Drop for WindowsHotkeyListener {
     fn drop(&mut self) {
         unsafe {
             let _ = PostThreadMessageW(self.thread_id, HOTKEY_STOP_MESSAGE, WPARAM(0), LPARAM(0));
+        }
+
+        if let Some(join_handle) = self.join_handle.take() {
+            let _ = join_handle.join();
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug)]
+pub struct WindowsTrayIcon {
+    thread_id: u32,
+    join_handle: Option<JoinHandle<()>>,
+}
+
+#[cfg(target_os = "windows")]
+impl WindowsTrayIcon {
+    pub fn set_recording_state(&self, is_recording: bool) -> Result<(), PlatformError> {
+        unsafe {
+            PostThreadMessageW(
+                self.thread_id,
+                TRAY_RECORDING_STATE_MESSAGE,
+                WPARAM(usize::from(is_recording)),
+                LPARAM(0),
+            )
+            .map_err(|error| {
+                PlatformError::Failed(format!("failed to update tray recording state: {error}"))
+            })
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsTrayIcon {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = PostThreadMessageW(self.thread_id, TRAY_STOP_MESSAGE, WPARAM(0), LPARAM(0));
         }
 
         if let Some(join_handle) = self.join_handle.take() {
@@ -145,7 +236,7 @@ impl PlatformAdapter for WindowsPlatform {
                     PlatformCapability::GlobalHotkeys,
                     CapabilityState::InProgress,
                 ),
-                (PlatformCapability::Tray, CapabilityState::Planned),
+                (PlatformCapability::Tray, CapabilityState::InProgress),
                 (PlatformCapability::Clipboard, CapabilityState::InProgress),
                 (PlatformCapability::FileDialogs, CapabilityState::Planned),
                 (
@@ -568,6 +659,353 @@ pub fn start_oddsnap_hotkey_listener(
             )))
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+pub fn start_oddsnap_tray_icon(
+    events: Sender<WindowsTrayEvent>,
+) -> Result<WindowsTrayIcon, PlatformError> {
+    let (started_sender, started_receiver) = mpsc::sync_channel(1);
+    let join_handle = thread::spawn(move || {
+        run_tray_message_loop(events, started_sender);
+    });
+
+    match started_receiver.recv() {
+        Ok(Ok(thread_id)) => Ok(WindowsTrayIcon {
+            thread_id,
+            join_handle: Some(join_handle),
+        }),
+        Ok(Err(error)) => {
+            let _ = join_handle.join();
+            Err(PlatformError::Failed(error))
+        }
+        Err(error) => {
+            let _ = join_handle.join();
+            Err(PlatformError::Failed(format!(
+                "tray icon did not start: {error}"
+            )))
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+static TRAY_EVENT_SENDERS: OnceLock<Mutex<HashMap<isize, Sender<WindowsTrayEvent>>>> =
+    OnceLock::new();
+#[cfg(target_os = "windows")]
+static TRAY_RECORDING_STATES: OnceLock<Mutex<HashMap<isize, bool>>> = OnceLock::new();
+
+#[cfg(target_os = "windows")]
+fn tray_event_senders() -> &'static Mutex<HashMap<isize, Sender<WindowsTrayEvent>>> {
+    TRAY_EVENT_SENDERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(target_os = "windows")]
+fn hwnd_key(hwnd: HWND) -> isize {
+    hwnd.0 as isize
+}
+
+#[cfg(target_os = "windows")]
+fn tray_recording_states() -> &'static Mutex<HashMap<isize, bool>> {
+    TRAY_RECORDING_STATES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(target_os = "windows")]
+fn run_tray_message_loop(
+    events: Sender<WindowsTrayEvent>,
+    started_sender: mpsc::SyncSender<Result<u32, String>>,
+) {
+    let thread_id = unsafe { GetCurrentThreadId() };
+    let mut message = MSG::default();
+    unsafe {
+        let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+    }
+
+    let hwnd = match create_tray_message_window() {
+        Ok(hwnd) => hwnd,
+        Err(error) => {
+            let _ = started_sender.send(Err(error.to_string()));
+            return;
+        }
+    };
+
+    if let Ok(mut senders) = tray_event_senders().lock() {
+        senders.insert(hwnd_key(hwnd), events);
+    }
+    set_tray_recording_state(hwnd, false);
+
+    let mut is_recording = false;
+    if let Err(error) = add_tray_icon(hwnd, is_recording) {
+        remove_tray_sender(hwnd);
+        let _ = unsafe { DestroyWindow(hwnd) };
+        let _ = started_sender.send(Err(error.to_string()));
+        return;
+    }
+
+    let _ = started_sender.send(Ok(thread_id));
+
+    loop {
+        let status = unsafe { GetMessageW(&mut message, None, 0, 0) };
+        if status.0 <= 0 {
+            break;
+        }
+
+        match message.message {
+            TRAY_STOP_MESSAGE => {
+                break;
+            }
+            TRAY_RECORDING_STATE_MESSAGE => {
+                is_recording = message.wParam.0 != 0;
+                set_tray_recording_state(hwnd, is_recording);
+                let _ = modify_tray_icon(hwnd, is_recording);
+            }
+            _ => unsafe {
+                let _ = TranslateMessage(&message);
+                DispatchMessageW(&message);
+            },
+        }
+    }
+
+    delete_tray_icon(hwnd);
+    remove_tray_sender(hwnd);
+    remove_tray_recording_state(hwnd);
+    let _ = unsafe { DestroyWindow(hwnd) };
+}
+
+#[cfg(target_os = "windows")]
+fn create_tray_message_window() -> Result<HWND, PlatformError> {
+    let class_name = wide_null("OddSnapRustTrayWindow");
+    let module = unsafe { GetModuleHandleW(None) }
+        .map_err(|error| PlatformError::Failed(format!("GetModuleHandleW failed: {error}")))?;
+    let instance = HINSTANCE(module.0);
+    let window_class = WNDCLASSW {
+        lpfnWndProc: Some(tray_window_proc),
+        hInstance: instance,
+        lpszClassName: PCWSTR(class_name.as_ptr()),
+        ..Default::default()
+    };
+    unsafe {
+        let _ = RegisterClassW(&window_class);
+        CreateWindowExW(
+            WINDOW_EX_STYLE(0),
+            PCWSTR(class_name.as_ptr()),
+            w!("OddSnap Rust Tray"),
+            WS_OVERLAPPED,
+            0,
+            0,
+            0,
+            0,
+            Some(HWND_MESSAGE),
+            None,
+            Some(instance),
+            None,
+        )
+        .map_err(|error| PlatformError::Failed(format!("CreateWindowExW failed: {error}")))
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn tray_window_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    if message == TRAY_CALLBACK_MESSAGE {
+        match lparam.0 as u32 {
+            WM_LBUTTONUP => send_tray_event(hwnd, WindowsTrayEvent::Capture),
+            WM_RBUTTONUP => show_tray_menu(hwnd),
+            _ => {}
+        }
+        return LRESULT(0);
+    }
+
+    unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+}
+
+#[cfg(target_os = "windows")]
+fn send_tray_event(hwnd: HWND, event: WindowsTrayEvent) {
+    if let Ok(senders) = tray_event_senders().lock() {
+        if let Some(sender) = senders.get(&hwnd_key(hwnd)) {
+            let _ = sender.send(event);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn remove_tray_sender(hwnd: HWND) {
+    if let Ok(mut senders) = tray_event_senders().lock() {
+        senders.remove(&hwnd_key(hwnd));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn set_tray_recording_state(hwnd: HWND, is_recording: bool) {
+    if let Ok(mut states) = tray_recording_states().lock() {
+        states.insert(hwnd_key(hwnd), is_recording);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn tray_recording_state(hwnd: HWND) -> bool {
+    tray_recording_states()
+        .lock()
+        .ok()
+        .and_then(|states| states.get(&hwnd_key(hwnd)).copied())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn remove_tray_recording_state(hwnd: HWND) {
+    if let Ok(mut states) = tray_recording_states().lock() {
+        states.remove(&hwnd_key(hwnd));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn add_tray_icon(hwnd: HWND, is_recording: bool) -> Result<(), PlatformError> {
+    let data = tray_notify_icon_data(hwnd, is_recording)?;
+    unsafe { Shell_NotifyIconW(NIM_ADD, &data) }
+        .ok()
+        .map_err(|error| PlatformError::Failed(format!("Shell_NotifyIconW add failed: {error}")))
+}
+
+#[cfg(target_os = "windows")]
+fn modify_tray_icon(hwnd: HWND, is_recording: bool) -> Result<(), PlatformError> {
+    let data = tray_notify_icon_data(hwnd, is_recording)?;
+    unsafe { Shell_NotifyIconW(NIM_MODIFY, &data) }
+        .ok()
+        .map_err(|error| PlatformError::Failed(format!("Shell_NotifyIconW modify failed: {error}")))
+}
+
+#[cfg(target_os = "windows")]
+fn delete_tray_icon(hwnd: HWND) {
+    let data = NOTIFYICONDATAW {
+        cbSize: mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: hwnd,
+        uID: TRAY_ICON_ID,
+        ..Default::default()
+    };
+    let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &data) };
+}
+
+#[cfg(target_os = "windows")]
+fn tray_notify_icon_data(hwnd: HWND, is_recording: bool) -> Result<NOTIFYICONDATAW, PlatformError> {
+    let mut tip = [0u16; 128];
+    let text = if is_recording {
+        "OddSnap recording - click to stop, right-click for menu"
+    } else {
+        "OddSnap - Click to capture, right-click for menu"
+    };
+    copy_wide_truncated(text, &mut tip);
+    let icon = unsafe { LoadIconW(None, IDI_APPLICATION) }
+        .map_err(|error| PlatformError::Failed(format!("LoadIconW failed: {error}")))?;
+
+    Ok(NOTIFYICONDATAW {
+        cbSize: mem::size_of::<NOTIFYICONDATAW>() as u32,
+        hWnd: hwnd,
+        uID: TRAY_ICON_ID,
+        uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP,
+        uCallbackMessage: TRAY_CALLBACK_MESSAGE,
+        hIcon: icon,
+        szTip: tip,
+        ..Default::default()
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn show_tray_menu(hwnd: HWND) {
+    let Ok(menu) = build_tray_menu(tray_recording_state(hwnd)) else {
+        return;
+    };
+    let mut point = POINT::default();
+    unsafe {
+        let _ = GetCursorPos(&mut point);
+        let _ = SetForegroundWindow(hwnd);
+        let command = TrackPopupMenu(
+            menu,
+            TPM_LEFTALIGN | TPM_RETURNCMD,
+            point.x,
+            point.y,
+            Some(0),
+            hwnd,
+            None,
+        );
+        if command.0 > 0 {
+            if let Some(event) = tray_event_for_menu_id(command.0 as usize) {
+                send_tray_event(hwnd, event);
+            }
+        }
+        let _ = DestroyMenu(menu);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn build_tray_menu(is_recording: bool) -> Result<HMENU, PlatformError> {
+    let menu = unsafe { CreatePopupMenu() }
+        .map_err(|error| PlatformError::Failed(format!("CreatePopupMenu failed: {error}")))?;
+    append_tray_menu_item(menu, TRAY_MENU_SCREENSHOT_ID, "Screenshot")?;
+    append_tray_menu_item(menu, TRAY_MENU_OCR_ID, "Text capture")?;
+    append_tray_menu_item(menu, TRAY_MENU_COLOR_PICKER_ID, "Color picker")?;
+    append_tray_menu_item(
+        menu,
+        TRAY_MENU_RECORD_ID,
+        if is_recording {
+            "Stop recording"
+        } else {
+            "Record"
+        },
+    )?;
+    append_tray_menu_item(menu, TRAY_MENU_SCROLL_CAPTURE_ID, "Scroll capture")?;
+    append_tray_separator(menu)?;
+    append_tray_menu_item(menu, TRAY_MENU_SETTINGS_ID, "Settings")?;
+    append_tray_menu_item(menu, TRAY_MENU_HISTORY_ID, "History")?;
+    append_tray_separator(menu)?;
+    append_tray_menu_item(menu, TRAY_MENU_QUIT_ID, "Quit")?;
+    Ok(menu)
+}
+
+#[cfg(target_os = "windows")]
+fn append_tray_menu_item(menu: HMENU, id: usize, label: &str) -> Result<(), PlatformError> {
+    let label = wide_null(label);
+    unsafe { AppendMenuW(menu, MF_STRING, id, PCWSTR(label.as_ptr())) }
+        .map_err(|error| PlatformError::Failed(format!("AppendMenuW failed: {error}")))
+}
+
+#[cfg(target_os = "windows")]
+fn append_tray_separator(menu: HMENU) -> Result<(), PlatformError> {
+    unsafe { AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()) }
+        .map_err(|error| PlatformError::Failed(format!("AppendMenuW failed: {error}")))
+}
+
+#[cfg(target_os = "windows")]
+fn tray_event_for_menu_id(id: usize) -> Option<WindowsTrayEvent> {
+    match id {
+        TRAY_MENU_SCREENSHOT_ID => Some(WindowsTrayEvent::Capture),
+        TRAY_MENU_OCR_ID => Some(WindowsTrayEvent::Ocr),
+        TRAY_MENU_COLOR_PICKER_ID => Some(WindowsTrayEvent::ColorPicker),
+        TRAY_MENU_RECORD_ID => Some(WindowsTrayEvent::ToggleRecording),
+        TRAY_MENU_SCROLL_CAPTURE_ID => Some(WindowsTrayEvent::ScrollCapture),
+        TRAY_MENU_SETTINGS_ID => Some(WindowsTrayEvent::Settings),
+        TRAY_MENU_HISTORY_ID => Some(WindowsTrayEvent::History),
+        TRAY_MENU_QUIT_ID => Some(WindowsTrayEvent::Quit),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn wide_null(value: &str) -> Vec<u16> {
+    OsStr::new(value).encode_wide().chain(Some(0)).collect()
+}
+
+#[cfg(target_os = "windows")]
+fn copy_wide_truncated(value: &str, destination: &mut [u16]) {
+    if destination.is_empty() {
+        return;
+    }
+    let encoded = wide_null(value);
+    let len = encoded.len().min(destination.len());
+    destination[..len].copy_from_slice(&encoded[..len]);
+    destination[destination.len() - 1] = 0;
 }
 
 #[cfg(target_os = "windows")]
@@ -1848,6 +2286,58 @@ mod tests {
 
         assert_eq!(first, super::WindowsHotkeyEvent::FullScreenCapture);
         assert_eq!(second, super::WindowsHotkeyEvent::ActiveWindowCapture);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn tray_menu_ids_map_to_expected_events() {
+        assert_eq!(
+            super::tray_event_for_menu_id(super::TRAY_MENU_SCREENSHOT_ID),
+            Some(super::WindowsTrayEvent::Capture)
+        );
+        assert_eq!(
+            super::tray_event_for_menu_id(super::TRAY_MENU_OCR_ID),
+            Some(super::WindowsTrayEvent::Ocr)
+        );
+        assert_eq!(
+            super::tray_event_for_menu_id(super::TRAY_MENU_COLOR_PICKER_ID),
+            Some(super::WindowsTrayEvent::ColorPicker)
+        );
+        assert_eq!(
+            super::tray_event_for_menu_id(super::TRAY_MENU_RECORD_ID),
+            Some(super::WindowsTrayEvent::ToggleRecording)
+        );
+        assert_eq!(
+            super::tray_event_for_menu_id(super::TRAY_MENU_SCROLL_CAPTURE_ID),
+            Some(super::WindowsTrayEvent::ScrollCapture)
+        );
+        assert_eq!(
+            super::tray_event_for_menu_id(super::TRAY_MENU_SETTINGS_ID),
+            Some(super::WindowsTrayEvent::Settings)
+        );
+        assert_eq!(
+            super::tray_event_for_menu_id(super::TRAY_MENU_HISTORY_ID),
+            Some(super::WindowsTrayEvent::History)
+        );
+        assert_eq!(
+            super::tray_event_for_menu_id(super::TRAY_MENU_QUIT_ID),
+            Some(super::WindowsTrayEvent::Quit)
+        );
+        assert_eq!(super::tray_event_for_menu_id(0), None);
+    }
+
+    #[test]
+    #[ignore = "adds a temporary shell tray icon in the local desktop session"]
+    #[cfg(target_os = "windows")]
+    fn windows_tray_icon_can_start_update_and_stop() {
+        use std::sync::mpsc;
+
+        let (sender, _receiver) = mpsc::channel();
+        let tray_icon = super::start_oddsnap_tray_icon(sender).expect("tray icon");
+
+        tray_icon
+            .set_recording_state(true)
+            .expect("recording tray state");
     }
 
     #[test]

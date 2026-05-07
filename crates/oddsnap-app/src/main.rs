@@ -72,12 +72,15 @@ struct OddSnapRustApp {
     history_path: String,
     media_status: String,
     hotkey_status: String,
+    tray_status: String,
     recording_status: String,
     active_recording: Option<ActiveRecording>,
     capture_history: Vec<CaptureHistoryEntry>,
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
     _hotkey_listener: Option<oddsnap_platform_windows::WindowsHotkeyListener>,
+    #[cfg(target_os = "windows")]
+    tray_icon: Option<oddsnap_platform_windows::WindowsTrayIcon>,
 }
 
 struct CaptureHistoryEntry {
@@ -179,6 +182,7 @@ impl OddSnapRustApp {
             settings.fullscreen_hotkey.as_deref(),
             settings.active_window_hotkey.as_deref(),
         );
+        let (tray_status, tray_icon, tray_events) = start_tray_icon();
 
         let app = Self {
             platform_name: platform.name().into(),
@@ -192,15 +196,19 @@ impl OddSnapRustApp {
             history_path,
             media_status,
             hotkey_status,
+            tray_status,
             recording_status: "No recording running.".into(),
             active_recording: None,
             capture_history,
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
             _hotkey_listener: hotkey_listener,
+            #[cfg(target_os = "windows")]
+            tray_icon,
         };
 
         app.start_hotkey_event_pump(hotkey_events, cx);
+        app.start_tray_event_pump(tray_events, cx);
         app
     }
 
@@ -507,6 +515,12 @@ impl OddSnapRustApp {
                     .text_size(px(12.0))
                     .text_color(rgb(0xaab0ba))
                     .child(SharedString::from(self.hotkey_status.clone())),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0xaab0ba))
+                    .child(SharedString::from(self.tray_status.clone())),
             )
             .child(
                 div()
@@ -999,6 +1013,34 @@ impl OddSnapRustApp {
     fn start_hotkey_event_pump(&self, _: Option<()>, _: &mut Context<Self>) {}
 
     #[cfg(target_os = "windows")]
+    fn start_tray_event_pump(
+        &self,
+        receiver: Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsTrayEvent>>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(receiver) = receiver else {
+            return;
+        };
+
+        cx.spawn(async move |this, cx| loop {
+            while let Ok(event) = receiver.try_recv() {
+                let _ = this.update(cx, |app, cx| {
+                    app.handle_tray_event(event, cx);
+                    cx.notify();
+                });
+            }
+
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(100))
+                .await;
+        })
+        .detach();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn start_tray_event_pump(&self, _: Option<()>, _: &mut Context<Self>) {}
+
+    #[cfg(target_os = "windows")]
     fn handle_hotkey_event(&mut self, event: oddsnap_platform_windows::WindowsHotkeyEvent) {
         match event {
             oddsnap_platform_windows::WindowsHotkeyEvent::Capture => {
@@ -1016,6 +1058,50 @@ impl OddSnapRustApp {
             oddsnap_platform_windows::WindowsHotkeyEvent::ActiveWindowCapture => {
                 self.capture_status = "Active-window hotkey received.".into();
                 self.run_capture(CaptureMode::ActiveWindow);
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn handle_tray_event(
+        &mut self,
+        event: oddsnap_platform_windows::WindowsTrayEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            oddsnap_platform_windows::WindowsTrayEvent::Capture => {
+                if self.active_recording.is_some() {
+                    self.recording_status = "Tray stop recording received.".into();
+                    self.stop_recording();
+                } else {
+                    self.capture_status = "Tray capture received.".into();
+                    self.run_capture(hotkey_capture_mode(self.settings.default_capture_mode));
+                }
+            }
+            oddsnap_platform_windows::WindowsTrayEvent::ToggleRecording => {
+                self.recording_status = "Tray recording command received.".into();
+                self.toggle_recording(RecordingTarget::FullScreen);
+            }
+            oddsnap_platform_windows::WindowsTrayEvent::Ocr => {
+                self.capture_status = "Tray text capture is pending Rust OCR parity.".into();
+            }
+            oddsnap_platform_windows::WindowsTrayEvent::ColorPicker => {
+                self.capture_status = "Tray color picker is pending Rust overlay parity.".into();
+            }
+            oddsnap_platform_windows::WindowsTrayEvent::ScrollCapture => {
+                self.capture_status = "Tray scroll capture is pending Rust overlay parity.".into();
+            }
+            oddsnap_platform_windows::WindowsTrayEvent::Settings => {
+                self.tray_status = "Tray settings command focused the Rust window.".into();
+                cx.activate(true);
+            }
+            oddsnap_platform_windows::WindowsTrayEvent::History => {
+                self.tray_status = "Tray history command focused recent captures.".into();
+                cx.activate(true);
+            }
+            oddsnap_platform_windows::WindowsTrayEvent::Quit => {
+                self.tray_status = "Tray quit requested.".into();
+                cx.quit();
             }
         }
     }
@@ -1063,6 +1149,17 @@ impl OddSnapRustApp {
             self.stop_recording();
         } else {
             self.start_recording(target);
+        }
+    }
+
+    fn sync_tray_recording_state(&mut self) {
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(tray_icon) = &self.tray_icon {
+                if let Err(error) = tray_icon.set_recording_state(self.active_recording.is_some()) {
+                    self.tray_status = format!("Tray recording state update failed: {error}");
+                }
+            }
         }
     }
 
@@ -1117,6 +1214,7 @@ impl OddSnapRustApp {
                     width,
                     height,
                 });
+                self.sync_tray_recording_state();
                 format!("Recording {} started: {path}", target.label())
             }
             Err(error) => format!("Recording failed to start: {error}"),
@@ -1134,9 +1232,13 @@ impl OddSnapRustApp {
                 let path = result.output_path.display().to_string();
                 let history_status =
                     self.save_recording_history(result.output_path, active.width, active.height);
+                self.sync_tray_recording_state();
                 format!("Recording saved: {path}{history_status}")
             }
-            Err(error) => format!("Recording failed to stop: {error}"),
+            Err(error) => {
+                self.sync_tray_recording_state();
+                format!("Recording failed to stop: {error}")
+            }
         };
     }
 
@@ -1346,6 +1448,28 @@ fn start_capture_hotkey_listener(
         None,
         None,
     )
+}
+
+#[cfg(target_os = "windows")]
+fn start_tray_icon() -> (
+    String,
+    Option<oddsnap_platform_windows::WindowsTrayIcon>,
+    Option<std::sync::mpsc::Receiver<oddsnap_platform_windows::WindowsTrayEvent>>,
+) {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    match oddsnap_platform_windows::start_oddsnap_tray_icon(sender) {
+        Ok(tray_icon) => (
+            "Tray: Windows icon and menu ready.".into(),
+            Some(tray_icon),
+            Some(receiver),
+        ),
+        Err(error) => (format!("Tray unavailable: {error}"), None, None),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn start_tray_icon() -> (String, Option<()>, Option<()>) {
+    ("Tray: pending on this platform.".into(), None, None)
 }
 
 fn hotkey_status_summary(

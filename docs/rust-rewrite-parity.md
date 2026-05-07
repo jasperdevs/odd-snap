@@ -36,6 +36,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.
 - Windows hotkey listener can dispatch imported full-screen and active-window capture hotkeys into the GPUI shell.
+- Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.
 - GPUI capture smoke honors the imported capture delay and surfaces imported capture UX preferences.
 - GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
@@ -58,4 +59,5 @@ The Rust rewrite must not replace the current app until this document and the li
 ## Current Non-Parity State
 
 The rewrite does not yet implement the full production capture overlay, annotation, region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, packaging, or update behavior.
+The Windows tray foundation is present, but the Rust menu still routes text capture, color picker, and scroll capture to pending-status messages until those feature backends land.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.
