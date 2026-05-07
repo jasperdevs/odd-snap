@@ -44,8 +44,9 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.
 - GPUI shows the newest saved image capture as an inline preview when the file still exists.
+- Windows still capture can honor the imported cursor-inclusion preference for full-screen and active-window captures.
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement real screenshot capture, annotation, recording, OCR, translation, upload, history, local runtimes, packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, packaging, or update behavior.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.

@@ -51,6 +51,7 @@ Keep it updated whenever a rewrite milestone lands.
 
 - [x] Windows full-screen capture path.
 - [x] Windows GDI region capture foundation.
+- [x] Windows still-capture cursor inclusion preference.
 - [ ] Cross-platform region capture.
 - [x] Windows active-window capture foundation.
 - [ ] Cross-platform window capture.

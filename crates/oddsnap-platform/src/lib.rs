@@ -45,6 +45,12 @@ pub struct CaptureResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureRequest {
+    pub region: CaptureRegion,
+    pub include_cursor: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WindowInfo {
     pub id: String,
     pub title: String,
@@ -78,12 +84,31 @@ pub trait PlatformAdapter: Send + Sync {
 pub trait ScreenCaptureService: Send + Sync {
     fn monitors(&self) -> Result<Vec<MonitorInfo>, PlatformError>;
     fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError>;
+    fn capture_region_with_options(
+        &self,
+        request: CaptureRequest,
+    ) -> Result<CaptureResult, PlatformError> {
+        self.capture_region(request.region)
+    }
 
     fn capture_all_screens(&self) -> Result<CaptureResult, PlatformError> {
         let monitors = self.monitors()?;
         let region = virtual_screen_region(&monitors)
             .ok_or_else(|| PlatformError::Failed("no monitors available for capture".into()))?;
         self.capture_region(region)
+    }
+
+    fn capture_all_screens_with_cursor(
+        &self,
+        include_cursor: bool,
+    ) -> Result<CaptureResult, PlatformError> {
+        let monitors = self.monitors()?;
+        let region = virtual_screen_region(&monitors)
+            .ok_or_else(|| PlatformError::Failed("no monitors available for capture".into()))?;
+        self.capture_region_with_options(CaptureRequest {
+            region,
+            include_cursor,
+        })
     }
 }
 

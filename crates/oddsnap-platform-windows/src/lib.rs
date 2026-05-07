@@ -3,10 +3,10 @@ use oddsnap_core::{
     NativeUiProfile, PlatformCapabilities, PlatformCapability,
 };
 use oddsnap_platform::{
-    CaptureRegion, CaptureResult, ClipboardImageService, ClipboardTextService, HotkeyService,
-    MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService, VideoRecordingHandle,
-    VideoRecordingRequest, VideoRecordingResult, VideoRecordingService, WindowInfo,
-    WindowPickerService,
+    CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
+    HotkeyService, MonitorInfo, PlatformAdapter, PlatformError, ScreenCaptureService,
+    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingResult, VideoRecordingService,
+    WindowInfo, WindowPickerService,
 };
 
 #[cfg(target_os = "windows")]
@@ -56,8 +56,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetMessageW, GetSystemMetrics, GetWindowRect, GetWindowTextLengthW,
-    GetWindowTextW, PeekMessageW, PostThreadMessageW, MSG, PM_NOREMOVE, SM_CXVIRTUALSCREEN,
+    DrawIconEx, GetCursorInfo, GetForegroundWindow, GetIconInfo, GetMessageW, GetSystemMetrics,
+    GetWindowRect, GetWindowTextLengthW, GetWindowTextW, PeekMessageW, PostThreadMessageW,
+    CURSORINFO, CURSOR_SHOWING, DI_NORMAL, ICONINFO, MSG, PM_NOREMOVE, SM_CXVIRTUALSCREEN,
     SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN, WM_APP, WM_HOTKEY,
 };
 
@@ -171,12 +172,30 @@ impl ScreenCaptureService for WindowsPlatform {
     fn capture_region(&self, region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
         #[cfg(target_os = "windows")]
         {
-            capture_region_to_bmp(region)
+            capture_region_to_bmp(region, false)
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             let _ = region;
+            Err(PlatformError::Unsupported(
+                "Windows region capture is only available on Windows",
+            ))
+        }
+    }
+
+    fn capture_region_with_options(
+        &self,
+        request: CaptureRequest,
+    ) -> Result<CaptureResult, PlatformError> {
+        #[cfg(target_os = "windows")]
+        {
+            capture_region_to_bmp(request.region, request.include_cursor)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = request;
             Err(PlatformError::Unsupported(
                 "Windows region capture is only available on Windows",
             ))
@@ -938,7 +957,10 @@ unsafe fn copy_bytes_to_clipboard(format: u32, bytes: &[u8]) -> Result<(), Platf
 }
 
 #[cfg(target_os = "windows")]
-fn capture_region_to_bmp(region: CaptureRegion) -> Result<CaptureResult, PlatformError> {
+fn capture_region_to_bmp(
+    region: CaptureRegion,
+    include_cursor: bool,
+) -> Result<CaptureResult, PlatformError> {
     if region.width == 0 || region.height == 0 {
         return Err(PlatformError::Failed(
             "capture region must have non-zero width and height".into(),
@@ -951,7 +973,7 @@ fn capture_region_to_bmp(region: CaptureRegion) -> Result<CaptureResult, Platfor
         .map_err(|_| PlatformError::Failed("capture region height is too large".into()))?;
     let output_path = capture_output_path();
 
-    let bgra = unsafe { read_screen_bgra(region.x, region.y, width, height)? };
+    let bgra = unsafe { read_screen_bgra(region.x, region.y, width, height, include_cursor)? };
     write_bmp(&output_path, region.width, region.height, &bgra)?;
 
     Ok(CaptureResult {
@@ -966,13 +988,15 @@ unsafe fn read_screen_bgra(
     y: i32,
     width: i32,
     height: i32,
+    include_cursor: bool,
 ) -> Result<Vec<u8>, PlatformError> {
     let screen_dc = unsafe { GetDC(None) };
     if screen_dc.is_invalid() {
         return Err(PlatformError::Failed("GetDC failed for the desktop".into()));
     }
 
-    let result = unsafe { read_screen_bgra_with_dc(screen_dc, x, y, width, height) };
+    let result =
+        unsafe { read_screen_bgra_with_dc(screen_dc, x, y, width, height, include_cursor) };
     unsafe {
         ReleaseDC(None, screen_dc);
     }
@@ -986,6 +1010,7 @@ unsafe fn read_screen_bgra_with_dc(
     y: i32,
     width: i32,
     height: i32,
+    include_cursor: bool,
 ) -> Result<Vec<u8>, PlatformError> {
     let memory_dc = unsafe { CreateCompatibleDC(Some(screen_dc)) };
     if memory_dc.is_invalid() {
@@ -1002,8 +1027,20 @@ unsafe fn read_screen_bgra_with_dc(
         ));
     }
 
-    let result =
-        unsafe { read_screen_bgra_with_bitmap(screen_dc, memory_dc, bitmap, x, y, width, height) };
+    let result = unsafe {
+        read_screen_bgra_with_bitmap(
+            screen_dc,
+            memory_dc,
+            bitmap,
+            CaptureRegion {
+                x,
+                y,
+                width: width as u32,
+                height: height as u32,
+            },
+            include_cursor,
+        )
+    };
 
     unsafe {
         let _ = DeleteObject(bitmap.into());
@@ -1018,11 +1055,13 @@ unsafe fn read_screen_bgra_with_bitmap(
     screen_dc: HDC,
     memory_dc: HDC,
     bitmap: HBITMAP,
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
+    region: CaptureRegion,
+    include_cursor: bool,
 ) -> Result<Vec<u8>, PlatformError> {
+    let width = i32::try_from(region.width)
+        .map_err(|_| PlatformError::Failed("capture region width is too large".into()))?;
+    let height = i32::try_from(region.height)
+        .map_err(|_| PlatformError::Failed("capture region height is too large".into()))?;
     let old_object = unsafe { SelectObject(memory_dc, bitmap.into()) };
     if old_object.is_invalid() {
         return Err(PlatformError::Failed(
@@ -1038,8 +1077,8 @@ unsafe fn read_screen_bgra_with_bitmap(
             width,
             height,
             Some(screen_dc),
-            x,
-            y,
+            region.x,
+            region.y,
             ROP_CODE(SRCCOPY.0 | CAPTUREBLT.0),
         )
     };
@@ -1049,6 +1088,12 @@ unsafe fn read_screen_bgra_with_bitmap(
             SelectObject(memory_dc, old_object);
         }
         return Err(PlatformError::Failed(format!("BitBlt failed: {error}")));
+    }
+
+    if include_cursor {
+        unsafe {
+            draw_cursor_if_inside(memory_dc, &region);
+        }
     }
 
     let mut info = BITMAPINFO {
@@ -1090,6 +1135,58 @@ unsafe fn read_screen_bgra_with_bitmap(
     }
 
     Ok(pixels)
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn draw_cursor_if_inside(target_dc: HDC, capture_region: &CaptureRegion) {
+    let mut cursor_info = CURSORINFO {
+        cbSize: mem::size_of::<CURSORINFO>() as u32,
+        ..Default::default()
+    };
+    if unsafe { GetCursorInfo(&mut cursor_info) }.is_err() {
+        return;
+    }
+    if cursor_info.flags.0 & CURSOR_SHOWING.0 == 0 || cursor_info.hCursor.is_invalid() {
+        return;
+    }
+
+    let cursor_x = cursor_info.ptScreenPos.x;
+    let cursor_y = cursor_info.ptScreenPos.y;
+    let left = capture_region.x;
+    let top = capture_region.y;
+    let right = left.saturating_add(capture_region.width as i32);
+    let bottom = top.saturating_add(capture_region.height as i32);
+    if cursor_x < left || cursor_x >= right || cursor_y < top || cursor_y >= bottom {
+        return;
+    }
+
+    let mut icon_info = ICONINFO::default();
+    let cursor_icon = cursor_info.hCursor.into();
+    if unsafe { GetIconInfo(cursor_icon, &mut icon_info) }.is_err() {
+        return;
+    }
+
+    let draw_x = cursor_x - left - icon_info.xHotspot as i32;
+    let draw_y = cursor_y - top - icon_info.yHotspot as i32;
+    let _ = unsafe {
+        DrawIconEx(
+            target_dc,
+            draw_x,
+            draw_y,
+            cursor_icon,
+            0,
+            0,
+            0,
+            None,
+            DI_NORMAL,
+        )
+    };
+    if !icon_info.hbmMask.is_invalid() {
+        let _ = unsafe { DeleteObject(icon_info.hbmMask.into()) };
+    }
+    if !icon_info.hbmColor.is_invalid() {
+        let _ = unsafe { DeleteObject(icon_info.hbmColor.into()) };
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -1397,6 +1494,32 @@ mod tests {
             .copy_image_to_clipboard(&result.image_path)
             .expect("copy capture");
         fs::remove_file(&result.image_path).expect("remove captured bmp");
+    }
+
+    #[test]
+    #[ignore = "captures a tiny local desktop region with cursor drawing enabled"]
+    #[cfg(target_os = "windows")]
+    fn windows_region_capture_accepts_cursor_option() {
+        use std::fs;
+
+        use oddsnap_platform::{CaptureRegion, CaptureRequest, ScreenCaptureService};
+
+        let adapter = WindowsPlatform;
+        let result = adapter
+            .capture_region_with_options(CaptureRequest {
+                region: CaptureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 2,
+                    height: 2,
+                },
+                include_cursor: true,
+            })
+            .expect("capture tiny region with cursor option");
+        let bytes = fs::read(&result.image_path).expect("read cursor-option bmp");
+        fs::remove_file(&result.image_path).expect("remove captured bmp");
+
+        assert_eq!(&bytes[0..2], b"BM");
     }
 
     #[test]

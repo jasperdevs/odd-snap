@@ -22,9 +22,9 @@ use oddsnap_core::{
     HistoryStore, PlatformCapability, SettingsStore,
 };
 use oddsnap_platform::{
-    default_capture_directory, persist_capture_to_path_as, virtual_screen_region,
+    default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRequest,
     ClipboardImageService, PlatformAdapter, ScreenCaptureService, VideoRecordingHandle,
-    VideoRecordingRequest, VideoRecordingService, WindowCaptureService,
+    VideoRecordingRequest, VideoRecordingService, WindowPickerService,
 };
 
 fn main() {
@@ -639,8 +639,15 @@ impl OddSnapRustApp {
         let result = {
             let adapter = oddsnap_platform_windows::WindowsPlatform;
             let capture = match mode {
-                CaptureMode::FullScreen => adapter.capture_all_screens(),
-                CaptureMode::ActiveWindow => adapter.capture_active_window(),
+                CaptureMode::FullScreen => {
+                    adapter.capture_all_screens_with_cursor(self.settings.show_cursor)
+                }
+                CaptureMode::ActiveWindow => adapter.active_window().and_then(|window| {
+                    adapter.capture_region_with_options(CaptureRequest {
+                        region: window.bounds,
+                        include_cursor: self.settings.show_cursor,
+                    })
+                }),
             };
             capture.and_then(|capture| {
                 let destination = self.capture_destination(&capture);
