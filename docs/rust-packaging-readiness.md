@@ -11,6 +11,7 @@ The Rust rewrite workflow is CI-only and should prove:
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo build -p oddsnap-app --bin oddsnap-rust`
+- Linux runtime command preflight for the external tools used by current capture, clipboard, region-selection, active-window, color-picker, and recording foundations
 - unsigned macOS `.app` bundle creation on macOS runners, including host-architecture validation and no artifact upload
 
 The matrix runs on Windows, Ubuntu, primary Apple Silicon macOS (`macos-26`), and Intel macOS compatibility (`macos-26-intel`) runners so platform-specific `cfg` paths are compiled on native runners instead of relying on weak cross-compilation from Windows.
@@ -33,6 +34,8 @@ Current Linux runtime foundations also expect optional host tools for feature us
 - X11 monitor geometry: `xrandr`
 - clipboard: `wl-copy`, `xclip`, or `xsel`
 - X11 recording: `ffmpeg` with `x11grab` support and a valid `DISPLAY`
+
+The CI lane installs and checks representative command coverage for these foundations (`ffmpeg`, `grim`, `gnome-screenshot`, `scrot`, `slurp`, `slop`, `xdotool`, `xrandr`, `wl-copy`, `xclip`, and `xsel`). It does not prove real desktop capture in a granted graphical session.
 
 ## macOS runner and release notes
 
