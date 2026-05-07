@@ -8125,6 +8125,67 @@ mod tests {
     }
 
     #[test]
+    fn image_search_sync_handles_large_imported_histories_and_retains_live_paths() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-large-image-index-sync-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp root");
+
+        let entries = (0..1200)
+            .map(|index| {
+                let file_path = root.join(format!("capture-{index:04}.png"));
+                std::fs::write(&file_path, [index as u8]).expect("write indexed image");
+                HistoryEntry {
+                    file_name: format!("capture-{index:04}.png"),
+                    file_path,
+                    captured_at_unix_ms: index,
+                    width: 10,
+                    height: 10,
+                    file_size_bytes: 1,
+                    kind: HistoryKind::Image,
+                    upload_url: None,
+                    upload_provider: None,
+                    upload_error: None,
+                    thumbnail_path: None,
+                }
+            })
+            .collect::<Vec<_>>();
+        let store = ImageSearchIndexStore::new(root.join("index.json"));
+        let settings = AppSettings::default();
+        let (synced, status) = sync_image_search_index_records(
+            &store,
+            &HistoryIndex {
+                entries: entries.clone(),
+                ..HistoryIndex::default()
+            },
+            &settings,
+        );
+
+        assert_eq!(synced.records.len(), 1200);
+        assert_eq!(image_search_reindex_pending_count(&synced, u64::MAX), 1200);
+        assert_eq!(status, "Image index: 1200 pending records refreshed.");
+
+        let (retained, _) = sync_image_search_index_records(
+            &store,
+            &HistoryIndex {
+                entries: entries.into_iter().take(25).collect(),
+                ..HistoryIndex::default()
+            },
+            &settings,
+        );
+        assert_eq!(retained.records.len(), 25);
+        assert!(retained.records.iter().all(|record| record
+            .file_path
+            .display()
+            .to_string()
+            .contains("capture-0")));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn external_url_command_uses_current_platform_browser_opener() {
         let (program, args) = external_url_command("https://chatgpt.com/");
 

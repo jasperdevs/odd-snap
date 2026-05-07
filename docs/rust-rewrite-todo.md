@@ -201,6 +201,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI image-index status reports record, pending, OCR-ready, and failed counts.
 - [x] GPUI image-search controls expose an explicit automatic OCR indexing toggle.
 - [x] GPUI image-search OCR reindex queue exposes start/cancel controls, current-file details, and running result counts.
+- [x] Image-search index sync is covered against a 1200-item imported history fixture with real files and stale-record retention.
 - [ ] Full reindex verification against large imported histories and real OCR runtimes.
 - [ ] Production color picker overlay polish.
 - [x] AI Redirect hotkey can open configured chat providers that do not require hosted-image upload and copies the newest saved image.
