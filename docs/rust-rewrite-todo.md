@@ -183,6 +183,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Upload destination model, credential/HTTPS preflight, size limits, AI Redirect routing, and explicit history status for auto-upload attempts.
 - [x] Remote sticker/background-removal provider foundation for Remove.bg and Photoroom.
 - [x] Remote DeepAI upscale provider foundation.
+- [x] Local rembg sticker runtime foundation with active-model preparation, stroke/shadow effects, and GPU-to-CPU processing fallback.
+- [x] Local ONNX upscale runtime foundation with model download/cache, scale handling, and GPU-to-CPU processing fallback.
 - [x] Curl-backed public upload hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and temporary-host fallback.
 - [x] Curl-backed credentialed Imgur and ImgBB upload request/response support using imported upload settings.
 - [x] Curl-backed credentialed Gyazo and imgpile upload request/response support using imported upload settings.
@@ -197,9 +199,9 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed OneDrive upload/create-link flow with imported access token/folder settings.
 - [x] Curl-backed Google Drive multipart/resumable upload and permission flow with imported access token/folder settings.
 - [x] Upload destinations, with legacy transfer.sh preserved as an explicit unavailable-provider error.
-- [ ] Full stickers/background removal parity, including local rembg runtimes, model management, effects, and GPU fallback.
-- [ ] Full upscale parity, including local ONNX runtimes, model management, GPU fallback, scale selection, and preview window.
-- [ ] Local runtime management.
+- [ ] Full stickers/background removal parity, including full settings-panel model management and real-runtime smoke verification.
+- [ ] Full upscale parity, including full settings-panel model management, preview window, and real-runtime smoke verification.
+- [x] Local runtime install/remove controls for active sticker/upscale runtimes.
 - [ ] Update/install flow.
 
 ## Milestone 6 - Migration And Parity Closure

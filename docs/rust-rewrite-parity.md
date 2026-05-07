@@ -112,8 +112,10 @@ The Rust rewrite must not replace the current app until this document and the li
 - Imported AI Redirect hotkeys can open configured chat providers that do not require hosted-image upload, copying the newest saved image first.
 - Google Lens AI Redirect can upload the newest saved image through the configured AI temporary host destination, persist the returned upload link in history, and open the Lens URL.
 - Rust preserves the legacy upload destination list, credential/HTTPS preflight rules, file-size limits, AI Redirect upload routing, and stores explicit upload pending/configuration errors in history instead of silently dropping auto-upload settings.
-- Rust can run configured remote sticker/background-removal providers (Remove.bg and Photoroom) through curl, save PNG sticker history entries, and copy the processed output to the clipboard; local rembg runtime parity is still pending.
-- Rust can run configured remote DeepAI upscale providers through curl, download the returned output image, save the processed PNG, and copy it to the clipboard; local ONNX upscale runtime parity and preview-window parity are still pending.
+- Rust can run configured remote sticker/background-removal providers (Remove.bg and Photoroom) through curl, save PNG sticker history entries, and copy the processed output to the clipboard.
+- Rust can run configured local sticker/background-removal through an isolated rembg Python runtime, preserve the legacy model cache layout, prepare the active local model, apply stroke/shadow presentation effects, and fall back from the GPU engine to the configured CPU engine when processing fails.
+- Rust can run configured remote DeepAI upscale providers through curl, download the returned output image, save the processed PNG, and copy it to the clipboard.
+- Rust can run configured local upscale through an isolated ONNX Runtime Python runtime, download/cache the active ONNX model, honor the configured scale factor, and fall back from the GPU engine to the configured CPU engine when processing fails.
 - Rust can auto-upload saved media to curl-backed public hosts for Catbox, Litterbox, file.io, Uguu, tmpfiles.org, Gofile, and the temporary-host fallback chain, then persist the returned link in history.
 - Rust can build and parse curl-backed Imgur and ImgBB uploads from imported upload settings, including Imgur Client-ID/Bearer auth and ImgBB API-key uploads.
 - Rust can build and parse curl-backed Gyazo and imgpile uploads from imported upload settings, including Gyazo access-token and imgpile bearer-token uploads.
@@ -154,11 +156,11 @@ The Rust rewrite must not replace the current app until this document and the li
 
 ## Current Non-Parity State
 
-The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, detached OCR result window polish, explicit image-search reindex progress UI/controls, full history actions, sticker/upscale local runtime install/uninstall management, release packaging, or update behavior.
+The rewrite does not yet implement the full production capture overlay, annotation, interactive region recording/audio parity, macOS OCR language discovery/install status, detached OCR result window polish, explicit image-search reindex progress UI/controls, full history actions, full sticker/upscale settings UI, release packaging, or update behavior.
 Linux recording is currently an X11-only FFmpeg `x11grab` foundation; Wayland recording and microphone/system-audio muxing are still pending.
 The Windows tray foundation is present and routes text capture to the OCR foundation, but scroll capture still reports pending status until that backend lands.
 The macOS menu bar foundation is present and routes text capture to the OCR foundation, but it still needs real-device validation on Apple Silicon macOS and scroll capture still reports pending status until that backend lands.
-Sticker/upscale parity is remote-provider-only in Rust right now and still depends on the current platform region selector; local rembg/ONNX runtime install, cached model management, GPU fallback, presentation effects, and upscale preview UI still need to land before full feature parity can be claimed.
+Sticker/upscale parity still depends on the current platform region selector; the Rust local rembg/ONNX runtime foundation is present, but full settings-panel model management, preview-window parity, and real-device runtime smoke verification still need to land before full feature parity can be claimed.
 The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, or sound/toast polish.
 The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair/window-detection feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, or annotation tools.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.

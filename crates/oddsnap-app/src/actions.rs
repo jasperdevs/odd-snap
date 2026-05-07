@@ -63,6 +63,10 @@ pub(crate) enum SettingsAction {
     RemoveArgosTranslationRuntime,
     InstallLocalTranslationRuntime,
     RemoveLocalTranslationRuntime,
+    InstallStickerRuntime,
+    RemoveStickerRuntime,
+    InstallUpscaleRuntime,
+    RemoveUpscaleRuntime,
 }
 
 #[cfg(any(test, not(target_os = "windows")))]

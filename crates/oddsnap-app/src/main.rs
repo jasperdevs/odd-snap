@@ -665,6 +665,14 @@ impl OddSnapRustApp {
             )
             .child(
                 div()
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                    .child(SharedString::from(
+                        sticker_upscale::sticker_upscale_runtime_status_summary(&self.settings),
+                    )),
+            )
+            .child(
+                div()
                     .flex()
                     .gap(px(8.0))
                     .child(self.settings_button(
@@ -694,6 +702,35 @@ impl OddSnapRustApp {
                         } else {
                             SettingsAction::InstallLocalTranslationRuntime
                         },
+                    )),
+            )
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.0))
+                    .child(self.settings_button(
+                        cx,
+                        "sticker-runtime-button",
+                        "Install Sticker Runtime".into(),
+                        SettingsAction::InstallStickerRuntime,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "remove-sticker-runtime-button",
+                        "Remove Sticker Runtime".into(),
+                        SettingsAction::RemoveStickerRuntime,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "upscale-runtime-button",
+                        "Install Upscale Runtime".into(),
+                        SettingsAction::InstallUpscaleRuntime,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "remove-upscale-runtime-button",
+                        "Remove Upscale Runtime".into(),
+                        SettingsAction::RemoveUpscaleRuntime,
                     )),
             )
             .child(
@@ -2680,6 +2717,34 @@ impl OddSnapRustApp {
                     }
                     Err(error) => format!("Open-source local runtime remove failed: {error}"),
                 };
+            }
+            SettingsAction::InstallStickerRuntime => {
+                self.capture_status =
+                    match sticker_upscale::install_active_sticker_runtime(&self.settings) {
+                        Ok(status) => status,
+                        Err(error) => format!("Sticker local runtime install failed: {error}"),
+                    };
+            }
+            SettingsAction::RemoveStickerRuntime => {
+                self.capture_status =
+                    match sticker_upscale::remove_active_sticker_runtime(&self.settings) {
+                        Ok(status) => status,
+                        Err(error) => format!("Sticker local runtime remove failed: {error}"),
+                    };
+            }
+            SettingsAction::InstallUpscaleRuntime => {
+                self.capture_status =
+                    match sticker_upscale::install_active_upscale_runtime(&self.settings) {
+                        Ok(status) => status,
+                        Err(error) => format!("Upscale local runtime install failed: {error}"),
+                    };
+            }
+            SettingsAction::RemoveUpscaleRuntime => {
+                self.capture_status =
+                    match sticker_upscale::remove_active_upscale_runtime(&self.settings) {
+                        Ok(status) => status,
+                        Err(error) => format!("Upscale local runtime remove failed: {error}"),
+                    };
             }
         }
     }
