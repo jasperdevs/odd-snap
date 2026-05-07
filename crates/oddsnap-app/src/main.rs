@@ -27,10 +27,10 @@ use oddsnap_core::{
     retain_indexed_image_paths, upsert_image_search_record, AiChatProvider, AppSettings,
     CapabilityState, CaptureImageFormat, CodeHistoryEntry, ColorHistoryEntry, DefaultCaptureMode,
     FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
-    ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchSources,
-    OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality, ScrollingCaptureMode,
-    SettingsStore, StickerProvider, StickerSettings, TranslationModel, UploadDestination,
-    UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings,
+    ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchOcrState,
+    ImageSearchSources, OcrHistoryEntry, PlatformCapability, RecordingFormat, RecordingQuality,
+    ScrollingCaptureMode, SettingsStore, StickerProvider, StickerSettings, TranslationModel,
+    UploadDestination, UploadPreflight, UploadSettings, UpscaleProvider, UpscaleSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, image_file_dimensions, persist_capture_to_path_as,
@@ -1424,6 +1424,12 @@ impl OddSnapRustApp {
                         SettingsAction::ToggleImageSearchDiagnostics,
                     ))
                     .child(self.image_search_index_ocr_button(cx))
+                    .child(self.settings_button(
+                        cx,
+                        "image-search-auto-index-button",
+                        format!("Auto OCR {}", on_off(self.settings.auto_index_images)),
+                        SettingsAction::ToggleImageSearchAutoIndex,
+                    ))
                     .child(self.settings_button(
                         cx,
                         "image-search-hide-button",
@@ -2977,6 +2983,22 @@ impl OddSnapRustApp {
                 self.persist_image_search_settings(format!(
                     "Image search diagnostics {}",
                     on_off(self.settings.show_image_search_diagnostics)
+                ));
+            }
+            SettingsAction::ToggleImageSearchAutoIndex => {
+                self.settings.auto_index_images = !self.settings.auto_index_images;
+                if !self.settings.auto_index_images {
+                    self.image_search_index_status = "Image index: automatic OCR off.".into();
+                } else {
+                    self.image_search_index_status =
+                        match self.image_search_index_store.load_or_default() {
+                            Ok(index) => image_search_index_status(&index),
+                            Err(error) => format!("Image index unavailable: {error}"),
+                        };
+                }
+                self.persist_image_search_settings(format!(
+                    "Image OCR auto-index {}",
+                    on_off(self.settings.auto_index_images)
                 ));
             }
             SettingsAction::InstallArgosTranslationRuntime => {
@@ -4847,15 +4869,35 @@ fn sync_image_search_index_records(
 }
 
 fn image_search_index_status(index: &ImageSearchIndex) -> String {
-    image_search_index_status_with_counts(index.records.len(), None, 0)
+    let pending = index
+        .records
+        .iter()
+        .filter(|record| {
+            record.ocr_state != ImageSearchOcrState::Failed
+                && image_search_record_needs_ocr(record, app_unix_millis_now())
+        })
+        .count();
+    let indexed = index
+        .records
+        .iter()
+        .filter(|record| record.ocr_state == ImageSearchOcrState::Indexed)
+        .count();
+    let failed = index
+        .records
+        .iter()
+        .filter(|record| record.ocr_state == ImageSearchOcrState::Failed)
+        .count();
+    image_search_index_status_with_counts(index.records.len(), pending, indexed, None, failed)
 }
 
 fn image_search_index_status_with_updates(updated: usize, failed: usize) -> String {
-    image_search_index_status_with_counts(updated, Some(updated), failed)
+    image_search_index_status_with_counts(updated, 0, 0, Some(updated), failed)
 }
 
 fn image_search_index_status_with_counts(
     count: usize,
+    pending: usize,
+    indexed: usize,
     updated: Option<usize>,
     failed: usize,
 ) -> String {
@@ -4867,8 +4909,9 @@ fn image_search_index_status_with_counts(
         (Some(updated), failed) => {
             format!("Image index: {updated} refreshed, {failed} failed.")
         }
-        (None, 0) => format!("Image index: {count} records."),
-        (None, failed) => format!("Image index: {count} records, {failed} failed."),
+        (None, _) => format!(
+            "Image index: {count} records, {pending} pending, {indexed} OCR ready, {failed} failed."
+        ),
     }
 }
 
@@ -6646,6 +6689,42 @@ mod tests {
         assert_eq!(record.ocr_language_tag, "en-US");
 
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn image_search_index_status_reports_pending_ready_and_failed_counts() {
+        let pending = ImageSearchIndexRecord {
+            file_path: PathBuf::from("pending.png"),
+            file_length_bytes: 10,
+            last_write_time_unix_ms: 1,
+            ocr_language_tag: "auto".into(),
+            ocr_engine_id: "pending".into(),
+            ocr_completed: false,
+            ocr_state: ImageSearchOcrState::Pending,
+            ocr_retry_count: 0,
+            next_ocr_retry_unix_ms: 0,
+            ocr_text: String::new(),
+            indexed_at_unix_ms: 1,
+            last_error: String::new(),
+        };
+        let mut indexed = pending.clone();
+        indexed.file_path = PathBuf::from("indexed.png");
+        indexed.ocr_completed = true;
+        indexed.ocr_state = ImageSearchOcrState::Indexed;
+        indexed.ocr_text = "Settings".into();
+        let mut failed = pending.clone();
+        failed.file_path = PathBuf::from("failed.png");
+        failed.ocr_state = ImageSearchOcrState::Failed;
+        failed.ocr_retry_count = 3;
+
+        let status = image_search_index_status(&ImageSearchIndex {
+            records: vec![pending, indexed, failed],
+        });
+
+        assert_eq!(
+            status,
+            "Image index: 3 records, 1 pending, 1 OCR ready, 1 failed."
+        );
     }
 
     #[test]
