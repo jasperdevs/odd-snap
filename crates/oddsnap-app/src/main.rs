@@ -770,6 +770,9 @@ impl OddSnapRustApp {
                     .flex()
                     .flex_col()
                     .gap(px(3.0))
+                    .min_w_0()
+                    .w_full()
+                    .overflow_hidden()
                     .rounded(px(6.0))
                     .bg(rgb(0x1d2027))
                     .px(px(10.0))
@@ -783,12 +786,18 @@ impl OddSnapRustApp {
                     ))))
                     .child(
                         div()
+                            .min_w_0()
+                            .w_full()
+                            .truncate()
                             .text_size(px(11.0))
                             .text_color(rgb(0x9ba3af))
                             .child(SharedString::from(entry.path.clone())),
                     )
                     .child(
                         div()
+                            .min_w_0()
+                            .w_full()
+                            .line_clamp(2)
                             .text_size(px(11.0))
                             .text_color(rgb(0x9ba3af))
                             .child(SharedString::from(history_upload_summary(entry))),
@@ -1475,8 +1484,8 @@ impl OddSnapRustApp {
     }
 
     fn open_history_path(&mut self, path: PathBuf) {
-        self.capture_status = match reveal_file_in_system_browser(&path) {
-            Ok(()) => format!("Opened {}.", path.display()),
+        self.capture_status = match reveal_history_path(&path) {
+            Ok(action) => format!("{action} {}.", path.display()),
             Err(error) => format!("Open failed: {error}"),
         };
     }
@@ -2785,34 +2794,63 @@ fn hotkey_capture_mode(default_mode: DefaultCaptureMode) -> CaptureMode {
     }
 }
 
-fn reveal_file_command(path: &Path) -> (&'static str, Vec<String>) {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RevealAction {
+    RevealFile,
+    #[cfg(all(unix, not(target_os = "macos")))]
+    OpenContainingFolder,
+}
+
+impl RevealAction {
+    fn past_tense(self) -> &'static str {
+        match self {
+            Self::RevealFile => "Revealed",
+            #[cfg(all(unix, not(target_os = "macos")))]
+            Self::OpenContainingFolder => "Opened containing folder for",
+        }
+    }
+}
+
+fn reveal_file_command(path: &Path) -> (&'static str, Vec<String>, RevealAction) {
     #[cfg(target_os = "windows")]
     {
-        ("explorer.exe", vec![format!("/select,{}", path.display())])
+        (
+            "explorer.exe",
+            vec![format!("/select,{}", path.display())],
+            RevealAction::RevealFile,
+        )
     }
 
     #[cfg(target_os = "macos")]
     {
-        ("open", vec!["-R".into(), path.display().to_string()])
+        (
+            "open",
+            vec!["-R".into(), path.display().to_string()],
+            RevealAction::RevealFile,
+        )
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         let target = path.parent().unwrap_or(path);
-        ("xdg-open", vec![target.display().to_string()])
+        (
+            "xdg-open",
+            vec![target.display().to_string()],
+            RevealAction::OpenContainingFolder,
+        )
     }
 }
 
-fn reveal_file_in_system_browser(path: &Path) -> Result<(), String> {
+fn reveal_history_path(path: &Path) -> Result<&'static str, String> {
     if !path.exists() {
         return Err(format!("{} does not exist", path.display()));
     }
 
-    let (program, args) = reveal_file_command(path);
+    let (program, args, action) = reveal_file_command(path);
     Command::new(program)
         .args(args)
         .spawn()
-        .map(|_| ())
+        .map(|_| action.past_tense())
         .map_err(|error| format!("failed to run {program}: {error}"))
 }
 
@@ -3083,24 +3121,27 @@ mod tests {
         #[cfg(not(target_os = "windows"))]
         let path = PathBuf::from("/tmp/captures/OddSnap.png");
 
-        let (program, args) = reveal_file_command(&path);
+        let (program, args, action) = reveal_file_command(&path);
 
         #[cfg(target_os = "windows")]
         {
             assert_eq!(program, "explorer.exe");
             assert_eq!(args, vec![r"/select,C:\captures\OddSnap.png"]);
+            assert_eq!(action, RevealAction::RevealFile);
         }
 
         #[cfg(target_os = "macos")]
         {
             assert_eq!(program, "open");
             assert_eq!(args, vec!["-R", "/tmp/captures/OddSnap.png"]);
+            assert_eq!(action, RevealAction::RevealFile);
         }
 
         #[cfg(all(unix, not(target_os = "macos")))]
         {
             assert_eq!(program, "xdg-open");
             assert_eq!(args, vec!["/tmp/captures"]);
+            assert_eq!(action, RevealAction::OpenContainingFolder);
         }
     }
 
