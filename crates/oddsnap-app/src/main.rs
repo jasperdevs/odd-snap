@@ -12,18 +12,20 @@ use std::{
 use gpui::prelude::FluentBuilder;
 use gpui::{
     div, img, px, rgb, size, App, AppContext, Bounds, Context, InteractiveElement, IntoElement,
-    ObjectFit, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
-    StyledImage, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
+    KeyDownEvent, ObjectFit, ParentElement, Render, SharedString, StatefulInteractiveElement,
+    Styled, StyledImage, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
     WindowDecorations, WindowOptions,
 };
 use gpui_platform::application;
 use oddsnap_core::{
     build_available_capture_path, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
     default_history_path, default_settings_path, discover_ffmpeg_tools, format_file_name_template,
-    AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat, ColorHistoryEntry,
-    DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind,
-    HistoryStore, ImageSearchSources, PlatformCapability, RecordingFormat, RecordingQuality,
-    SettingsStore, TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
+    image_search_record_diagnostics, rank_image_search_items, AiChatProvider, AppSettings,
+    CapabilityState, CaptureImageFormat, ColorHistoryEntry, DefaultCaptureMode,
+    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
+    ImageSearchRecordDiagnostics, ImageSearchSources, PlatformCapability, RecordingFormat,
+    RecordingQuality, SettingsStore, TranslationModel, UploadDestination, UploadPreflight,
+    UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
@@ -105,6 +107,9 @@ struct OddSnapRustApp {
     active_recording: Option<ActiveRecording>,
     capture_history: Vec<CaptureHistoryEntry>,
     color_history: Vec<ColorHistoryEntry>,
+    image_search_query: String,
+    image_search_status: String,
+    image_search_input_active: bool,
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
     _hotkey_listener: Option<oddsnap_platform_windows::WindowsHotkeyListener>,
@@ -116,13 +121,17 @@ struct OddSnapRustApp {
     tray_icon: Option<oddsnap_platform_macos::MacosTrayIcon>,
 }
 
+#[derive(Clone)]
 struct CaptureHistoryEntry {
     mode: CaptureMode,
     kind: HistoryKind,
     path: String,
+    file_name: String,
     preview_path: Option<PathBuf>,
     width: u32,
     height: u32,
+    captured_at_unix_ms: u64,
+    image_search_ocr_text: String,
     upload_url: Option<String>,
     upload_provider: Option<String>,
     upload_error: Option<String>,
@@ -292,6 +301,9 @@ impl OddSnapRustApp {
             active_recording: None,
             capture_history,
             color_history,
+            image_search_query: String::new(),
+            image_search_status: "Image search ready.".into(),
+            image_search_input_active: false,
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
             _hotkey_listener: hotkey_listener,
@@ -403,6 +415,8 @@ impl Render for OddSnapRustApp {
             .bg(ui::skin::color(ui::skin::APP_BG))
             .text_color(ui::skin::color(ui::skin::APP_TEXT))
             .font_family("Segoe UI")
+            .track_focus(&self.focus_handle)
+            .on_key_down(cx.listener(Self::on_key_down))
             .child(
                 div()
                     .flex()
@@ -726,6 +740,16 @@ impl OddSnapRustApp {
         }
 
         body = body.child(div().text_size(px(13.0)).child("Recent captures"));
+        if self.settings.show_image_search_bar {
+            body = body.child(self.image_search_bar(cx));
+        } else {
+            body = body.child(self.settings_button(
+                cx,
+                "image-search-show-button",
+                "Show search".into(),
+                SettingsAction::ToggleImageSearchBar,
+            ));
+        }
 
         if self.capture_history.is_empty() {
             return body.child(
@@ -736,15 +760,29 @@ impl OddSnapRustApp {
             );
         }
 
-        if let Some(preview_path) = self
-            .capture_history
+        let visible_history = self.visible_capture_history();
+        let search_active = self.image_search_active();
+
+        if visible_history.is_empty() && search_active {
+            return body.child(div().text_size(px(12.0)).text_color(rgb(0x8b93a3)).child(
+                SharedString::from(format!(
+                    "No matches for '{}'.",
+                    self.image_search_query.trim()
+                )),
+            ));
+        }
+
+        if let Some(preview_path) = visible_history
             .iter()
             .find_map(|entry| entry.preview_path.clone())
         {
             body = body.child(self.capture_preview(preview_path));
         }
 
-        for entry in &self.capture_history {
+        for entry in &visible_history {
+            let diagnostics = self.image_search_diagnostics(entry);
+            let match_summary = search_match_summary(&diagnostics);
+            let details_text = diagnostics.details_text;
             body = body.child(
                 div()
                     .flex()
@@ -782,6 +820,28 @@ impl OddSnapRustApp {
                             .text_color(rgb(0x9ba3af))
                             .child(SharedString::from(history_upload_summary(entry))),
                     )
+                    .when(search_active, |row| {
+                        row.child(
+                            div()
+                                .min_w_0()
+                                .w_full()
+                                .truncate()
+                                .text_size(px(11.0))
+                                .text_color(rgb(0x9ba3af))
+                                .child(SharedString::from(match_summary.clone())),
+                        )
+                    })
+                    .when(self.settings.show_image_search_diagnostics, |row| {
+                        row.child(
+                            div()
+                                .min_w_0()
+                                .w_full()
+                                .line_clamp(3)
+                                .text_size(px(11.0))
+                                .text_color(rgb(0x7f8795))
+                                .child(SharedString::from(details_text.clone())),
+                        )
+                    })
                     .child(
                         div()
                             .flex()
@@ -803,6 +863,177 @@ impl OddSnapRustApp {
         }
 
         body
+    }
+
+    fn image_search_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let query_label = if self.image_search_query.is_empty() {
+            "Search screenshots, OCR text, or filenames...".into()
+        } else {
+            self.image_search_query.clone()
+        };
+        let query_color = if self.image_search_query.is_empty() {
+            rgb(0x7f8795)
+        } else {
+            ui::skin::color(ui::skin::BRIGHT_TEXT)
+        };
+        let sources = self.image_search_sources();
+
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.0))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.0))
+                    .child(
+                        div()
+                            .id("image-search-field")
+                            .flex_1()
+                            .min_w_0()
+                            .rounded(px(7.0))
+                            .border_1()
+                            .border_color(if self.image_search_input_active {
+                                rgb(0x5d6f92)
+                            } else {
+                                rgb(0x303744)
+                            })
+                            .bg(rgb(0x151922))
+                            .px(px(10.0))
+                            .py(px(7.0))
+                            .truncate()
+                            .text_size(px(12.0))
+                            .text_color(query_color)
+                            .child(SharedString::from(query_label))
+                            .on_click(cx.listener(|this: &mut Self, _, window, cx| {
+                                cx.stop_propagation();
+                                window.focus(&this.focus_handle(cx), cx);
+                                this.image_search_input_active = true;
+                                this.refresh_image_search_status();
+                                cx.notify();
+                            })),
+                    )
+                    .child(self.settings_button(
+                        cx,
+                        "image-search-file-name-button",
+                        format!(
+                            "File {}",
+                            on_off(sources.contains(ImageSearchSources::FILE_NAME))
+                        ),
+                        SettingsAction::ToggleImageSearchFileName,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "image-search-ocr-button",
+                        format!("OCR {}", on_off(sources.contains(ImageSearchSources::OCR))),
+                        SettingsAction::ToggleImageSearchOcr,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "image-search-exact-button",
+                        format!("Exact {}", on_off(self.settings.image_search_exact_match)),
+                        SettingsAction::ToggleImageSearchExactMatch,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "image-search-diagnostics-button",
+                        format!(
+                            "Diag {}",
+                            on_off(self.settings.show_image_search_diagnostics)
+                        ),
+                        SettingsAction::ToggleImageSearchDiagnostics,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "image-search-hide-button",
+                        "Hide".into(),
+                        SettingsAction::ToggleImageSearchBar,
+                    )),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(rgb(0x8b93a3))
+                    .child(SharedString::from(self.image_search_status_text())),
+            )
+    }
+
+    fn image_search_sources(&self) -> ImageSearchSources {
+        ImageSearchSources::from_bits(self.settings.image_search_sources)
+    }
+
+    fn image_search_active(&self) -> bool {
+        self.settings.show_image_search_bar
+            && !self.image_search_query.trim().is_empty()
+            && !self.image_search_sources().is_empty()
+    }
+
+    fn visible_capture_history(&self) -> Vec<CaptureHistoryEntry> {
+        if !self.image_search_active() {
+            return self.capture_history.iter().take(6).cloned().collect();
+        }
+
+        rank_image_search_items(
+            self.capture_history.clone(),
+            self.image_search_query.trim(),
+            |entry| entry.image_search_ocr_text.as_str(),
+            |entry| entry.file_name.as_str(),
+            |entry| entry.captured_at_unix_ms,
+            self.image_search_sources(),
+            self.settings.image_search_exact_match,
+        )
+        .into_iter()
+        .take(20)
+        .collect()
+    }
+
+    fn image_search_diagnostics(
+        &self,
+        entry: &CaptureHistoryEntry,
+    ) -> ImageSearchRecordDiagnostics {
+        image_search_record_diagnostics(
+            PathBuf::from(&entry.path),
+            None,
+            &entry.file_name,
+            self.image_search_active()
+                .then_some(self.image_search_query.trim()),
+            self.image_search_sources(),
+            self.settings.image_search_exact_match,
+        )
+    }
+
+    fn image_search_status_text(&self) -> String {
+        if !self.settings.show_image_search_bar {
+            return "Image search hidden.".into();
+        }
+
+        let sources = self.image_search_sources();
+        if sources.is_empty() {
+            return "Image search off: no sources enabled.".into();
+        }
+
+        let query = self.image_search_query.trim();
+        if query.is_empty() {
+            return self.image_search_status.clone();
+        }
+
+        let match_count = self.visible_capture_history().len();
+        let source_label = image_search_sources_label(sources);
+        let exact = if self.settings.image_search_exact_match {
+            "exact"
+        } else {
+            "loose"
+        };
+        format!("{match_count} matches for '{query}' via {source_label}/{exact}.")
+    }
+
+    fn refresh_image_search_status(&mut self) {
+        self.image_search_status = if self.image_search_input_active {
+            "Image search active.".into()
+        } else {
+            "Image search ready.".into()
+        };
     }
 
     fn capture_preview(&self, preview_path: PathBuf) -> impl IntoElement {
@@ -840,6 +1071,52 @@ impl OddSnapRustApp {
                             .into_any_element()
                     }),
             )
+    }
+
+    fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        if !self.image_search_input_active || !self.settings.show_image_search_bar {
+            return;
+        }
+        if event.keystroke.modifiers.control
+            || event.keystroke.modifiers.platform
+            || event.keystroke.modifiers.alt
+        {
+            return;
+        }
+
+        let key = event.keystroke.key.to_ascii_lowercase();
+        match key.as_str() {
+            "escape" => {
+                if self.image_search_query.is_empty() {
+                    self.image_search_input_active = false;
+                } else {
+                    self.image_search_query.clear();
+                }
+            }
+            "backspace" => {
+                self.image_search_query.pop();
+            }
+            "delete" => {
+                self.image_search_query.clear();
+            }
+            "space" => {
+                self.image_search_query.push(' ');
+            }
+            "enter" | "tab" | "shift" | "control" | "alt" | "cmd" | "super" => return,
+            _ => {
+                let Some(text) = event.keystroke.key_char.as_deref() else {
+                    return;
+                };
+                if text.chars().any(char::is_control) {
+                    return;
+                }
+                self.image_search_query.push_str(text);
+            }
+        }
+
+        self.refresh_image_search_status();
+        cx.stop_propagation();
+        cx.notify();
     }
 
     fn capability_panel(&self) -> impl IntoElement {
@@ -1430,6 +1707,52 @@ impl OddSnapRustApp {
                     self.settings.recording_quality.label()
                 ));
             }
+            SettingsAction::ToggleImageSearchBar => {
+                self.settings.show_image_search_bar = !self.settings.show_image_search_bar;
+                if !self.settings.show_image_search_bar {
+                    self.image_search_query.clear();
+                    self.image_search_input_active = false;
+                }
+                self.persist_image_search_settings(format!(
+                    "Image search bar {}",
+                    on_off(self.settings.show_image_search_bar)
+                ));
+            }
+            SettingsAction::ToggleImageSearchFileName => {
+                self.toggle_image_search_source(ImageSearchSources::FILE_NAME);
+                self.persist_image_search_settings(format!(
+                    "Image search file-name source {}",
+                    on_off(
+                        self.image_search_sources()
+                            .contains(ImageSearchSources::FILE_NAME)
+                    )
+                ));
+            }
+            SettingsAction::ToggleImageSearchOcr => {
+                self.toggle_image_search_source(ImageSearchSources::OCR);
+                self.persist_image_search_settings(format!(
+                    "Image search OCR source {}",
+                    on_off(
+                        self.image_search_sources()
+                            .contains(ImageSearchSources::OCR)
+                    )
+                ));
+            }
+            SettingsAction::ToggleImageSearchExactMatch => {
+                self.settings.image_search_exact_match = !self.settings.image_search_exact_match;
+                self.persist_image_search_settings(format!(
+                    "Image search exact match {}",
+                    on_off(self.settings.image_search_exact_match)
+                ));
+            }
+            SettingsAction::ToggleImageSearchDiagnostics => {
+                self.settings.show_image_search_diagnostics =
+                    !self.settings.show_image_search_diagnostics;
+                self.persist_image_search_settings(format!(
+                    "Image search diagnostics {}",
+                    on_off(self.settings.show_image_search_diagnostics)
+                ));
+            }
         }
     }
 
@@ -1445,6 +1768,24 @@ impl OddSnapRustApp {
             Ok(()) => format!("{message}."),
             Err(error) => format!("Settings save failed: {error}"),
         };
+    }
+
+    fn persist_image_search_settings(&mut self, message: String) {
+        self.refresh_image_search_status();
+        self.capture_status = match self.settings_store.save(&self.settings) {
+            Ok(()) => format!("{message}."),
+            Err(error) => format!("Settings save failed: {error}"),
+        };
+    }
+
+    fn toggle_image_search_source(&mut self, source: ImageSearchSources) {
+        let mut bits = self.image_search_sources().bits();
+        if ImageSearchSources::from_bits(bits).contains(source) {
+            bits &= !source.bits();
+        } else {
+            bits |= source.bits();
+        }
+        self.settings.image_search_sources = ImageSearchSources::from_bits(bits).bits();
     }
 
     fn open_history_path(&mut self, path: PathBuf) {
@@ -2284,9 +2625,12 @@ impl OddSnapRustApp {
                     mode: target.capture_mode(),
                     kind,
                     path: path.display().to_string(),
+                    file_name: file_name_for_path(&path),
                     preview_path,
                     width,
                     height,
+                    captured_at_unix_ms: 0,
+                    image_search_ocr_text: String::new(),
                     upload_url: upload.url,
                     upload_provider: upload.provider,
                     upload_error: upload.error,
@@ -2330,9 +2674,12 @@ impl OddSnapRustApp {
                     mode,
                     kind: HistoryKind::Image,
                     path: capture.image_path.display().to_string(),
+                    file_name: file_name_for_path(&capture.image_path),
                     preview_path: preview_path_for_capture(&capture.image_path),
                     width: capture.region.width,
                     height: capture.region.height,
+                    captured_at_unix_ms: 0,
+                    image_search_ocr_text: String::new(),
                     upload_url: upload.url,
                     upload_provider: upload.provider,
                     upload_error: upload.error,
@@ -2687,22 +3034,31 @@ fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistory
     index
         .entries
         .into_iter()
-        .take(6)
         .map(|entry| CaptureHistoryEntry {
             mode: CaptureMode::FullScreen,
             kind: entry.kind,
             path: entry.file_path.display().to_string(),
+            file_name: entry.file_name,
             preview_path: entry
                 .thumbnail_path
                 .filter(|path| path.exists())
                 .or_else(|| preview_path_for_capture(&entry.file_path)),
             width: entry.width,
             height: entry.height,
+            captured_at_unix_ms: entry.captured_at_unix_ms,
+            image_search_ocr_text: String::new(),
             upload_url: entry.upload_url,
             upload_provider: entry.upload_provider,
             upload_error: entry.upload_error,
         })
         .collect()
+}
+
+fn file_name_for_path(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_string()
 }
 
 fn history_entries_to_color_history(index: HistoryIndex) -> Vec<ColorHistoryEntry> {
@@ -2740,6 +3096,26 @@ fn history_upload_summary(entry: &CaptureHistoryEntry) -> String {
     }
 
     "No upload link".into()
+}
+
+fn search_match_summary(diagnostics: &ImageSearchRecordDiagnostics) -> String {
+    if diagnostics.match_text.is_empty() {
+        diagnostics.status_text.clone()
+    } else {
+        format!("{} · {}", diagnostics.match_text, diagnostics.status_text)
+    }
+}
+
+fn image_search_sources_label(sources: ImageSearchSources) -> &'static str {
+    match (
+        sources.contains(ImageSearchSources::FILE_NAME),
+        sources.contains(ImageSearchSources::OCR),
+    ) {
+        (true, true) => "file+OCR",
+        (true, false) => "file",
+        (false, true) => "OCR",
+        (false, false) => "off",
+    }
 }
 
 fn newest_history_image_path(history: &[CaptureHistoryEntry]) -> Option<PathBuf> {
@@ -2792,15 +3168,7 @@ fn image_search_settings_summary(settings: &AppSettings) -> String {
     }
 
     let sources = ImageSearchSources::from_bits(settings.image_search_sources);
-    let source_label = match (
-        sources.contains(ImageSearchSources::FILE_NAME),
-        sources.contains(ImageSearchSources::OCR),
-    ) {
-        (true, true) => "file+OCR",
-        (true, false) => "file",
-        (false, true) => "OCR",
-        (false, false) => "off",
-    };
+    let source_label = image_search_sources_label(sources);
     let exact = if settings.image_search_exact_match {
         "exact"
     } else {
@@ -3843,9 +4211,12 @@ mod tests {
             mode: CaptureMode::FullScreen,
             kind: HistoryKind::Image,
             path: "capture.png".into(),
+            file_name: "capture.png".into(),
             preview_path: None,
             width: 10,
             height: 10,
+            captured_at_unix_ms: 1,
+            image_search_ocr_text: String::new(),
             upload_url: Some("https://example.test/capture.png".into()),
             upload_provider: Some("Imgur".into()),
             upload_error: None,
@@ -3951,9 +4322,12 @@ mod tests {
             mode: CaptureMode::FullScreen,
             kind: HistoryKind::Image,
             path: "capture.png".into(),
+            file_name: "capture.png".into(),
             preview_path: None,
             width: 10,
             height: 10,
+            captured_at_unix_ms: 1,
+            image_search_ocr_text: String::new(),
             upload_url: Some("https://files.catbox.moe/capture.png".into()),
             upload_provider: Some("Catbox".into()),
             upload_error: None,
@@ -3993,9 +4367,12 @@ mod tests {
                 mode: CaptureMode::FullScreen,
                 kind: HistoryKind::Video,
                 path: root.join("capture.mp4").display().to_string(),
+                file_name: "capture.mp4".into(),
                 preview_path: None,
                 width: 10,
                 height: 10,
+                captured_at_unix_ms: 1,
+                image_search_ocr_text: String::new(),
                 upload_url: None,
                 upload_provider: None,
                 upload_error: None,
@@ -4004,9 +4381,12 @@ mod tests {
                 mode: CaptureMode::FullScreen,
                 kind: HistoryKind::Image,
                 path: missing.display().to_string(),
+                file_name: "missing.png".into(),
                 preview_path: None,
                 width: 10,
                 height: 10,
+                captured_at_unix_ms: 2,
+                image_search_ocr_text: String::new(),
                 upload_url: None,
                 upload_provider: None,
                 upload_error: None,
@@ -4015,9 +4395,12 @@ mod tests {
                 mode: CaptureMode::FullScreen,
                 kind: HistoryKind::Sticker,
                 path: image.display().to_string(),
+                file_name: "capture.png".into(),
                 preview_path: None,
                 width: 10,
                 height: 10,
+                captured_at_unix_ms: 3,
+                image_search_ocr_text: String::new(),
                 upload_url: None,
                 upload_provider: None,
                 upload_error: None,

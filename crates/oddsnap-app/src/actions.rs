@@ -54,6 +54,11 @@ pub(crate) enum SettingsAction {
     ToggleWindowDetection,
     RecordingFormat,
     RecordingQuality,
+    ToggleImageSearchBar,
+    ToggleImageSearchFileName,
+    ToggleImageSearchOcr,
+    ToggleImageSearchExactMatch,
+    ToggleImageSearchDiagnostics,
 }
 
 #[cfg(any(test, not(target_os = "windows")))]
