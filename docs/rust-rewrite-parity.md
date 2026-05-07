@@ -95,7 +95,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust recording history can store FFmpeg-generated JPG thumbnails for saved GIF/video entries.
 - FFmpeg-generated recording thumbnails must be readable image files before they are attached to history entries.
 - GPUI can persistently cycle implemented recording preferences for format and quality.
-- GPUI history rows show media kind and legacy upload metadata, can copy saved file paths, can copy saved image captures back to the system clipboard, and can copy stored upload links.
+- GPUI history rows show media kind and legacy upload metadata, can copy saved file paths, can copy saved image captures back to the system clipboard, and can copy or open stored upload links.
 - GPUI history rows can remove entries from the persisted Rust history index without deleting the original media file.
 - Imported AI Redirect hotkeys can open configured chat providers that do not require hosted-image upload, copying the newest saved image first; Google Lens remains blocked until hosted upload destination parity lands.
 - Rust preserves the legacy upload destination list, credential/HTTPS preflight rules, file-size limits, AI Redirect upload routing, and stores explicit upload pending/configuration errors in history instead of silently dropping auto-upload settings.

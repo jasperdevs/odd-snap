@@ -135,6 +135,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Recording thumbnails are validated as decodable image files before being shown in history.
 - [x] Basic persisted media history index.
 - [x] GPUI history rows show media kind and legacy upload metadata, with upload-link copy action.
+- [x] GPUI history rows can open stored upload links through the platform browser opener.
 - [x] GPUI history rows can copy saved file paths and image captures.
 - [x] GPUI history rows can remove entries from the persisted Rust history index without deleting media files.
 - [ ] Full media history UI and actions.
