@@ -91,6 +91,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Linux has an X11 FFmpeg-backed desktop recording foundation through `x11grab`, including explicit-region bounds for full-screen and active-window recording requests.
 - Linux recording falls back to video-only when imported settings request microphone or desktop audio, instead of blocking the whole recording before audio capture parity lands.
 - macOS has a `screencapture`-backed desktop recording foundation that records to a temporary MOV and transcodes to the requested OddSnap recording format through FFmpeg; microphone capture can request the default input, while system audio remains pending.
+- GPUI recording status reflects macOS microphone support separately from still-pending Windows/Linux audio capture and macOS system audio.
 - GPUI can start active-window recording through the explicit-region FFmpeg path.
 - The current desktop/window recording path supports GIF output through the shared FFmpeg recording arguments and records GIF entries distinctly in history.
 - GPUI can start freeform region recording through the same region selector and explicit-region FFmpeg path for GIF, MP4, WebM, and MKV settings.

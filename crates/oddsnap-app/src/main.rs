@@ -2367,16 +2367,7 @@ impl OddSnapRustApp {
             return base;
         }
 
-        let microphone = if self.settings.record_microphone {
-            "mic configured, capture pending"
-        } else {
-            "mic off"
-        };
-        let desktop_audio = if self.settings.record_desktop_audio {
-            "desktop audio configured, capture pending"
-        } else {
-            "desktop audio off"
-        };
+        let (microphone, desktop_audio) = recording_audio_status_summary(&self.settings);
         format!("{base} · {microphone} · {desktop_audio}")
     }
 
@@ -3367,6 +3358,45 @@ fn recording_history_kind(format: RecordingFormat) -> HistoryKind {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn recording_audio_status_summary(settings: &AppSettings) -> (&'static str, &'static str) {
+    let microphone = if settings.record_microphone {
+        "mic on"
+    } else {
+        "mic off"
+    };
+    let desktop_audio = if settings.record_desktop_audio {
+        "system audio configured, pending"
+    } else {
+        "system audio off"
+    };
+    (microphone, desktop_audio)
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn recording_audio_status_summary(settings: &AppSettings) -> (&'static str, &'static str) {
+    let microphone = if settings.record_microphone {
+        "mic configured, pending"
+    } else {
+        "mic off"
+    };
+    let desktop_audio = if settings.record_desktop_audio {
+        "desktop audio configured, pending"
+    } else {
+        "desktop audio off"
+    };
+    (microphone, desktop_audio)
+}
+
+#[cfg(all(
+    not(target_os = "linux"),
+    not(target_os = "macos"),
+    not(target_os = "windows")
+))]
+fn recording_audio_status_summary(_: &AppSettings) -> (&'static str, &'static str) {
+    ("mic unsupported", "desktop audio unsupported")
+}
+
 #[cfg(target_os = "linux")]
 fn recording_audio_request_for_host(settings: &AppSettings) -> (bool, bool, Option<&'static str>) {
     if settings.record_microphone || settings.record_desktop_audio {
@@ -3905,10 +3935,13 @@ mod tests {
             record_desktop_audio: true,
             ..AppSettings::default()
         };
+        let (microphone_status, desktop_audio_status) = recording_audio_status_summary(&settings);
         let (microphone, desktop_audio, note) = recording_audio_request_for_host(&settings);
 
         #[cfg(target_os = "linux")]
         {
+            assert_eq!(microphone_status, "mic configured, pending");
+            assert_eq!(desktop_audio_status, "desktop audio configured, pending");
             assert!(!microphone);
             assert!(!desktop_audio);
             assert_eq!(
@@ -3919,6 +3952,8 @@ mod tests {
 
         #[cfg(target_os = "macos")]
         {
+            assert_eq!(microphone_status, "mic on");
+            assert_eq!(desktop_audio_status, "system audio configured, pending");
             assert!(microphone);
             assert!(!desktop_audio);
             assert_eq!(
@@ -3929,6 +3964,8 @@ mod tests {
 
         #[cfg(target_os = "windows")]
         {
+            assert_eq!(microphone_status, "mic configured, pending");
+            assert_eq!(desktop_audio_status, "desktop audio configured, pending");
             assert!(!microphone);
             assert!(!desktop_audio);
             assert_eq!(
@@ -3943,6 +3980,8 @@ mod tests {
             not(target_os = "windows")
         ))]
         {
+            assert_eq!(microphone_status, "mic unsupported");
+            assert_eq!(desktop_audio_status, "desktop audio unsupported");
             assert!(!microphone);
             assert!(!desktop_audio);
             assert_eq!(note, None);

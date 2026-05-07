@@ -129,6 +129,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Bundled/AppData FFmpeg discovery parity before PATH fallback.
 - [x] Rust recording settings import and FFmpeg output argument model.
 - [x] GPUI persisted controls for recording format and quality.
+- [x] macOS microphone recording request through native `screencapture -g`, with GPUI status no longer calling it pending.
 - [ ] Microphone recording.
 - [ ] System audio recording where supported.
 - [x] Video thumbnail generation for Rust recording history.
