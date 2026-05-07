@@ -149,7 +149,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI history rows can copy saved file paths and image captures.
 - [x] GPUI history rows can remove entries from the persisted Rust history index without deleting media files.
 - [x] GPUI history rows can manually retry uploads with the current upload destination.
-- [ ] Full media history UI and actions.
+- [x] GPUI media history exposes kind and upload-state filters with filter-aware empty states.
+- [ ] Full media history UI details, bulk actions, and large-history polish.
 - [x] GPUI app has a dedicated action model module for capture modes, recording targets, pending tool routes, hotkey events, and settings actions.
 
 ## Milestone 5 - Advanced OddSnap Features

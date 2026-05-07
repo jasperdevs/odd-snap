@@ -128,6 +128,8 @@ struct OddSnapRustApp {
     latest_ocr_result: Option<String>,
     latest_scan_result: Option<CodeHistoryEntry>,
     image_search: image_search::ImageSearchUiState,
+    history_kind_filter: HistoryKindFilter,
+    history_upload_filter: HistoryUploadFilter,
     image_search_reindex_queue: ImageSearchReindexQueueState,
     last_auto_image_search_ocr_unix_ms: u64,
     focus_handle: gpui::FocusHandle,
@@ -188,6 +190,107 @@ struct CaptureRunResult {
     capture: oddsnap_platform::CaptureResult,
     copy_error: Option<String>,
     original_preview_path: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HistoryKindFilter {
+    All,
+    Image,
+    Gif,
+    Video,
+    Sticker,
+}
+
+impl HistoryKindFilter {
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Image => "Images",
+            Self::Gif => "GIFs",
+            Self::Video => "Videos",
+            Self::Sticker => "Stickers",
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Self::All => Self::Image,
+            Self::Image => Self::Gif,
+            Self::Gif => Self::Video,
+            Self::Video => Self::Sticker,
+            Self::Sticker => Self::All,
+        }
+    }
+
+    fn matches(self, kind: HistoryKind) -> bool {
+        match self {
+            Self::All => true,
+            Self::Image => kind == HistoryKind::Image,
+            Self::Gif => kind == HistoryKind::Gif,
+            Self::Video => kind == HistoryKind::Video,
+            Self::Sticker => kind == HistoryKind::Sticker,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HistoryUploadFilter {
+    All,
+    Uploaded,
+    Failed,
+    Pending,
+    NoLink,
+}
+
+impl HistoryUploadFilter {
+    fn label(self) -> &'static str {
+        match self {
+            Self::All => "All uploads",
+            Self::Uploaded => "Uploaded",
+            Self::Failed => "Failed",
+            Self::Pending => "Pending",
+            Self::NoLink => "No link",
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Self::All => Self::Uploaded,
+            Self::Uploaded => Self::Failed,
+            Self::Failed => Self::Pending,
+            Self::Pending => Self::NoLink,
+            Self::NoLink => Self::All,
+        }
+    }
+
+    fn matches(self, entry: &CaptureHistoryEntry) -> bool {
+        match self {
+            Self::All => true,
+            Self::Uploaded => entry
+                .upload_url
+                .as_deref()
+                .is_some_and(|url| !url.trim().is_empty()),
+            Self::Failed => entry
+                .upload_error
+                .as_deref()
+                .filter(|error| !error.trim().is_empty())
+                .is_some_and(|error| !error.starts_with("pending: ")),
+            Self::Pending => entry
+                .upload_error
+                .as_deref()
+                .is_some_and(|error| error.starts_with("pending: ")),
+            Self::NoLink => {
+                entry
+                    .upload_url
+                    .as_deref()
+                    .is_none_or(|url| url.trim().is_empty())
+                    && entry
+                        .upload_error
+                        .as_deref()
+                        .is_none_or(|error| error.trim().is_empty())
+            }
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -544,6 +647,8 @@ impl OddSnapRustApp {
             latest_ocr_result,
             latest_scan_result,
             image_search: image_search::ImageSearchUiState::new(),
+            history_kind_filter: HistoryKindFilter::All,
+            history_upload_filter: HistoryUploadFilter::All,
             image_search_reindex_queue: ImageSearchReindexQueueState::default(),
             last_auto_image_search_ocr_unix_ms: 0,
             focus_handle: cx.focus_handle(),
@@ -1306,6 +1411,7 @@ impl OddSnapRustApp {
         }
 
         body = body.child(div().text_size(px(13.0)).child("Recent captures"));
+        body = body.child(self.history_filter_bar(cx));
         if self.settings.show_image_search_bar {
             body = body.child(self.image_search_bar(cx));
         } else {
@@ -1317,6 +1423,12 @@ impl OddSnapRustApp {
             ));
         }
 
+        let filtered_history = filtered_capture_history(
+            &self.capture_history,
+            self.history_kind_filter,
+            self.history_upload_filter,
+        );
+
         if self.capture_history.is_empty() {
             return body.child(
                 div()
@@ -1325,11 +1437,20 @@ impl OddSnapRustApp {
                     .child("No saved captures yet."),
             );
         }
+        if filtered_history.is_empty() {
+            return body.child(div().text_size(px(12.0)).text_color(rgb(0x8b93a3)).child(
+                SharedString::from(format!(
+                    "No captures for {} / {}.",
+                    self.history_kind_filter.label(),
+                    self.history_upload_filter.label()
+                )),
+            ));
+        }
 
         let visible_history = image_search::visible_items(
             &self.settings,
             &self.image_search,
-            &self.capture_history,
+            &filtered_history,
             6,
             20,
         );
@@ -1435,6 +1556,67 @@ impl OddSnapRustApp {
         }
 
         body
+    }
+
+    fn history_filter_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_wrap()
+            .gap(px(8.0))
+            .child(self.history_kind_filter_button(cx))
+            .child(self.history_upload_filter_button(cx))
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(rgb(0x8b93a3))
+                    .child(SharedString::from(format!(
+                        "{} visible before search",
+                        filtered_capture_history(
+                            &self.capture_history,
+                            self.history_kind_filter,
+                            self.history_upload_filter,
+                        )
+                        .len()
+                    ))),
+            )
+    }
+
+    fn history_kind_filter_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("history-kind-filter-button"),
+            ui::ButtonVariant::History,
+        )
+        .child(SharedString::from(format!(
+            "Kind {}",
+            self.history_kind_filter.label()
+        )))
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.history_kind_filter = this.history_kind_filter.next();
+            this.capture_status =
+                format!("History kind filter: {}.", this.history_kind_filter.label());
+            cx.notify();
+        }))
+    }
+
+    fn history_upload_filter_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        ui::action_button_style(
+            div().id("history-upload-filter-button"),
+            ui::ButtonVariant::History,
+        )
+        .child(SharedString::from(format!(
+            "Upload {}",
+            self.history_upload_filter.label()
+        )))
+        .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+            cx.stop_propagation();
+            this.history_upload_filter = this.history_upload_filter.next();
+            this.capture_status = format!(
+                "History upload filter: {}.",
+                this.history_upload_filter.label()
+            );
+            cx.notify();
+        }))
     }
 
     fn image_search_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -5275,6 +5457,18 @@ fn history_entries_to_capture_history(
         .collect()
 }
 
+fn filtered_capture_history(
+    entries: &[CaptureHistoryEntry],
+    kind_filter: HistoryKindFilter,
+    upload_filter: HistoryUploadFilter,
+) -> Vec<CaptureHistoryEntry> {
+    entries
+        .iter()
+        .filter(|entry| kind_filter.matches(entry.kind) && upload_filter.matches(entry))
+        .cloned()
+        .collect()
+}
+
 fn sync_image_search_index_records(
     store: &ImageSearchIndexStore,
     history_index: &HistoryIndex,
@@ -6990,6 +7184,70 @@ mod tests {
             "Upload pending: Rust upload backend for Catbox is pending."
         );
         assert_eq!(history_kind_label(HistoryKind::Sticker), "Sticker");
+    }
+
+    #[test]
+    fn media_history_filters_apply_kind_and_upload_state() {
+        let base = CaptureHistoryEntry {
+            mode: CaptureMode::FullScreen,
+            kind: HistoryKind::Image,
+            path: "capture.png".into(),
+            file_name: "capture.png".into(),
+            preview_path: None,
+            width: 10,
+            height: 10,
+            captured_at_unix_ms: 1,
+            image_search_ocr_text: String::new(),
+            image_search_record: None,
+            upload_url: None,
+            upload_provider: None,
+            upload_error: None,
+        };
+        let mut uploaded = base.clone();
+        uploaded.upload_url = Some("https://example.test/capture.png".into());
+        let mut failed = base.clone();
+        failed.kind = HistoryKind::Video;
+        failed.file_name = "clip.mp4".into();
+        failed.upload_error = Some("rate limited".into());
+        let mut pending = base.clone();
+        pending.kind = HistoryKind::Sticker;
+        pending.file_name = "sticker.png".into();
+        pending.upload_error = Some("pending: backend pending".into());
+
+        let entries = vec![uploaded, failed, pending];
+
+        assert_eq!(
+            filtered_capture_history(
+                &entries,
+                HistoryKindFilter::Image,
+                HistoryUploadFilter::Uploaded
+            )
+            .len(),
+            1
+        );
+        assert_eq!(
+            filtered_capture_history(
+                &entries,
+                HistoryKindFilter::Video,
+                HistoryUploadFilter::Failed
+            )[0]
+            .file_name,
+            "clip.mp4"
+        );
+        assert_eq!(
+            filtered_capture_history(
+                &entries,
+                HistoryKindFilter::Sticker,
+                HistoryUploadFilter::Pending
+            )[0]
+            .file_name,
+            "sticker.png"
+        );
+        assert_eq!(
+            filtered_capture_history(&entries, HistoryKindFilter::Gif, HistoryUploadFilter::All)
+                .len(),
+            0
+        );
     }
 
     #[test]
