@@ -379,7 +379,8 @@ mod tests {
 
         let failure = r#"{"error":{"message":"bad key"}}"#;
         assert_eq!(
-            parse_google_translate_response(&format!("{failure}\n403")).unwrap_err(),
+            parse_google_translate_response(&format!("{failure}\n403"))
+                .expect_err("403 response should report the Google Translate API error"),
             "bad key"
         );
     }

@@ -1,3 +1,4 @@
+pub mod annotations;
 pub mod capabilities;
 pub mod filename_template;
 pub mod history;
@@ -13,6 +14,11 @@ pub mod sticker_upscale;
 pub mod translation;
 pub mod upload;
 
+pub use annotations::{
+    annotation_tool_default_key, annotation_tool_hotkey, default_enabled_tool_ids,
+    find_annotation_tool_id, hit_test_annotations, Annotation, AnnotationColor, AnnotationPoint,
+    AnnotationRect, AnnotationToolDef, AnnotationToolGroup, TOOL_DEFINITIONS,
+};
 pub use capabilities::{CapabilityState, PlatformCapabilities, PlatformCapability};
 pub use filename_template::{
     build_available_capture_path, format_file_name_template, normalize_file_name_template,
