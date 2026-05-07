@@ -148,6 +148,9 @@ impl UploadDestination {
             Self::Gyazo if settings.gyazo_access_token.trim().is_empty() => {
                 Some(missing_upload_setting("Gyazo access token"))
             }
+            Self::TransferSh => Some(
+                "The public transfer.sh service is unavailable. Choose Temp Hosts, Catbox, Litterbox, Uguu, or file.io.".into(),
+            ),
             Self::Dropbox if settings.dropbox_access_token.trim().is_empty() => {
                 Some(missing_upload_setting("Dropbox access token"))
             }
@@ -2512,6 +2515,10 @@ mod tests {
         assert_eq!(
             UploadDestination::Catbox.configuration_error(&settings),
             None
+        );
+        assert_eq!(
+            UploadDestination::TransferSh.configuration_error(&settings),
+            Some("The public transfer.sh service is unavailable. Choose Temp Hosts, Catbox, Litterbox, Uguu, or file.io.".into())
         );
     }
 

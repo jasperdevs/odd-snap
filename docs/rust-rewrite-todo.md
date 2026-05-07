@@ -171,7 +171,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Curl-backed Dropbox upload/share-link flow with imported access token/path-prefix settings and existing-link fallback.
 - [x] Curl-backed OneDrive upload/create-link flow with imported access token/folder settings.
 - [x] Curl-backed Google Drive multipart/resumable upload and permission flow with imported access token/folder settings.
-- [ ] Upload destinations.
+- [x] Upload destinations, with legacy transfer.sh preserved as an explicit unavailable-provider error.
 - [ ] Stickers/background removal.
 - [ ] Upscale.
 - [ ] Local runtime management.
