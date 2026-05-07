@@ -78,6 +78,21 @@ if [[ "$profile" != "debug" && "$profile" != "release" ]]; then
   exit 2
 fi
 
+verify_codesign_identity() {
+  local identity="$1"
+  local identity_line
+
+  identity_line="$(security find-identity -v -p codesigning | grep -F "$identity" | head -n 1 || true)"
+  if [[ -z "$identity_line" || "$identity_line" != *"Developer ID Application:"* ]]; then
+    cat >&2 <<ERROR
+CODESIGN_IDENTITY must resolve to an installed Developer ID Application certificate.
+Got: ${identity}
+Create/install a Developer ID Application certificate from your Apple Developer account before distributing outside the Mac App Store.
+ERROR
+    exit 1
+  fi
+}
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
@@ -119,6 +134,7 @@ sed \
 plutil -lint "${contents_path}/Info.plist" "packaging/macos/OddSnap.entitlements" >/dev/null
 
 if [[ "$force_unsigned" -eq 0 && -n "${CODESIGN_IDENTITY:-}" ]]; then
+  verify_codesign_identity "$CODESIGN_IDENTITY"
   codesign \
     --force \
     --timestamp \

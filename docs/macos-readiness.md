@@ -15,6 +15,7 @@ This is local planning only. Do not treat it as a release checklist until the Ru
 - Notarize the signed app with Apple's notary service before shipping a DMG, ZIP, or PKG.
 - Staple the accepted notarization ticket to the distributed artifact.
 - Do not use a Mac App Distribution, ad hoc, Apple Development, or local development certificate for Developer ID distribution.
+- `scripts/macos/package-oddsnap-rust.sh` rejects signing identities that do not resolve to an installed `Developer ID Application` certificate.
 
 ## Local package dry run
 
@@ -53,7 +54,7 @@ xcrun stapler validate dist/macos/OddSnap.app
 - The current macOS capture path shells out to `screencapture`, so permission failures should point users to Screen & System Audio Recording.
 - Active-window detection shells out to System Events, so the signed app bundle needs the Apple Events usage string in `packaging/macos/Info.plist` and the Apple Events entitlement in `packaging/macos/OddSnap.entitlements`.
 - Microphone recording needs `NSMicrophoneUsageDescription`; system audio recording is still pending.
-- Global hotkeys use the app-level `global-hotkey` foundation and need real-device validation on macOS before this can be marked fully available.
+- Global hotkeys currently use the app-level `global-hotkey` foundation, not a finished macOS platform service, and need real-device validation on macOS before this can be marked fully available.
 - No release, tag, notarized artifact, or PR is part of this branch-local work.
 
 ## Apple references

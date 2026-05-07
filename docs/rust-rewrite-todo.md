@@ -69,7 +69,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows full-screen capture path.
 - [x] Windows GDI region capture foundation.
 - [x] Windows still-capture cursor inclusion preference.
-- [ ] Cross-platform region capture.
+- [x] Cross-platform explicit-region capture foundations.
+- [ ] Production cross-platform region selection UX parity.
 - [x] Windows active-window capture foundation.
 - [x] Cross-platform active-window capture foundation.
 - [ ] Production region selection overlay.
