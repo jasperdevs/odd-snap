@@ -11,6 +11,7 @@ The Rust rewrite workflow is CI-only and should prove:
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo build -p oddsnap-app --bin oddsnap-rust`
+- local unsigned Windows app-folder package smoke on Windows runners, with no upload
 - `curl --version` on all CI hosts for the command-backed public upload foundation
 - Linux runtime command preflight for the external tools used by current capture, clipboard, region-selection, active-window, color-picker, upload, and recording foundations
 - unsigned macOS `.app` bundle creation on macOS runners, including host-architecture validation and no artifact upload
@@ -57,6 +58,20 @@ The repo now includes local-only macOS package scaffolding:
 - `scripts/macos/package-oddsnap-rust.sh`
 
 That script is intentionally not wired to publish artifacts. CI runs it only as an unsigned package smoke on the macOS lanes after the debug binary build, and the script rejects a binary that does not include the current Mac host architecture. It also validates required macOS privacy strings and the Apple Events entitlement before the signing/notarization branch. Locally, it can build an unsigned `.app`/ZIP for smoke testing, or use `CODESIGN_IDENTITY` and `NOTARY_PROFILE` on a Mac when Developer ID signing and notarization are ready.
+
+## Windows local package smoke
+
+The repo includes a local-only Windows package folder script:
+
+- `scripts/windows/package-oddsnap-rust.ps1`
+
+It copies the built Rust executable into an `OddSnap-Rust` app folder and writes `oddsnap-rust-package.json` with `releaseChannelEnabled: false` and `publicArtifact: false`. It does not build an installer, create Squirrel/NuGet update metadata, upload artifacts, or touch the existing .NET release pipeline.
+
+Local smoke:
+
+```powershell
+scripts/windows/package-oddsnap-rust.ps1 -Profile debug
+```
 
 ## Current release pipeline boundary
 
