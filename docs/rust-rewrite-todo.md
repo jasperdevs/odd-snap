@@ -157,5 +157,6 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Linux full parity verification.
 - [x] CI-only Rust rewrite matrix runs fmt/check/test/clippy/build on Windows, Ubuntu, latest Apple Silicon macOS, and Intel macOS compatibility.
 - [x] macOS CI lanes create an unsigned local `.app` bundle smoke artifact without uploading or releasing it.
+- [x] macOS package smoke validates the bundled binary includes the current Mac host architecture.
 - [x] Rust packaging readiness notes document current non-release boundary and host dependency caveats.
 - [ ] Release decision document.

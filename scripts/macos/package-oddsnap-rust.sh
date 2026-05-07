@@ -93,6 +93,31 @@ ERROR
   fi
 }
 
+verify_binary_matches_host_arch() {
+  local binary="$1"
+  local host_arch
+  local binary_arches
+
+  host_arch="$(uname -m)"
+  binary_arches="$(lipo -archs "$binary" 2>/dev/null || true)"
+  if [[ -z "$binary_arches" ]]; then
+    echo "failed to inspect binary architecture for $binary" >&2
+    exit 1
+  fi
+
+  if [[ " ${binary_arches} " != *" ${host_arch} "* ]]; then
+    cat >&2 <<ERROR
+Built binary architecture does not match this Mac.
+Host architecture: ${host_arch}
+Binary architectures: ${binary_arches}
+Rebuild on the target Mac architecture or package a universal binary before smoke testing.
+ERROR
+    exit 1
+  fi
+
+  echo "binary architecture: ${binary_arches}; host architecture: ${host_arch}" >&2
+}
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
@@ -109,6 +134,7 @@ if [[ ! -x "$binary_path" ]]; then
   echo "missing built binary: $binary_path" >&2
   exit 1
 fi
+verify_binary_matches_host_arch "$binary_path"
 
 app_path="${output_dir}/OddSnap.app"
 contents_path="${app_path}/Contents"

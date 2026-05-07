@@ -11,7 +11,7 @@ The Rust rewrite workflow is CI-only and should prove:
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo build -p oddsnap-app --bin oddsnap-rust`
-- unsigned macOS `.app` bundle creation on macOS runners, without uploading artifacts
+- unsigned macOS `.app` bundle creation on macOS runners, including host-architecture validation and no artifact upload
 
 The matrix runs on Windows, Ubuntu, primary Apple Silicon macOS (`macos-26`), and Intel macOS compatibility (`macos-26-intel`) runners so platform-specific `cfg` paths are compiled on native runners instead of relying on weak cross-compilation from Windows.
 
@@ -51,7 +51,7 @@ The repo now includes local-only macOS package scaffolding:
 - `packaging/macos/OddSnap.entitlements`
 - `scripts/macos/package-oddsnap-rust.sh`
 
-That script is intentionally not wired to publish artifacts. CI runs it only as an unsigned package smoke on the macOS lanes after the debug binary build. Locally, it can build an unsigned `.app`/ZIP for smoke testing, or use `CODESIGN_IDENTITY` and `NOTARY_PROFILE` on a Mac when Developer ID signing and notarization are ready.
+That script is intentionally not wired to publish artifacts. CI runs it only as an unsigned package smoke on the macOS lanes after the debug binary build, and the script rejects a binary that does not include the current Mac host architecture. Locally, it can build an unsigned `.app`/ZIP for smoke testing, or use `CODESIGN_IDENTITY` and `NOTARY_PROFILE` on a Mac when Developer ID signing and notarization are ready.
 
 ## Current release pipeline boundary
 
