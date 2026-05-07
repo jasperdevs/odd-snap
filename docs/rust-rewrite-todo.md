@@ -52,6 +52,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Linux portal-aware screen capture plan.
 - [ ] Linux tray/appindicator strategy.
 - [x] Linux app-level X11 global hotkey listener foundation.
+- [x] Linux hotkey startup blocks Wayland/headless sessions with explicit guidance instead of attempting the X11 path.
 - [ ] Linux Wayland global hotkey support.
 - [x] Linux explicit unsupported capture/clipboard adapter surfaces.
 - [x] Linux X11 monitor enumeration foundation through `xrandr`.

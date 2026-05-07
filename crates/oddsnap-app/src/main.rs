@@ -1946,6 +1946,9 @@ fn start_cross_platform_hotkey_listener(
     ),
     String,
 > {
+    #[cfg(target_os = "linux")]
+    validate_linux_hotkey_session()?;
+
     let mut registrations = vec![(accelerator, CrossPlatformHotkeyEvent::Capture)];
     if let Some(recording) = non_empty_hotkey(recording_accelerator) {
         registrations.push((recording, CrossPlatformHotkeyEvent::Recording));
@@ -2020,6 +2023,41 @@ fn parse_cross_platform_hotkey(accelerator: &str) -> Result<global_hotkey::hotke
 #[cfg(not(target_os = "windows"))]
 fn non_empty_hotkey(value: Option<&str>) -> Option<&str> {
     value.filter(|value| !value.trim().is_empty())
+}
+
+#[cfg(target_os = "linux")]
+fn validate_linux_hotkey_session() -> Result<(), String> {
+    linux_hotkey_session_error(
+        std::env::var("XDG_SESSION_TYPE").ok().as_deref(),
+        std::env::var("DISPLAY").ok().as_deref(),
+        std::env::var("WAYLAND_DISPLAY").ok().as_deref(),
+    )
+    .map_or(Ok(()), |error| Err(error.into()))
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn linux_hotkey_session_error(
+    session_type: Option<&str>,
+    display: Option<&str>,
+    wayland_display: Option<&str>,
+) -> Option<&'static str> {
+    let session_type = session_type.unwrap_or_default().trim();
+    let display = display.unwrap_or_default().trim();
+    let wayland_display = wayland_display.unwrap_or_default().trim();
+
+    if session_type.eq_ignore_ascii_case("wayland")
+        || (!wayland_display.is_empty() && display.is_empty())
+    {
+        return Some(
+            "Linux Wayland global hotkeys need portal or compositor support; OddSnap Rust currently supports global hotkeys only on X11.",
+        );
+    }
+
+    if display.is_empty() {
+        return Some("Linux X11 global hotkeys need DISPLAY; Wayland portal hotkeys are not implemented yet.");
+    }
+
+    None
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -2481,6 +2519,32 @@ mod tests {
         let error = parse_cross_platform_hotkey("S").expect_err("modifierless hotkey rejected");
 
         assert!(error.contains("must include a modifier"));
+    }
+
+    #[test]
+    fn linux_hotkey_session_gate_requires_x11_display() {
+        assert_eq!(
+            linux_hotkey_session_error(Some("wayland"), Some(":1"), Some("wayland-0")),
+            Some(
+                "Linux Wayland global hotkeys need portal or compositor support; OddSnap Rust currently supports global hotkeys only on X11."
+            )
+        );
+        assert_eq!(
+            linux_hotkey_session_error(None, None, Some("wayland-0")),
+            Some(
+                "Linux Wayland global hotkeys need portal or compositor support; OddSnap Rust currently supports global hotkeys only on X11."
+            )
+        );
+        assert_eq!(
+            linux_hotkey_session_error(Some("x11"), Some(":0"), None),
+            None
+        );
+        assert_eq!(
+            linux_hotkey_session_error(None, None, None),
+            Some(
+                "Linux X11 global hotkeys need DISPLAY; Wayland portal hotkeys are not implemented yet."
+            )
+        );
     }
 
     #[test]
