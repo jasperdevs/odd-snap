@@ -155,7 +155,8 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Core image-search index record, OCR status labels, diagnostics text, and match-source descriptions ported from legacy.
 - [x] GPUI advanced settings summary uses core translation labels and image-search source/exact-match state instead of raw legacy numeric values.
 - [x] GPUI history panel exposes a keyboard-driven image-search bar with file/OCR source toggles, exact-match toggle, diagnostics toggle, core-ranked rows, and core diagnostics text.
-- [ ] OCR-backed image-search indexing persistence, background refresh, reindex progress, and OCR runtime hydration.
+- [x] Rust image-search index JSON store, record upsert/remove, startup sync, history mutation hooks, and GPUI pending-index diagnostics are wired.
+- [ ] OCR-backed image-search text hydration, background refresh worker, and reindex progress UI.
 - [ ] Production color picker overlay polish.
 - [x] AI Redirect hotkey can open configured chat providers that do not require hosted-image upload and copies the newest saved image.
 - [x] Google Lens AI Redirect can upload the newest saved image through the configured AI temporary host and open the Lens URL.

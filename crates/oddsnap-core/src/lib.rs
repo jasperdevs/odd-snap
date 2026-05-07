@@ -20,10 +20,14 @@ pub use history::{
     HistoryStoreError,
 };
 pub use image_search::{
-    build_image_search_text, describe_image_search_match, image_search_diagnostics_text,
-    image_search_record_diagnostics, image_search_status_text, normalize_image_search_text,
-    rank_image_search_items, score_image_search, score_normalized_image_search,
-    score_pre_normalized_image_search, ImageSearchIndexRecord, ImageSearchOcrState,
+    build_image_search_text, default_image_search_index_path, describe_image_search_match,
+    history_entry_can_be_image_indexed, image_search_diagnostics_text,
+    image_search_record_diagnostics, image_search_record_matches_history_entry,
+    image_search_status_text, normalize_image_search_text,
+    pending_image_search_record_from_history_entry, rank_image_search_items,
+    retain_indexed_image_paths, score_image_search, score_normalized_image_search,
+    score_pre_normalized_image_search, upsert_image_search_record, ImageSearchIndex,
+    ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchIndexStoreError, ImageSearchOcrState,
     ImageSearchRecordDiagnostics, ImageSearchSources,
 };
 pub use jobs::{AppJobArea, AppJobSnapshot};

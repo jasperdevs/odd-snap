@@ -19,11 +19,15 @@ use gpui::{
 use gpui_platform::application;
 use oddsnap_core::{
     build_available_capture_path, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
-    default_history_path, default_settings_path, discover_ffmpeg_tools, format_file_name_template,
-    AiChatProvider, AppSettings, CapabilityState, CaptureImageFormat, ColorHistoryEntry,
-    DefaultCaptureMode, FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind,
-    HistoryStore, ImageSearchSources, PlatformCapability, RecordingFormat, RecordingQuality,
-    SettingsStore, TranslationModel, UploadDestination, UploadPreflight, UploadSettings,
+    default_history_path, default_image_search_index_path, default_settings_path,
+    discover_ffmpeg_tools, format_file_name_template, history_entry_can_be_image_indexed,
+    image_search_record_matches_history_entry, pending_image_search_record_from_history_entry,
+    retain_indexed_image_paths, upsert_image_search_record, AiChatProvider, AppSettings,
+    CapabilityState, CaptureImageFormat, ColorHistoryEntry, DefaultCaptureMode,
+    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
+    ImageSearchIndex, ImageSearchIndexRecord, ImageSearchIndexStore, ImageSearchSources,
+    PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore, TranslationModel,
+    UploadDestination, UploadPreflight, UploadSettings,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
@@ -99,6 +103,9 @@ struct OddSnapRustApp {
     settings_path: String,
     history_store: HistoryStore,
     history_path: String,
+    image_search_index_store: ImageSearchIndexStore,
+    image_search_index_path: String,
+    image_search_index_status: String,
     media_status: String,
     hotkey_status: String,
     tray_status: String,
@@ -129,6 +136,7 @@ struct CaptureHistoryEntry {
     height: u32,
     captured_at_unix_ms: u64,
     image_search_ocr_text: String,
+    image_search_record: Option<ImageSearchIndexRecord>,
     upload_url: Option<String>,
     upload_provider: Option<String>,
     upload_error: Option<String>,
@@ -148,7 +156,15 @@ impl image_search::ImageSearchItem for CaptureHistoryEntry {
     }
 
     fn image_search_ocr_text(&self) -> &str {
-        &self.image_search_ocr_text
+        self.image_search_record
+            .as_ref()
+            .map_or(self.image_search_ocr_text.as_str(), |record| {
+                record.ocr_text.as_str()
+            })
+    }
+
+    fn image_search_record(&self) -> Option<&ImageSearchIndexRecord> {
+        self.image_search_record.as_ref()
     }
 }
 
@@ -258,7 +274,13 @@ impl OddSnapRustApp {
                 Some(format!("History load failed, using empty history: {error}")),
             ),
         };
-        let capture_history = history_entries_to_capture_history(history_index.clone());
+        let image_search_index_store =
+            ImageSearchIndexStore::new(default_image_search_index_path());
+        let image_search_index_path = image_search_index_store.path().display().to_string();
+        let (image_search_index, image_search_index_status) =
+            sync_image_search_index_records(&image_search_index_store, &history_index, &settings);
+        let capture_history =
+            history_entries_to_capture_history(history_index.clone(), &image_search_index);
         let color_history = history_entries_to_color_history(history_index);
         let permission_status = host_permission_status();
         let media_status = match discover_ffmpeg_tools() {
@@ -309,6 +331,9 @@ impl OddSnapRustApp {
             settings_path,
             history_store,
             history_path,
+            image_search_index_store,
+            image_search_index_path,
+            image_search_index_status,
             media_status,
             hotkey_status,
             tray_status,
@@ -535,6 +560,21 @@ impl OddSnapRustApp {
                     .text_size(px(12.0))
                     .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
                     .child(SharedString::from(format!("History: {}", self.history_path))),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                    .child(SharedString::from(format!(
+                        "Image index: {}",
+                        self.image_search_index_path
+                    ))),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(ui::skin::color(ui::skin::MUTED_TEXT))
+                    .child(SharedString::from(self.image_search_index_status.clone())),
             )
             .child(
                 div()
@@ -1820,7 +1860,10 @@ impl OddSnapRustApp {
     fn remove_history_entry(&mut self, path: String) {
         self.capture_status = match self.history_store.remove_entry(Path::new(&path)) {
             Ok(index) => {
-                self.capture_history = history_entries_to_capture_history(index);
+                let _ = self
+                    .image_search_index_store
+                    .remove_record(Path::new(&path));
+                self.refresh_capture_history(index);
                 format!("Removed {path} from history.")
             }
             Err(error) => format!("Remove from history failed: {error}"),
@@ -2502,10 +2545,42 @@ impl OddSnapRustApp {
             upload.error.clone(),
         ) {
             Ok(index) => {
-                self.capture_history = history_entries_to_capture_history(index);
+                self.refresh_capture_history(index);
                 String::new()
             }
             Err(error) => format!(" History upload metadata update failed: {error}"),
+        }
+    }
+
+    fn refresh_capture_history(&mut self, history_index: HistoryIndex) {
+        let image_search_index = self
+            .image_search_index_store
+            .load_or_default()
+            .unwrap_or_default();
+        self.capture_history =
+            history_entries_to_capture_history(history_index, &image_search_index);
+    }
+
+    fn sync_pending_image_search_entry(&mut self, entry: &HistoryEntry) -> String {
+        if !self.settings.auto_index_images || !history_entry_can_be_image_indexed(entry) {
+            return String::new();
+        }
+
+        match pending_image_search_record_from_history_entry(
+            entry,
+            &self.settings.ocr_language_tag,
+            "rust-ocr-pending",
+        )
+        .and_then(|record| self.image_search_index_store.upsert_record(record))
+        {
+            Ok(index) => {
+                self.image_search_index_status = image_search_index_status(&index);
+                String::new()
+            }
+            Err(error) => {
+                self.image_search_index_status = format!("Image index update failed: {error}");
+                format!("; image index failed: {error}")
+            }
         }
     }
 
@@ -2533,6 +2608,7 @@ impl OddSnapRustApp {
                     height,
                     captured_at_unix_ms: 0,
                     image_search_ocr_text: String::new(),
+                    image_search_record: None,
                     upload_url: upload.url,
                     upload_provider: upload.provider,
                     upload_error: upload.error,
@@ -2553,11 +2629,17 @@ impl OddSnapRustApp {
         entry.upload_url = upload.url;
         entry.upload_provider = upload.provider;
         entry.upload_error = upload.error;
+        let indexed_entry = entry.clone();
 
         match self.history_store.append_entry(entry) {
             Ok(index) => {
-                self.capture_history = history_entries_to_capture_history(index);
-                upload_history_status(self.capture_history.first())
+                let image_search_status = self.sync_pending_image_search_entry(&indexed_entry);
+                self.refresh_capture_history(index);
+                format!(
+                    "{}{}",
+                    upload_history_status(self.capture_history.first()),
+                    image_search_status
+                )
             }
             Err(error) => format!("; history failed: {error}"),
         }
@@ -2582,6 +2664,7 @@ impl OddSnapRustApp {
                     height: capture.region.height,
                     captured_at_unix_ms: 0,
                     image_search_ocr_text: String::new(),
+                    image_search_record: None,
                     upload_url: upload.url,
                     upload_provider: upload.provider,
                     upload_error: upload.error,
@@ -2604,11 +2687,17 @@ impl OddSnapRustApp {
         entry.upload_url = upload.url;
         entry.upload_provider = upload.provider;
         entry.upload_error = upload.error;
+        let indexed_entry = entry.clone();
 
         match self.history_store.append_entry(entry) {
             Ok(index) => {
-                self.capture_history = history_entries_to_capture_history(index);
-                upload_history_status(self.capture_history.first())
+                let image_search_status = self.sync_pending_image_search_entry(&indexed_entry);
+                self.refresh_capture_history(index);
+                format!(
+                    "{}{}",
+                    upload_history_status(self.capture_history.first()),
+                    image_search_status
+                )
             }
             Err(error) => format!("; history failed: {error}"),
         }
@@ -2932,7 +3021,10 @@ fn hotkey_status_summary(accelerators: ImportedHotkeyAccelerators<'_>) -> String
     format!("Hotkeys: {}.", parts.join(", "))
 }
 
-fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistoryEntry> {
+fn history_entries_to_capture_history(
+    index: HistoryIndex,
+    image_search_index: &ImageSearchIndex,
+) -> Vec<CaptureHistoryEntry> {
     index
         .entries
         .into_iter()
@@ -2949,11 +3041,114 @@ fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistory
             height: entry.height,
             captured_at_unix_ms: entry.captured_at_unix_ms,
             image_search_ocr_text: String::new(),
+            image_search_record: image_search_index
+                .records
+                .iter()
+                .find(|record| record.file_path == entry.file_path)
+                .cloned(),
             upload_url: entry.upload_url,
             upload_provider: entry.upload_provider,
             upload_error: entry.upload_error,
         })
         .collect()
+}
+
+fn sync_image_search_index_records(
+    store: &ImageSearchIndexStore,
+    history_index: &HistoryIndex,
+    settings: &AppSettings,
+) -> (ImageSearchIndex, String) {
+    let mut index = match store.load_or_default() {
+        Ok(index) => index,
+        Err(error) => {
+            return (
+                ImageSearchIndex::default(),
+                format!("Image index load failed: {error}"),
+            );
+        }
+    };
+
+    if !settings.auto_index_images {
+        return (index, "Image index: auto-index disabled.".into());
+    }
+
+    let indexed_paths = history_index
+        .entries
+        .iter()
+        .filter(|entry| history_entry_can_be_image_indexed(entry))
+        .map(|entry| entry.file_path.clone())
+        .collect::<std::collections::HashSet<_>>();
+    retain_indexed_image_paths(&mut index, &indexed_paths);
+
+    let mut updated = 0usize;
+    let mut failed = 0usize;
+    for entry in history_index
+        .entries
+        .iter()
+        .filter(|entry| history_entry_can_be_image_indexed(entry))
+    {
+        let current = index
+            .records
+            .iter()
+            .find(|record| record.file_path == entry.file_path);
+        if current
+            .map(|record| image_search_record_matches_history_entry(record, entry))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+
+        match pending_image_search_record_from_history_entry(
+            entry,
+            &settings.ocr_language_tag,
+            "rust-ocr-pending",
+        ) {
+            Ok(record) => {
+                upsert_image_search_record(&mut index, record);
+                updated += 1;
+            }
+            Err(_) => {
+                failed += 1;
+            }
+        }
+    }
+
+    match store.save(&index) {
+        Ok(()) => (
+            index,
+            image_search_index_status_with_updates(updated, failed),
+        ),
+        Err(error) => (
+            index,
+            format!("Image index save failed after sync: {error}"),
+        ),
+    }
+}
+
+fn image_search_index_status(index: &ImageSearchIndex) -> String {
+    image_search_index_status_with_counts(index.records.len(), None, 0)
+}
+
+fn image_search_index_status_with_updates(updated: usize, failed: usize) -> String {
+    image_search_index_status_with_counts(updated, Some(updated), failed)
+}
+
+fn image_search_index_status_with_counts(
+    count: usize,
+    updated: Option<usize>,
+    failed: usize,
+) -> String {
+    match (updated, failed) {
+        (Some(updated), 0) if updated > 0 => {
+            format!("Image index: {updated} pending records refreshed.")
+        }
+        (Some(0), 0) => "Image index: ready.".into(),
+        (Some(updated), failed) => {
+            format!("Image index: {updated} refreshed, {failed} failed.")
+        }
+        (None, 0) => format!("Image index: {count} records."),
+        (None, failed) => format!("Image index: {count} records, {failed} failed."),
+    }
 }
 
 fn file_name_for_path(path: &Path) -> String {
@@ -4087,6 +4282,7 @@ mod tests {
             height: 10,
             captured_at_unix_ms: 1,
             image_search_ocr_text: String::new(),
+            image_search_record: None,
             upload_url: Some("https://example.test/capture.png".into()),
             upload_provider: Some("Imgur".into()),
             upload_error: None,
@@ -4198,6 +4394,7 @@ mod tests {
             height: 10,
             captured_at_unix_ms: 1,
             image_search_ocr_text: String::new(),
+            image_search_record: None,
             upload_url: Some("https://files.catbox.moe/capture.png".into()),
             upload_provider: Some("Catbox".into()),
             upload_error: None,
@@ -4243,6 +4440,7 @@ mod tests {
                 height: 10,
                 captured_at_unix_ms: 1,
                 image_search_ocr_text: String::new(),
+                image_search_record: None,
                 upload_url: None,
                 upload_provider: None,
                 upload_error: None,
@@ -4257,6 +4455,7 @@ mod tests {
                 height: 10,
                 captured_at_unix_ms: 2,
                 image_search_ocr_text: String::new(),
+                image_search_record: None,
                 upload_url: None,
                 upload_provider: None,
                 upload_error: None,
@@ -4271,6 +4470,7 @@ mod tests {
                 height: 10,
                 captured_at_unix_ms: 3,
                 image_search_ocr_text: String::new(),
+                image_search_record: None,
                 upload_url: None,
                 upload_provider: None,
                 upload_error: None,

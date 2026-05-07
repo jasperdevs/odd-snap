@@ -1,9 +1,14 @@
 use std::{
     collections::HashSet,
+    fs,
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::{HistoryEntry, HistoryKind};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ImageSearchOcrState {
@@ -52,6 +57,158 @@ pub struct ImageSearchRecordDiagnostics {
     pub status_text: String,
     pub details_text: String,
     pub match_text: String,
+}
+
+#[derive(Debug, Error)]
+pub enum ImageSearchIndexStoreError {
+    #[error("failed to read image-search index: {0}")]
+    Read(#[source] std::io::Error),
+    #[error("failed to write image-search index: {0}")]
+    Write(#[source] std::io::Error),
+    #[error("failed to read indexed image metadata: {0}")]
+    Metadata(#[source] std::io::Error),
+    #[error("failed to parse image-search index: {0}")]
+    Parse(#[source] serde_json::Error),
+    #[error("failed to serialize image-search index: {0}")]
+    Serialize(#[source] serde_json::Error),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageSearchIndex {
+    #[serde(default)]
+    pub records: Vec<ImageSearchIndexRecord>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImageSearchIndexStore {
+    path: PathBuf,
+}
+
+impl ImageSearchIndexStore {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn load_or_default(&self) -> Result<ImageSearchIndex, ImageSearchIndexStoreError> {
+        if !self.path.exists() {
+            return Ok(ImageSearchIndex::default());
+        }
+
+        let bytes = fs::read(&self.path).map_err(ImageSearchIndexStoreError::Read)?;
+        serde_json::from_slice(&bytes).map_err(ImageSearchIndexStoreError::Parse)
+    }
+
+    pub fn save(&self, index: &ImageSearchIndex) -> Result<(), ImageSearchIndexStoreError> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).map_err(ImageSearchIndexStoreError::Write)?;
+        }
+
+        let bytes =
+            serde_json::to_vec_pretty(index).map_err(ImageSearchIndexStoreError::Serialize)?;
+        fs::write(&self.path, bytes).map_err(ImageSearchIndexStoreError::Write)
+    }
+
+    pub fn upsert_record(
+        &self,
+        record: ImageSearchIndexRecord,
+    ) -> Result<ImageSearchIndex, ImageSearchIndexStoreError> {
+        let mut index = self.load_or_default()?;
+        upsert_image_search_record(&mut index, record);
+        self.save(&index)?;
+        Ok(index)
+    }
+
+    pub fn remove_record(
+        &self,
+        file_path: &Path,
+    ) -> Result<ImageSearchIndex, ImageSearchIndexStoreError> {
+        let mut index = self.load_or_default()?;
+        index.records.retain(|record| record.file_path != file_path);
+        self.save(&index)?;
+        Ok(index)
+    }
+}
+
+pub fn default_image_search_index_path() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            return PathBuf::from(profile)
+                .join("Pictures")
+                .join("OddSnap History")
+                .join("rust-image-search-index.json");
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home)
+                .join("Pictures")
+                .join("OddSnap History")
+                .join("rust-image-search-index.json");
+        }
+    }
+
+    std::env::temp_dir()
+        .join("OddSnap History")
+        .join("rust-image-search-index.json")
+}
+
+pub fn upsert_image_search_record(index: &mut ImageSearchIndex, record: ImageSearchIndexRecord) {
+    index
+        .records
+        .retain(|existing| existing.file_path != record.file_path);
+    index.records.insert(0, record);
+}
+
+pub fn retain_indexed_image_paths(index: &mut ImageSearchIndex, paths: &HashSet<PathBuf>) {
+    index
+        .records
+        .retain(|record| paths.contains(&record.file_path));
+}
+
+pub fn history_entry_can_be_image_indexed(entry: &HistoryEntry) -> bool {
+    matches!(entry.kind, HistoryKind::Image | HistoryKind::Sticker)
+}
+
+pub fn image_search_record_matches_history_entry(
+    record: &ImageSearchIndexRecord,
+    entry: &HistoryEntry,
+) -> bool {
+    record.file_path == entry.file_path
+        && record.file_length_bytes == entry.file_size_bytes
+        && record.last_write_time_unix_ms > 0
+}
+
+pub fn pending_image_search_record_from_history_entry(
+    entry: &HistoryEntry,
+    ocr_language_tag: &str,
+    ocr_engine_id: &str,
+) -> Result<ImageSearchIndexRecord, ImageSearchIndexStoreError> {
+    let metadata = fs::metadata(&entry.file_path).map_err(ImageSearchIndexStoreError::Metadata)?;
+    Ok(ImageSearchIndexRecord {
+        file_path: entry.file_path.clone(),
+        file_length_bytes: metadata.len(),
+        last_write_time_unix_ms: metadata
+            .modified()
+            .ok()
+            .map(unix_millis_from_system_time)
+            .unwrap_or_default(),
+        ocr_language_tag: ocr_language_tag.into(),
+        ocr_engine_id: ocr_engine_id.into(),
+        ocr_completed: false,
+        ocr_state: ImageSearchOcrState::Pending,
+        ocr_retry_count: 0,
+        next_ocr_retry_unix_ms: 0,
+        ocr_text: String::new(),
+        indexed_at_unix_ms: unix_millis_now(),
+        last_error: String::new(),
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -451,6 +608,16 @@ fn trim_for_image_search_diagnostics(value: &str) -> String {
     }
 }
 
+fn unix_millis_now() -> u64 {
+    unix_millis_from_system_time(SystemTime::now())
+}
+
+fn unix_millis_from_system_time(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64)
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -680,5 +847,62 @@ mod tests {
         assert_eq!(diagnostics.status_text, "OCR ready");
         assert_eq!(diagnostics.match_text, "Match: OCR");
         assert!(diagnostics.details_text.contains("Status: OCR ready"));
+    }
+
+    #[test]
+    fn image_search_index_store_upserts_and_removes_records() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-image-search-index-store-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp root");
+        let store = ImageSearchIndexStore::new(root.join("index.json"));
+        let mut record = indexed_record();
+        record.file_path = root.join("invoice.png");
+
+        let saved = store
+            .upsert_record(record.clone())
+            .expect("upsert image-search record");
+        assert_eq!(saved.records, vec![record.clone()]);
+
+        record.ocr_text = "updated".into();
+        let saved = store
+            .upsert_record(record.clone())
+            .expect("replace image-search record");
+        assert_eq!(saved.records.len(), 1);
+        assert_eq!(saved.records[0].ocr_text, "updated");
+
+        let saved = store
+            .remove_record(&record.file_path)
+            .expect("remove image-search record");
+        assert!(saved.records.is_empty());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn pending_image_search_record_uses_history_metadata() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-image-search-index-record-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp root");
+        let image = root.join("capture.png");
+        std::fs::write(&image, b"image bytes").expect("write image");
+        let entry = HistoryEntry::from_capture_file(image.clone(), 20, 30, HistoryKind::Image)
+            .expect("build history entry");
+
+        let record = pending_image_search_record_from_history_entry(&entry, "en-US", "pending")
+            .expect("build pending index record");
+
+        assert_eq!(record.file_path, image);
+        assert_eq!(record.file_length_bytes, entry.file_size_bytes);
+        assert_eq!(record.ocr_language_tag, "en-US");
+        assert_eq!(record.ocr_engine_id, "pending");
+        assert_eq!(record.ocr_state, ImageSearchOcrState::Pending);
+        assert!(history_entry_can_be_image_indexed(&entry));
+        assert!(image_search_record_matches_history_entry(&record, &entry));
+        let _ = std::fs::remove_dir_all(root);
     }
 }

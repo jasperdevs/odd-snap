@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use gpui::KeyDownEvent;
 use oddsnap_core::{
-    image_search_record_diagnostics, rank_image_search_items, AppSettings,
+    image_search_record_diagnostics, rank_image_search_items, AppSettings, ImageSearchIndexRecord,
     ImageSearchRecordDiagnostics, ImageSearchSources,
 };
 
@@ -119,6 +119,7 @@ pub(crate) trait ImageSearchItem: Clone {
     fn file_name(&self) -> &str;
     fn captured_at_unix_ms(&self) -> u64;
     fn image_search_ocr_text(&self) -> &str;
+    fn image_search_record(&self) -> Option<&ImageSearchIndexRecord>;
 }
 
 pub(crate) fn sources(settings: &AppSettings) -> ImageSearchSources {
@@ -199,7 +200,7 @@ where
 {
     image_search_record_diagnostics(
         PathBuf::from(entry.file_path()),
-        None,
+        entry.image_search_record(),
         entry.file_name(),
         is_active(settings, state).then_some(state.query.trim()),
         sources(settings),
