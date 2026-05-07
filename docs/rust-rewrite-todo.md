@@ -137,4 +137,6 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Windows full parity verification.
 - [ ] macOS full parity verification.
 - [ ] Linux full parity verification.
+- [x] CI-only Rust rewrite matrix runs fmt/check/test/clippy/build on Windows, macOS, and Ubuntu.
+- [x] Rust packaging readiness notes document current non-release boundary and host dependency caveats.
 - [ ] Release decision document.

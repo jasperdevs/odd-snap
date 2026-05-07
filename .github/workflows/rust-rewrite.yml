@@ -6,6 +6,9 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "crates/**"
+      - "docs/macos-readiness.md"
+      - "docs/rust-packaging-readiness.md"
+      - "docs/rust-rewrite-parity.md"
       - "docs/rust-rewrite-todo.md"
       - ".github/workflows/rust-rewrite.yml"
   push:
@@ -23,7 +26,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install Linux native build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxdo-dev libappindicator3-dev libayatana-appindicator3-dev
+      - name: Format
+        run: cargo fmt --all --check
       - name: Check
         run: cargo check --workspace
       - name: Test
         run: cargo test --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Build app
+        run: cargo build -p oddsnap-app --bin oddsnap-rust
