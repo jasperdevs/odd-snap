@@ -306,9 +306,15 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
         settings.default_capture_mode = legacy_default_capture_mode(default_capture_mode);
     }
 
+    if let Some(last_capture_mode) = import.raw.get("LastCaptureMode") {
+        settings.last_capture_mode = legacy_default_capture_mode(last_capture_mode);
+    }
+
     if let Some(toast_position) = import.raw.get("ToastPosition") {
         settings.toast_position = legacy_toast_position(toast_position);
     }
+
+    settings.toast_button_layout = import.raw.get("ToastButtons").cloned();
 
     settings.ocr_hotkey = legacy_hotkey(
         import.raw.get("OcrHotkeyModifiers"),
@@ -1125,7 +1131,7 @@ mod tests {
         ));
         fs::write(
             &path,
-            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}","RecordingFormat":2,"RecordingQuality":1,"RecordingFps":60,"GifFps":24,"RecordMicrophone":true,"RecordDesktopAudio":false,"MicrophoneDeviceId":"mic-1","DesktopAudioDeviceId":"desktop-1","HotkeyModifiers":5,"HotkeyKey":67,"GifHotkeyModifiers":1,"GifHotkeyKey":82,"StartWithWindows":false,"AutoCheckForUpdates":false,"CaptureDelaySeconds":5,"MuteSounds":true,"DisableAnimations":true,"UiScale":1.25,"ShowCrosshairGuides":true,"ShowCursor":true,"ShowCaptureMagnifier":false,"OverlayCaptureAllMonitors":false,"DetectWindows":false,"DefaultCaptureMode":"ActiveWindow","ToastPosition":3}"#,
+            r#"{"SaveDirectory":"C:\\Users\\test\\Pictures\\OddSnap","SaveHistory":false,"AfterCapture":2,"CaptureImageFormat":1,"JpegQuality":92,"SaveInMonthlyFolders":false,"FileNameTemplate":"Screenshot_{date}","RecordingFormat":2,"RecordingQuality":1,"RecordingFps":60,"GifFps":24,"RecordMicrophone":true,"RecordDesktopAudio":false,"MicrophoneDeviceId":"mic-1","DesktopAudioDeviceId":"desktop-1","HotkeyModifiers":5,"HotkeyKey":67,"GifHotkeyModifiers":1,"GifHotkeyKey":82,"StartWithWindows":false,"AutoCheckForUpdates":false,"CaptureDelaySeconds":5,"MuteSounds":true,"DisableAnimations":true,"UiScale":1.25,"ShowCrosshairGuides":true,"ShowCursor":true,"ShowCaptureMagnifier":false,"OverlayCaptureAllMonitors":false,"DetectWindows":false,"DefaultCaptureMode":"ActiveWindow","LastCaptureMode":"ColorPicker","ToastPosition":3,"ToastButtons":{"Copy":{"Visible":false}}}"#,
         )
         .expect("write test settings");
 
@@ -1171,7 +1177,15 @@ mod tests {
             settings.default_capture_mode,
             DefaultCaptureMode::ActiveWindow
         );
+        assert_eq!(settings.last_capture_mode, DefaultCaptureMode::ColorPicker);
         assert_eq!(settings.toast_position, ToastPosition::TopRight);
+        assert_eq!(
+            settings
+                .toast_button_layout
+                .as_ref()
+                .expect("toast button layout should import")["Copy"]["Visible"],
+            false
+        );
     }
 
     #[test]
@@ -1254,6 +1268,7 @@ mod tests {
                 "CaptureDelaySeconds": 999,
                 "UiScale": 4.0,
                 "DefaultCaptureMode": 8,
+                "LastCaptureMode": 9,
                 "ToastPosition": "TopLeft"
             }),
         };
@@ -1263,6 +1278,7 @@ mod tests {
         assert_eq!(settings.capture_delay_seconds, 60);
         assert_eq!(settings.ui_scale, 1.4);
         assert_eq!(settings.default_capture_mode, DefaultCaptureMode::Center);
+        assert_eq!(settings.last_capture_mode, DefaultCaptureMode::Ruler);
         assert_eq!(settings.toast_position, ToastPosition::TopLeft);
     }
 

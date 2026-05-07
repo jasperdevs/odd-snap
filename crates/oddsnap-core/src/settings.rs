@@ -224,7 +224,11 @@ pub struct AppSettings {
     #[serde(default)]
     pub default_capture_mode: DefaultCaptureMode,
     #[serde(default)]
+    pub last_capture_mode: DefaultCaptureMode,
+    #[serde(default)]
     pub toast_position: ToastPosition,
+    #[serde(default)]
+    pub toast_button_layout: Option<Value>,
     #[serde(default)]
     pub ocr_hotkey: Option<String>,
     #[serde(default)]
@@ -367,7 +371,9 @@ impl Default for AppSettings {
             overlay_capture_all_monitors: default_overlay_capture_all_monitors(),
             detect_windows: default_detect_windows(),
             default_capture_mode: DefaultCaptureMode::Rectangle,
+            last_capture_mode: DefaultCaptureMode::Rectangle,
             toast_position: ToastPosition::Right,
+            toast_button_layout: None,
             ocr_hotkey: None,
             picker_hotkey: None,
             scan_hotkey: None,
@@ -720,7 +726,9 @@ mod tests {
         assert!(settings.overlay_capture_all_monitors);
         assert!(settings.detect_windows);
         assert_eq!(settings.default_capture_mode, DefaultCaptureMode::Rectangle);
+        assert_eq!(settings.last_capture_mode, DefaultCaptureMode::Rectangle);
         assert_eq!(settings.toast_position, ToastPosition::Right);
+        assert_eq!(settings.toast_button_layout, None);
         assert_eq!(settings.ocr_language_tag, "auto");
         assert_eq!(settings.ocr_default_translate_from, "auto");
         assert_eq!(settings.ocr_default_translate_to, "auto");
@@ -794,7 +802,9 @@ mod tests {
             overlay_capture_all_monitors: false,
             detect_windows: false,
             default_capture_mode: DefaultCaptureMode::ActiveWindow,
+            last_capture_mode: DefaultCaptureMode::ColorPicker,
             toast_position: ToastPosition::TopRight,
+            toast_button_layout: Some(serde_json::json!({"Copy": false})),
             ..AppSettings::default()
         };
 

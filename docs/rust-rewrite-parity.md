@@ -80,6 +80,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
 - GPUI can persistently cycle implemented default capture mode, capture delay, crosshair, magnifier, and window-detection preferences.
 - Rust settings preserve advanced legacy preferences for OCR, translation, uploads, image search, tool visibility, custom tool hotkeys, toast timing, screenshot styling, setup state, and open-with apps.
+- Rust settings preserve the legacy last capture mode and raw toast button layout metadata so migration does not drop those UI preferences before the production toast skin lands.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.
 - Rust FFmpeg discovery also checks bundled executable and legacy AppData locations before PATH.
 - Rust startup can import legacy recording format, quality, FPS, and audio-device preferences.
