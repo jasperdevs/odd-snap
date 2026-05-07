@@ -72,6 +72,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows image clipboard foundation.
 - [x] Windows text clipboard foundation.
 - [x] Windows cursor color sampling and clipboard copy foundation.
+- [x] Rust color history persistence and recent-color copy actions.
 - [ ] Cross-platform image clipboard.
 - [ ] Cross-platform text clipboard.
 - [x] GPUI recent-captures list for capture smoke results.
@@ -106,7 +107,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] OCR.
 - [ ] Translation.
 - [ ] Image search.
-- [ ] Production color picker overlay and color history.
+- [ ] Production color picker overlay polish.
 - [ ] Upload destinations.
 - [ ] Stickers/background removal.
 - [ ] Upscale.

@@ -48,6 +48,21 @@ pub struct HistoryEntry {
     pub thumbnail_path: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColorHistoryEntry {
+    pub hex: String,
+    pub captured_at_unix_ms: u64,
+}
+
+impl ColorHistoryEntry {
+    pub fn new(hex: impl Into<String>) -> Self {
+        Self {
+            hex: hex.into(),
+            captured_at_unix_ms: unix_millis_now(),
+        }
+    }
+}
+
 impl HistoryEntry {
     pub fn from_capture_file(
         file_path: PathBuf,
@@ -84,6 +99,8 @@ impl HistoryEntry {
 pub struct HistoryIndex {
     #[serde(default)]
     pub entries: Vec<HistoryEntry>,
+    #[serde(default)]
+    pub colors: Vec<ColorHistoryEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +144,17 @@ impl HistoryStore {
         self.save(&index)?;
         Ok(index)
     }
+
+    pub fn append_color_entry(
+        &self,
+        entry: ColorHistoryEntry,
+    ) -> Result<HistoryIndex, HistoryStoreError> {
+        let mut index = self.load_or_default()?;
+        index.colors.insert(0, entry);
+        index.colors.truncate(200);
+        self.save(&index)?;
+        Ok(index)
+    }
 }
 
 pub fn default_history_path() -> PathBuf {
@@ -166,7 +194,7 @@ fn unix_millis_now() -> u64 {
 mod tests {
     use std::fs;
 
-    use super::{HistoryEntry, HistoryKind, HistoryStore};
+    use super::{ColorHistoryEntry, HistoryEntry, HistoryKind, HistoryStore};
 
     #[test]
     fn history_entry_reads_file_metadata() {
@@ -218,6 +246,28 @@ mod tests {
         assert_eq!(index.entries[0].file_path, first_path);
         assert_eq!(index.entries[0].width, 3);
         assert_eq!(index.entries[1].file_name, "second.bmp");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_store_appends_color_entries_newest_first_and_caps_list() {
+        let root =
+            std::env::temp_dir().join(format!("oddsnap-color-history-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp root");
+        let store = HistoryStore::new(root.join("history.json"));
+
+        for index in 0..205 {
+            store
+                .append_color_entry(ColorHistoryEntry::new(format!("{index:06X}")))
+                .expect("append color");
+        }
+
+        let index = store.load_or_default().expect("load history");
+        assert_eq!(index.colors.len(), 200);
+        assert_eq!(index.colors[0].hex, "0000CC");
+        assert_eq!(index.colors[199].hex, "000005");
+        assert!(index.entries.is_empty());
         let _ = fs::remove_dir_all(root);
     }
 

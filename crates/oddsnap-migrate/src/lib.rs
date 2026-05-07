@@ -646,7 +646,10 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
         }
     }
 
-    Ok(HistoryIndex { entries })
+    Ok(HistoryIndex {
+        entries,
+        colors: Vec::new(),
+    })
 }
 
 fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
@@ -709,7 +712,10 @@ fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
         })
         .collect();
 
-    Ok(HistoryIndex { entries })
+    Ok(HistoryIndex {
+        entries,
+        colors: Vec::new(),
+    })
 }
 
 struct LegacyHistoryRecord {

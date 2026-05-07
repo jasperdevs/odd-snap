@@ -12,7 +12,8 @@ pub use filename_template::{
     DEFAULT_FILE_NAME_TEMPLATE, LEGACY_DEFAULT_FILE_NAME_TEMPLATE,
 };
 pub use history::{
-    default_history_path, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, HistoryStoreError,
+    default_history_path, ColorHistoryEntry, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
+    HistoryStoreError,
 };
 pub use jobs::{AppJobArea, AppJobSnapshot};
 pub use media::{

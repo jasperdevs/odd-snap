@@ -21,6 +21,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows can run a primitive native drag-selection loop and capture the selected region through the shared capture pipeline.
 - Windows can copy generated BMP captures to the system clipboard as image data.
 - Windows can sample the cursor pixel color, format it as OddSnap-compatible hex, and copy it to the clipboard from the GPUI shell or tray color picker command.
+- Rust history stores recent color picks separately from file-backed media history and exposes recent-color copy actions in the GPUI shell.
 - Shared capture persistence can save generated captures into a stable output directory.
 - GPUI shell exposes full-screen and active-window capture smoke controls with a local recent-captures list.
 - Rust app settings can load capture output and clipboard preferences from a JSON settings file.
@@ -67,6 +68,6 @@ The Rust rewrite must not replace the current app until this document and the li
 
 The rewrite does not yet implement the full production capture overlay, annotation, region recording/audio parity, OCR, translation, upload, full history actions, local runtimes, packaging, or update behavior.
 The Windows tray foundation is present, but the Rust menu still routes text capture and scroll capture to pending-status messages until those feature backends land.
-The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, sound/toast polish, or color history.
+The Rust color picker is a cursor-pixel sampling foundation only; it does not yet provide the production magnifier overlay, click-to-pick flow, or sound/toast polish.
 The Windows overlay foundation is still primitive; it has native window lifecycle, dim/frame/crosshair feedback, and capture routing, but it does not yet include the production screenshot-backed overlay, magnifier, toolbar, snap-to-window behavior, or annotation tools.
 Those remain tracked in `docs/rust-rewrite-todo.md` and GitHub issue #40.

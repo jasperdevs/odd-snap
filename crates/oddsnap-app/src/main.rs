@@ -19,9 +19,9 @@ use gpui_platform::application;
 use oddsnap_core::{
     build_available_capture_path, build_video_thumbnail_args, build_video_thumbnail_fallback_args,
     default_history_path, default_settings_path, discover_ffmpeg_tools, format_file_name_template,
-    AppSettings, CapabilityState, CaptureImageFormat, DefaultCaptureMode, FfmpegThumbnailRequest,
-    HistoryEntry, HistoryIndex, HistoryKind, HistoryStore, PlatformCapability, RecordingFormat,
-    RecordingQuality, SettingsStore,
+    AppSettings, CapabilityState, CaptureImageFormat, ColorHistoryEntry, DefaultCaptureMode,
+    FfmpegThumbnailRequest, HistoryEntry, HistoryIndex, HistoryKind, HistoryStore,
+    PlatformCapability, RecordingFormat, RecordingQuality, SettingsStore,
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRequest,
@@ -77,6 +77,7 @@ struct OddSnapRustApp {
     recording_status: String,
     active_recording: Option<ActiveRecording>,
     capture_history: Vec<CaptureHistoryEntry>,
+    color_history: Vec<ColorHistoryEntry>,
     focus_handle: gpui::FocusHandle,
     #[cfg(target_os = "windows")]
     _hotkey_listener: Option<oddsnap_platform_windows::WindowsHotkeyListener>,
@@ -169,10 +170,9 @@ impl OddSnapRustApp {
         let history_store = HistoryStore::new(default_history_path());
         let history_path = history_store.path().display().to_string();
         let history_migration_status = import_legacy_history_if_needed(&history_store);
-        let capture_history = history_store
-            .load_or_default()
-            .map(history_entries_to_capture_history)
-            .unwrap_or_default();
+        let history_index = history_store.load_or_default().unwrap_or_default();
+        let capture_history = history_entries_to_capture_history(history_index.clone());
+        let color_history = history_entries_to_color_history(history_index);
         let media_status = match discover_ffmpeg_tools() {
             Some(tools) => {
                 let probe = tools
@@ -209,6 +209,7 @@ impl OddSnapRustApp {
             recording_status: "No recording running.".into(),
             active_recording: None,
             capture_history,
+            color_history,
             focus_handle: cx.focus_handle(),
             #[cfg(target_os = "windows")]
             _hotkey_listener: hotkey_listener,
@@ -601,6 +602,35 @@ impl OddSnapRustApp {
                     .child(SharedString::from(self.capture_status.clone())),
             );
 
+        body = body.child(div().text_size(px(13.0)).child("Recent colors"));
+        if self.color_history.is_empty() {
+            body = body.child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(0x8b93a3))
+                    .child("No picked colors yet."),
+            );
+        } else {
+            for entry in self.color_history.iter().take(6) {
+                body = body.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .rounded(px(6.0))
+                        .bg(rgb(0x1d2027))
+                        .px(px(10.0))
+                        .py(px(8.0))
+                        .child(
+                            div()
+                                .text_size(px(12.0))
+                                .child(SharedString::from(format!("#{}", entry.hex))),
+                        )
+                        .child(self.copy_color_hex_button(cx, entry.hex.clone())),
+                );
+            }
+        }
+
         body = body.child(div().text_size(px(13.0)).child("Recent captures"));
 
         if self.capture_history.is_empty() {
@@ -861,6 +891,26 @@ impl OddSnapRustApp {
             }))
     }
 
+    fn copy_color_hex_button(&self, cx: &mut Context<Self>, hex: String) -> impl IntoElement {
+        div()
+            .id(SharedString::from(format!("copy-color-{hex}")))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(rgb(0x354052))
+            .bg(rgb(0x202733))
+            .hover(|this| this.bg(rgb(0x2a3342)))
+            .px(px(8.0))
+            .py(px(4.0))
+            .text_size(px(11.0))
+            .text_color(rgb(0xd8dde6))
+            .child("Copy")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.copy_color_history_hex(hex.clone());
+                cx.notify();
+            }))
+    }
+
     fn recording_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let label = if self.active_recording.is_some() {
             "Stop recording"
@@ -1006,24 +1056,42 @@ impl OddSnapRustApp {
         let result = {
             let adapter = oddsnap_platform_windows::WindowsPlatform;
             adapter.sample_cursor_color().map(|sample| {
-                let copied = adapter
-                    .copy_text_to_clipboard(&sample.bare_hex_rgb())
-                    .is_ok();
-                (sample.hex_rgb(), copied)
+                let bare = sample.bare_hex_rgb();
+                let copied = adapter.copy_text_to_clipboard(&bare).is_ok();
+                (sample.hex_rgb(), bare, copied)
             })
         };
 
         #[cfg(not(target_os = "windows"))]
-        let result: Result<(String, bool), oddsnap_platform::PlatformError> =
+        let result: Result<(String, String, bool), oddsnap_platform::PlatformError> =
             Err(oddsnap_platform::PlatformError::Unsupported(
                 "color picker is pending on this platform",
             ));
 
         self.capture_status = match result {
-            Ok((hex, true)) => format!("Picked color {hex} and copied it to clipboard."),
-            Ok((hex, false)) => format!("Picked color {hex}; clipboard copy failed."),
+            Ok((hex, bare, copied)) => {
+                let history_status = self.save_color_history(bare);
+                if copied {
+                    format!("Picked color {hex} and copied it to clipboard{history_status}.")
+                } else {
+                    format!("Picked color {hex}; clipboard copy failed{history_status}.")
+                }
+            }
             Err(error) => format!("{} color picker failed: {error}", platform.name()),
         };
+    }
+
+    fn save_color_history(&mut self, bare_hex: String) -> String {
+        match self
+            .history_store
+            .append_color_entry(ColorHistoryEntry::new(bare_hex))
+        {
+            Ok(index) => {
+                self.color_history = history_entries_to_color_history(index);
+                "; history saved".into()
+            }
+            Err(error) => format!("; history save failed: {error}"),
+        }
     }
 
     fn apply_settings_action(&mut self, action: SettingsAction) {
@@ -1141,6 +1209,22 @@ impl OddSnapRustApp {
         self.capture_status = match result {
             Ok(()) => "Upload link copied.".into(),
             Err(error) => format!("Copy upload link failed: {error}"),
+        };
+    }
+
+    fn copy_color_history_hex(&mut self, hex: String) {
+        #[cfg(target_os = "windows")]
+        let result = oddsnap_platform_windows::WindowsPlatform.copy_text_to_clipboard(&hex);
+
+        #[cfg(not(target_os = "windows"))]
+        let result: Result<(), oddsnap_platform::PlatformError> =
+            Err(oddsnap_platform::PlatformError::Unsupported(
+                "text clipboard is not implemented on this platform yet",
+            ));
+
+        self.capture_status = match result {
+            Ok(()) => format!("Color {hex} copied."),
+            Err(error) => format!("Copy color failed: {error}"),
         };
     }
 
@@ -1687,6 +1771,10 @@ fn history_entries_to_capture_history(index: HistoryIndex) -> Vec<CaptureHistory
         .collect()
 }
 
+fn history_entries_to_color_history(index: HistoryIndex) -> Vec<ColorHistoryEntry> {
+    index.colors.into_iter().take(12).collect()
+}
+
 fn history_kind_label(kind: HistoryKind) -> &'static str {
     match kind {
         HistoryKind::Image => "Image",
@@ -2058,5 +2146,24 @@ mod tests {
             "Upload failed: rate limited"
         );
         assert_eq!(history_kind_label(HistoryKind::Sticker), "Sticker");
+    }
+
+    #[test]
+    fn color_history_limits_recent_entries_for_display() {
+        let index = HistoryIndex {
+            entries: Vec::new(),
+            colors: (0..14)
+                .map(|value| ColorHistoryEntry {
+                    hex: format!("{value:06X}"),
+                    captured_at_unix_ms: value,
+                })
+                .collect(),
+        };
+
+        let colors = history_entries_to_color_history(index);
+
+        assert_eq!(colors.len(), 12);
+        assert_eq!(colors[0].hex, "000000");
+        assert_eq!(colors[11].hex, "00000B");
     }
 }
