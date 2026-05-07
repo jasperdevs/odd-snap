@@ -87,6 +87,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows primitive center-selection capture path with symmetric drag and imported aspect-ratio constraints.
 - [x] Windows primitive region-selection frame and crosshair visual feedback.
 - [x] Windows primitive region-selection window detection/snap foundation.
+- [x] Windows primitive region-selection magnifier follows the cursor when the imported magnifier preference is enabled.
 - [ ] Production crosshair guides across overlay tools.
 - [ ] Magnifier.
 - [ ] Annotation drawing.

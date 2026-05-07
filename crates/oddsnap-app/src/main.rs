@@ -2405,6 +2405,7 @@ impl OddSnapRustApp {
                     opacity: 24,
                     click_through: false,
                     show_crosshair_guides: self.settings.show_crosshair_guides,
+                    show_magnifier: self.settings.show_capture_magnifier,
                     detect_windows: self.settings.detect_windows,
                     selection_mode: RegionSelectionMode::Rectangle,
                 })? {
@@ -2852,6 +2853,7 @@ impl OddSnapRustApp {
                 opacity: 24,
                 click_through: false,
                 show_crosshair_guides: self.settings.show_crosshair_guides,
+                show_magnifier: self.settings.show_capture_magnifier,
                 detect_windows: self.settings.detect_windows,
                 selection_mode: RegionSelectionMode::Rectangle,
             })
@@ -3059,6 +3061,7 @@ impl OddSnapRustApp {
             opacity: 24,
             click_through: false,
             show_crosshair_guides: self.settings.show_crosshair_guides,
+            show_magnifier: self.settings.show_capture_magnifier,
             detect_windows: false,
             selection_mode: RegionSelectionMode::Center {
                 aspect_ratio: center_selection_aspect_ratio(
@@ -3148,6 +3151,7 @@ impl OddSnapRustApp {
             opacity: 24,
             click_through: false,
             show_crosshair_guides: true,
+            show_magnifier: self.settings.show_capture_magnifier,
             detect_windows: self.settings.detect_windows,
             selection_mode: RegionSelectionMode::Rectangle,
         })?
@@ -6192,6 +6196,7 @@ where
             opacity: 24,
             click_through: false,
             show_crosshair_guides: settings.show_crosshair_guides,
+            show_magnifier: settings.show_capture_magnifier,
             detect_windows: settings.detect_windows,
             selection_mode: RegionSelectionMode::Rectangle,
         })?

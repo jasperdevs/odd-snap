@@ -183,6 +183,7 @@ const TRAY_MENU_QUIT_ID: usize = 0x1008;
 struct WindowsRegionSelectionState {
     bounds: CaptureRegion,
     show_crosshair_guides: bool,
+    show_magnifier: bool,
     detect_windows: bool,
     selection_mode: RegionSelectionMode,
     start: Option<(i32, i32)>,
@@ -1301,6 +1302,7 @@ fn run_region_selection_loop(
             WindowsRegionSelectionState {
                 bounds: request.bounds.clone(),
                 show_crosshair_guides: request.show_crosshair_guides,
+                show_magnifier: request.show_magnifier,
                 detect_windows: request.detect_windows
                     && request.selection_mode == RegionSelectionMode::Rectangle,
                 selection_mode: request.selection_mode,
@@ -1548,6 +1550,11 @@ fn paint_region_selection_window(hwnd: HWND) {
                 paint_crosshair_guides(hdc, &state.bounds, cursor);
             }
         }
+        if state.show_magnifier {
+            if let Some(cursor) = state.current {
+                paint_selection_magnifier(hdc, &state.bounds, cursor);
+            }
+        }
 
         if state.start.is_none() {
             if let Some(detected) = state.detected_window.as_ref() {
@@ -1600,6 +1607,97 @@ fn paint_crosshair_guides(hdc: HDC, bounds: &CaptureRegion, cursor: (i32, i32)) 
         },
         color,
     );
+}
+
+#[cfg(target_os = "windows")]
+fn paint_selection_magnifier(hdc: HDC, bounds: &CaptureRegion, cursor: (i32, i32)) {
+    let lens = magnifier_client_rect(bounds, cursor);
+    fill_region_rect(hdc, lens, COLORREF(0x001d2027));
+    frame_region_rect(hdc, lens, COLORREF(0x00ffffff));
+    frame_region_rect(hdc, inset_rect(lens, 1), COLORREF(0x00d5972d));
+
+    let screen_hdc = unsafe { GetDC(None) };
+    if screen_hdc.is_invalid() {
+        return;
+    }
+
+    let sample_radius = 6;
+    let cell_size = 10;
+    let center_screen_x = bounds.x.saturating_add(cursor.0);
+    let center_screen_y = bounds.y.saturating_add(cursor.1);
+    let content_left = lens.left + 4;
+    let content_top = lens.top + 4;
+    for sample_y in -sample_radius..sample_radius {
+        for sample_x in -sample_radius..sample_radius {
+            let color = unsafe {
+                GetPixel(
+                    screen_hdc,
+                    center_screen_x.saturating_add(sample_x),
+                    center_screen_y.saturating_add(sample_y),
+                )
+            };
+            fill_region_rect(
+                hdc,
+                RECT {
+                    left: content_left + (sample_x + sample_radius) * cell_size,
+                    top: content_top + (sample_y + sample_radius) * cell_size,
+                    right: content_left + (sample_x + sample_radius + 1) * cell_size,
+                    bottom: content_top + (sample_y + sample_radius + 1) * cell_size,
+                },
+                color,
+            );
+        }
+    }
+    let _ = unsafe { ReleaseDC(None, screen_hdc) };
+
+    let center_x = (lens.left + lens.right) / 2;
+    let center_y = (lens.top + lens.bottom) / 2;
+    fill_region_rect(
+        hdc,
+        RECT {
+            left: center_x - 1,
+            top: lens.top + 4,
+            right: center_x + 2,
+            bottom: lens.bottom - 4,
+        },
+        COLORREF(0x000000ff),
+    );
+    fill_region_rect(
+        hdc,
+        RECT {
+            left: lens.left + 4,
+            top: center_y - 1,
+            right: lens.right - 4,
+            bottom: center_y + 2,
+        },
+        COLORREF(0x000000ff),
+    );
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn magnifier_client_rect(bounds: &CaptureRegion, cursor: (i32, i32)) -> RECT {
+    let lens_size = 128;
+    let gap = 24;
+    let max_left = (bounds.width as i32 - lens_size).max(0);
+    let max_top = (bounds.height as i32 - lens_size).max(0);
+    let prefer_left = if cursor.0 + gap + lens_size <= bounds.width as i32 {
+        cursor.0 + gap
+    } else {
+        cursor.0 - gap - lens_size
+    };
+    let prefer_top = if cursor.1 + gap + lens_size <= bounds.height as i32 {
+        cursor.1 + gap
+    } else {
+        cursor.1 - gap - lens_size
+    };
+    let left = prefer_left.clamp(0, max_left);
+    let top = prefer_top.clamp(0, max_top);
+    RECT {
+        left,
+        top,
+        right: left + lens_size.min(bounds.width as i32),
+        bottom: top + lens_size.min(bounds.height as i32),
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -3098,6 +3196,7 @@ mod tests {
             opacity: 1,
             click_through: true,
             show_crosshair_guides: false,
+            show_magnifier: false,
             detect_windows: false,
             selection_mode: RegionSelectionMode::Rectangle,
         }) {
@@ -3263,6 +3362,29 @@ mod tests {
 
     #[test]
     #[cfg(target_os = "windows")]
+    fn magnifier_client_rect_stays_inside_overlay_bounds() {
+        let bounds = oddsnap_platform::CaptureRegion {
+            x: -100,
+            y: 50,
+            width: 300,
+            height: 200,
+        };
+
+        let rect = super::magnifier_client_rect(&bounds, (40, 40));
+        assert_eq!(
+            (rect.left, rect.top, rect.right, rect.bottom),
+            (64, 64, 192, 192)
+        );
+
+        let clipped = super::magnifier_client_rect(&bounds, (280, 190));
+        assert_eq!(clipped.left, 128);
+        assert_eq!(clipped.top, 38);
+        assert_eq!(clipped.right, 256);
+        assert_eq!(clipped.bottom, 166);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
     fn colorref_to_color_sample_extracts_rgb_channels() {
         let sample =
             super::colorref_to_color_sample(windows::Win32::Foundation::COLORREF(0x00CC_550A))
@@ -3308,6 +3430,7 @@ mod tests {
             opacity: 24,
             click_through: false,
             show_crosshair_guides: false,
+            show_magnifier: false,
             detect_windows: false,
             selection_mode: RegionSelectionMode::Rectangle,
         }) {
@@ -3334,6 +3457,7 @@ mod tests {
                 opacity: 1,
                 click_through: true,
                 show_crosshair_guides: false,
+                show_magnifier: false,
                 detect_windows: false,
                 selection_mode: RegionSelectionMode::Rectangle,
             })

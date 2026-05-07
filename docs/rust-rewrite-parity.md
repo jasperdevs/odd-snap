@@ -48,6 +48,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows monitor enumeration now reports real display entries with DPI-derived scale percentages.
 - Windows has a region-overlay service boundary that can create and destroy a topmost layered tool window in virtual-screen coordinates, with screenshot exclusion applied.
 - Windows primitive region selection now paints a dimmed native overlay, live selection frame, optional crosshair guides, and detected-window hover frames using imported capture UX preferences.
+- Windows primitive region selection now paints a cursor-following magnifier lens when the imported magnifier preference is enabled.
 - Windows center selection now uses the primitive native selector with symmetric drag around the starting point and imported aspect-ratio constraints; macOS/Linux center selection still need production overlay support.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - Rust startup reports corrupt/unreadable Rust history instead of silently treating it as empty history.

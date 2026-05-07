@@ -2034,6 +2034,7 @@ mod tests {
             opacity: 1,
             click_through: true,
             show_crosshair_guides: false,
+            show_magnifier: false,
             detect_windows: false,
             selection_mode: RegionSelectionMode::Rectangle,
         }) {
@@ -2057,6 +2058,7 @@ mod tests {
             opacity: 1,
             click_through: false,
             show_crosshair_guides: false,
+            show_magnifier: false,
             detect_windows: false,
             selection_mode: RegionSelectionMode::Rectangle,
         }) {

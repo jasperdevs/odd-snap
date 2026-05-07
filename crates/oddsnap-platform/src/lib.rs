@@ -99,6 +99,7 @@ pub struct OverlayWindowRequest {
     pub opacity: u8,
     pub click_through: bool,
     pub show_crosshair_guides: bool,
+    pub show_magnifier: bool,
     pub detect_windows: bool,
     pub selection_mode: RegionSelectionMode,
 }
