@@ -12,6 +12,8 @@ use std::{
 #[cfg(any(target_os = "linux", test))]
 use oddsnap_core::{build_recording_output_args, FfmpegRecordingRequest};
 use oddsnap_core::{CapabilityState, NativeUiProfile, PlatformCapabilities, PlatformCapability};
+#[cfg(target_os = "linux")]
+use oddsnap_platform::RegionSelectionMode;
 use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
     ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OcrTextRequest, OcrTextResult,
@@ -890,6 +892,12 @@ impl RegionSelectionService for LinuxPlatform {
 fn run_linux_region_selection(
     request: &OverlayWindowRequest,
 ) -> Result<Option<CaptureRegion>, PlatformError> {
+    if request.selection_mode != RegionSelectionMode::Rectangle {
+        return Err(PlatformError::Unsupported(
+            "Linux center selection needs the production overlay",
+        ));
+    }
+
     let mut errors = Vec::new();
 
     for (program, args) in linux_region_selection_commands(request) {
@@ -969,8 +977,8 @@ mod tests {
     use oddsnap_platform::WindowPickerService;
     use oddsnap_platform::{
         ClipboardImageService, ClipboardTextService, ColorPickerService, HotkeyService,
-        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
-        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
+        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionMode,
+        RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
     };
 
     use super::LinuxPlatform;
@@ -1550,6 +1558,7 @@ mod tests {
             click_through: true,
             show_crosshair_guides: false,
             detect_windows: false,
+            selection_mode: RegionSelectionMode::Rectangle,
         }) {
             Ok(_) => panic!("Linux overlay should be pending"),
             Err(error) => error,
@@ -1573,6 +1582,7 @@ mod tests {
             click_through: false,
             show_crosshair_guides: false,
             detect_windows: false,
+            selection_mode: RegionSelectionMode::Rectangle,
         }) {
             Ok(_) => panic!("Linux region selection should be pending"),
             Err(error) => error,
@@ -1615,6 +1625,7 @@ mod tests {
             click_through: false,
             show_crosshair_guides: false,
             detect_windows: true,
+            selection_mode: RegionSelectionMode::Rectangle,
         });
 
         assert_eq!(commands[0].0, "slurp");
@@ -1639,6 +1650,7 @@ mod tests {
                 click_through: false,
                 show_crosshair_guides: false,
                 detect_windows: false,
+                selection_mode: RegionSelectionMode::Rectangle,
             })
             .expect("select region");
     }

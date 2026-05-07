@@ -185,6 +185,7 @@ pub(crate) enum DefaultCaptureAction {
     ColorPicker,
     Ocr,
     Scan,
+    Center,
     Ruler,
     Pending(PendingTool),
 }
@@ -199,13 +200,12 @@ pub(crate) fn default_capture_action(default_mode: DefaultCaptureMode) -> Defaul
         DefaultCaptureMode::ColorPicker => DefaultCaptureAction::ColorPicker,
         DefaultCaptureMode::Ocr => DefaultCaptureAction::Ocr,
         DefaultCaptureMode::Scan => DefaultCaptureAction::Scan,
+        DefaultCaptureMode::Center => DefaultCaptureAction::Center,
         DefaultCaptureMode::Ruler => DefaultCaptureAction::Ruler,
-        DefaultCaptureMode::Sticker | DefaultCaptureMode::Upscale | DefaultCaptureMode::Center => {
-            DefaultCaptureAction::Pending(
-                PendingTool::from_default_capture_mode(default_mode)
-                    .expect("advanced default capture mode has pending tool spec"),
-            )
-        }
+        DefaultCaptureMode::Sticker | DefaultCaptureMode::Upscale => DefaultCaptureAction::Pending(
+            PendingTool::from_default_capture_mode(default_mode)
+                .expect("advanced default capture mode has pending tool spec"),
+        ),
     }
 }
 

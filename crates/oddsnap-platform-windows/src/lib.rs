@@ -8,10 +8,11 @@ use oddsnap_platform::image_file_to_windows_dib_bytes;
 #[cfg(target_os = "windows")]
 use oddsnap_platform::VideoRecordingResult;
 use oddsnap_platform::{
-    CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
-    ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OcrTextRequest, OcrTextResult,
-    OcrTextService, OverlayWindowHandle, OverlayWindowRequest, PlatformAdapter, PlatformError,
-    RegionOverlayService, RegionSelectionService, ScreenCaptureService, ScreenshotExclusionService,
+    CaptureRegion, CaptureRequest, CaptureResult, CenterSelectionAspectRatio,
+    ClipboardImageService, ClipboardTextService, ColorPickerService, ColorSample, HotkeyService,
+    MonitorInfo, OcrTextRequest, OcrTextResult, OcrTextService, OverlayWindowHandle,
+    OverlayWindowRequest, PlatformAdapter, PlatformError, RegionOverlayService,
+    RegionSelectionMode, RegionSelectionService, ScreenCaptureService, ScreenshotExclusionService,
     VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowInfo,
     WindowPickerService,
 };
@@ -183,6 +184,7 @@ struct WindowsRegionSelectionState {
     bounds: CaptureRegion,
     show_crosshair_guides: bool,
     detect_windows: bool,
+    selection_mode: RegionSelectionMode,
     start: Option<(i32, i32)>,
     current: Option<(i32, i32)>,
     detected_window: Option<CaptureRegion>,
@@ -1271,7 +1273,9 @@ fn run_region_selection_loop(
             WindowsRegionSelectionState {
                 bounds: request.bounds.clone(),
                 show_crosshair_guides: request.show_crosshair_guides,
-                detect_windows: request.detect_windows,
+                detect_windows: request.detect_windows
+                    && request.selection_mode == RegionSelectionMode::Rectangle,
+                selection_mode: request.selection_mode,
                 start: None,
                 current: None,
                 detected_window: None,
@@ -1409,10 +1413,13 @@ unsafe extern "system" fn region_selection_window_proc(
                 let point = clamp_selection_point(point, &state.bounds);
                 state.current = Some(point);
                 state.result = Some(match (state.start, state.current) {
-                    (Some(start), Some(end)) => {
-                        selection_region_from_points(&state.bounds, start, end)
-                            .or_else(|| state.detected_window.clone())
-                    }
+                    (Some(start), Some(end)) => selection_region_from_points(
+                        &state.bounds,
+                        state.selection_mode,
+                        start,
+                        end,
+                    )
+                    .or_else(|| state.detected_window.clone()),
                     _ => None,
                 });
             });
@@ -1524,7 +1531,12 @@ fn paint_region_selection_window(hwnd: HWND) {
         }
 
         if let (Some(start), Some(current)) = (state.start, state.current) {
-            if let Some(rect) = selection_client_rect_from_points(start, current) {
+            if let Some(rect) = selection_client_rect_from_points(
+                &state.bounds,
+                state.selection_mode,
+                start,
+                current,
+            ) {
                 frame_region_rect(hdc, rect, COLORREF(0x00ffffff));
                 frame_region_rect(hdc, inset_rect(rect, 1), COLORREF(0x00d5972d));
             }
@@ -1609,13 +1621,11 @@ fn clamp_selection_point(point: (i32, i32), bounds: &CaptureRegion) -> (i32, i32
 #[cfg(target_os = "windows")]
 fn selection_region_from_points(
     bounds: &CaptureRegion,
+    mode: RegionSelectionMode,
     start: (i32, i32),
     end: (i32, i32),
 ) -> Option<CaptureRegion> {
-    let left = start.0.min(end.0);
-    let top = start.1.min(end.1);
-    let right = start.0.max(end.0);
-    let bottom = start.1.max(end.1);
+    let (left, top, right, bottom) = selection_edges_from_points(bounds, mode, start, end)?;
     let width = u32::try_from(right - left).ok()?;
     let height = u32::try_from(bottom - top).ok()?;
     if width == 0 || height == 0 {
@@ -1631,11 +1641,13 @@ fn selection_region_from_points(
 }
 
 #[cfg(target_os = "windows")]
-fn selection_client_rect_from_points(start: (i32, i32), end: (i32, i32)) -> Option<RECT> {
-    let left = start.0.min(end.0);
-    let top = start.1.min(end.1);
-    let right = start.0.max(end.0);
-    let bottom = start.1.max(end.1);
+fn selection_client_rect_from_points(
+    bounds: &CaptureRegion,
+    mode: RegionSelectionMode,
+    start: (i32, i32),
+    end: (i32, i32),
+) -> Option<RECT> {
+    let (left, top, right, bottom) = selection_edges_from_points(bounds, mode, start, end)?;
     if right <= left || bottom <= top {
         return None;
     }
@@ -1645,6 +1657,76 @@ fn selection_client_rect_from_points(start: (i32, i32), end: (i32, i32)) -> Opti
         right,
         bottom,
     })
+}
+
+#[cfg(target_os = "windows")]
+fn selection_edges_from_points(
+    bounds: &CaptureRegion,
+    mode: RegionSelectionMode,
+    start: (i32, i32),
+    end: (i32, i32),
+) -> Option<(i32, i32, i32, i32)> {
+    match mode {
+        RegionSelectionMode::Rectangle => Some((
+            start.0.min(end.0),
+            start.1.min(end.1),
+            start.0.max(end.0),
+            start.1.max(end.1),
+        )),
+        RegionSelectionMode::Center { aspect_ratio } => {
+            let mut half_width = (end.0 - start.0).unsigned_abs() as i32;
+            let mut half_height = (end.1 - start.1).unsigned_abs() as i32;
+            apply_center_selection_aspect_ratio(aspect_ratio, &mut half_width, &mut half_height);
+
+            let max_half_width = start
+                .0
+                .max(0)
+                .min((bounds.width as i32).saturating_sub(start.0));
+            let max_half_height = start
+                .1
+                .max(0)
+                .min((bounds.height as i32).saturating_sub(start.1));
+            let scale = f64::min(
+                1.0,
+                f64::min(
+                    max_half_width as f64 / f64::from(half_width.max(1)),
+                    max_half_height as f64 / f64::from(half_height.max(1)),
+                ),
+            );
+            half_width = ((half_width as f64) * scale).floor() as i32;
+            half_height = ((half_height as f64) * scale).floor() as i32;
+            Some((
+                start.0 - half_width,
+                start.1 - half_height,
+                start.0 + half_width,
+                start.1 + half_height,
+            ))
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_center_selection_aspect_ratio(
+    aspect_ratio: CenterSelectionAspectRatio,
+    half_width: &mut i32,
+    half_height: &mut i32,
+) {
+    let ratio = match aspect_ratio {
+        CenterSelectionAspectRatio::Free => return,
+        CenterSelectionAspectRatio::Square => 1.0,
+        CenterSelectionAspectRatio::Widescreen16x9 => 16.0 / 9.0,
+        CenterSelectionAspectRatio::Classic4x3 => 4.0 / 3.0,
+        CenterSelectionAspectRatio::Photo3x2 => 3.0 / 2.0,
+        CenterSelectionAspectRatio::Portrait9x16 => 9.0 / 16.0,
+    };
+    if *half_width == 0 && *half_height == 0 {
+        return;
+    }
+    if f64::from(*half_width) / f64::from((*half_height).max(1)) >= ratio {
+        *half_height = (f64::from(*half_width) / ratio).round().max(1.0) as i32;
+    } else {
+        *half_width = (f64::from(*half_height) * ratio).round().max(1.0) as i32;
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -2867,12 +2949,12 @@ mod tests {
     use oddsnap_core::{RecordingFormat, RecordingQuality};
     use oddsnap_platform::PlatformAdapter;
     #[cfg(target_os = "windows")]
-    use oddsnap_platform::{ColorPickerService, ScreenshotExclusionService};
-    #[cfg(target_os = "windows")]
     use oddsnap_platform::{
-        OverlayWindowRequest, RegionOverlayService, RegionSelectionService, VideoRecordingRequest,
-        VideoRecordingService,
+        CenterSelectionAspectRatio, OverlayWindowRequest, RegionOverlayService,
+        RegionSelectionMode, RegionSelectionService, VideoRecordingRequest, VideoRecordingService,
     };
+    #[cfg(target_os = "windows")]
+    use oddsnap_platform::{ColorPickerService, ScreenshotExclusionService};
     #[cfg(target_os = "windows")]
     use windows::core::w;
     #[cfg(target_os = "windows")]
@@ -2989,6 +3071,7 @@ mod tests {
             click_through: true,
             show_crosshair_guides: false,
             detect_windows: false,
+            selection_mode: RegionSelectionMode::Rectangle,
         }) {
             Ok(_) => panic!("empty overlay should fail"),
             Err(error) => error,
@@ -3007,8 +3090,13 @@ mod tests {
             height: 600,
         };
 
-        let region =
-            super::selection_region_from_points(&bounds, (220, 180), (20, 30)).expect("selection");
+        let region = super::selection_region_from_points(
+            &bounds,
+            RegionSelectionMode::Rectangle,
+            (220, 180),
+            (20, 30),
+        )
+        .expect("selection");
 
         assert_eq!(
             region,
@@ -3019,14 +3107,31 @@ mod tests {
                 height: 150,
             }
         );
-        assert!(super::selection_region_from_points(&bounds, (10, 10), (10, 20)).is_none());
+        assert!(super::selection_region_from_points(
+            &bounds,
+            RegionSelectionMode::Rectangle,
+            (10, 10),
+            (10, 20)
+        )
+        .is_none());
         assert_eq!(super::clamp_selection_point((-10, 700), &bounds), (0, 600));
 
-        let paint_rect =
-            super::selection_client_rect_from_points((220, 180), (20, 30)).expect("paint rect");
+        let paint_rect = super::selection_client_rect_from_points(
+            &bounds,
+            RegionSelectionMode::Rectangle,
+            (220, 180),
+            (20, 30),
+        )
+        .expect("paint rect");
         assert_eq!((paint_rect.left, paint_rect.top), (20, 30));
         assert_eq!((paint_rect.right, paint_rect.bottom), (220, 180));
-        assert!(super::selection_client_rect_from_points((4, 4), (4, 9)).is_none());
+        assert!(super::selection_client_rect_from_points(
+            &bounds,
+            RegionSelectionMode::Rectangle,
+            (4, 4),
+            (4, 9)
+        )
+        .is_none());
 
         let client_rect = super::capture_region_to_client_rect(
             &bounds,
@@ -3046,6 +3151,56 @@ mod tests {
                 client_rect.bottom
             ),
             (20, 30, 220, 180)
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn center_region_selection_expands_from_anchor_and_clips_to_bounds() {
+        let bounds = oddsnap_platform::CaptureRegion {
+            x: -100,
+            y: 50,
+            width: 300,
+            height: 200,
+        };
+
+        let region = super::selection_region_from_points(
+            &bounds,
+            RegionSelectionMode::Center {
+                aspect_ratio: CenterSelectionAspectRatio::Free,
+            },
+            (100, 100),
+            (130, 140),
+        )
+        .expect("center selection");
+
+        assert_eq!(
+            region,
+            oddsnap_platform::CaptureRegion {
+                x: -30,
+                y: 110,
+                width: 60,
+                height: 80,
+            }
+        );
+
+        let clipped = super::selection_region_from_points(
+            &bounds,
+            RegionSelectionMode::Center {
+                aspect_ratio: CenterSelectionAspectRatio::Square,
+            },
+            (20, 20),
+            (100, 70),
+        )
+        .expect("clipped center selection");
+        assert_eq!(
+            clipped,
+            oddsnap_platform::CaptureRegion {
+                x: -100,
+                y: 50,
+                width: 40,
+                height: 40,
+            }
         );
     }
 
@@ -3126,6 +3281,7 @@ mod tests {
             click_through: false,
             show_crosshair_guides: false,
             detect_windows: false,
+            selection_mode: RegionSelectionMode::Rectangle,
         }) {
             Ok(_) => panic!("empty selection bounds should fail"),
             Err(error) => error,
@@ -3151,6 +3307,7 @@ mod tests {
                 click_through: true,
                 show_crosshair_guides: false,
                 detect_windows: false,
+                selection_mode: RegionSelectionMode::Rectangle,
             })
             .expect("overlay window");
 

@@ -33,10 +33,10 @@ use oddsnap_core::{
 };
 use oddsnap_platform::{
     default_capture_directory, persist_capture_to_path_as, virtual_screen_region, CaptureRegion,
-    CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService, ColorPickerService,
-    OcrTextRequest, OcrTextService, OverlayWindowRequest, PlatformAdapter, RegionSelectionService,
-    ScreenCaptureService, VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService,
-    WindowPickerService,
+    CaptureRequest, CaptureResult, CenterSelectionAspectRatio, ClipboardImageService,
+    ClipboardTextService, ColorPickerService, OcrTextRequest, OcrTextService, OverlayWindowRequest,
+    PlatformAdapter, RegionSelectionMode, RegionSelectionService, ScreenCaptureService,
+    VideoRecordingHandle, VideoRecordingRequest, VideoRecordingService, WindowPickerService,
 };
 
 mod actions;
@@ -1725,6 +1725,7 @@ impl OddSnapRustApp {
                     click_through: false,
                     show_crosshair_guides: self.settings.show_crosshair_guides,
                     detect_windows: self.settings.detect_windows,
+                    selection_mode: RegionSelectionMode::Rectangle,
                 })? {
                     Some(region) => adapter.capture_region_with_options(CaptureRequest {
                         region,
@@ -2064,6 +2065,111 @@ impl OddSnapRustApp {
         })
     }
 
+    fn run_center_capture(&mut self, trigger: &'static str) {
+        if self.settings.capture_delay_seconds > 0 {
+            self.capture_status = format!(
+                "Waiting {}s before center capture.",
+                self.settings.capture_delay_seconds
+            );
+            thread::sleep(Duration::from_secs(
+                self.settings.capture_delay_seconds as u64,
+            ));
+        }
+
+        let platform = host_platform();
+        #[cfg(target_os = "windows")]
+        let result = {
+            let adapter = oddsnap_platform_windows::WindowsPlatform;
+            self.run_center_capture_with_adapter(&adapter)
+        };
+
+        #[cfg(target_os = "macos")]
+        let result = Err(oddsnap_platform::PlatformError::Unsupported(
+            "macOS center selection needs the production overlay",
+        ));
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.run_center_capture_with_adapter(&adapter)
+        };
+
+        self.capture_status = match result {
+            Ok(result) => {
+                let path = result.capture.image_path.display().to_string();
+                let history_status =
+                    self.save_capture_history(&result.capture, CaptureMode::Rectangle);
+                let copy_status = match (
+                    self.settings.copy_captures_to_clipboard,
+                    result.copy_error.as_deref(),
+                ) {
+                    (true, None) => "copied and saved".to_string(),
+                    (true, Some(error)) => format!("saved; clipboard copy failed ({error})"),
+                    (false, _) => "saved".to_string(),
+                };
+                format!(
+                    "{trigger} received. {} Center {copy_status} {path}{history_status}",
+                    platform.name()
+                )
+            }
+            Err(error) => format!("{} center capture failed: {error}", platform.name()),
+        };
+    }
+
+    fn run_center_capture_with_adapter<T>(
+        &self,
+        adapter: &T,
+    ) -> Result<CaptureRunResult, oddsnap_platform::PlatformError>
+    where
+        T: ScreenCaptureService
+            + WindowPickerService
+            + ClipboardImageService
+            + RegionSelectionService,
+    {
+        let bounds = match adapter.monitors() {
+            Ok(monitors) => virtual_screen_region(&monitors).ok_or_else(|| {
+                oddsnap_platform::PlatformError::Failed(
+                    "no monitors available for center selection".into(),
+                )
+            })?,
+            #[cfg(target_os = "linux")]
+            Err(error) => {
+                let _ = error;
+                CaptureRegion {
+                    x: 0,
+                    y: 0,
+                    width: 1,
+                    height: 1,
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            Err(error) => return Err(error),
+        };
+        let Some(region) = adapter.select_region(OverlayWindowRequest {
+            bounds,
+            opacity: 24,
+            click_through: false,
+            show_crosshair_guides: self.settings.show_crosshair_guides,
+            detect_windows: false,
+            selection_mode: RegionSelectionMode::Center {
+                aspect_ratio: center_selection_aspect_ratio(
+                    &self.settings.center_selection_aspect_ratio,
+                ),
+            },
+        })?
+        else {
+            return Err(oddsnap_platform::PlatformError::Failed(
+                "center selection canceled".into(),
+            ));
+        };
+
+        let capture = adapter.capture_region_with_options(CaptureRequest {
+            region,
+            include_cursor: self.settings.show_cursor,
+        })?;
+        self.save_and_copy_capture(adapter, capture)
+    }
+
     fn run_default_capture_command(&mut self, trigger: &'static str) {
         match default_capture_action(self.settings.default_capture_mode) {
             DefaultCaptureAction::Capture(mode) => {
@@ -2079,6 +2185,9 @@ impl OddSnapRustApp {
             }
             DefaultCaptureAction::Scan => {
                 self.run_scan_capture(trigger);
+            }
+            DefaultCaptureAction::Center => {
+                self.run_center_capture(trigger);
             }
             DefaultCaptureAction::Ruler => {
                 self.run_ruler_measure(trigger);
@@ -2128,6 +2237,7 @@ impl OddSnapRustApp {
             click_through: false,
             show_crosshair_guides: true,
             detect_windows: self.settings.detect_windows,
+            selection_mode: RegionSelectionMode::Rectangle,
         })?
         else {
             return Err(oddsnap_platform::PlatformError::Failed(
@@ -2901,7 +3011,7 @@ impl OddSnapRustApp {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::Upscale);
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Center => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Center);
+                self.run_center_capture("Center hotkey");
             }
             oddsnap_platform_windows::WindowsHotkeyEvent::Ruler => {
                 self.run_ruler_measure("Ruler hotkey");
@@ -2950,7 +3060,7 @@ impl OddSnapRustApp {
                 self.capture_status = pending_tool_hotkey_status(PendingTool::Upscale);
             }
             CrossPlatformHotkeyEvent::Center => {
-                self.capture_status = pending_tool_hotkey_status(PendingTool::Center);
+                self.run_center_capture("Center hotkey");
             }
             CrossPlatformHotkeyEvent::Ruler => {
                 self.run_ruler_measure("Ruler hotkey");
@@ -4199,6 +4309,21 @@ fn ruler_measurement_text(region: CaptureRegion) -> String {
     )
 }
 
+fn center_selection_aspect_ratio(value: &str) -> CenterSelectionAspectRatio {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "square" => CenterSelectionAspectRatio::Square,
+        "widescreen16x9" | "widescreen_16x9" | "16:9" | "16x9" => {
+            CenterSelectionAspectRatio::Widescreen16x9
+        }
+        "classic4x3" | "classic_4x3" | "4:3" | "4x3" => CenterSelectionAspectRatio::Classic4x3,
+        "photo3x2" | "photo_3x2" | "3:2" | "3x2" => CenterSelectionAspectRatio::Photo3x2,
+        "portrait9x16" | "portrait_9x16" | "9:16" | "9x16" => {
+            CenterSelectionAspectRatio::Portrait9x16
+        }
+        _ => CenterSelectionAspectRatio::Free,
+    }
+}
+
 fn advanced_settings_summary_text(settings: &AppSettings) -> String {
     let upload = if settings.auto_upload_screenshots
         || settings.auto_upload_gifs
@@ -4481,6 +4606,7 @@ where
             click_through: false,
             show_crosshair_guides: settings.show_crosshair_guides,
             detect_windows: settings.detect_windows,
+            selection_mode: RegionSelectionMode::Rectangle,
         })?
         .ok_or_else(|| oddsnap_platform::PlatformError::Failed("region recording canceled".into()))
 }
@@ -4991,6 +5117,10 @@ mod tests {
             DefaultCaptureAction::Scan
         ));
         assert!(matches!(
+            default_capture_action(DefaultCaptureMode::Center),
+            DefaultCaptureAction::Center
+        ));
+        assert!(matches!(
             default_capture_action(DefaultCaptureMode::Ruler),
             DefaultCaptureAction::Ruler
         ));
@@ -4998,7 +5128,6 @@ mod tests {
         for (mode, tool) in [
             (DefaultCaptureMode::Sticker, PendingTool::Sticker),
             (DefaultCaptureMode::Upscale, PendingTool::Upscale),
-            (DefaultCaptureMode::Center, PendingTool::Center),
         ] {
             assert!(matches!(
                 default_capture_action(mode),
@@ -5025,6 +5154,22 @@ mod tests {
                 height: 480,
             }),
             "640x480 px @ -10,20"
+        );
+    }
+
+    #[test]
+    fn center_selection_aspect_ratio_accepts_legacy_names() {
+        assert_eq!(
+            center_selection_aspect_ratio("Widescreen16x9"),
+            CenterSelectionAspectRatio::Widescreen16x9
+        );
+        assert_eq!(
+            center_selection_aspect_ratio("4:3"),
+            CenterSelectionAspectRatio::Classic4x3
+        );
+        assert_eq!(
+            center_selection_aspect_ratio("unknown"),
+            CenterSelectionAspectRatio::Free
         );
     }
 

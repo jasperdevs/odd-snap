@@ -41,8 +41,9 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Windows imported color-picker hotkey routing.
 - [x] Imported OCR hotkey routing starts the Rust OCR capture path instead of being dropped.
 - [x] Imported scan hotkey routing starts the Rust QR/barcode scan foundation instead of being dropped.
+- [x] Imported center hotkey routing starts the Rust center-selection capture foundation on Windows instead of being dropped.
 - [x] Imported ruler hotkey routing measures a selected region and copies dimensions.
-- [x] Imported sticker/upscale/center/scroll/AI hotkey routing reports pending parity instead of being dropped.
+- [x] Imported sticker/upscale/scroll/AI hotkey routing reports pending parity instead of being dropped.
 - [x] Pending advanced tool metadata is centralized for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - [x] Duplicate imported hotkeys are rejected before platform registration.
 - [x] Windows topmost transparent overlay window foundation.
@@ -83,6 +84,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Cross-platform active-window capture foundation.
 - [ ] Production region selection overlay.
 - [x] Windows primitive drag region selection capture path.
+- [x] Windows primitive center-selection capture path with symmetric drag and imported aspect-ratio constraints.
 - [x] Windows primitive region-selection frame and crosshair visual feedback.
 - [x] Windows primitive region-selection window detection/snap foundation.
 - [ ] Production crosshair guides across overlay tools.

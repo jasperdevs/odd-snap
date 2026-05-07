@@ -100,6 +100,25 @@ pub struct OverlayWindowRequest {
     pub click_through: bool,
     pub show_crosshair_guides: bool,
     pub detect_windows: bool,
+    pub selection_mode: RegionSelectionMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegionSelectionMode {
+    Rectangle,
+    Center {
+        aspect_ratio: CenterSelectionAspectRatio,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CenterSelectionAspectRatio {
+    Free,
+    Square,
+    Widescreen16x9,
+    Classic4x3,
+    Photo3x2,
+    Portrait9x16,
 }
 
 pub trait PlatformAdapter: Send + Sync {

@@ -48,6 +48,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Windows monitor enumeration now reports real display entries with DPI-derived scale percentages.
 - Windows has a region-overlay service boundary that can create and destroy a topmost layered tool window in virtual-screen coordinates, with screenshot exclusion applied.
 - Windows primitive region selection now paints a dimmed native overlay, live selection frame, optional crosshair guides, and detected-window hover frames using imported capture UX preferences.
+- Windows center selection now uses the primitive native selector with symmetric drag around the starting point and imported aspect-ratio constraints; macOS/Linux center selection still need production overlay support.
 - Rust captures can append durable JSON history entries and reload recent captures on startup.
 - Rust startup reports corrupt/unreadable Rust history instead of silently treating it as empty history.
 - GPUI recent-capture rows can reveal saved files through the host file browser on Windows/macOS, and open the containing folder on Linux where the generic `xdg-open` fallback cannot select a file.
@@ -65,7 +66,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust startup can import legacy capture and recording hotkey settings; the capture listener uses the imported capture hotkey.
 - Windows hotkey listener can dispatch both capture and recording events into the GPUI shell.
 - Capture hotkey routing uses the supported imported default capture mode, including active-window capture.
-- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, OCR routes to the Rust OCR capture foundation, Scan routes to the Rust QR/barcode scan foundation, ruler routes to region measurement, and sticker/upscale/center report explicit pending parity.
+- Imported default capture modes no longer fall back to full-screen for unimplemented tools; color picker routes to the color sampler, OCR routes to the Rust OCR capture foundation, Scan routes to the Rust QR/barcode scan foundation, Windows Center routes to symmetric center selection, ruler routes to region measurement, and sticker/upscale report explicit pending parity.
 - Windows hotkey listener can dispatch imported full-screen and active-window capture hotkeys into the GPUI shell.
 - Windows hotkey listener can dispatch the imported color-picker hotkey into the Rust color sampling path.
 - macOS has an app-level global hotkey listener foundation through `global-hotkey`; the manager is created during GPUI app startup so it stays on the main application thread.
@@ -75,7 +76,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Imported OCR hotkeys are registered and routed on Windows/macOS/Linux startup; they start the Rust OCR capture foundation instead of being silently dropped.
 - Default capture mode `OCR` is modeled as an implemented OCR action instead of a pending advanced-tool fallback.
 - Imported ruler hotkeys and default ruler mode can now select a region, copy `widthxheight px @ x,y`, and report the measured dimensions.
-- Imported scan, sticker, upscale, center, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; Scan starts the Rust QR/barcode scan foundation, while sticker/upscale/center/scroll-capture still report explicit pending parity statuses instead of being silently dropped.
+- Imported scan, sticker, upscale, center, scroll-capture, and AI redirect hotkeys are registered and routed on Windows/macOS/Linux startup; Scan starts the Rust QR/barcode scan foundation, Windows Center starts the symmetric center-selection capture foundation, while sticker/upscale/scroll-capture still report explicit pending parity statuses instead of being silently dropped.
 - Pending advanced tool metadata is centralized in the Rust app registry for default capture routing, hotkey summaries, duplicate checks, and cross-platform hotkey registration.
 - Rust startup now rejects duplicate imported hotkey bindings before platform registration, with a clear status instead of an opaque OS/global-hotkey failure.
 - Windows can install a shell tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the tray recording state.

@@ -17,8 +17,9 @@ use oddsnap_platform::{
     CaptureRegion, CaptureRequest, CaptureResult, ClipboardImageService, ClipboardTextService,
     ColorPickerService, ColorSample, HotkeyService, MonitorInfo, OcrTextRequest, OcrTextResult,
     OcrTextService, OverlayWindowHandle, OverlayWindowRequest, PermissionsService, PlatformAdapter,
-    PlatformError, RegionOverlayService, RegionSelectionService, ScreenCaptureService,
-    VideoRecordingRequest, VideoRecordingService, WindowInfo, WindowPickerService,
+    PlatformError, RegionOverlayService, RegionSelectionMode, RegionSelectionService,
+    ScreenCaptureService, VideoRecordingRequest, VideoRecordingService, WindowInfo,
+    WindowPickerService,
 };
 
 #[derive(Debug, Default)]
@@ -1302,6 +1303,11 @@ impl RegionSelectionService for MacosPlatform {
         &self,
         request: OverlayWindowRequest,
     ) -> Result<Option<CaptureRegion>, PlatformError> {
+        if request.selection_mode != RegionSelectionMode::Rectangle {
+            return Err(PlatformError::Unsupported(
+                "macOS center selection needs the production overlay",
+            ));
+        }
         let _ = request;
         Err(PlatformError::Unsupported(
             "macOS region selection is not implemented yet",
@@ -1314,8 +1320,8 @@ mod tests {
     use oddsnap_core::{NativeMaterial, RecordingFormat, RecordingQuality};
     use oddsnap_platform::{
         ClipboardImageService, ClipboardTextService, ColorPickerService, HotkeyService,
-        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionService,
-        ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
+        OverlayWindowRequest, PlatformAdapter, RegionOverlayService, RegionSelectionMode,
+        RegionSelectionService, ScreenCaptureService, VideoRecordingRequest, VideoRecordingService,
     };
     #[cfg(not(target_os = "macos"))]
     use oddsnap_platform::{PermissionsService, WindowPickerService};
@@ -1915,6 +1921,7 @@ mod tests {
             click_through: true,
             show_crosshair_guides: false,
             detect_windows: false,
+            selection_mode: RegionSelectionMode::Rectangle,
         }) {
             Ok(_) => panic!("macOS overlay should be pending"),
             Err(error) => error,
@@ -1937,6 +1944,7 @@ mod tests {
             click_through: false,
             show_crosshair_guides: false,
             detect_windows: false,
+            selection_mode: RegionSelectionMode::Rectangle,
         }) {
             Ok(_) => panic!("macOS region selection should be pending"),
             Err(error) => error,
