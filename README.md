@@ -52,6 +52,16 @@
   <code>winget upgrade --id JasperDevs.OddSnap -e</code>
 </p>
 
+<h2 align="center">Rust rewrite status</h2>
+
+| Platform | Current branch status |
+| --- | --- |
+| Windows | Shipping releases and Winget still use the existing Windows app. The Rust/GPUI rewrite is local branch work until parity is verified. |
+| macOS | Rust foundations and unsigned local package smoke exist for current Apple Silicon macOS, with Intel kept as compatibility coverage. Signing, notarization, and real-device parity are not release-ready. |
+| Linux | Rust foundations cover selected X11/desktop-tool paths. Wayland recording, tray integration, audio capture, and full parity are still pending. |
+
+See [Rust rewrite parity notes](docs/rust-rewrite-parity.md), [macOS readiness](docs/macos-readiness.md), and [Rust packaging readiness](docs/rust-packaging-readiness.md) before treating this branch as shippable.
+
 <h2 align="center">Features</h2>
 
 <p align="center">
