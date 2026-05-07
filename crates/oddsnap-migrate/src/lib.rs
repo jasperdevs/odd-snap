@@ -164,6 +164,7 @@ pub fn import_app_settings(import: &LegacySettingsImport) -> AppSettings {
     }
 
     if let Some(after_capture) = import.raw.get("AfterCapture") {
+        settings.after_capture_action = legacy_after_capture_action(after_capture);
         settings.copy_captures_to_clipboard = legacy_after_capture_copies(after_capture);
     }
 
@@ -1190,10 +1191,24 @@ fn system_time_to_unix_ms(value: SystemTime) -> u64 {
 }
 
 fn legacy_after_capture_copies(value: &Value) -> bool {
+    legacy_after_capture_action(value) != "PreviewOnly"
+}
+
+fn legacy_after_capture_action(value: &Value) -> String {
     match value {
-        Value::Number(number) => number.as_u64().is_none_or(|index| index != 2),
-        Value::String(name) => !name.eq_ignore_ascii_case("PreviewOnly"),
-        _ => AppSettings::default().copy_captures_to_clipboard,
+        Value::Number(number) => match number.as_u64() {
+            Some(0) => "CopyToClipboard".into(),
+            Some(2) => "PreviewOnly".into(),
+            _ => "PreviewAndCopy".into(),
+        },
+        Value::String(name) if name.eq_ignore_ascii_case("CopyToClipboard") => {
+            "CopyToClipboard".into()
+        }
+        Value::String(name) if name.eq_ignore_ascii_case("PreviewOnly") => "PreviewOnly".into(),
+        Value::String(name) if name.eq_ignore_ascii_case("PreviewAndCopy") => {
+            "PreviewAndCopy".into()
+        }
+        _ => AppSettings::default().after_capture_action,
     }
 }
 
@@ -1442,6 +1457,7 @@ mod tests {
         );
         assert!(!settings.save_history);
         assert!(!settings.copy_captures_to_clipboard);
+        assert_eq!(settings.after_capture_action, "PreviewOnly");
         assert_eq!(settings.capture_image_format, CaptureImageFormat::Jpeg);
         assert_eq!(settings.jpeg_quality, 92);
         assert!(!settings.save_in_monthly_folders);
@@ -1496,6 +1512,7 @@ mod tests {
         let settings = import_app_settings(&import);
 
         assert!(settings.copy_captures_to_clipboard);
+        assert_eq!(settings.after_capture_action, "PreviewAndCopy");
     }
 
     #[test]

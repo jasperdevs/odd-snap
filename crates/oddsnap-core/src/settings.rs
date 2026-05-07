@@ -172,6 +172,8 @@ pub struct AppSettings {
     pub capture_output_directory: Option<PathBuf>,
     #[serde(default = "default_copy_captures_to_clipboard")]
     pub copy_captures_to_clipboard: bool,
+    #[serde(default = "default_after_capture_action")]
+    pub after_capture_action: String,
     #[serde(default = "default_save_history")]
     pub save_history: bool,
     #[serde(default)]
@@ -347,6 +349,7 @@ impl Default for AppSettings {
         Self {
             capture_output_directory: None,
             copy_captures_to_clipboard: true,
+            after_capture_action: default_after_capture_action(),
             save_history: true,
             capture_image_format: CaptureImageFormat::Png,
             jpeg_quality: default_jpeg_quality(),
@@ -471,6 +474,10 @@ impl AppSettings {
 
 fn default_copy_captures_to_clipboard() -> bool {
     true
+}
+
+fn default_after_capture_action() -> String {
+    "PreviewAndCopy".into()
 }
 
 fn default_save_history() -> bool {
@@ -731,6 +738,7 @@ mod tests {
         let settings = AppSettings::default();
 
         assert!(settings.copy_captures_to_clipboard);
+        assert_eq!(settings.after_capture_action, "PreviewAndCopy");
         assert!(settings.save_history);
         assert_eq!(settings.capture_image_format, CaptureImageFormat::Png);
         assert_eq!(settings.jpeg_quality, 85);
@@ -803,6 +811,7 @@ mod tests {
         let settings = AppSettings {
             capture_output_directory: Some(root.join("captures")),
             copy_captures_to_clipboard: false,
+            after_capture_action: "PreviewOnly".into(),
             save_history: false,
             capture_image_format: CaptureImageFormat::Jpeg,
             jpeg_quality: 70,

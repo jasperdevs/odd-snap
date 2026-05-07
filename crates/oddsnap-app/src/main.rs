@@ -3460,6 +3460,11 @@ impl OddSnapRustApp {
             SettingsAction::ToggleClipboardCopy => {
                 self.settings.copy_captures_to_clipboard =
                     !self.settings.copy_captures_to_clipboard;
+                self.settings.after_capture_action = if self.settings.copy_captures_to_clipboard {
+                    "PreviewAndCopy".into()
+                } else {
+                    "PreviewOnly".into()
+                };
                 self.persist_capture_settings(format!(
                     "Copy captures {}",
                     on_off(self.settings.copy_captures_to_clipboard)
@@ -5404,8 +5409,9 @@ impl OddSnapRustApp {
 
     fn capture_preferences_summary(&self) -> String {
         format!(
-            "Capture prefs: default {} · delay {}s · cursor {} · crosshair {} · magnifier {} · sounds {} · toasts {} {:.1}s fade {} · UI scale {:.2}x",
+            "Capture prefs: default {} · after {} · delay {}s · cursor {} · crosshair {} · magnifier {} · sounds {} · toasts {} {:.1}s fade {} · UI scale {:.2}x",
             self.settings.default_capture_mode.label(),
+            self.settings.after_capture_action,
             self.settings.capture_delay_seconds,
             on_off(self.settings.show_cursor),
             on_off(self.settings.show_crosshair_guides),

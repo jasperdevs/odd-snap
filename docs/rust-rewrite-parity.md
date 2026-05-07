@@ -91,6 +91,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - macOS can install a menu bar status item with the legacy menu commands, dispatch menu bar capture/recording/settings/history/quit events into GPUI, and update the recording menu label.
 - Linux can install an appindicator/status tray icon with the legacy menu commands, dispatch tray capture/recording/settings/history/quit events into GPUI, and update the recording menu label.
 - Rust startup can import legacy capture UX preferences including delay, cursor, magnifier, crosshair, UI scale, toast position, default capture mode, startup, and update toggles.
+- Rust settings now preserve the full legacy AfterCapture mode while retaining the derived clipboard-copy behavior used by current capture code.
 - GPUI lifecycle controls can show and persist the imported startup/update-check preferences while explicitly reporting that the Rust release/update channel is not enabled on this branch.
 - Rust core has an update-check foundation that parses GitHub latest-release metadata, compares release versions, extracts SHA-256 digests, and chooses platform-appropriate Windows/macOS/Linux release assets without enabling installs on this branch.
 - GPUI lifecycle controls can manually check GitHub latest-release metadata through curl and report update availability plus the selected platform asset without installing it.
