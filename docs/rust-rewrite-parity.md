@@ -109,6 +109,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Rust core now ports the legacy OCR line-layout formatter that orders recognized lines, preserves paragraph gaps, and retains indentation in copied/viewed text.
 - Rust core now ports the legacy translation model labels, supported-language normalization, source/target language resolution, and runtime configuration error rules.
 - Rust core now ports the legacy image-search query matcher for normalization, file-name/OCR source filtering, scoring, exact-match behavior, and newest-first tie-breaking.
+- Rust core now ports the legacy image-search index record metadata, OCR status labels, diagnostics text, and match-source descriptions for file-name versus OCR matches.
 - GPUI advanced settings summary now reports translated source/target languages, translation model labels, and image-search source/exact-match state through shared Rust core rules instead of exposing raw legacy numeric values.
 - Rust capture persistence can save Windows BMP captures as PNG, JPEG, or BMP according to Rust settings.
 - Rust capture persistence uses the configured file-name template and optional `yyyy-MM` monthly folder.

@@ -150,6 +150,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] Core translation model, supported-language normalization, source/target resolution, and runtime configuration error rules ported from legacy.
 - [ ] Image search.
 - [x] Core image-search query normalization, source filtering, scoring, and ranking ported from the legacy matcher.
+- [x] Core image-search index record, OCR status labels, diagnostics text, and match-source descriptions ported from legacy.
 - [x] GPUI advanced settings summary uses core translation labels and image-search source/exact-match state instead of raw legacy numeric values.
 - [ ] Production color picker overlay polish.
 - [x] AI Redirect hotkey can open configured chat providers that do not require hosted-image upload and copies the newest saved image.
