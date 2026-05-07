@@ -90,6 +90,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI capture smoke honors the imported capture delay and surfaces imported capture UX preferences.
 - GPUI can persistently cycle implemented capture preferences for image format, clipboard copy, and cursor inclusion.
 - GPUI can persistently cycle implemented default capture mode, capture delay, crosshair, magnifier, window-detection, and automatic/manual scrolling-capture preferences.
+- GPUI can persistently toggle migrated sound mute, toast duration, and toast fade preferences while the production toast skin is still pending.
 - Rust settings preserve advanced legacy preferences for OCR, translation, uploads, image search, tool visibility, custom tool hotkeys, toast timing, screenshot styling, setup state, and open-with apps.
 - Rust settings preserve the legacy last capture mode and raw toast button layout metadata so migration does not drop those UI preferences before the production toast skin lands.
 - Rust core can discover `ffmpeg` and optional `ffprobe` from PATH, and the GPUI shell reports media-tool availability.

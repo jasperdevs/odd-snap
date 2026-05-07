@@ -874,6 +874,7 @@ impl OddSnapRustApp {
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .gap(px(8.0))
                     .child(self.settings_button(
                         cx,
@@ -1031,6 +1032,31 @@ impl OddSnapRustApp {
                             on_off(self.settings.show_capture_magnifier)
                         ),
                         SettingsAction::ToggleMagnifier,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "capture-sounds-button",
+                        format!(
+                            "Sounds {}",
+                            if self.settings.mute_sounds {
+                                "muted"
+                            } else {
+                                "on"
+                            }
+                        ),
+                        SettingsAction::ToggleMuteSounds,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "toast-duration-button",
+                        format!("Toast {:.1}s", self.settings.toast_duration_seconds),
+                        SettingsAction::ToastDuration,
+                    ))
+                    .child(self.settings_button(
+                        cx,
+                        "toast-fade-button",
+                        format!("Fade {}", on_off(self.settings.toast_fade_out_enabled)),
+                        SettingsAction::ToggleToastFade,
                     ))
                     .child(self.settings_button(
                         cx,
@@ -3249,6 +3275,32 @@ impl OddSnapRustApp {
                     on_off(self.settings.detect_windows)
                 ));
             }
+            SettingsAction::ToggleMuteSounds => {
+                self.settings.mute_sounds = !self.settings.mute_sounds;
+                self.persist_capture_settings(format!(
+                    "Capture sounds {}",
+                    if self.settings.mute_sounds {
+                        "muted"
+                    } else {
+                        "enabled"
+                    }
+                ));
+            }
+            SettingsAction::ToastDuration => {
+                self.settings.toast_duration_seconds =
+                    next_toast_duration_seconds(self.settings.toast_duration_seconds);
+                self.persist_capture_settings(format!(
+                    "Toast duration {:.1}s",
+                    self.settings.toast_duration_seconds
+                ));
+            }
+            SettingsAction::ToggleToastFade => {
+                self.settings.toast_fade_out_enabled = !self.settings.toast_fade_out_enabled;
+                self.persist_capture_settings(format!(
+                    "Toast fade {}",
+                    on_off(self.settings.toast_fade_out_enabled)
+                ));
+            }
             SettingsAction::ScrollingCaptureMode => {
                 self.settings.scrolling_capture_mode =
                     next_scrolling_capture_mode(&self.settings.scrolling_capture_mode);
@@ -4937,13 +4989,16 @@ impl OddSnapRustApp {
 
     fn capture_preferences_summary(&self) -> String {
         format!(
-            "Capture prefs: default {} · delay {}s · cursor {} · crosshair {} · magnifier {} · toasts {} · UI scale {:.2}x",
+            "Capture prefs: default {} · delay {}s · cursor {} · crosshair {} · magnifier {} · sounds {} · toasts {} {:.1}s fade {} · UI scale {:.2}x",
             self.settings.default_capture_mode.label(),
             self.settings.capture_delay_seconds,
             on_off(self.settings.show_cursor),
             on_off(self.settings.show_crosshair_guides),
             on_off(self.settings.show_capture_magnifier),
+            if self.settings.mute_sounds { "muted" } else { "on" },
             self.settings.toast_position.label(),
+            self.settings.toast_duration_seconds,
+            on_off(self.settings.toast_fade_out_enabled),
             self.settings.ui_scale
         )
     }
@@ -6366,6 +6421,16 @@ fn next_capture_delay_seconds(delay: u32) -> u32 {
     }
 }
 
+fn next_toast_duration_seconds(seconds: f64) -> f64 {
+    if seconds < 2.0 {
+        2.5
+    } else if seconds < 4.0 {
+        4.5
+    } else {
+        1.5
+    }
+}
+
 fn next_recording_format(format: RecordingFormat) -> RecordingFormat {
     match format {
         RecordingFormat::Gif => RecordingFormat::Mp4,
@@ -6652,6 +6717,9 @@ mod tests {
         assert_eq!(next_scrolling_capture_mode("Automatic"), "Manual");
         assert_eq!(next_scrolling_capture_mode("Manual"), "Automatic");
         assert_eq!(next_scrolling_capture_mode("InvalidLegacyValue"), "Manual");
+        assert_eq!(next_toast_duration_seconds(1.5), 2.5);
+        assert_eq!(next_toast_duration_seconds(2.5), 4.5);
+        assert_eq!(next_toast_duration_seconds(4.5), 1.5);
     }
 
     #[test]
