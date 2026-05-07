@@ -14,6 +14,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - Legacy settings JSON can be located and parsed without requiring the full old C# schema.
 - Windows monitor enumeration returns the virtual-screen bounds through the platform service.
 - Windows can capture a screen region through the Rust platform service and write a BMP file.
+- macOS has a command-backed `screencapture` still-capture foundation for full-screen and explicit-region PNG captures.
 - GPUI shell can invoke the Windows capture service through a local smoke action.
 - Shared capture trait can capture the full virtual screen by reusing monitor enumeration and region capture.
 - GPUI exposes rectangle, full-screen, and active-window capture actions instead of mapping rectangle capture to full-screen.
@@ -28,6 +29,7 @@ The Rust rewrite must not replace the current app until this document and the li
 - GPUI shell exposes full-screen and active-window capture smoke controls with a local recent-captures list.
 - Rust app settings can load capture output and clipboard preferences from a JSON settings file.
 - macOS and Linux adapters expose explicit pending capture/window/clipboard service implementations instead of missing trait surfaces.
+- GPUI capture routing now uses the host adapter for still captures instead of hard-coding the Windows adapter path.
 - Windows monitor enumeration now reports real display entries with DPI-derived scale percentages.
 - Windows has a region-overlay service boundary that can create and destroy a topmost layered tool window in virtual-screen coordinates, with screenshot exclusion applied.
 - Windows primitive region selection now paints a dimmed native overlay, live selection frame, optional crosshair guides, and detected-window hover frames using imported capture UX preferences.

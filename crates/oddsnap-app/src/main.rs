@@ -97,6 +97,11 @@ struct CaptureHistoryEntry {
     upload_error: Option<String>,
 }
 
+struct CaptureRunResult {
+    capture: oddsnap_platform::CaptureResult,
+    copy_error: Option<String>,
+}
+
 struct ActiveRecording {
     handle: Box<dyn VideoRecordingHandle>,
     width: u32,
@@ -976,70 +981,36 @@ impl OddSnapRustApp {
 
         let platform = host_platform();
         #[cfg(target_os = "windows")]
-        let result = (|| {
+        let result = {
             let adapter = oddsnap_platform_windows::WindowsPlatform;
-            let capture = match mode {
-                CaptureMode::Rectangle => {
-                    let monitors = adapter.monitors()?;
-                    let bounds = virtual_screen_region(&monitors).ok_or_else(|| {
-                        oddsnap_platform::PlatformError::Failed(
-                            "no monitors available for region selection".into(),
-                        )
-                    })?;
-                    match adapter.select_region(OverlayWindowRequest {
-                        bounds,
-                        opacity: 24,
-                        click_through: false,
-                        show_crosshair_guides: self.settings.show_crosshair_guides,
-                        detect_windows: self.settings.detect_windows,
-                    })? {
-                        Some(region) => adapter.capture_region_with_options(CaptureRequest {
-                            region,
-                            include_cursor: self.settings.show_cursor,
-                        }),
-                        None => Err(oddsnap_platform::PlatformError::Failed(
-                            "region selection canceled".into(),
-                        )),
-                    }
-                }
-                CaptureMode::FullScreen => {
-                    adapter.capture_all_screens_with_cursor(self.settings.show_cursor)
-                }
-                CaptureMode::ActiveWindow => adapter.active_window().and_then(|window| {
-                    adapter.capture_region_with_options(CaptureRequest {
-                        region: window.bounds,
-                        include_cursor: self.settings.show_cursor,
-                    })
-                }),
-            };
-            capture.and_then(|capture| {
-                let destination = self.capture_destination(&capture);
-                let saved = persist_capture_to_path_as(
-                    &capture,
-                    &destination,
-                    self.settings.capture_image_format,
-                    self.settings.jpeg_quality,
-                )?;
-                if self.settings.copy_captures_to_clipboard {
-                    adapter.copy_image_to_clipboard(&saved.image_path)?;
-                }
-                Ok(saved)
-            })
-        })();
+            self.run_capture_with_adapter(&adapter, mode)
+        };
 
-        #[cfg(not(target_os = "windows"))]
-        let result = Err(oddsnap_platform::PlatformError::Unsupported(
-            "capture smoke is only wired on Windows so far",
-        ));
+        #[cfg(target_os = "macos")]
+        let result = {
+            let adapter = oddsnap_platform_macos::MacosPlatform;
+            self.run_capture_with_adapter(&adapter, mode)
+        };
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let result = {
+            let adapter = oddsnap_platform_linux::LinuxPlatform;
+            self.run_capture_with_adapter(&adapter, mode)
+        };
 
         self.capture_status = match result {
-            Ok(capture) => {
-                let path = capture.image_path.display().to_string();
-                let history_status = self.save_capture_history(&capture, mode);
-                let copy_status = if self.settings.copy_captures_to_clipboard {
-                    "copied and saved"
-                } else {
-                    "saved"
+            Ok(result) => {
+                let path = result.capture.image_path.display().to_string();
+                let history_status = self.save_capture_history(&result.capture, mode);
+                let copy_status = match (
+                    self.settings.copy_captures_to_clipboard,
+                    result.copy_error.as_deref(),
+                ) {
+                    (true, None) => "copied and saved".to_string(),
+                    (true, Some(error)) => {
+                        format!("saved; clipboard copy failed ({error})")
+                    }
+                    (false, _) => "saved".to_string(),
                 };
                 format!(
                     "{} {} {copy_status} {path}{history_status}",
@@ -1049,6 +1020,75 @@ impl OddSnapRustApp {
             }
             Err(error) => format!("{} capture failed: {error}", platform.name()),
         };
+    }
+
+    fn run_capture_with_adapter<T>(
+        &self,
+        adapter: &T,
+        mode: CaptureMode,
+    ) -> Result<CaptureRunResult, oddsnap_platform::PlatformError>
+    where
+        T: ScreenCaptureService
+            + WindowPickerService
+            + ClipboardImageService
+            + RegionSelectionService,
+    {
+        let capture = match mode {
+            CaptureMode::Rectangle => {
+                let monitors = adapter.monitors()?;
+                let bounds = virtual_screen_region(&monitors).ok_or_else(|| {
+                    oddsnap_platform::PlatformError::Failed(
+                        "no monitors available for region selection".into(),
+                    )
+                })?;
+                match adapter.select_region(OverlayWindowRequest {
+                    bounds,
+                    opacity: 24,
+                    click_through: false,
+                    show_crosshair_guides: self.settings.show_crosshair_guides,
+                    detect_windows: self.settings.detect_windows,
+                })? {
+                    Some(region) => adapter.capture_region_with_options(CaptureRequest {
+                        region,
+                        include_cursor: self.settings.show_cursor,
+                    }),
+                    None => Err(oddsnap_platform::PlatformError::Failed(
+                        "region selection canceled".into(),
+                    )),
+                }
+            }
+            CaptureMode::FullScreen => {
+                adapter.capture_all_screens_with_cursor(self.settings.show_cursor)
+            }
+            CaptureMode::ActiveWindow => adapter.active_window().and_then(|window| {
+                adapter.capture_region_with_options(CaptureRequest {
+                    region: window.bounds,
+                    include_cursor: self.settings.show_cursor,
+                })
+            }),
+        };
+
+        capture.and_then(|capture| {
+            let destination = self.capture_destination(&capture);
+            let saved = persist_capture_to_path_as(
+                &capture,
+                &destination,
+                self.settings.capture_image_format,
+                self.settings.jpeg_quality,
+            )?;
+            let copy_error = if self.settings.copy_captures_to_clipboard {
+                adapter
+                    .copy_image_to_clipboard(&saved.image_path)
+                    .err()
+                    .map(|error| error.to_string())
+            } else {
+                None
+            };
+            Ok(CaptureRunResult {
+                capture: saved,
+                copy_error,
+            })
+        })
     }
 
     fn run_color_picker(&mut self) {

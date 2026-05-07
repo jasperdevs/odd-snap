@@ -365,6 +365,17 @@ pub fn image_file_to_windows_dib_bytes(path: &Path) -> Result<Vec<u8>, PlatformE
     Ok(dib)
 }
 
+pub fn image_file_dimensions(path: &Path) -> Result<(u32, u32), PlatformError> {
+    let dimensions = image::image_dimensions(path).map_err(|source| {
+        PlatformError::Failed(format!("failed to read image dimensions: {source}"))
+    })?;
+    if dimensions.0 == 0 || dimensions.1 == 0 {
+        Err(PlatformError::Failed("image dimensions are empty".into()))
+    } else {
+        Ok(dimensions)
+    }
+}
+
 pub trait HotkeyService: Send + Sync {
     fn register_capture_hotkey(&self, accelerator: &str) -> Result<(), PlatformError>;
 }
@@ -444,7 +455,7 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        image_file_to_windows_dib_bytes, persist_capture_to_directory,
+        image_file_dimensions, image_file_to_windows_dib_bytes, persist_capture_to_directory,
         persist_capture_to_directory_as, persist_capture_to_path_as, virtual_screen_region,
         CaptureRegion, CaptureResult, ColorSample, MonitorInfo,
     };
@@ -695,6 +706,28 @@ mod tests {
             assert_eq!(&dib[14..16], &32u16.to_le_bytes());
             assert_eq!(dib.len(), 40 + 8);
         }
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn image_file_dimensions_reads_saved_image_size() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-platform-dimensions-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create temp test root");
+        let source = root.join("source.png");
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            3,
+            2,
+            image::Rgba([10, 20, 30, 255]),
+        ))
+        .save_with_format(&source, image::ImageFormat::Png)
+        .expect("write source png");
+
+        assert_eq!(image_file_dimensions(&source).expect("dimensions"), (3, 2));
 
         let _ = fs::remove_dir_all(root);
     }

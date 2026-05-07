@@ -45,6 +45,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] macOS tray/menu bar presence.
 - [ ] macOS global hotkey.
 - [x] macOS explicit unsupported capture/clipboard adapter surfaces.
+- [x] macOS command-backed still screenshot capture foundation.
 - [ ] Linux portal-aware screen capture plan.
 - [ ] Linux tray/appindicator strategy.
 - [ ] Linux global hotkey strategy.
