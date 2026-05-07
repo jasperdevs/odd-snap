@@ -497,8 +497,33 @@ pub fn upload_preflight_for_media(
     file_path: &Path,
     use_ai_redirect: bool,
 ) -> UploadPreflight {
+    upload_preflight_for_media_inner(settings, kind, file_path, use_ai_redirect, true)
+}
+
+pub fn upload_preflight_for_explicit_media(
+    settings: &AppSettings,
+    kind: HistoryKind,
+    file_path: &Path,
+    use_ai_redirect: bool,
+) -> UploadPreflight {
+    upload_preflight_for_media_inner(settings, kind, file_path, use_ai_redirect, false)
+}
+
+fn upload_preflight_for_media_inner(
+    settings: &AppSettings,
+    kind: HistoryKind,
+    file_path: &Path,
+    use_ai_redirect: bool,
+    require_auto_enabled: bool,
+) -> UploadPreflight {
     let destination = UploadDestination::from_legacy_name(&settings.image_upload_destination);
-    if !should_upload_media(settings, kind, file_path, use_ai_redirect) {
+    if !should_upload_media_inner(
+        settings,
+        kind,
+        file_path,
+        use_ai_redirect,
+        require_auto_enabled,
+    ) {
         return UploadPreflight::Disabled;
     }
 
@@ -549,6 +574,16 @@ pub fn should_upload_media(
     file_path: &Path,
     use_ai_redirect: bool,
 ) -> bool {
+    should_upload_media_inner(settings, kind, file_path, use_ai_redirect, true)
+}
+
+fn should_upload_media_inner(
+    settings: &AppSettings,
+    kind: HistoryKind,
+    file_path: &Path,
+    use_ai_redirect: bool,
+    require_auto_enabled: bool,
+) -> bool {
     if file_path.as_os_str().is_empty() {
         return false;
     }
@@ -560,6 +595,13 @@ pub fn should_upload_media(
 
     if destination == UploadDestination::AiChat {
         return kind == HistoryKind::Image && use_ai_redirect;
+    }
+
+    if !require_auto_enabled {
+        return matches!(
+            kind,
+            HistoryKind::Image | HistoryKind::Sticker | HistoryKind::Gif | HistoryKind::Video
+        );
     }
 
     match kind {
@@ -1090,6 +1132,25 @@ mod tests {
         );
         assert!(matches!(
             upload_preflight_for_media(&settings, HistoryKind::Video, &file, false),
+            UploadPreflight::Ready { provider_name, .. } if provider_name == "Catbox"
+        ));
+    }
+
+    #[test]
+    fn explicit_upload_preflight_ignores_auto_upload_toggles() {
+        let file = PathBuf::from("capture.png");
+        let settings = AppSettings {
+            image_upload_destination: "Catbox".into(),
+            auto_upload_screenshots: false,
+            ..AppSettings::default()
+        };
+
+        assert_eq!(
+            upload_preflight_for_media(&settings, HistoryKind::Image, &file, false),
+            UploadPreflight::Disabled
+        );
+        assert!(matches!(
+            upload_preflight_for_explicit_media(&settings, HistoryKind::Image, &file, false),
             UploadPreflight::Ready { provider_name, .. } if provider_name == "Catbox"
         ));
     }

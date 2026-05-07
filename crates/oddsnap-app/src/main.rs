@@ -944,6 +944,7 @@ impl OddSnapRustApp {
                                 row.child(self.open_upload_url_button(cx, url.clone()))
                                     .child(self.copy_upload_url_button(cx, url))
                             })
+                            .child(self.retry_upload_button(cx, entry.path.clone(), entry.kind))
                             .child(self.remove_history_button(cx, entry.path.clone())),
                     ),
             );
@@ -1205,6 +1206,31 @@ impl OddSnapRustApp {
             .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
                 cx.stop_propagation();
                 this.open_history_upload_url(url.clone());
+                cx.notify();
+            }))
+    }
+
+    fn retry_upload_button(
+        &self,
+        cx: &mut Context<Self>,
+        path: String,
+        kind: HistoryKind,
+    ) -> impl IntoElement {
+        div()
+            .id(SharedString::from(format!("retry-upload-{path}")))
+            .rounded(px(6.0))
+            .border_1()
+            .border_color(rgb(0x354052))
+            .bg(rgb(0x202733))
+            .hover(|this| this.bg(rgb(0x2a3342)))
+            .px(px(8.0))
+            .py(px(4.0))
+            .text_size(px(11.0))
+            .text_color(rgb(0xd8dde6))
+            .child("Upload")
+            .on_click(cx.listener(move |this: &mut Self, _, _, cx| {
+                cx.stop_propagation();
+                this.retry_history_upload(PathBuf::from(&path), kind);
                 cx.notify();
             }))
     }
@@ -1668,6 +1694,25 @@ impl OddSnapRustApp {
         self.capture_status = match open_external_url(&url) {
             Ok(()) => "Upload link opened.".into(),
             Err(error) => format!("Open upload link failed: {error}"),
+        };
+    }
+
+    fn retry_history_upload(&mut self, path: PathBuf, kind: HistoryKind) {
+        if !path.exists() {
+            self.capture_status =
+                format!("Upload retry failed: file not found: {}", path.display());
+            return;
+        }
+
+        let upload = self.explicit_upload_metadata(kind, &path, false);
+        let history_status = self.update_history_upload_metadata(&path, &upload);
+        self.capture_status = if let Some(url) = upload.url {
+            let provider = upload.provider.as_deref().unwrap_or("Upload");
+            format!("Uploaded to {provider}: {url}.{history_status}")
+        } else if let Some(error) = upload.error {
+            format!("Upload retry failed: {error}.{history_status}")
+        } else {
+            format!("Upload retry needs a destination in Settings -> Uploads.{history_status}")
         };
     }
 
@@ -2330,8 +2375,35 @@ impl OddSnapRustApp {
         path: &Path,
         use_ai_redirect: bool,
     ) -> UploadMetadata {
-        match oddsnap_core::upload_preflight_for_media(&self.settings, kind, path, use_ai_redirect)
-        {
+        self.upload_metadata_from_preflight(
+            oddsnap_core::upload_preflight_for_media(&self.settings, kind, path, use_ai_redirect),
+            path,
+        )
+    }
+
+    fn explicit_upload_metadata(
+        &self,
+        kind: HistoryKind,
+        path: &Path,
+        use_ai_redirect: bool,
+    ) -> UploadMetadata {
+        self.upload_metadata_from_preflight(
+            oddsnap_core::upload_preflight_for_explicit_media(
+                &self.settings,
+                kind,
+                path,
+                use_ai_redirect,
+            ),
+            path,
+        )
+    }
+
+    fn upload_metadata_from_preflight(
+        &self,
+        preflight: UploadPreflight,
+        path: &Path,
+    ) -> UploadMetadata {
+        match preflight {
             UploadPreflight::Disabled => UploadMetadata::default(),
             UploadPreflight::Ready {
                 destination,

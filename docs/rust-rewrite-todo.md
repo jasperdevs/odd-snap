@@ -138,6 +138,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [x] GPUI history rows can open stored upload links through the platform browser opener.
 - [x] GPUI history rows can copy saved file paths and image captures.
 - [x] GPUI history rows can remove entries from the persisted Rust history index without deleting media files.
+- [x] GPUI history rows can manually retry uploads with the current upload destination.
 - [ ] Full media history UI and actions.
 
 ## Milestone 5 - Advanced OddSnap Features
