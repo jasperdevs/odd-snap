@@ -3,10 +3,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::{DateTime, NaiveDateTime, Utc};
 use oddsnap_core::{
     normalize_file_name_template, AppSettings, CaptureImageFormat, ColorHistoryEntry,
-    DefaultCaptureMode, HistoryEntry, HistoryIndex, HistoryKind, RecordingFormat, RecordingQuality,
-    ToastPosition,
+    DefaultCaptureMode, HistoryEntry, HistoryIndex, HistoryKind, OcrHistoryEntry, RecordingFormat,
+    RecordingQuality, ToastPosition,
 };
 use rusqlite::Connection;
 use serde_json::Value;
@@ -580,7 +581,10 @@ pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryInde
         if index.colors.is_empty() {
             index.colors = import_first_color_history_json(paths)?;
         }
-        if !index.entries.is_empty() || !index.colors.is_empty() {
+        if index.ocr_entries.is_empty() {
+            index.ocr_entries = import_first_ocr_history_json(paths)?;
+        }
+        if history_index_has_content(&index) {
             return Ok(index);
         }
     }
@@ -595,22 +599,30 @@ pub fn import_existing_history(paths: &LegacyOddSnapPaths) -> Result<HistoryInde
             if index.colors.is_empty() {
                 index.colors = import_first_color_history_json(paths)?;
             }
-            if !index.entries.is_empty() || !index.colors.is_empty() {
+            if index.ocr_entries.is_empty() {
+                index.ocr_entries = import_first_ocr_history_json(paths)?;
+            }
+            if history_index_has_content(&index) {
                 return Ok(index);
             }
         }
     }
 
     let colors = import_first_color_history_json(paths)?;
-    if !colors.is_empty() {
+    let ocr_entries = import_first_ocr_history_json(paths)?;
+    if !colors.is_empty() || !ocr_entries.is_empty() {
         return Ok(HistoryIndex {
             entries: Vec::new(),
             colors,
-            ocr_entries: Vec::new(),
+            ocr_entries,
         });
     }
 
     Ok(HistoryIndex::default())
+}
+
+fn history_index_has_content(index: &HistoryIndex) -> bool {
+    !index.entries.is_empty() || !index.colors.is_empty() || !index.ocr_entries.is_empty()
 }
 
 fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> {
@@ -619,52 +631,60 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
             path: path.to_path_buf(),
             source,
         })?;
-    let mut statement = connection
-        .prepare(
-            "SELECT file_name, file_path, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error \
-             FROM history_entries ORDER BY captured_at_ticks DESC",
-        )
-        .map_err(|source| MigrationError::ReadHistoryDatabase {
-            path: path.to_path_buf(),
-            source,
-        })?;
-
-    let rows = statement
-        .query_map([], |row| {
-            let file_name: String = row.get(0)?;
-            let file_path: String = row.get(1)?;
-            let width: i64 = row.get(2)?;
-            let height: i64 = row.get(3)?;
-            let file_size_bytes: i64 = row.get(4)?;
-            let kind: i64 = row.get(5)?;
-            let upload_url: Option<String> = row.get(6)?;
-            let upload_provider: Option<String> = row.get(7)?;
-            let upload_error: Option<String> = row.get(8)?;
-            Ok(legacy_history_entry(LegacyHistoryRecord {
-                file_name,
-                file_path: PathBuf::from(file_path),
-                width,
-                height,
-                file_size_bytes,
-                kind: legacy_history_kind_from_i64(kind),
-                upload_url,
-                upload_provider,
-                upload_error,
-            }))
-        })
-        .map_err(|source| MigrationError::ReadHistoryDatabase {
-            path: path.to_path_buf(),
-            source,
-        })?;
-
     let mut entries = Vec::new();
-    for row in rows {
-        let entry = row.map_err(|source| MigrationError::ReadHistoryDatabase {
+
+    if sqlite_table_exists(&connection, "history_entries").map_err(|source| {
+        MigrationError::ReadHistoryDatabase {
             path: path.to_path_buf(),
             source,
-        })?;
-        if is_supported_history_file(&entry.file_path) && entry.file_path.exists() {
-            entries.push(entry);
+        }
+    })? {
+        let mut statement = connection
+            .prepare(
+                "SELECT file_name, file_path, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error \
+                 FROM history_entries ORDER BY captured_at_ticks DESC",
+            )
+            .map_err(|source| MigrationError::ReadHistoryDatabase {
+                path: path.to_path_buf(),
+                source,
+            })?;
+
+        let rows = statement
+            .query_map([], |row| {
+                let file_name: String = row.get(0)?;
+                let file_path: String = row.get(1)?;
+                let width: i64 = row.get(2)?;
+                let height: i64 = row.get(3)?;
+                let file_size_bytes: i64 = row.get(4)?;
+                let kind: i64 = row.get(5)?;
+                let upload_url: Option<String> = row.get(6)?;
+                let upload_provider: Option<String> = row.get(7)?;
+                let upload_error: Option<String> = row.get(8)?;
+                Ok(legacy_history_entry(LegacyHistoryRecord {
+                    file_name,
+                    file_path: PathBuf::from(file_path),
+                    width,
+                    height,
+                    file_size_bytes,
+                    kind: legacy_history_kind_from_i64(kind),
+                    upload_url,
+                    upload_provider,
+                    upload_error,
+                }))
+            })
+            .map_err(|source| MigrationError::ReadHistoryDatabase {
+                path: path.to_path_buf(),
+                source,
+            })?;
+
+        for row in rows {
+            let entry = row.map_err(|source| MigrationError::ReadHistoryDatabase {
+                path: path.to_path_buf(),
+                source,
+            })?;
+            if is_supported_history_file(&entry.file_path) && entry.file_path.exists() {
+                entries.push(entry);
+            }
         }
     }
 
@@ -674,23 +694,33 @@ fn import_history_database(path: &Path) -> Result<HistoryIndex, MigrationError> 
             source,
         }
     })?;
+    let ocr_entries = import_ocr_history_database(&connection).map_err(|source| {
+        MigrationError::ReadHistoryDatabase {
+            path: path.to_path_buf(),
+            source,
+        }
+    })?;
 
     Ok(HistoryIndex {
         entries,
         colors,
-        ocr_entries: Vec::new(),
+        ocr_entries,
     })
+}
+
+fn sqlite_table_exists(connection: &Connection, table_name: &str) -> Result<bool, rusqlite::Error> {
+    let table_count: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [table_name],
+        |row| row.get(0),
+    )?;
+    Ok(table_count > 0)
 }
 
 fn import_color_history_database(
     connection: &Connection,
 ) -> Result<Vec<ColorHistoryEntry>, rusqlite::Error> {
-    let table_count: i64 = connection.query_row(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'color_entries'",
-        [],
-        |row| row.get(0),
-    )?;
-    if table_count == 0 {
+    if !sqlite_table_exists(connection, "color_entries")? {
         return Ok(Vec::new());
     }
 
@@ -704,6 +734,35 @@ fn import_color_history_database(
         }
     }
     Ok(colors)
+}
+
+fn import_ocr_history_database(
+    connection: &Connection,
+) -> Result<Vec<OcrHistoryEntry>, rusqlite::Error> {
+    if !sqlite_table_exists(connection, "ocr_entries")? {
+        return Ok(Vec::new());
+    }
+
+    let mut statement = connection.prepare(
+        "SELECT text, captured_at_ticks FROM ocr_entries ORDER BY captured_at_ticks DESC LIMIT 500",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    })?;
+    let mut entries = Vec::new();
+    for row in rows {
+        let (text, captured_at_ticks) = row?;
+        let text = text.trim();
+        if text.is_empty() {
+            continue;
+        }
+        entries.push(OcrHistoryEntry {
+            text: text.to_string(),
+            captured_at_unix_ms: dotnet_datetime_binary_to_unix_ms(captured_at_ticks)
+                .unwrap_or_default(),
+        });
+    }
+    Ok(entries)
 }
 
 fn import_history_json(path: &Path) -> Result<HistoryIndex, MigrationError> {
@@ -791,6 +850,55 @@ fn import_first_color_history_json(
     Ok(Vec::new())
 }
 
+fn import_first_ocr_history_json(
+    paths: &LegacyOddSnapPaths,
+) -> Result<Vec<OcrHistoryEntry>, MigrationError> {
+    for path in [
+        paths.current_history_dir.join("ocr_index.json"),
+        paths.history_dir.join("ocr_index.json"),
+    ] {
+        if path.exists() {
+            let entries = import_ocr_history_json(&path)?;
+            if !entries.is_empty() {
+                return Ok(entries);
+            }
+        }
+    }
+
+    Ok(Vec::new())
+}
+
+fn import_ocr_history_json(path: &Path) -> Result<Vec<OcrHistoryEntry>, MigrationError> {
+    let json = fs::read_to_string(path).map_err(|source| MigrationError::ReadHistory {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let raw: Vec<Value> =
+        serde_json::from_str(&json).map_err(|source| MigrationError::ParseHistory {
+            path: path.to_path_buf(),
+            source,
+        })?;
+
+    Ok(raw
+        .into_iter()
+        .filter_map(|entry| {
+            let text = entry
+                .get("Text")
+                .or_else(|| entry.get("text"))?
+                .as_str()?
+                .trim();
+            if text.is_empty() {
+                return None;
+            }
+            Some(OcrHistoryEntry {
+                text: text.to_string(),
+                captured_at_unix_ms: legacy_captured_at_unix_ms(&entry).unwrap_or_default(),
+            })
+        })
+        .take(500)
+        .collect())
+}
+
 fn import_color_history_json(path: &Path) -> Result<Vec<ColorHistoryEntry>, MigrationError> {
     let json = fs::read_to_string(path).map_err(|source| MigrationError::ReadHistory {
         path: path.to_path_buf(),
@@ -810,6 +918,84 @@ fn import_color_history_json(path: &Path) -> Result<Vec<ColorHistoryEntry>, Migr
         })
         .take(200)
         .collect())
+}
+
+fn legacy_captured_at_unix_ms(entry: &Value) -> Option<u64> {
+    for key in ["CapturedAtUnixMs", "captured_at_unix_ms"] {
+        if let Some(value) = entry.get(key).and_then(Value::as_u64) {
+            return Some(value);
+        }
+    }
+
+    for key in ["CapturedAtTicks", "captured_at_ticks"] {
+        if let Some(value) = entry.get(key).and_then(Value::as_i64) {
+            return dotnet_datetime_binary_to_unix_ms(value);
+        }
+    }
+
+    entry
+        .get("CapturedAt")
+        .or_else(|| entry.get("captured_at"))
+        .and_then(Value::as_str)
+        .and_then(parse_legacy_datetime_to_unix_ms)
+}
+
+fn dotnet_datetime_binary_to_unix_ms(value: i64) -> Option<u64> {
+    const DOTNET_TICKS_PER_MILLISECOND: u64 = 10_000;
+    const DOTNET_UNIX_EPOCH_TICKS: u64 = 621_355_968_000_000_000;
+    const DOTNET_MAX_TICKS: u64 = 3_155_378_975_999_999_999;
+    const DOTNET_TICKS_MASK: u64 = 0x3fff_ffff_ffff_ffff;
+    const DOTNET_KIND_MASK: u64 = 0xc000_0000_0000_0000;
+    const DOTNET_LOCAL_MASK: u64 = 0x8000_0000_0000_0000;
+    const DOTNET_TICKS_CEILING: u64 = 0x4000_0000_0000_0000;
+
+    let data = value as u64;
+    let kind = data & DOTNET_KIND_MASK;
+    let mut ticks = data & DOTNET_TICKS_MASK;
+
+    if matches!(kind, DOTNET_LOCAL_MASK | DOTNET_KIND_MASK) && ticks > DOTNET_MAX_TICKS {
+        ticks = ticks.saturating_sub(DOTNET_TICKS_CEILING);
+    }
+
+    if ticks < DOTNET_UNIX_EPOCH_TICKS {
+        return None;
+    }
+
+    Some((ticks - DOTNET_UNIX_EPOCH_TICKS) / DOTNET_TICKS_PER_MILLISECOND)
+}
+
+fn parse_legacy_datetime_to_unix_ms(value: &str) -> Option<u64> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    if let Ok(datetime) = DateTime::parse_from_rfc3339(value) {
+        return chrono_datetime_to_unix_ms(datetime.with_timezone(&Utc));
+    }
+
+    for format in [
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+    ] {
+        if let Ok(datetime) = NaiveDateTime::parse_from_str(value, format) {
+            return chrono_datetime_to_unix_ms(DateTime::<Utc>::from_naive_utc_and_offset(
+                datetime, Utc,
+            ));
+        }
+    }
+
+    None
+}
+
+fn chrono_datetime_to_unix_ms(datetime: DateTime<Utc>) -> Option<u64> {
+    let timestamp = datetime.timestamp_millis();
+    if timestamp < 0 {
+        return None;
+    }
+    Some(timestamp as u64)
 }
 
 fn normalize_color_hex(hex: &str) -> Option<String> {
@@ -1454,9 +1640,15 @@ mod tests {
                 CREATE TABLE color_entries (
                     hex TEXT NOT NULL,
                     captured_at_ticks INTEGER NOT NULL
+                );
+                CREATE TABLE ocr_entries (
+                    text TEXT NOT NULL,
+                    captured_at_ticks INTEGER NOT NULL
                 );",
             )
             .expect("create table");
+        let legacy_ocr_unix_ms = 1_700_000_000_123_i64;
+        let legacy_ocr_ticks = 621_355_968_000_000_000_i64 + legacy_ocr_unix_ms * 10_000;
         connection
             .execute(
                 "INSERT INTO history_entries(file_path, file_name, captured_at_ticks, width, height, file_size_bytes, kind, upload_url, upload_provider, upload_error)
@@ -1470,6 +1662,12 @@ mod tests {
                 [],
             )
             .expect("insert color row");
+        connection
+            .execute(
+                "INSERT INTO ocr_entries(text, captured_at_ticks) VALUES (' legacy ocr text ', ?1)",
+                [legacy_ocr_ticks],
+            )
+            .expect("insert ocr row");
 
         let paths = LegacyOddSnapPaths {
             roaming_dir: root.join("roaming"),
@@ -1488,6 +1686,12 @@ mod tests {
         assert_eq!(index.entries[0].kind, oddsnap_core::HistoryKind::Image);
         assert_eq!(index.colors.len(), 1);
         assert_eq!(index.colors[0].hex, "AABBCC");
+        assert_eq!(index.ocr_entries.len(), 1);
+        assert_eq!(index.ocr_entries[0].text, "legacy ocr text");
+        assert_eq!(
+            index.ocr_entries[0].captured_at_unix_ms,
+            legacy_ocr_unix_ms as u64
+        );
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1526,6 +1730,16 @@ mod tests {
         ]);
         fs::write(root.join("color_index.json"), color_json.to_string())
             .expect("write color json index");
+        let ocr_json = serde_json::json!([
+            {
+                "Text": "json ocr text",
+                "CapturedAt": "2026-01-02T03:04:05Z"
+            },
+            {
+                "Text": "   "
+            }
+        ]);
+        fs::write(root.join("ocr_index.json"), ocr_json.to_string()).expect("write ocr json index");
         let paths = LegacyOddSnapPaths {
             roaming_dir: root.join("roaming"),
             settings_path: root.join("roaming").join("settings.json"),
@@ -1542,6 +1756,44 @@ mod tests {
         assert_eq!(index.entries[0].height, 6);
         assert_eq!(index.colors.len(), 1);
         assert_eq!(index.colors[0].hex, "112233");
+        assert_eq!(index.ocr_entries.len(), 1);
+        assert_eq!(index.ocr_entries[0].text, "json ocr text");
+        assert_eq!(index.ocr_entries[0].captured_at_unix_ms, 1_767_323_045_000);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn imports_ocr_history_even_when_no_capture_history_exists() {
+        let root = std::env::temp_dir().join(format!(
+            "oddsnap-ocr-only-import-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock should be after unix epoch")
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create root");
+        let ocr_json = serde_json::json!([{
+            "text": "ocr only",
+            "captured_at_unix_ms": 1234
+        }]);
+        fs::write(root.join("ocr_index.json"), ocr_json.to_string()).expect("write ocr json index");
+        let paths = LegacyOddSnapPaths {
+            roaming_dir: root.join("roaming"),
+            settings_path: root.join("roaming").join("settings.json"),
+            history_dir: root.join("roaming").join("history"),
+            current_history_dir: root.clone(),
+            current_history_database_path: root.join("missing.db"),
+            current_history_index_path: root.join("missing-index.json"),
+        };
+
+        let index = super::import_existing_history(&paths).expect("import history");
+
+        assert!(index.entries.is_empty());
+        assert!(index.colors.is_empty());
+        assert_eq!(index.ocr_entries.len(), 1);
+        assert_eq!(index.ocr_entries[0].text, "ocr only");
+        assert_eq!(index.ocr_entries[0].captured_at_unix_ms, 1234);
         let _ = fs::remove_dir_all(root);
     }
 }

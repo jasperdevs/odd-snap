@@ -3909,6 +3909,7 @@ dependencies = [
 name = "oddsnap-migrate"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "oddsnap-core",
  "rusqlite",
  "serde_json",

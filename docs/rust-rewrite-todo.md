@@ -205,6 +205,7 @@ Keep it updated whenever a rewrite milestone lands.
 - [ ] Import all existing settings.
 - [x] Import existing history.
 - [x] Import existing color history.
+- [x] Import existing OCR history.
 - [ ] Import existing media metadata where practical.
 - [ ] Windows full parity verification.
 - [ ] macOS full parity verification.

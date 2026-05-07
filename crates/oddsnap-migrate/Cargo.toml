@@ -7,6 +7,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+chrono.workspace = true
 oddsnap-core = { path = "../oddsnap-core" }
 rusqlite.workspace = true
 serde_json.workspace = true
