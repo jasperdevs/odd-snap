@@ -78,6 +78,10 @@ public sealed class SettingsWindowVisualPolishTests
         Assert.DoesNotContain("FontSize=\"11\" Padding=\"7,4\"", xaml);
         Assert.DoesNotContain("MinWidth=\"64\"", xaml);
         Assert.Contains("<ControlTemplate TargetType=\"ComboBox\">", xaml);
+        Assert.Contains("<Grid MinWidth=\"{TemplateBinding MinWidth}\"", xaml);
+        Assert.Contains("<ToggleButton x:Name=\"ToggleSite\"", xaml);
+        Assert.Matches(@"<ToggleButton x:Name=""ToggleSite""\s+MinWidth=""\{TemplateBinding MinWidth\}""", xaml);
+        Assert.Matches(@"<Border x:Name=""Bd""\s+MinWidth=""\{TemplateBinding MinWidth\}""", xaml);
         Assert.Contains("x:Name=\"PART_Popup\"", xaml);
         Assert.Contains("Background=\"{DynamicResource ThemeCardBrush}\"", xaml);
         Assert.DoesNotContain("Background=\"White\"", xaml);
@@ -1391,6 +1395,9 @@ public sealed class SettingsWindowVisualPolishTests
         AssertNamedControlHasLabel(xaml, "RecordingFormatCombo", "<ComboBox", "Recording format", "Choose the video container for recordings");
         AssertNamedControlHasLabel(xaml, "RecordingQualityCombo", "<ComboBox", "Recording quality", "Set maximum recording resolution");
         AssertNamedControlHasLabel(xaml, "RecordingFpsCombo", "<ComboBox", "Recording FPS", "Choose how many frames are captured each second");
+        Assert.Contains("MinWidth=\"150\"", GetOpeningTag(xaml, xaml.IndexOf("x:Name=\"RecordingFormatCombo\"", StringComparison.Ordinal), "<ComboBox"));
+        Assert.Contains("MinWidth=\"150\"", GetOpeningTag(xaml, xaml.IndexOf("x:Name=\"RecordingQualityCombo\"", StringComparison.Ordinal), "<ComboBox"));
+        Assert.Contains("MinWidth=\"150\"", GetOpeningTag(xaml, xaml.IndexOf("x:Name=\"RecordingFpsCombo\"", StringComparison.Ordinal), "<ComboBox"));
         AssertNamedControlHasLabel(xaml, "MicDeviceCombo", "<ComboBox", "Microphone input device", "Choose the microphone input device");
         AssertNamedControlHasLabel(xaml, "DesktopAudioDeviceCombo", "<ComboBox", "Desktop audio output device", "Choose the desktop audio output device");
         Assert.Contains("CreateAudioDeviceItem(", recordingCode);

@@ -78,7 +78,7 @@ public partial class App
             if (UploadService.IsAiChatDestination(dest))
             {
                 SoundService.PlayUploadStartSound();
-                var previewBitmap = TryLoadPreviewBitmap(filePath);
+                Bitmap? previewBitmap = null;
                 try
                 {
                     var providerName = UploadService.GetAiChatProviderName(settings.AiChatProvider);
@@ -100,8 +100,6 @@ public partial class App
                             return;
 
                         SoundService.PlayUploadDoneSound();
-                        previewBitmap?.Dispose();
-                        previewBitmap = null;
                         ToastWindow.Show(ToastSpec.Standard("Google Lens Ready", $"Opened from {lensUpload.ProviderName}.", filePath) with { SuppressSound = true });
 
                         return;
@@ -121,6 +119,7 @@ public partial class App
                         return;
 
                     SoundService.PlayUploadDoneSound();
+                    previewBitmap = await TryLoadPreviewBitmapAsync(filePath);
                     if (previewBitmap is not null)
                     {
                         var copySucceeded = TryCopyAiRedirectImageToClipboard(previewBitmap, filePath);
@@ -282,7 +281,7 @@ public partial class App
         {
             var settings = _settingsService!.Settings.ImageUploadSettings;
             SoundService.PlayUploadStartSound();
-            var previewBitmap = TryLoadPreviewBitmap(filePath);
+            Bitmap? previewBitmap = null;
             try
             {
                 var providerName = UploadService.GetAiChatProviderName(settings.AiChatProvider);
@@ -304,8 +303,6 @@ public partial class App
                         return;
 
                     SoundService.PlayUploadDoneSound();
-                    previewBitmap?.Dispose();
-                    previewBitmap = null;
                     ToastWindow.Show(ToastSpec.Standard("Google Lens Ready", $"Opened from {lensUpload.ProviderName}.", filePath) with { SuppressSound = true });
                     return;
                 }
@@ -324,6 +321,7 @@ public partial class App
                     return;
 
                 SoundService.PlayUploadDoneSound();
+                previewBitmap = await TryLoadPreviewBitmapAsync(filePath);
                 if (previewBitmap is not null)
                 {
                     var copySucceeded = TryCopyAiRedirectImageToClipboard(previewBitmap, filePath);
@@ -454,6 +452,9 @@ public partial class App
             ? (dlg.ShowDialog() == true ? dlg.FileName : null)
             : (dlg.ShowDialog(owner) == true ? dlg.FileName : null);
     }
+
+    private static Task<Bitmap?> TryLoadPreviewBitmapAsync(string filePath)
+        => Task.Run(() => TryLoadPreviewBitmap(filePath));
 
     private static Bitmap? TryLoadPreviewBitmap(string filePath)
     {

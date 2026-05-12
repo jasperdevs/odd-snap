@@ -47,4 +47,61 @@ public sealed class OcrServiceTests
 
         Assert.Equal("plain text", text);
     }
+
+    [Fact]
+    public void RecognizeAsyncAndImageIndexingPropagateCancellation()
+    {
+        var ocrSource = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "OcrService.cs"));
+        var indexingSource = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "ImageSearchIndexService.Indexing.cs"));
+
+        var recognizeBlock = GetMethodBlock(ocrSource, "public static async Task<string> RecognizeAsync(");
+        Assert.Contains("CancellationToken cancellationToken = default", recognizeBlock);
+        Assert.Contains("RecognizeGate.WaitAsync(cancellationToken)", recognizeBlock);
+        Assert.Contains("cancellationToken.ThrowIfCancellationRequested();", recognizeBlock);
+        Assert.Contains("}, cancellationToken)", recognizeBlock);
+
+        var buildRecordBlock = GetMethodBlock(indexingSource, "private async Task<ImageSearchIndexRecord> BuildRecordAsync");
+        Assert.Contains("OcrService.RecognizeAsync(bitmap, ocrLanguageTag, workload, cancellationToken)", buildRecordBlock);
+    }
+
+    private static string RepoPath(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find repo file: {Path.Combine(parts)}");
+    }
+
+    private static string GetMethodBlock(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Could not find method: {signature}");
+
+        var bodyStart = source.IndexOf('{', start);
+        Assert.True(bodyStart > start, $"Could not find method body: {signature}");
+
+        var depth = 0;
+        for (var index = bodyStart; index < source.Length; index++)
+        {
+            if (source[index] == '{')
+            {
+                depth++;
+            }
+            else if (source[index] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return source[start..(index + 1)];
+            }
+        }
+
+        throw new InvalidOperationException($"Could not read method body: {signature}");
+    }
 }

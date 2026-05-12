@@ -9,6 +9,7 @@ using System.Windows.Forms;
 using System.Linq;
 using OddSnap.Helpers;
 using OddSnap.Models;
+using OddSnap.Services;
 
 namespace OddSnap.Capture;
 
@@ -26,6 +27,7 @@ public sealed partial class RegionOverlayForm
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        var paintStarted = PerformanceTrace.Timestamp();
         var g = e.Graphics;
         g.InterpolationMode = InterpolationMode.NearestNeighbor;
         g.PixelOffsetMode = PixelOffsetMode.None;
@@ -126,10 +128,35 @@ public sealed partial class RegionOverlayForm
                 break;
         }
 
+        DrawCrosshairGuides(g);
+        DrawCaptureMagnifier(g);
+
         if (!_hasSelection)
             _lastSelectionRect = Rectangle.Empty;
 
         g.SmoothingMode = SmoothingMode.Default;
+
+        if (!_firstPaintLogged)
+        {
+            _firstPaintLogged = true;
+            PerformanceTrace.LogElapsed(
+                "perf.capture.overlay-first-paint",
+                paintStarted,
+                $"{ClientSize.Width}x{ClientSize.Height} clip={e.ClipRectangle.Width}x{e.ClipRectangle.Height}");
+        }
+        else if (_isSelecting)
+        {
+            var elapsed = PerformanceTrace.ElapsedSince(paintStarted);
+            var now = PerformanceTrace.Timestamp();
+            if (elapsed >= TimeSpan.FromMilliseconds(16)
+                && (_lastDragPaintLogTicks == 0 || PerformanceTrace.ElapsedSince(_lastDragPaintLogTicks) >= TimeSpan.FromMilliseconds(500)))
+            {
+                _lastDragPaintLogTicks = now;
+                AppDiagnostics.LogInfo(
+                    "perf.capture.drag-repaint",
+                    $"{elapsed.TotalMilliseconds:F1} ms · selection={_selectionRect.Width}x{_selectionRect.Height} clip={e.ClipRectangle.Width}x{e.ClipRectangle.Height}");
+            }
+        }
     }
 
     /// <summary>Clamp a rectangle so it stays 2px inside the client area (prevents dashes from being cut off at screen edges).</summary>
@@ -226,6 +253,87 @@ public sealed partial class RegionOverlayForm
         }
 
         return Rectangle.FromLTRB(left, top, right, bottom);
+    }
+
+    private void DrawCrosshairGuides(Graphics g)
+    {
+        if (!_crosshairVisible || _crosshairPoint == Point.Empty)
+            return;
+
+        var point = _crosshairPoint;
+        int gap = 5;
+        var shadow = SketchRenderer.GetToolColorBrush(Color.FromArgb(30, 0, 0, 0));
+        var line = SketchRenderer.GetToolColorBrush(Color.FromArgb(
+            72,
+            UiChrome.SurfaceTextPrimary.R,
+            UiChrome.SurfaceTextPrimary.G,
+            UiChrome.SurfaceTextPrimary.B));
+
+        if (point.X - gap > 0)
+        {
+            g.FillRectangle(shadow, 0, point.Y - 1, point.X - gap, 3);
+            g.FillRectangle(line, 0, point.Y, point.X - gap, 1);
+        }
+
+        if (point.X + gap < ClientSize.Width)
+        {
+            int x = point.X + gap;
+            g.FillRectangle(shadow, x, point.Y - 1, ClientSize.Width - x, 3);
+            g.FillRectangle(line, x, point.Y, ClientSize.Width - x, 1);
+        }
+
+        if (point.Y - gap > 0)
+        {
+            g.FillRectangle(shadow, point.X - 1, 0, 3, point.Y - gap);
+            g.FillRectangle(line, point.X, 0, 1, point.Y - gap);
+        }
+
+        if (point.Y + gap < ClientSize.Height)
+        {
+            int y = point.Y + gap;
+            g.FillRectangle(shadow, point.X - 1, y, 3, ClientSize.Height - y);
+            g.FillRectangle(line, point.X, y, 1, ClientSize.Height - y);
+        }
+    }
+
+    private void DrawCaptureMagnifier(Graphics g)
+    {
+        if (!_captureMagnifierVisible || _captureMagnifierBounds.IsEmpty)
+            return;
+
+        var bounds = _captureMagnifierBounds;
+        var lensRect = new Rectangle(
+            bounds.X + PickerMagnifierForm.Pad,
+            bounds.Y + PickerMagnifierForm.Pad,
+            PickerMagnifierForm.LensSize,
+            PickerMagnifierForm.LensSize);
+
+        PaintShadow(g, lensRect, 14f, alpha: 42, yOffset: 1f);
+        using var lensPath = RRect(lensRect, 14f);
+        using var background = new SolidBrush(UiChrome.SurfaceElevated);
+        using var outer = new Pen(UiChrome.SurfaceBorderSubtle, 1f);
+        using var inner = new Pen(UiChrome.SurfaceBorderStrong, 1.5f);
+        g.FillPath(background, lensPath);
+
+        var state = g.Save();
+        g.SetClip(lensPath);
+        g.InterpolationMode = InterpolationMode.NearestNeighbor;
+        g.PixelOffsetMode = PixelOffsetMode.Half;
+        g.DrawImage(_magBitmap, lensRect);
+        g.Restore(state);
+
+        g.DrawPath(outer, lensPath);
+        var innerRect = lensRect;
+        innerRect.Inflate(-1, -1);
+        using (var innerPath = RRect(innerRect, 13f))
+            g.DrawPath(inner, innerPath);
+
+        int cx = lensRect.X + lensRect.Width / 2;
+        int cy = lensRect.Y + lensRect.Height / 2;
+        using var dotFill = new SolidBrush(UiChrome.SurfaceTextPrimary);
+        using var dotBorder = new Pen(UiChrome.SurfaceBorderStrong, 1f);
+        g.FillRectangle(dotFill, cx - 2, cy - 2, 4, 4);
+        g.DrawRectangle(dotBorder, cx - 2, cy - 2, 4, 4);
     }
 
     private static void PaintShadow(Graphics g, RectangleF rect, float radius, int alpha = 52, float yOffset = 1f)

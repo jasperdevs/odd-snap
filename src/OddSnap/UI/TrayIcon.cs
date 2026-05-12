@@ -1,8 +1,11 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Forms;
+using Microsoft.Win32;
 using OddSnap.Helpers;
 using OddSnap.Models;
 using OddSnap.Services;
@@ -12,14 +15,17 @@ namespace OddSnap.UI;
 public sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _notifyIcon;
-    private readonly AppSettings? _settings;
+    private AppSettings? _settings;
     private Icon? _defaultIcon;
     private Icon? _recordingIcon;
     private ContextMenuStrip? _menu;
     private ToolStripMenuItem? _recordItem;
+    private readonly UserPreferenceChangedEventHandler _themePreferenceHandler;
     private bool _isShowingRecording;
+    private bool _disposed;
 
     public event Action? OnCapture;
+    public event Action? OnFullScreenCapture;
     public event Action? OnOcr;
     public event Action? OnColorPicker;
     public event Action? OnGifRecord;
@@ -40,21 +46,23 @@ public sealed class TrayIcon : IDisposable
             Visible = true
         };
 
-        _notifyIcon.MouseClick += (_, e) =>
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                if (Capture.RecordingForm.Current != null)
-                    Capture.RecordingForm.Current.RequestStop();
-                else
-                    OnCapture?.Invoke();
-            }
-            else if (e.Button == MouseButtons.Right)
-                ShowMenu();
-        };
+        _notifyIcon.MouseClick += (_, e) => HandleMouseClick(e.Button);
 
         _menu = CreateThemedMenu();
-        _notifyIcon.ContextMenuStrip = _menu;
+        _menu.Closed += (_, _) => _notifyIcon.ContextMenuStrip = null;
+
+        _themePreferenceHandler = (_, e) =>
+        {
+            if (e.Category is UserPreferenceCategory.Color or UserPreferenceCategory.General or UserPreferenceCategory.VisualStyle)
+                RefreshTrayIconThemeOnUiThread();
+        };
+        SystemEvents.UserPreferenceChanged += _themePreferenceHandler;
+    }
+
+    public void UpdateSettings(AppSettings? settings)
+    {
+        _settings = settings;
+        RefreshLocalization();
     }
 
     public void UpdateRecordingState(bool isRecording)
@@ -82,7 +90,8 @@ public sealed class TrayIcon : IDisposable
 
         var oldMenu = _menu;
         _menu = CreateThemedMenu();
-        _notifyIcon.ContextMenuStrip = _menu;
+        _menu.Closed += (_, _) => _notifyIcon.ContextMenuStrip = null;
+        _notifyIcon.ContextMenuStrip = null;
         oldMenu?.Dispose();
     }
 
@@ -93,6 +102,7 @@ public sealed class TrayIcon : IDisposable
         bool isRec = Capture.RecordingForm.Current != null;
 
         var captureItem  = WindowsMenuRenderer.Item(T("Screenshot"), HotkeyHint("rect"), "rect");
+        var fullscreenItem = WindowsMenuRenderer.Item(T("Full screen"), HotkeyHint("_fullscreen"), "fullscreen");
         var ocrItem      = WindowsMenuRenderer.Item(T("Text capture"), HotkeyHint("ocr"), "ocr");
         var pickerItem   = WindowsMenuRenderer.Item(T("Color picker"), HotkeyHint("picker"), "picker");
         var recordItem   = isRec
@@ -105,6 +115,7 @@ public sealed class TrayIcon : IDisposable
         var quitItem     = WindowsMenuRenderer.Item(T("Quit"), iconId: "close", danger: true);
 
         captureItem.Click += (_, _) => OnCapture?.Invoke();
+        fullscreenItem.Click += (_, _) => OnFullScreenCapture?.Invoke();
         ocrItem.Click     += (_, _) => OnOcr?.Invoke();
         pickerItem.Click  += (_, _) => OnColorPicker?.Invoke();
         recordItem.Click  += (_, _) =>
@@ -121,7 +132,7 @@ public sealed class TrayIcon : IDisposable
 
         menu.Items.AddRange(new ToolStripItem[]
         {
-            captureItem, ocrItem, pickerItem, recordItem, scrollItem,
+            captureItem, fullscreenItem, ocrItem, pickerItem, recordItem, scrollItem,
             new ToolStripSeparator(),
             settingsItem, historyItem,
             new ToolStripSeparator(),
@@ -130,6 +141,28 @@ public sealed class TrayIcon : IDisposable
 
         WindowsMenuRenderer.NormalizeItemWidths(menu);
         return menu;
+    }
+
+    private void HandleMouseClick(MouseButtons button)
+    {
+        if (button == MouseButtons.Left && Capture.RecordingForm.Current != null)
+        {
+            Capture.RecordingForm.Current.RequestStop();
+            return;
+        }
+
+        switch (button)
+        {
+            case MouseButtons.Left:
+                OnCapture?.Invoke();
+                break;
+            case MouseButtons.Middle:
+                OnHistory?.Invoke();
+                break;
+            case MouseButtons.Right:
+                ShowMenu();
+                break;
+        }
     }
 
     private string? HotkeyHint(string toolId)
@@ -160,6 +193,7 @@ public sealed class TrayIcon : IDisposable
     private void ShowMenu()
     {
         UpdateRecordingMenuItem();
+        _notifyIcon.ContextMenuStrip = _menu;
 
         var showMethod = typeof(NotifyIcon).GetMethod("ShowContextMenu",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
@@ -184,16 +218,32 @@ public sealed class TrayIcon : IDisposable
 
     private static Icon CreateDefaultIcon()
     {
-        Theme.Refresh();
-        var tint = Theme.IsDark ? Color.White : Color.Black;
+        var tint = IsTrayBackgroundDark() ? Color.White : Color.Black;
         return CreateLogoIcon(tint, recording: false);
     }
 
     private static Icon CreateRecordingIcon()
     {
-        Theme.Refresh();
-        var tint = Theme.IsDark ? Color.White : Color.Black;
+        var tint = IsTrayBackgroundDark() ? Color.White : Color.Black;
         return CreateLogoIcon(tint, recording: true);
+    }
+
+    private static bool IsTrayBackgroundDark()
+    {
+        Theme.Refresh();
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            var value = key?.GetValue("SystemUsesLightTheme");
+            if (value is int systemUsesLightTheme)
+                return systemUsesLightTheme == 0;
+        }
+        catch
+        {
+        }
+
+        return Theme.IsDark;
     }
 
     private static Icon CreateLogoIcon(Color tint, bool recording)
@@ -201,17 +251,7 @@ public sealed class TrayIcon : IDisposable
         try
         {
             using var source = LoadLogoBitmap();
-            var size = Math.Max(16, source.Width);
-            var mono = new Bitmap(size, size);
-            for (int y = 0; y < source.Height; y++)
-            {
-                for (int x = 0; x < source.Width; x++)
-                {
-                    var px = source.GetPixel(x, y);
-                    mono.SetPixel(x, y, Color.FromArgb(px.A, tint.R, tint.G, tint.B));
-                }
-            }
-
+            using var mono = CreateTintedLogoBitmap(source, tint);
             var icon = CreateOwnedIcon(mono);
             return recording ? OverlayRecordingDot(icon) : icon;
         }
@@ -227,7 +267,8 @@ public sealed class TrayIcon : IDisposable
         if (info == null)
             throw new InvalidOperationException("OddSnap logo resource was not found.");
 
-        var decoder = BitmapDecoder.Create(info.Stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        using var stream = info.Stream;
+        var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         var frame = decoder.Frames[0];
         var stride = frame.PixelWidth * 4;
         var pixels = new byte[stride * frame.PixelHeight];
@@ -235,31 +276,85 @@ public sealed class TrayIcon : IDisposable
         converted.CopyPixels(pixels, stride, 0);
 
         var bitmap = new Bitmap(frame.PixelWidth, frame.PixelHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        for (int y = 0; y < frame.PixelHeight; y++)
+        try
         {
-            for (int x = 0; x < frame.PixelWidth; x++)
+            var rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
+            var data = bitmap.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
             {
-                int i = y * stride + x * 4;
-                bitmap.SetPixel(x, y, Color.FromArgb(pixels[i + 3], pixels[i + 2], pixels[i + 1], pixels[i]));
+                Marshal.Copy(pixels, 0, data.Scan0, pixels.Length);
             }
-        }
+            finally
+            {
+                bitmap.UnlockBits(data);
+            }
 
-        return bitmap;
+            return bitmap;
+        }
+        catch
+        {
+            bitmap.Dispose();
+            throw;
+        }
+    }
+
+    private static Bitmap CreateTintedLogoBitmap(Bitmap source, Color tint)
+    {
+        var tinted = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
+        var rect = new Rectangle(0, 0, source.Width, source.Height);
+        BitmapData? sourceData = null;
+        BitmapData? tintedData = null;
+        var row = new byte[source.Width * 4];
+
+        try
+        {
+            sourceData = source.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            tintedData = tinted.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+
+            for (int y = 0; y < source.Height; y++)
+            {
+                Marshal.Copy(IntPtr.Add(sourceData.Scan0, y * sourceData.Stride), row, 0, row.Length);
+                for (int x = 0; x < source.Width; x++)
+                {
+                    int i = x * 4;
+                    row[i] = tint.B;
+                    row[i + 1] = tint.G;
+                    row[i + 2] = tint.R;
+                }
+                Marshal.Copy(row, 0, IntPtr.Add(tintedData.Scan0, y * tintedData.Stride), row.Length);
+            }
+
+            return tinted;
+        }
+        catch
+        {
+            tinted.Dispose();
+            throw;
+        }
+        finally
+        {
+            if (sourceData is not null)
+                source.UnlockBits(sourceData);
+            if (tintedData is not null)
+                tinted.UnlockBits(tintedData);
+        }
     }
 
     private static Icon OverlayRecordingDot(Icon baseIcon)
     {
         using var baseBmp = baseIcon.ToBitmap();
-        var bmp = new Bitmap(baseBmp.Width, baseBmp.Height);
-        using var g = Graphics.FromImage(bmp);
-        g.DrawImage(baseBmp, 0, 0);
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        int d = Math.Max(8, bmp.Width / 3);
-        int x = bmp.Width - d - 1, y = bmp.Height - d - 1;
-        using var white = new SolidBrush(Color.White);
-        g.FillEllipse(white, x - 1, y - 1, d + 2, d + 2);
-        using var red = new SolidBrush(Color.FromArgb(239, 68, 68));
-        g.FillEllipse(red, x, y, d, d);
+        using var bmp = new Bitmap(baseBmp.Width, baseBmp.Height);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.DrawImage(baseBmp, 0, 0);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int d = Math.Max(8, bmp.Width / 3);
+            int x = bmp.Width - d - 1, y = bmp.Height - d - 1;
+            using var white = new SolidBrush(Color.White);
+            g.FillEllipse(white, x - 1, y - 1, d + 2, d + 2);
+            using var red = new SolidBrush(Color.FromArgb(239, 68, 68));
+            g.FillEllipse(red, x, y, d, d);
+        }
         var result = CreateOwnedIcon(bmp);
         baseIcon.Dispose();
         return result;
@@ -267,31 +362,51 @@ public sealed class TrayIcon : IDisposable
 
     private static Icon CreateFallbackIcon(bool recording, Color strokeColor)
     {
-        var bmp = new Bitmap(32, 32);
-        using var g = Graphics.FromImage(bmp);
-        g.Clear(Color.FromArgb(0, 0, 0, 0));
-        using var pen = new Pen(strokeColor, 3f);
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.DrawLine(pen, 6, 4, 16, 16);
-        g.DrawLine(pen, 26, 4, 16, 16);
-        g.DrawLine(pen, 16, 16, 16, 28);
-        if (recording)
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
         {
-            using var halo = new SolidBrush(strokeColor);
-            g.FillEllipse(halo, 20, 21, 12, 12);
-            using var red = new SolidBrush(Color.FromArgb(239, 68, 68));
-            g.FillEllipse(red, 21, 22, 10, 10);
+            g.Clear(Color.FromArgb(0, 0, 0, 0));
+            using var pen = new Pen(strokeColor, 3f);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.DrawLine(pen, 6, 4, 16, 16);
+            g.DrawLine(pen, 26, 4, 16, 16);
+            g.DrawLine(pen, 16, 16, 16, 28);
+            if (recording)
+            {
+                using var halo = new SolidBrush(strokeColor);
+                g.FillEllipse(halo, 20, 21, 12, 12);
+                using var red = new SolidBrush(Color.FromArgb(239, 68, 68));
+                g.FillEllipse(red, 21, 22, 10, 10);
+            }
         }
         return CreateOwnedIcon(bmp);
     }
 
     private void RefreshTrayIconTheme()
     {
+        if (_disposed)
+            return;
+
         _defaultIcon?.Dispose();
         _recordingIcon?.Dispose();
         _defaultIcon = CreateDefaultIcon();
         _recordingIcon = null;
         _notifyIcon.Icon = _isShowingRecording ? (_recordingIcon = CreateRecordingIcon()) : _defaultIcon;
+    }
+
+    private void RefreshTrayIconThemeOnUiThread()
+    {
+        if (_disposed)
+            return;
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(RefreshTrayIconTheme);
+            return;
+        }
+
+        RefreshTrayIconTheme();
     }
 
     private static Icon CreateOwnedIcon(Bitmap bitmap)
@@ -309,6 +424,8 @@ public sealed class TrayIcon : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
+        SystemEvents.UserPreferenceChanged -= _themePreferenceHandler;
         _notifyIcon.Visible = false;
         _notifyIcon.ContextMenuStrip = null;
         _menu?.Dispose();

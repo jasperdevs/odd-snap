@@ -73,6 +73,7 @@ public partial class ToastWindow
         ReplaceCurrentToast();
         var toast = new ToastWindow(spec);
         _current = toast;
+        toast.PrepareForShow();
         toast.Show();
     }
 

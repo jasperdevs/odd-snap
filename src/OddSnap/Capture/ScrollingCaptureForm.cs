@@ -51,6 +51,7 @@ public sealed partial class ScrollingCaptureForm : Form
     private Bitmap? _pendingAutoFrame;
     private Bitmap? _stitchedResult;
     private Bitmap? _previousCapturedFrame;
+    private readonly CancellationTokenSource _captureCts = new();
     private int _frameCount;
     private int _bestMatchCount;
     private int _bestMatchIndex;
@@ -262,6 +263,7 @@ public sealed partial class ScrollingCaptureForm : Form
     {
         try
         {
+            _captureCts.Token.ThrowIfCancellationRequested();
             var frame = ScreenCapture.CaptureRegion(_screenRegion, _showCursor);
 
             if (forceAccept || _captureMode == ScrollingCaptureMode.Manual)
@@ -271,6 +273,10 @@ public sealed partial class ScrollingCaptureForm : Form
             }
 
             return ProcessAutomaticFrame(frame);
+        }
+        catch (OperationCanceledException) when (_captureCts.IsCancellationRequested)
+        {
+            return FrameCaptureResult.Rejected;
         }
         catch (Exception ex)
         {
@@ -327,7 +333,7 @@ public sealed partial class ScrollingCaptureForm : Form
             return FrameCaptureResult.Duplicate;
         }
 
-        var match = TryAppendScrollingFrame(_stitchedResult, frame, _bestMatchCount, _bestMatchIndex, _bestIgnoreBottomOffset);
+        var match = TryAppendScrollingFrame(_stitchedResult, frame, _bestMatchCount, _bestMatchIndex, _bestIgnoreBottomOffset, _captureCts.Token);
         if (!match.Success)
         {
             frame.Dispose();
@@ -385,7 +391,7 @@ public sealed partial class ScrollingCaptureForm : Form
         if (_previousCapturedFrame is not null && AreFramesDuplicate(_previousCapturedFrame, frame))
             return false;
 
-        var match = TryFindScrollingAppend(_stitchedResult, frame, _bestMatchCount, _bestMatchIndex, _bestIgnoreBottomOffset);
+        var match = TryFindScrollingAppend(_stitchedResult, frame, _bestMatchCount, _bestMatchIndex, _bestIgnoreBottomOffset, _captureCts.Token);
         if (!match.Success)
             return false;
 
@@ -450,6 +456,7 @@ public sealed partial class ScrollingCaptureForm : Form
     private void Fail(string message)
     {
         if (_state == State.Done) return;
+        _captureCts.Cancel();
 
         try
         {
@@ -478,6 +485,7 @@ public sealed partial class ScrollingCaptureForm : Form
 
     private void Cancel()
     {
+        _captureCts.Cancel();
         StopAutomaticTimer();
         ClearPendingAutoFrame();
         _controlBar?.Close();
@@ -644,6 +652,7 @@ public sealed partial class ScrollingCaptureForm : Form
     {
         if (disposing)
         {
+            _captureCts.Cancel();
             _magHelper?.Dispose();
             _escapeHook?.Dispose();
             _escapeHook = null;
@@ -658,6 +667,7 @@ public sealed partial class ScrollingCaptureForm : Form
             _readoutFont.Dispose();
             _hintFont.Dispose();
             _hintBrush.Dispose();
+            _captureCts.Dispose();
         }
         base.Dispose(disposing);
     }

@@ -28,6 +28,7 @@ internal static partial class User32
     public const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
     public const int SRCCOPY = 0x00CC0020;
+    public const int CAPTUREBLT = 0x40000000;
     public const int WH_KEYBOARD_LL = 13;
     public const int WM_KEYDOWN = 0x0100;
     public const int WM_SYSKEYDOWN = 0x0104;

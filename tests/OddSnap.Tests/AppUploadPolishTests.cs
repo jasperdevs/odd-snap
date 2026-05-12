@@ -240,12 +240,17 @@ public sealed class AppUploadPolishTests
         Assert.DoesNotContain("catch\n", helperBlock);
         Assert.DoesNotContain("catch\r\n", helperBlock);
 
+        var asyncHelperBlock = GetMethodBlock(source, "private static Task<Bitmap?> TryLoadPreviewBitmapAsync(string filePath)");
+        Assert.Contains("Task.Run(() => TryLoadPreviewBitmap(filePath))", asyncHelperBlock);
+
         var uploadBlock = GetMethodBlock(source, "private async Task UploadFileAsync(string filePath, string label, Services.HistoryEntry? historyEntry = null)");
-        Assert.Contains("var previewBitmap = TryLoadPreviewBitmap(filePath);", uploadBlock);
+        Assert.Contains("Bitmap? previewBitmap = null;", uploadBlock);
+        Assert.Contains("previewBitmap = await TryLoadPreviewBitmapAsync(filePath);", uploadBlock);
         Assert.Contains("ToastWindow.Show(ToastSpec.Standard(\"AI Redirect Ready\", $\"Opened {providerName}. Use Ctrl+V in the chat box.\", filePath) with { SuppressSound = true });", uploadBlock);
 
         var redirectBlock = GetMethodBlock(source, "private async Task StartAiRedirectAsync(string filePath, Services.HistoryEntry? historyEntry = null)");
-        Assert.Contains("var previewBitmap = TryLoadPreviewBitmap(filePath);", redirectBlock);
+        Assert.Contains("Bitmap? previewBitmap = null;", redirectBlock);
+        Assert.Contains("previewBitmap = await TryLoadPreviewBitmapAsync(filePath);", redirectBlock);
         Assert.Contains("ToastWindow.Show(ToastSpec.Standard(\"AI Redirect Ready\", $\"Opened {providerName}. Use Ctrl+V in the chat box.\", filePath) with { SuppressSound = true });", redirectBlock);
     }
 

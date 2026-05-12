@@ -17,6 +17,8 @@ public sealed class VideoRecorder : IDisposable
 {
     private const int DefaultInitialCaptureDelayMs = 0;
     private const double DurationValidationToleranceSeconds = 0.35d;
+    private const string H264ScreenRecordingArgs = "-c:v libx264 -preset veryfast -tune zerolatency -crf 21 -pix_fmt yuv420p -threads 2";
+    private const string Vp9ScreenRecordingArgs = "-c:v libvpx-vp9 -deadline realtime -cpu-used 6 -row-mt 1 -threads 2 -crf 30 -b:v 0 -pix_fmt yuv420p";
     public enum Format { MP4, WebM, MKV }
     private static readonly object FfmpegPathLock = new();
     private static string? _cachedFfmpegPath;
@@ -806,22 +808,22 @@ public sealed class VideoRecorder : IDisposable
 
     private static string GetRepairVideoCodecArguments(Format format) => format switch
     {
-        Format.WebM => "-c:v libvpx-vp9 -deadline good -cpu-used 2 -row-mt 1 -crf 24 -b:v 0 -pix_fmt yuv420p",
-        Format.MKV => "-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p",
-        _ => "-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p -movflags +faststart",
+        Format.WebM => Vp9ScreenRecordingArgs,
+        Format.MKV => H264ScreenRecordingArgs,
+        _ => $"{H264ScreenRecordingArgs} -movflags +faststart",
     };
 
     internal static string BuildVideoCodecArguments(Format format, int inputWidth, int inputHeight, int outputWidth, int outputHeight)
     {
         string scaleFilter = inputWidth == outputWidth && inputHeight == outputHeight
             ? string.Empty
-            : $" -vf scale={outputWidth}:{outputHeight}:flags=lanczos";
+            : $" -vf scale={outputWidth}:{outputHeight}:flags=bicubic";
 
         return format switch
         {
-            Format.WebM => $"-c:v libvpx-vp9 -deadline good -cpu-used 2 -row-mt 1 -crf 24 -b:v 0 -pix_fmt yuv420p{scaleFilter}",
-            Format.MKV => $"-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p{scaleFilter}",
-            _ => $"-c:v libx264 -preset fast -crf 18 -pix_fmt yuv420p{scaleFilter} -movflags +faststart",
+            Format.WebM => $"{Vp9ScreenRecordingArgs}{scaleFilter}",
+            Format.MKV => $"{H264ScreenRecordingArgs}{scaleFilter}",
+            _ => $"{H264ScreenRecordingArgs}{scaleFilter} -movflags +faststart",
         };
     }
 

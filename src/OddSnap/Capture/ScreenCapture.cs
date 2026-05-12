@@ -9,6 +9,8 @@ namespace OddSnap.Capture;
 
 public static class ScreenCapture
 {
+    public static bool HdrCaptureCompatibleMode { get; set; }
+
     public static Rectangle GetVirtualScreenBounds()
     {
         int left = User32.GetSystemMetrics(User32.SM_XVIRTUALSCREEN);
@@ -25,8 +27,31 @@ public static class ScreenCapture
         return CaptureWindowExclusion.RunWithoutIntersectingWindows(bounds, () => CaptureAllScreensCore(includeCursor, bounds));
     }
 
+    public static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensLowLatency(bool includeCursor = false)
+    {
+        var bounds = GetVirtualScreenBounds();
+        return CaptureWindowExclusion.RunWithoutIntersectingWindows(bounds, () => CaptureAllScreensLegacy(includeCursor, bounds));
+    }
+
+    public static void WarmLowLatencyCapture()
+    {
+        var bounds = GetVirtualScreenBounds();
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            return;
+
+        var warmRegion = new Rectangle(
+            bounds.Left,
+            bounds.Top,
+            Math.Min(32, bounds.Width),
+            Math.Min(32, bounds.Height));
+        using var _ = CaptureRegionLegacy(warmRegion, includeCursor: false);
+    }
+
     private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensCore(bool includeCursor, Rectangle bounds)
     {
+        if (HdrCaptureCompatibleMode)
+            return CaptureAllScreensLegacy(includeCursor, bounds);
+
         try
         {
             var capture = DxgiScreenCapture.CaptureAllScreens();
@@ -60,11 +85,25 @@ public static class ScreenCapture
         return (bmp, bounds);
     }
 
+    public static (Bitmap Bitmap, Rectangle Bounds) CaptureCurrentScreenLowLatency(bool includeCursor = false)
+    {
+        Screen screen;
+        try { screen = Screen.FromPoint(System.Windows.Forms.Cursor.Position); }
+        catch { screen = Screen.PrimaryScreen ?? Screen.AllScreens[0]; }
+
+        var bounds = screen.Bounds;
+        var bmp = CaptureWindowExclusion.RunWithoutIntersectingWindows(bounds, () => CaptureRegionLegacy(bounds, includeCursor));
+        return (bmp, bounds);
+    }
+
     public static Bitmap CaptureRegion(Rectangle region, bool includeCursor = false)
         => CaptureWindowExclusion.RunWithoutIntersectingWindows(region, () => CaptureRegionCore(region, includeCursor));
 
     private static Bitmap CaptureRegionCore(Rectangle region, bool includeCursor)
     {
+        if (HdrCaptureCompatibleMode)
+            return CaptureRegionLegacy(region, includeCursor);
+
         try
         {
             var capture = DxgiScreenCapture.CaptureRegion(region);
@@ -112,7 +151,7 @@ public static class ScreenCapture
             try
             {
                 hdcDest = graphics.GetHdc();
-                bool ok = Gdi32.BitBlt(hdcDest, 0, 0, width, height, hdcScreen, left, top, User32.SRCCOPY);
+                bool ok = Gdi32.BitBlt(hdcDest, 0, 0, width, height, hdcScreen, left, top, User32.SRCCOPY | User32.CAPTUREBLT);
                 if (!ok)
                     throw new InvalidOperationException("Screen capture failed (BitBlt returned false).");
             }
@@ -147,7 +186,7 @@ public static class ScreenCapture
             try
             {
                 hdcDest = g.GetHdc();
-                bool ok = Gdi32.BitBlt(hdcDest, 0, 0, region.Width, region.Height, hdcScreen, region.X, region.Y, User32.SRCCOPY);
+                bool ok = Gdi32.BitBlt(hdcDest, 0, 0, region.Width, region.Height, hdcScreen, region.X, region.Y, User32.SRCCOPY | User32.CAPTUREBLT);
                 if (!ok)
                     throw new InvalidOperationException("Screen capture failed (BitBlt returned false).");
             }
@@ -359,7 +398,7 @@ public static class ScreenCapture
             try
             {
                 hdcDest = _graphics.GetHdc();
-                bool ok = Gdi32.BitBlt(hdcDest, 0, 0, _region.Width, _region.Height, _hdcScreen, _region.X, _region.Y, User32.SRCCOPY);
+                bool ok = Gdi32.BitBlt(hdcDest, 0, 0, _region.Width, _region.Height, _hdcScreen, _region.X, _region.Y, User32.SRCCOPY | User32.CAPTUREBLT);
                 if (!ok)
                     throw new InvalidOperationException("Screen capture failed (BitBlt returned false).");
 

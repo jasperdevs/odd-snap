@@ -40,9 +40,7 @@ public sealed partial class RegionOverlayForm
         if (_mode == CaptureMode.Freeform && _isSelecting)
         {
             _selectionEnd = e.Location;
-            if (ShowCaptureMagnifier)
-                UpdateCaptureMagnifier(e.Location);
-            ClearCrosshairGuides();
+            UpdateSelectionCaptureChrome(e.Location);
 
             if (_freeformPoints.Count == 0)
             {
@@ -63,6 +61,13 @@ public sealed partial class RegionOverlayForm
                     Invalidate(Rectangle.Union(oldDirty, newDirty));
                 }
             }
+            return;
+        }
+
+        if (_isSelecting &&
+            _mode is CaptureMode.Rectangle or CaptureMode.Center or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker or CaptureMode.Upscale)
+        {
+            QueueSelectionDragMove(e.Location);
             return;
         }
 
@@ -315,34 +320,8 @@ public sealed partial class RegionOverlayForm
                 }
                 else
                 {
-                    UpdateAutoDetectRect(e.Location);
+                    QueueAutoDetectRectUpdate(e.Location);
                 }
-                break;
-            case CaptureMode.Rectangle when _isSelecting:
-            case CaptureMode.Center when _isSelecting:
-            case CaptureMode.Ocr when _isSelecting:
-            case CaptureMode.Scan when _isSelecting:
-            case CaptureMode.Sticker when _isSelecting:
-            case CaptureMode.Upscale when _isSelecting:
-                _autoDetectActive = false;
-                _autoDetectTimer.Stop();
-                var oldSelectionRect = _selectionRect;
-                var oldSelectionCursor = _selectionEnd;
-                var nextSelectionEnd = e.Location;
-                var nextSelectionRect = _mode == CaptureMode.Center
-                    ? GetCenterSelectionRect(_selectionStart, nextSelectionEnd)
-                    : _mode == CaptureMode.Rectangle && (ModifierKeys & Keys.Shift) != 0
-                    ? GetSquareSelectionRect(_selectionStart, nextSelectionEnd)
-                    : NormRect(_selectionStart, nextSelectionEnd);
-                if (nextSelectionEnd == oldSelectionCursor && nextSelectionRect == oldSelectionRect)
-                    return;
-                _selectionEnd = nextSelectionEnd;
-                _selectionRect = nextSelectionRect;
-                if (_selectionRect.Width > 3 || _selectionRect.Height > 3) _hasDragged = true;
-                _hasSelection = _selectionRect.Width > 2 && _selectionRect.Height > 2;
-                InvalidateSelectionChrome(oldSelectionRect, oldSelectionCursor, _selectionRect, _selectionEnd);
-                if (ShowCaptureMagnifier && ShouldShowCaptureMagnifierAt(e.Location))
-                    UpdateCaptureMagnifier(e.Location);
                 break;
             case CaptureMode.Highlight when _isHighlighting:
                 InvalidateLivePreview(NormRect(_highlightStart, oldCursor), NormRect(_highlightStart, e.Location), 18);
@@ -456,6 +435,95 @@ public sealed partial class RegionOverlayForm
             Invalidate();
     }
 
+    private void UpdateSelectionCaptureChrome(Point location)
+    {
+        UpdateCrosshairGuides(location);
+
+        if (ShowCaptureMagnifier && ShouldShowCaptureMagnifierAt(location))
+            UpdateCaptureMagnifier(location);
+        else if (_captureMagnifierForm != null)
+            CloseCaptureMagnifier();
+    }
+
+    private static bool IsRegionSelectionDragMode(CaptureMode mode) =>
+        mode is CaptureMode.Rectangle or CaptureMode.Center or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker or CaptureMode.Upscale;
+
+    private void QueueSelectionDragMove(Point location)
+    {
+        _pendingSelectionMovePoint = location;
+
+        var now = Environment.TickCount64;
+        if (_lastSelectionMoveFrameMs == 0 ||
+            now - _lastSelectionMoveFrameMs >= UiChrome.FrameIntervalMs)
+        {
+            _selectionMoveQueued = false;
+            _selectionMoveTimer.Stop();
+            ProcessSelectionDragMove(location);
+            _lastSelectionMoveFrameMs = now;
+            return;
+        }
+
+        _selectionMoveQueued = true;
+        if (_selectionMoveTimer.Enabled)
+            return;
+
+        var remaining = UiChrome.FrameIntervalMs - (int)Math.Min(int.MaxValue, now - _lastSelectionMoveFrameMs);
+        _selectionMoveTimer.Interval = Math.Max(1, remaining);
+        _selectionMoveTimer.Start();
+    }
+
+    private void FlushPendingSelectionDragMove()
+    {
+        _selectionMoveTimer.Stop();
+        if (!_selectionMoveQueued)
+            return;
+
+        _selectionMoveQueued = false;
+        if (!_isSelecting || !IsRegionSelectionDragMode(_mode))
+            return;
+
+        ProcessSelectionDragMove(_pendingSelectionMovePoint);
+        _lastSelectionMoveFrameMs = Environment.TickCount64;
+    }
+
+    private void ResetSelectionDragMoveQueue()
+    {
+        _selectionMoveTimer.Stop();
+        _selectionMoveQueued = false;
+        _pendingSelectionMovePoint = Point.Empty;
+        _lastSelectionMoveFrameMs = 0;
+    }
+
+    private void ProcessSelectionDragMove(Point location)
+    {
+        if (!_isSelecting || !IsRegionSelectionDragMode(_mode))
+            return;
+
+        _autoDetectActive = false;
+        if (_autoDetectTimer.Enabled)
+            _autoDetectTimer.Stop();
+
+        var oldSelectionRect = _selectionRect;
+        var oldSelectionCursor = _selectionEnd;
+        var nextSelectionEnd = location;
+        var nextSelectionRect = _mode == CaptureMode.Center
+            ? GetCenterSelectionRect(_selectionStart, nextSelectionEnd)
+            : _mode == CaptureMode.Rectangle && (ModifierKeys & Keys.Shift) != 0
+            ? GetSquareSelectionRect(_selectionStart, nextSelectionEnd)
+            : NormRect(_selectionStart, nextSelectionEnd);
+
+        if (nextSelectionEnd == oldSelectionCursor && nextSelectionRect == oldSelectionRect)
+            return;
+
+        _selectionEnd = nextSelectionEnd;
+        _selectionRect = nextSelectionRect;
+        if (_selectionRect.Width > 3 || _selectionRect.Height > 3)
+            _hasDragged = true;
+        _hasSelection = _selectionRect.Width > 2 && _selectionRect.Height > 2;
+        InvalidateSelectionChrome(oldSelectionRect, oldSelectionCursor, _selectionRect, _selectionEnd);
+        UpdateSelectionCaptureChrome(location);
+    }
+
     private void InvalidateLivePreview(Rectangle oldBounds, Rectangle newBounds, int pad)
     {
         var oldDirty = InflateForRepaint(oldBounds, pad);
@@ -506,6 +574,12 @@ public sealed partial class RegionOverlayForm
     protected override void OnMouseUp(MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
+        if (_isSelecting && IsRegionSelectionDragMode(_mode))
+        {
+            _pendingSelectionMovePoint = e.Location;
+            _selectionMoveQueued = true;
+            FlushPendingSelectionDragMove();
+        }
         SetSnapGuides(false, false);
 
         // End select drag/resize

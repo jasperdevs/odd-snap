@@ -17,6 +17,7 @@ public partial class App
         _imageSearchIndexService = null;
         _trayIcon?.Dispose();
         _settingsWindow?.Close();
+        try { OddSnap.Capture.CaptureOverlayThread.Stop(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.stop-capture-overlay-thread", ex); }
         try { OddSnap.Capture.DxgiScreenCapture.ResetCache(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.reset-dxgi-cache", ex); }
         try { _mutex?.ReleaseMutex(); } catch (Exception ex) { AppDiagnostics.LogWarning("shutdown.release-mutex", ex.Message, ex); }
         try { _mutex?.Dispose(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.dispose-mutex", ex); }

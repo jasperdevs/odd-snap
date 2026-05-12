@@ -48,13 +48,23 @@ public sealed partial class ScrollingCaptureForm
     }
 
     private static ScrollAppendMatch TryAppendScrollingFrame(Bitmap result, Bitmap currentImage,
-        int bestMatchCount, int bestMatchIndex, int bestIgnoreBottomOffset)
+        int bestMatchCount, int bestMatchIndex, int bestIgnoreBottomOffset, CancellationToken cancellationToken = default)
     {
-        var match = TryFindScrollingAppend(result, currentImage, bestMatchCount, bestMatchIndex, bestIgnoreBottomOffset);
+        var stitchStarted = PerformanceTrace.Timestamp();
+        cancellationToken.ThrowIfCancellationRequested();
+        var match = TryFindScrollingAppend(result, currentImage, bestMatchCount, bestMatchIndex, bestIgnoreBottomOffset, cancellationToken);
         if (!match.Success)
+        {
+            PerformanceTrace.LogIfSlow(
+                "perf.scrolling.stitch-append",
+                stitchStarted,
+                TimeSpan.FromMilliseconds(20),
+                $"no-match result={result.Width}x{result.Height} frame={currentImage.Width}x{currentImage.Height}");
             return match;
+        }
 
         int keepResultHeight = result.Height - match.IgnoreBottomOffset;
+        cancellationToken.ThrowIfCancellationRequested();
         int totalHeight = keepResultHeight + match.NewContentHeight;
         if (totalHeight > 32000)
             totalHeight = 32000;
@@ -72,18 +82,26 @@ public sealed partial class ScrollingCaptureForm
             new Rectangle(0, 0, result.Width, keepResultHeight),
             GraphicsUnit.Pixel);
 
+        cancellationToken.ThrowIfCancellationRequested();
         int drawHeight = totalHeight - keepResultHeight;
         g.DrawImage(currentImage,
             new Rectangle(0, keepResultHeight, currentImage.Width, drawHeight),
             new Rectangle(0, match.MatchIndex + 1, currentImage.Width, drawHeight),
             GraphicsUnit.Pixel);
 
+        PerformanceTrace.LogIfSlow(
+            "perf.scrolling.stitch-append",
+            stitchStarted,
+            TimeSpan.FromMilliseconds(20),
+            $"new={match.NewContentHeight}px total={totalHeight}px match={match.MatchCount}");
+
         return match with { Image = newResult };
     }
 
     private static ScrollAppendMatch TryFindScrollingAppend(Bitmap result, Bitmap currentImage,
-        int bestMatchCount, int bestMatchIndex, int bestIgnoreBottomOffset)
+        int bestMatchCount, int bestMatchIndex, int bestIgnoreBottomOffset, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (result.Width != currentImage.Width || result.Height <= 0 || currentImage.Height <= 0)
             return new ScrollAppendMatch(false, null, 0, 0, 0, 0, false);
 
@@ -109,14 +127,28 @@ public sealed partial class ScrollingCaptureForm
 
         try
         {
+            var resultRowHashes = BuildRowHashes(resultData, ignoreSideOffset, compareWidth);
+            cancellationToken.ThrowIfCancellationRequested();
+            var currentRowHashes = BuildRowHashes(currentData, ignoreSideOffset, compareWidth);
+
             if (ignoreBottomOffsetMax > 0)
             {
                 int resultLastY = result.Height - 1;
                 int currentLastY = currentImage.Height - 1;
                 for (int offset = 0; offset <= ignoreBottomOffsetMax; offset++)
                 {
-                    if (!RowsEqual(resultData, currentData, resultLastY - offset, currentLastY - offset,
-                            ignoreSideOffset, compareWidth))
+                    if ((offset & 15) == 0)
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                    if (!RowsEqual(
+                            resultData,
+                            currentData,
+                            resultRowHashes,
+                            currentRowHashes,
+                            resultLastY - offset,
+                            currentLastY - offset,
+                            ignoreSideOffset,
+                            compareWidth))
                     {
                         ignoreBottomOffset = offset;
                         break;
@@ -133,11 +165,24 @@ public sealed partial class ScrollingCaptureForm
 
             for (int currentY = currentImage.Height - 1; currentY >= 0 && matchCount < matchLimit; currentY--)
             {
+                if ((currentY & 15) == 0)
+                    cancellationToken.ThrowIfCancellationRequested();
+
                 int currentMatchCount = 0;
                 for (int row = 0; currentY - row >= 0 && resultBottomY - row >= 0 && currentMatchCount < matchLimit; row++)
                 {
-                    if (!RowsEqual(resultData, currentData, resultBottomY - row, currentY - row,
-                            ignoreSideOffset, compareWidth))
+                    if ((row & 31) == 0)
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                    if (!RowsEqual(
+                            resultData,
+                            currentData,
+                            resultRowHashes,
+                            currentRowHashes,
+                            resultBottomY - row,
+                            currentY - row,
+                            ignoreSideOffset,
+                            compareWidth))
                         break;
 
                     currentMatchCount++;
@@ -190,6 +235,51 @@ public sealed partial class ScrollingCaptureForm
         }
 
         return true;
+    }
+
+    private static bool RowsEqual(
+        BitmapData aData,
+        BitmapData bData,
+        ulong[] aHashes,
+        ulong[] bHashes,
+        int aY,
+        int bY,
+        int x,
+        int width)
+    {
+        if (aY < 0 || aY >= aHashes.Length || bY < 0 || bY >= bHashes.Length)
+            return false;
+
+        return aHashes[aY] == bHashes[bY] && RowsEqual(aData, bData, aY, bY, x, width);
+    }
+
+    private static unsafe ulong[] BuildRowHashes(BitmapData data, int x, int width)
+    {
+        var hashes = new ulong[data.Height];
+        if (width <= 0)
+            return hashes;
+
+        int byteOffset = x * 4;
+        int byteWidth = width * 4;
+        for (int y = 0; y < data.Height; y++)
+            hashes[y] = HashRow((byte*)data.Scan0 + (y * data.Stride) + byteOffset, byteWidth);
+
+        return hashes;
+    }
+
+    private static unsafe ulong HashRow(byte* row, int byteWidth)
+    {
+        const ulong offset = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+        ulong hash = offset;
+
+        for (int i = 0; i < byteWidth; i++)
+        {
+            hash ^= row[i];
+            hash *= prime;
+        }
+
+        return hash;
     }
 
     /// <summary>Compares a horizontal strip between two locked bitmaps. Returns 0..1 similarity.</summary>

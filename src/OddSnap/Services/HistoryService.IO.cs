@@ -148,46 +148,33 @@ public sealed partial class HistoryService
     /// </summary>
     public void RecoverFromDirectories(params string[] dirs)
     {
+        List<HistoryEntry> snapshotEntries;
+        lock (_gate)
+            snapshotEntries = _entries.ToList();
+
+        var removedPaths = snapshotEntries
+            .Where(entry => !File.Exists(entry.FilePath))
+            .Select(entry => entry.FilePath)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var discoveredEntries = FindRecoverableEntries(snapshotEntries, dirs);
+
         bool changed = false;
         lock (_gate)
         {
-            var removed = _entries.RemoveAll(e => !File.Exists(e.FilePath));
+            var removed = _entries.RemoveAll(e => removedPaths.Contains(e.FilePath) && !File.Exists(e.FilePath));
             if (removed > 0)
                 changed = true;
 
             var tracked = new HashSet<string>(_entries.Select(e => e.FilePath), StringComparer.OrdinalIgnoreCase);
-
-            foreach (var dir in dirs)
+            foreach (var entry in discoveredEntries)
             {
-                if (!Directory.Exists(dir)) continue;
-                foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories))
-                {
-                    if (file.StartsWith(StickerDir, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (file.StartsWith(ThumbnailDir, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (!HistoryEntryUtilities.IsSupportedHistoryFile(file)) continue;
-                    if (tracked.Contains(file)) continue;
+                if (tracked.Contains(entry.FilePath) || !File.Exists(entry.FilePath))
+                    continue;
 
-                    try
-                    {
-                        var fi = new FileInfo(file);
-                        var kind = HistoryEntryUtilities.GetKindForPath(file, stickerDirs: [StickerDir]);
-                        _entries.Add(new HistoryEntry
-                        {
-                            FileName = fi.Name,
-                            FilePath = file,
-                            CapturedAt = fi.CreationTime,
-                            Width = 0,
-                            Height = 0,
-                            FileSizeBytes = fi.Length,
-                            Kind = kind
-                        });
-                        tracked.Add(file);
-                        changed = true;
-                    }
-                    catch { }
-                }
+                _entries.Add(entry);
+                tracked.Add(entry.FilePath);
+                changed = true;
             }
 
             if (changed)
@@ -202,6 +189,65 @@ public sealed partial class HistoryService
 
         if (changed)
             NotifyChanged();
+    }
+
+    private static List<HistoryEntry> FindRecoverableEntries(IReadOnlyList<HistoryEntry> currentEntries, params string[] dirs)
+    {
+        var tracked = new HashSet<string>(
+            currentEntries
+                .Where(entry => File.Exists(entry.FilePath))
+                .Select(entry => entry.FilePath),
+            StringComparer.OrdinalIgnoreCase);
+        var discovered = new List<HistoryEntry>();
+
+        foreach (var dir in dirs)
+        {
+            if (!Directory.Exists(dir))
+                continue;
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories))
+                {
+                    if (file.StartsWith(StickerDir, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (file.StartsWith(ThumbnailDir, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (file.StartsWith(ImageThumbnailDir, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (!HistoryEntryUtilities.IsSupportedHistoryFile(file))
+                        continue;
+                    if (!tracked.Add(file))
+                        continue;
+
+                    try
+                    {
+                        var fi = new FileInfo(file);
+                        var kind = HistoryEntryUtilities.GetKindForPath(file, stickerDirs: [StickerDir]);
+                        discovered.Add(new HistoryEntry
+                        {
+                            FileName = fi.Name,
+                            FilePath = file,
+                            CapturedAt = fi.CreationTime,
+                            Width = 0,
+                            Height = 0,
+                            FileSizeBytes = fi.Length,
+                            Kind = kind
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        AppDiagnostics.LogWarning("history.recover.file", $"Failed to recover history file {Path.GetFileName(file)}: {ex.Message}", ex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning("history.recover.enumerate", $"Failed to scan history recovery directory {dir}: {ex.Message}", ex);
+            }
+        }
+
+        return discovered;
     }
 
     private static void AddDirectorySignature(HashCode hash, string path)

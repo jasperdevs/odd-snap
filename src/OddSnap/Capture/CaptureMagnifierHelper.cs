@@ -20,7 +20,7 @@ internal sealed class CaptureMagnifierHelper : IDisposable
     private readonly System.Diagnostics.Stopwatch _throttle = System.Diagnostics.Stopwatch.StartNew();
     private PickerMagnifierForm? _form;
     private Point _lastSamplePoint = new(-1, -1);
-    private int[]? _pixelData;
+    private Bitmap? _screenshot;
     private int _bmpW, _bmpH;
     private Color _pickedColor;
     private string _hexStr = "";
@@ -28,24 +28,14 @@ internal sealed class CaptureMagnifierHelper : IDisposable
     private int _placementIndex;
 
     /// <summary>
-    /// Caches pixel data from the screenshot for fast magnifier rendering.
+    /// Stores the screenshot reference for small per-frame samples.
     /// Call once after creating the helper with the screenshot bitmap.
     /// </summary>
     public void CachePixelData(Bitmap screenshot)
     {
+        _screenshot = screenshot;
         _bmpW = screenshot.Width;
         _bmpH = screenshot.Height;
-        _pixelData = new int[_bmpW * _bmpH];
-        var bits = screenshot.LockBits(new Rectangle(0, 0, _bmpW, _bmpH),
-            ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        try
-        {
-            Marshal.Copy(bits.Scan0, _pixelData, 0, _pixelData.Length);
-        }
-        finally
-        {
-            screenshot.UnlockBits(bits);
-        }
     }
 
     /// <summary>
@@ -53,14 +43,14 @@ internal sealed class CaptureMagnifierHelper : IDisposable
     /// </summary>
     public void Update(Point cursorInForm, Form owner, Rectangle virtualBounds, Rectangle avoidRect = default)
     {
-        if (_pixelData is null) return;
+        if (_screenshot is null) return;
         if (_throttle.ElapsedMilliseconds < UiChrome.FrameIntervalMs && _form?.Visible == true) return;
 
         int cx = Math.Clamp(cursorInForm.X, 0, _bmpW - 1);
         int cy = Math.Clamp(cursorInForm.Y, 0, _bmpH - 1);
         var samplePoint = new Point(cx, cy);
 
-        int argb = _pixelData[cy * _bmpW + cx];
+        int argb = ScreenshotPixelSampler.ReadArgb(_screenshot, cx, cy);
         _pickedColor = Color.FromArgb(argb);
         _hexStr = $"{_pickedColor.R:X2}{_pickedColor.G:X2}{_pickedColor.B:X2}";
         _rgbStr = $"{_pickedColor.R}, {_pickedColor.G}, {_pickedColor.B}";
@@ -95,7 +85,7 @@ internal sealed class CaptureMagnifierHelper : IDisposable
         _form?.Close();
         _form?.Dispose();
         _form = null;
-        _pixelData = null;
+        _screenshot = null;
         _bmpW = 0;
         _bmpH = 0;
         _lastSamplePoint = new Point(-1, -1);
@@ -114,18 +104,33 @@ internal sealed class CaptureMagnifierHelper : IDisposable
 
     private void BuildMagnifierBitmap(int cx, int cy)
     {
-        var pixelData = _pixelData!;
-        Array.Fill(_magPixels, unchecked((int)0xFF202020));
+        if (_screenshot is null)
+            return;
 
         int half = Grid / 2;
+        var requestedSample = new Rectangle(cx - half, cy - half, Grid, Grid);
+        var samplePixels = ScreenshotPixelSampler.CopyArgbRegion(_screenshot, requestedSample, out var copiedSample);
+
+        int SampleAt(int sx, int sy)
+        {
+            if ((uint)sx >= (uint)_bmpW || (uint)sy >= (uint)_bmpH)
+                return ScreenshotPixelSampler.OpaqueBlack;
+
+            if (samplePixels.Length == 0 || !copiedSample.Contains(sx, sy))
+                return ScreenshotPixelSampler.OpaqueBlack;
+
+            return samplePixels[((sy - copiedSample.Y) * copiedSample.Width) + (sx - copiedSample.X)];
+        }
+
+        Array.Fill(_magPixels, unchecked((int)0xFF202020));
+
         for (int gy = 0; gy < Grid; gy++)
         {
             int sy = cy - half + gy;
             for (int gx = 0; gx < Grid; gx++)
             {
                 int sx = cx - half + gx;
-                int c = ((uint)sx < (uint)_bmpW && (uint)sy < (uint)_bmpH)
-                    ? pixelData[sy * _bmpW + sx] : unchecked((int)0xFF000000);
+                int c = SampleAt(sx, sy);
 
                 int ox = gx * Cell;
                 int oy = gy * Cell;

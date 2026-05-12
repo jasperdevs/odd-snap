@@ -34,9 +34,8 @@ public sealed partial class RegionOverlayForm
         Activate();
         Focus();
         _escapeHook = CaptureEscapeKeyHook.Install(this, Cancel);
-        EnsureToolbarReady();
+        QueueToolbarReady();
         Invalidate();
-        Update();
 
         WindowDetector.ClearSnapshot();
         if (_windowDetectionMode != WindowDetectionMode.Off)
@@ -56,9 +55,20 @@ public sealed partial class RegionOverlayForm
         }
     }
 
+    private void QueueToolbarReady()
+    {
+        if (IsDisposed || Disposing)
+            return;
+
+        BeginInvoke(new Action(EnsureToolbarReady));
+    }
+
     private void EnsureToolbarReady()
     {
         if (IsDisposed || Disposing || !Visible)
+            return;
+
+        if (_isSelecting && ToolDef.IsCaptureTool(_mode))
             return;
 
         if (_toolbarForm == null || _toolbarForm.IsDisposed)
@@ -79,6 +89,80 @@ public sealed partial class RegionOverlayForm
         _toolbarForm.UpdateSurface();
         Invalidate(new Rectangle(_toolbarRect.X - 12, _toolbarRect.Y - 48,
             _toolbarRect.Width + 24, _toolbarRect.Height + 96));
+    }
+
+    internal void PrepareFirstMoveChrome()
+    {
+        if (IsDisposed || Disposing)
+            return;
+
+        try
+        {
+            if (ShowCaptureMagnifier)
+                BuildMagnifier();
+            WarmSelectionChromeForFirstMove();
+        }
+        catch (Exception ex)
+        {
+            OddSnap.Services.AppDiagnostics.LogError("capture.overlay.prepare-first-move-chrome", ex);
+        }
+    }
+
+    private void WarmSelectionChromeForFirstMove()
+    {
+        var oldSelecting = _isSelecting;
+        var oldSelection = _selectionRect;
+        var oldSelectionEnd = _selectionEnd;
+        var oldHasSelection = _hasSelection;
+        var oldCrosshairVisible = _crosshairVisible;
+        var oldCrosshairPoint = _crosshairPoint;
+        var oldMagnifierVisible = _captureMagnifierVisible;
+        var oldMagnifierBounds = _captureMagnifierBounds;
+
+        using var warmSurface = new Bitmap(160, 120, PixelFormat.Format32bppPArgb);
+        using var g = Graphics.FromImage(warmSurface);
+        ApplyUiGraphics(g);
+
+        try
+        {
+            var warmSelection = new Rectangle(16, 18, 96, 64);
+            var warmCursor = new Point(warmSelection.Right, warmSelection.Bottom);
+            _isSelecting = true;
+            _selectionRect = warmSelection;
+            _selectionEnd = warmCursor;
+            _hasSelection = true;
+            _crosshairVisible = ShowCrosshairGuides;
+            _crosshairPoint = new Point(
+                Math.Clamp(80, 1, Math.Max(1, ClientSize.Width - 2)),
+                Math.Clamp(60, 1, Math.Max(1, ClientSize.Height - 2)));
+            _captureMagnifierVisible = ShowCaptureMagnifier;
+            _captureMagnifierBounds = new Rectangle(
+                24,
+                8,
+                PickerMagnifierForm.TotalW,
+                PickerMagnifierForm.GetTotalHeight(showInfo: false));
+
+            SelectionFrameRenderer.DrawRectangle(g, warmSelection);
+            SelectionSizeReadout.Draw(
+                g,
+                warmCursor,
+                warmSelection,
+                _readoutFont,
+                new Rectangle(0, 0, warmSurface.Width, warmSurface.Height));
+            DrawCrosshairGuides(g);
+            DrawCaptureMagnifier(g);
+        }
+        finally
+        {
+            _isSelecting = oldSelecting;
+            _selectionRect = oldSelection;
+            _selectionEnd = oldSelectionEnd;
+            _hasSelection = oldHasSelection;
+            _crosshairVisible = oldCrosshairVisible;
+            _crosshairPoint = oldCrosshairPoint;
+            _captureMagnifierVisible = oldMagnifierVisible;
+            _captureMagnifierBounds = oldMagnifierBounds;
+        }
     }
 
     protected override void OnDeactivate(EventArgs e)
@@ -436,27 +520,6 @@ public sealed partial class RegionOverlayForm
             HideToolbarImmediately();
     }
 
-    private void EnsureCrosshairForms()
-    {
-        if (_verticalCrosshairForm != null && _horizontalCrosshairForm != null)
-            return;
-
-        var color = Color.FromArgb(72, UiChrome.SurfaceTextPrimary.R, UiChrome.SurfaceTextPrimary.G, UiChrome.SurfaceTextPrimary.B);
-        if (_verticalCrosshairForm == null)
-        {
-            _verticalCrosshairForm = new CrosshairGuideForm(color);
-            var _ = _verticalCrosshairForm.Handle;
-            WindowDetector.RegisterIgnoredWindow(_verticalCrosshairForm.Handle);
-        }
-
-        if (_horizontalCrosshairForm == null)
-        {
-            _horizontalCrosshairForm = new CrosshairGuideForm(color);
-            var _ = _horizontalCrosshairForm.Handle;
-            WindowDetector.RegisterIgnoredWindow(_horizontalCrosshairForm.Handle);
-        }
-    }
-
     private void UpdateCrosshairGuides(Point point)
     {
         bool shouldShow = ShowCrosshairGuides
@@ -469,20 +532,32 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
-        EnsureCrosshairForms();
-        if (_verticalCrosshairForm is null || _horizontalCrosshairForm is null)
+        if (_crosshairVisible && _crosshairPoint == point)
             return;
 
-        int screenX = _virtualBounds.X + point.X;
-        int screenY = _virtualBounds.Y + point.Y;
-        _verticalCrosshairForm.UpdateLine(new Rectangle(screenX - 1, _virtualBounds.Top, 3, _virtualBounds.Height));
-        _horizontalCrosshairForm.UpdateLine(new Rectangle(_virtualBounds.Left, screenY - 1, _virtualBounds.Width, 3));
+        if (_crosshairVisible)
+            InvalidateCrosshair(_crosshairPoint);
+
+        _crosshairPoint = point;
+        _crosshairVisible = true;
+        InvalidateCrosshair(point);
     }
 
     private void ClearCrosshairGuides()
     {
-        _verticalCrosshairForm?.Hide();
-        _horizontalCrosshairForm?.Hide();
+        if (_crosshairVisible)
+            InvalidateCrosshair(_crosshairPoint);
+        _crosshairVisible = false;
+        _crosshairPoint = Point.Empty;
+    }
+
+    private void InvalidateCrosshair(Point point)
+    {
+        if (point == Point.Empty)
+            return;
+
+        Invalidate(new Rectangle(Math.Max(0, point.X - 3), 0, 7, ClientSize.Height));
+        Invalidate(new Rectangle(0, Math.Max(0, point.Y - 3), ClientSize.Width, 7));
     }
 
     internal int ToolbarRenderVersion => _toolbarRenderVersion;
@@ -539,6 +614,7 @@ public sealed partial class RegionOverlayForm
         try { CloseCaptureMagnifier(); } catch { }
         try { CloseSelectionAdorner(); } catch { }
         try { ClearCrosshairGuides(); } catch { }
+        try { ResetSelectionDragMoveQueue(); } catch { }
         SelectionCancelled?.Invoke();
         Close();
     }
@@ -554,14 +630,6 @@ public sealed partial class RegionOverlayForm
             _escapeHook?.Dispose();
             _escapeHook = null;
             ClearCrosshairGuides();
-            if (_verticalCrosshairForm != null)
-                WindowDetector.UnregisterIgnoredWindow(_verticalCrosshairForm.Handle);
-            _verticalCrosshairForm?.Close();
-            _verticalCrosshairForm?.Dispose();
-            if (_horizontalCrosshairForm != null)
-                WindowDetector.UnregisterIgnoredWindow(_horizontalCrosshairForm.Handle);
-            _horizontalCrosshairForm?.Close();
-            _horizontalCrosshairForm?.Dispose();
             CloseSelectionAdorner();
             WindowDetector.UnregisterIgnoredWindow(Handle);
             WindowDetector.ClearSnapshot();
@@ -577,6 +645,7 @@ public sealed partial class RegionOverlayForm
             _animTimer.Dispose();
             _pickerTimer.Dispose();
             _autoDetectTimer.Dispose();
+            _selectionMoveTimer.Dispose();
             _magGfx.Dispose();
             _magBitmap.Dispose();
             _committedAnnotationsBitmap?.Dispose();

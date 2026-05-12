@@ -11,6 +11,8 @@ namespace OddSnap.Capture;
 
 internal static class DxgiScreenCapture
 {
+    private const int CaptureFrameTimeoutMs = 60;
+    private const int WarmupFrameTimeoutMs = 40;
     private static readonly object CacheLock = new();
     private static DeviceBundle? _cachedBundle;
 
@@ -28,18 +30,19 @@ internal static class DxgiScreenCapture
     public static Bitmap CaptureRegion(Rectangle region)
     {
         var deviceBundle = GetOrCreateDeviceBundle();
+        Bitmap? result = null;
         try
         {
             lock (deviceBundle.CaptureSyncRoot)
             {
-                var result = new Bitmap(region.Width, region.Height, PixelFormat.Format32bppArgb);
-
-                using var graphics = Graphics.FromImage(result);
-                graphics.Clear(Color.Transparent);
-
                 var outputs = deviceBundle.GetOutputs();
                 if (!IsRegionFullyCoveredByOutputs(region, outputs.Select(output => ToRectangle(output.Description.DesktopCoordinates))))
                     throw new InvalidOperationException("DXGI capture outputs do not cover the requested screen region.");
+
+                result = new Bitmap(region.Width, region.Height, PixelFormat.Format32bppArgb);
+
+                using var graphics = Graphics.FromImage(result);
+                graphics.Clear(Color.Transparent);
 
                 foreach (var output in outputs)
                 {
@@ -49,7 +52,7 @@ internal static class DxgiScreenCapture
                         continue;
 
                     var duplication = output.GetOrCreateDuplication(deviceBundle.Device);
-                    using var frame = AcquireFrame(duplication);
+                    using var frame = AcquireFrame(duplication, timeoutMs: CaptureFrameTimeoutMs);
                     using var desktopTexture = frame.Resource.QueryInterface<ID3D11Texture2D>();
                     var staging = deviceBundle.GetOrCreateStagingTexture(overlap.Width, overlap.Height);
 
@@ -73,6 +76,7 @@ internal static class DxgiScreenCapture
         }
         catch
         {
+            result?.Dispose();
             ResetCache();
             throw;
         }
@@ -81,7 +85,10 @@ internal static class DxgiScreenCapture
     public static void WarmUp()
     {
         var deviceBundle = GetOrCreateDeviceBundle();
-        lock (deviceBundle.CaptureSyncRoot)
+        if (!Monitor.TryEnter(deviceBundle.CaptureSyncRoot))
+            return;
+
+        try
         {
             foreach (var output in deviceBundle.GetOutputs())
             {
@@ -92,7 +99,7 @@ internal static class DxgiScreenCapture
                         continue;
 
                     var duplication = output.GetOrCreateDuplication(deviceBundle.Device);
-                    using var frame = AcquireFrame(duplication);
+                    using var frame = AcquireFrame(duplication, timeoutMs: WarmupFrameTimeoutMs);
                     using var desktopTexture = frame.Resource.QueryInterface<ID3D11Texture2D>();
                     _ = deviceBundle.GetOrCreateStagingTexture(outputBounds.Width, outputBounds.Height);
                 }
@@ -101,6 +108,10 @@ internal static class DxgiScreenCapture
                     // Best-effort warmup only. A failure here should not block first capture.
                 }
             }
+        }
+        finally
+        {
+            Monitor.Exit(deviceBundle.CaptureSyncRoot);
         }
     }
 
@@ -164,9 +175,9 @@ internal static class DxgiScreenCapture
         return outputs;
     }
 
-    private static FrameBundle AcquireFrame(IDXGIOutputDuplication duplication)
+    private static FrameBundle AcquireFrame(IDXGIOutputDuplication duplication, int timeoutMs)
     {
-        duplication.AcquireNextFrame(250, out _, out IDXGIResource resource).CheckError();
+        duplication.AcquireNextFrame((uint)timeoutMs, out _, out IDXGIResource resource).CheckError();
         return new FrameBundle(duplication, resource);
     }
 

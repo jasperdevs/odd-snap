@@ -4,6 +4,7 @@ using OddSnap.Models;
 using System.Reflection;
 using System.Net;
 using System.Net.Http;
+using System.Threading;
 
 namespace OddSnap.Tests;
 
@@ -226,6 +227,27 @@ public sealed class UploadServiceTests
     }
 
     [Fact]
+    public async Task UploadAsync_HonorsCancellationBeforeNetworkWork()
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), "oddsnap-cancel-upload-test-" + Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            await File.WriteAllTextAsync(filePath, "oddsnap");
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var result = await UploadService.UploadAsync(filePath, UploadDestination.TransferSh, new UploadSettings(), cts.Token);
+
+            Assert.False(result.Success);
+            Assert.Equal("Upload canceled.", result.Error);
+        }
+        finally
+        {
+            try { File.Delete(filePath); } catch { }
+        }
+    }
+
+    [Fact]
     public async Task UploadAsync_WebDavRejectsNonHttpsUrlBeforeNetworkCall()
     {
         var filePath = Path.Combine(Path.GetTempPath(), "oddsnap-webdav-test-" + Guid.NewGuid().ToString("N") + ".txt");
@@ -383,12 +405,36 @@ public sealed class UploadServiceTests
     {
         var source = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "UploadService.CloudTargets.cs"));
 
-        var uploadCustomBlock = GetMethodBlock(source, "private static async Task<UploadResult> UploadCustom(string filePath, UploadSettings s)");
+        var uploadCustomBlock = GetMethodBlock(source, "private static async Task<UploadResult> UploadCustom(string filePath, UploadSettings s, CancellationToken cancellationToken)");
         Assert.Contains("s.CustomResponseUrlPath.Split('.')", uploadCustomBlock);
         Assert.Contains("catch (Exception ex)", uploadCustomBlock);
         Assert.Contains("AppDiagnostics.LogWarning(", uploadCustomBlock);
         Assert.Contains("\"upload.custom-response-path\"", uploadCustomBlock);
         Assert.DoesNotContain("catch { }", uploadCustomBlock);
+    }
+
+    [Fact]
+    public void UploadProvidersPropagateCancellationTokens()
+    {
+        var core = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "UploadService.cs"));
+        var publicHosts = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "UploadService.PublicHosts.cs"));
+        var cloudTargets = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "UploadService.CloudTargets.cs"));
+
+        var uploadAsyncBlock = GetMethodBlock(core, "public static async Task<UploadResult> UploadAsync(");
+        Assert.Contains("CancellationToken cancellationToken = default", uploadAsyncBlock);
+        Assert.Contains("cancellationToken.ThrowIfCancellationRequested();", uploadAsyncBlock);
+        Assert.Contains("UploadTemporaryHostsAsync(filePath, settings, cancellationToken)", uploadAsyncBlock);
+        Assert.Contains("catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)", uploadAsyncBlock);
+
+        var fallbackBlock = GetMethodBlock(core, "private static async Task<UploadResult> UploadTemporaryHostsAsync");
+        Assert.Contains("UploadAsync(filePath, destination, settings, cancellationToken)", fallbackBlock);
+
+        Assert.Contains("Http.SendAsync(request, cancellationToken)", publicHosts);
+        Assert.Contains("Http.PostAsync(\"https://catbox.moe/user/api.php\", content, cancellationToken)", publicHosts);
+        Assert.Contains("Http.SendAsync(uploadReq, cancellationToken)", cloudTargets);
+        Assert.Contains("File.ReadAllBytesAsync(filePath, cancellationToken)", cloudTargets);
+        Assert.Contains("Task.Run(() =>", cloudTargets);
+        Assert.Contains("}, cancellationToken);", cloudTargets);
     }
 
     [Theory]

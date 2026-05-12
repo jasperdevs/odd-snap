@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Threading;
+using OddSnap.Capture;
 using OddSnap.Services;
 using OddSnap.UI;
 
@@ -75,6 +76,7 @@ public partial class App
         ToastWindow.SetDuration(_settingsService.Settings.ToastDurationSeconds);
         ToastWindow.SetButtonLayout(_settingsService.Settings.ToastButtons);
         ToastWindow.SetFadeOutBehavior(_settingsService.Settings.ToastFadeOutEnabled, _settingsService.Settings.ToastFadeOutSeconds);
+        ScreenCapture.HdrCaptureCompatibleMode = _settingsService.Settings.HdrCaptureCompatibleMode;
 
         _idleTrimTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
         _idleTrimTimer.Tick += (_, _) => TrimIdleMemory();
@@ -90,6 +92,9 @@ public partial class App
 
         ConfigureTrayIcon();
         RegisterHotkeys();
+        CaptureOverlayThread.Start();
+        CaptureOverlayThread.Post(CaptureOverlayHotPathWarmup.Warm);
+        WarmLowLatencyCapture();
         WarmDxgiCapture();
         Helpers.FluentIcons.Preload();
 
@@ -137,6 +142,7 @@ public partial class App
     {
         _trayIcon = new TrayIcon(_settingsService?.Settings);
         _trayIcon.OnCapture += OnHotkeyPressed;
+        _trayIcon.OnFullScreenCapture += OnFullscreenHotkeyPressed;
         _trayIcon.OnOcr += OnOcrHotkeyPressed;
         _trayIcon.OnColorPicker += OnPickerHotkeyPressed;
         _trayIcon.OnGifRecord += OnGifHotkeyPressed;
@@ -153,4 +159,13 @@ public partial class App
             try { OddSnap.Capture.DxgiScreenCapture.WarmUp(); } catch (Exception ex) { AppDiagnostics.LogError("startup.dxgi-warmup", ex); }
         });
     }
+
+    private static void WarmLowLatencyCapture()
+    {
+        _ = Task.Run(() =>
+        {
+            try { ScreenCapture.WarmLowLatencyCapture(); } catch (Exception ex) { AppDiagnostics.LogError("startup.low-latency-capture-warmup", ex); }
+        });
+    }
+
 }

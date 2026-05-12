@@ -36,6 +36,7 @@ public partial class App : Application
     private int _settingsWindowOpening;
     private int _settingsHiddenForCapture;
     private int _idleTrimInProgress;
+    private long _captureRequestedTimestamp;
     private DateTime _lastIdleTrimUtc = DateTime.MinValue;
     private int _openHistoryWhenSettingsReady;
 }

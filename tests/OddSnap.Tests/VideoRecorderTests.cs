@@ -79,35 +79,39 @@ public sealed class VideoRecorderTests
     }
 
     [Fact]
-    public void BuildRepairArguments_WebMUsesVp9SpeedOptimizedConstantQuality()
+    public void BuildRepairArguments_WebMUsesRealtimeVp9Settings()
     {
         var recorder = new VideoRecorder(new System.Drawing.Rectangle(0, 0, 100, 100), VideoRecorder.Format.WebM, fps: 30);
         SetRecordedDuration(recorder, TimeSpan.FromSeconds(3));
 
         string args = recorder.BuildRepairArguments("capture.webm", "capture_repaired.webm", 2.5d, hasAudioTrack: false);
 
-        Assert.Contains("-deadline good", args);
-        Assert.Contains("-cpu-used 2", args);
+        Assert.Contains("-deadline realtime", args);
+        Assert.Contains("-cpu-used 6", args);
         Assert.Contains("-row-mt 1", args);
+        Assert.Contains("-threads 2", args);
         Assert.DoesNotContain("-movflags +faststart", args);
     }
 
     [Fact]
-    public void BuildVideoCodecArguments_OriginalSizeSkipsScaleFilterAndUsesHighQualityCrf()
+    public void BuildVideoCodecArguments_OriginalSizeSkipsScaleFilterAndUsesBalancedScreenRecordingSettings()
     {
         string args = VideoRecorder.BuildVideoCodecArguments(VideoRecorder.Format.MP4, 1920, 1080, 1920, 1080);
 
-        Assert.Contains("-crf 18", args);
+        Assert.Contains("-preset veryfast", args);
+        Assert.Contains("-tune zerolatency", args);
+        Assert.Contains("-crf 21", args);
+        Assert.Contains("-threads 2", args);
         Assert.DoesNotContain("-vf scale=", args, StringComparison.Ordinal);
         Assert.Contains("-movflags +faststart", args);
     }
 
     [Fact]
-    public void BuildVideoCodecArguments_ResizedOutputUsesLanczosScaler()
+    public void BuildVideoCodecArguments_ResizedOutputUsesBicubicScaler()
     {
         string args = VideoRecorder.BuildVideoCodecArguments(VideoRecorder.Format.MP4, 3840, 2160, 1920, 1080);
 
-        Assert.Contains("-vf scale=1920:1080:flags=lanczos", args);
+        Assert.Contains("-vf scale=1920:1080:flags=bicubic", args);
     }
 
     [Fact]

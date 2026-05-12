@@ -271,7 +271,6 @@ public sealed partial class RegionOverlayForm
         if (oldDetect.IsEmpty != newDetect.IsEmpty)
         {
             Invalidate();
-            Update();
             return;
         }
 
@@ -280,12 +279,29 @@ public sealed partial class RegionOverlayForm
         if (!oldDirty.IsEmpty && !newDirty.IsEmpty)
         {
             Invalidate(Rectangle.Union(oldDirty, newDirty));
-            Update();
         }
         else if (!oldDirty.IsEmpty)
             Invalidate(oldDirty);
         else if (!newDirty.IsEmpty)
             Invalidate(newDirty);
+    }
+
+    private void QueueAutoDetectRectUpdate(Point location)
+    {
+        if (_windowDetectionMode == WindowDetectionMode.Off)
+        {
+            var previousDetect = _autoDetectRect;
+            _pendingAutoDetectPoint = Point.Empty;
+            _autoDetectTimer.Stop();
+            _autoDetectRect = Rectangle.Empty;
+            _autoDetectActive = false;
+            InvalidateAutoDetectChrome(previousDetect, Rectangle.Empty);
+            return;
+        }
+
+        _pendingAutoDetectPoint = location;
+        _autoDetectTimer.Stop();
+        _autoDetectTimer.Start();
     }
 
     private void UpdateAutoDetectRect(Point location)
@@ -299,9 +315,11 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
+        if (!WindowDetector.TryGetSnapshotDetectionRectAtPoint(
+                location, _virtualBounds, _windowDetectionMode, out var detected))
+            return;
+
         var oldDetect = _autoDetectRect;
-        var detected = WindowDetector.GetDetectionRectAtPoint(
-            location, _virtualBounds, _windowDetectionMode);
         _autoDetectRect = detected;
         _autoDetectActive = detected.Width > 0 && detected.Height > 0;
 
@@ -504,6 +522,14 @@ public sealed partial class RegionOverlayForm
 
     private Bitmap GetCommittedAnnotationsBitmap()
     {
+        if (_undoStack.Count == 0 && _renderSkipIndex < 0)
+        {
+            _committedAnnotationsBitmap?.Dispose();
+            _committedAnnotationsBitmap = null;
+            _committedAnnotationsDirty = false;
+            return _screenshot;
+        }
+
         if (!_committedAnnotationsDirty && _committedAnnotationsBitmap is not null)
             return _committedAnnotationsBitmap;
 

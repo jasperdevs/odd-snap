@@ -156,6 +156,7 @@ public partial class SettingsWindow
         CrosshairGuidesCheck.IsChecked = s.ShowCrosshairGuides;
         ShowCaptureMagnifierCheck.IsChecked = s.ShowCaptureMagnifier;
         OverlayAllMonitorsCheck.IsChecked = s.OverlayCaptureAllMonitors;
+        HdrCaptureCompatibleModeCheck.IsChecked = s.HdrCaptureCompatibleMode;
         ShowToolNumberBadgesCheck.IsChecked = s.ShowToolNumberBadges;
         AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
         MonthlyFoldersCheck.IsChecked = s.SaveInMonthlyFolders;

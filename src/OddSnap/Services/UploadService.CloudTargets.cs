@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Threading;
 using FluentFTP;
 using Renci.SshNet;
 
@@ -13,7 +14,7 @@ namespace OddSnap.Services;
 
 public static partial class UploadService
 {
-    private static async Task<UploadResult> UploadDropbox(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadDropbox(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(s.DropboxAccessToken))
             return new UploadResult { Error = "Dropbox access token not configured" };
@@ -25,25 +26,25 @@ public static partial class UploadService
         uploadReq.Headers.TryAddWithoutValidation("Dropbox-API-Arg", JsonSerializer.Serialize(new { path = remotePath, mode = "add", autorename = true, mute = false }));
         uploadReq.Headers.TryAddWithoutValidation("Content-Type", "application/octet-stream");
         uploadReq.Content = CreateFileStreamContent(filePath);
-        using var uploadResp = await Http.SendAsync(uploadReq);
+        using var uploadResp = await Http.SendAsync(uploadReq, cancellationToken);
         if (!uploadResp.IsSuccessStatusCode)
         {
-            var uploadBody = await uploadResp.Content.ReadAsStringAsync();
+            var uploadBody = await uploadResp.Content.ReadAsStringAsync(cancellationToken);
             return new UploadResult { Error = BuildHttpError("Dropbox upload", uploadResp, uploadBody, TryParseJson(uploadBody)) };
         }
 
         using var shareReq = new HttpRequestMessage(HttpMethod.Post, "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings");
         shareReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.DropboxAccessToken);
         shareReq.Content = new StringContent(JsonSerializer.Serialize(new { path = remotePath }), Encoding.UTF8, "application/json");
-        using var shareResp = await Http.SendAsync(shareReq);
-        var shareBody = await shareResp.Content.ReadAsStringAsync();
+        using var shareResp = await Http.SendAsync(shareReq, cancellationToken);
+        var shareBody = await shareResp.Content.ReadAsStringAsync(cancellationToken);
         if (!shareResp.IsSuccessStatusCode && shareBody.Contains("shared_link_already_exists"))
         {
             using var listReq = new HttpRequestMessage(HttpMethod.Post, "https://api.dropboxapi.com/2/sharing/list_shared_links");
             listReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.DropboxAccessToken);
             listReq.Content = new StringContent(JsonSerializer.Serialize(new { path = remotePath, direct_only = true }), Encoding.UTF8, "application/json");
-            using var listResp = await Http.SendAsync(listReq);
-            var listBody = await listResp.Content.ReadAsStringAsync();
+            using var listResp = await Http.SendAsync(listReq, cancellationToken);
+            var listBody = await listResp.Content.ReadAsStringAsync(cancellationToken);
             var listNode = TryParseJson(listBody);
             var existing = listNode?["links"]?.AsArray().FirstOrDefault()?["url"]?.GetValue<string>();
             if (!string.IsNullOrWhiteSpace(existing))
@@ -60,7 +61,7 @@ public static partial class UploadService
         return new UploadResult { Error = "Dropbox share link creation failed" };
     }
 
-    private static async Task<UploadResult> UploadGoogleDrive(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadGoogleDrive(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(s.GoogleDriveAccessToken))
             return new UploadResult { Error = "Google Drive access token not configured" };
@@ -69,8 +70,8 @@ public static partial class UploadService
         var metadata = BuildGoogleDriveMetadata(filePath, s);
         var fileSize = new FileInfo(filePath).Length;
         var id = fileSize <= 5L * 1024 * 1024
-            ? await UploadGoogleDriveMultipart(filePath, s, metadata, mimeType).ConfigureAwait(false)
-            : await UploadGoogleDriveResumable(filePath, s, metadata, mimeType, fileSize).ConfigureAwait(false);
+            ? await UploadGoogleDriveMultipart(filePath, s, metadata, mimeType, cancellationToken).ConfigureAwait(false)
+            : await UploadGoogleDriveResumable(filePath, s, metadata, mimeType, fileSize, cancellationToken).ConfigureAwait(false);
 
         if (!id.Success)
             return id.Result;
@@ -78,8 +79,8 @@ public static partial class UploadService
         using var permReq = new HttpRequestMessage(HttpMethod.Post, $"https://www.googleapis.com/drive/v3/files/{id.FileId}/permissions");
         permReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.GoogleDriveAccessToken);
         permReq.Content = new StringContent("{\"role\":\"reader\",\"type\":\"anyone\"}", Encoding.UTF8, "application/json");
-        using var permResp = await Http.SendAsync(permReq);
-        var permBody = await permResp.Content.ReadAsStringAsync();
+        using var permResp = await Http.SendAsync(permReq, cancellationToken);
+        var permBody = await permResp.Content.ReadAsStringAsync(cancellationToken);
         if (!permResp.IsSuccessStatusCode)
             return new UploadResult { Error = BuildHttpError("Google Drive permissions", permResp, permBody, TryParseJson(permBody)) };
 
@@ -95,7 +96,7 @@ public static partial class UploadService
         return metadata;
     }
 
-    private static async Task<GoogleDriveUploadId> UploadGoogleDriveMultipart(string filePath, UploadSettings s, JsonObject metadata, string mimeType)
+    private static async Task<GoogleDriveUploadId> UploadGoogleDriveMultipart(string filePath, UploadSettings s, JsonObject metadata, string mimeType, CancellationToken cancellationToken)
     {
         using var content = new MultipartFormDataContent("foo_bar_baz");
         content.Add(new StringContent(metadata.ToJsonString(), Encoding.UTF8, "application/json"), "metadata");
@@ -104,8 +105,8 @@ public static partial class UploadService
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink,webContentLink");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.GoogleDriveAccessToken);
         req.Content = content;
-        using var resp = await Http.SendAsync(req);
-        var body = await resp.Content.ReadAsStringAsync();
+        using var resp = await Http.SendAsync(req, cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
         if (!resp.IsSuccessStatusCode)
             return GoogleDriveUploadId.Fail(BuildHttpError("Google Drive upload", resp, body, TryParseJson(body)));
 
@@ -117,15 +118,15 @@ public static partial class UploadService
         return GoogleDriveUploadId.Ok(id);
     }
 
-    private static async Task<GoogleDriveUploadId> UploadGoogleDriveResumable(string filePath, UploadSettings s, JsonObject metadata, string mimeType, long fileSize)
+    private static async Task<GoogleDriveUploadId> UploadGoogleDriveResumable(string filePath, UploadSettings s, JsonObject metadata, string mimeType, long fileSize, CancellationToken cancellationToken)
     {
         using var startReq = new HttpRequestMessage(HttpMethod.Post, "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id");
         startReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.GoogleDriveAccessToken);
         startReq.Headers.TryAddWithoutValidation("X-Upload-Content-Type", mimeType);
         startReq.Headers.TryAddWithoutValidation("X-Upload-Content-Length", fileSize.ToString());
         startReq.Content = new StringContent(metadata.ToJsonString(), Encoding.UTF8, "application/json");
-        using var startResp = await Http.SendAsync(startReq);
-        var startBody = await startResp.Content.ReadAsStringAsync();
+        using var startResp = await Http.SendAsync(startReq, cancellationToken);
+        var startBody = await startResp.Content.ReadAsStringAsync(cancellationToken);
         if (!startResp.IsSuccessStatusCode)
             return GoogleDriveUploadId.Fail(BuildHttpError("Google Drive upload session", startResp, startBody, TryParseJson(startBody)));
 
@@ -135,8 +136,8 @@ public static partial class UploadService
         using var uploadReq = new HttpRequestMessage(HttpMethod.Put, startResp.Headers.Location);
         uploadReq.Content = CreateFileStreamContent(filePath, mimeType);
         uploadReq.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);
-        using var uploadResp = await Http.SendAsync(uploadReq);
-        var uploadBody = await uploadResp.Content.ReadAsStringAsync();
+        using var uploadResp = await Http.SendAsync(uploadReq, cancellationToken);
+        var uploadBody = await uploadResp.Content.ReadAsStringAsync(cancellationToken);
         if (!uploadResp.IsSuccessStatusCode)
             return GoogleDriveUploadId.Fail(BuildHttpError("Google Drive resumable upload", uploadResp, uploadBody, TryParseJson(uploadBody)));
 
@@ -153,7 +154,7 @@ public static partial class UploadService
         public static GoogleDriveUploadId Fail(string error) => new(false, "", new UploadResult { Error = error });
     }
 
-    private static async Task<UploadResult> UploadOneDrive(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadOneDrive(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(s.OneDriveAccessToken))
             return new UploadResult { Error = "OneDrive access token not configured" };
@@ -164,8 +165,8 @@ public static partial class UploadService
         using var req = new HttpRequestMessage(HttpMethod.Put, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.OneDriveAccessToken);
         req.Content = CreateFileStreamContent(filePath);
-        using var resp = await Http.SendAsync(req);
-        var body = await resp.Content.ReadAsStringAsync();
+        using var resp = await Http.SendAsync(req, cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
         if (!resp.IsSuccessStatusCode)
             return new UploadResult { Error = $"OneDrive upload failed: {resp.StatusCode}" };
 
@@ -177,8 +178,8 @@ public static partial class UploadService
         using var shareReq = new HttpRequestMessage(HttpMethod.Post, $"https://graph.microsoft.com/v1.0/me/drive/items/{itemId}/createLink");
         shareReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.OneDriveAccessToken);
         shareReq.Content = new StringContent("{\"type\":\"view\",\"scope\":\"anonymous\"}", Encoding.UTF8, "application/json");
-        using var shareResp = await Http.SendAsync(shareReq);
-        var shareBody = await shareResp.Content.ReadAsStringAsync();
+        using var shareResp = await Http.SendAsync(shareReq, cancellationToken);
+        var shareBody = await shareResp.Content.ReadAsStringAsync(cancellationToken);
         if (!shareResp.IsSuccessStatusCode)
             return new UploadResult { Error = $"OneDrive share failed: {shareResp.StatusCode}" };
         var shareNode = TryParseJson(shareBody);
@@ -188,7 +189,7 @@ public static partial class UploadService
             : new UploadResult { Error = "OneDrive returned no share URL" };
     }
 
-    private static async Task<UploadResult> UploadAzureBlob(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadAzureBlob(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(s.AzureBlobSasUrl))
             return new UploadResult { Error = "Azure Blob SAS base URL not configured" };
@@ -199,7 +200,7 @@ public static partial class UploadService
         using var req = new HttpRequestMessage(HttpMethod.Put, url);
         req.Headers.TryAddWithoutValidation("x-ms-blob-type", "BlockBlob");
         req.Content = CreateFileStreamContent(filePath);
-        using var resp = await Http.SendAsync(req);
+        using var resp = await Http.SendAsync(req, cancellationToken);
         if (!resp.IsSuccessStatusCode)
             return new UploadResult { Error = $"Azure Blob upload failed: {resp.StatusCode}" };
         return new UploadResult { Success = true, Url = publicUrl };
@@ -231,7 +232,7 @@ public static partial class UploadService
         return true;
     }
 
-    private static async Task<UploadResult> UploadGitHub(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadGitHub(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(s.GitHubToken) || string.IsNullOrWhiteSpace(s.GitHubRepo))
             return new UploadResult { Error = "GitHub token or repo not configured" };
@@ -241,7 +242,7 @@ public static partial class UploadService
             : $"{s.GitHubPathPrefix.Trim('/')}/{Path.GetFileName(filePath)}";
         string apiUrl = $"https://api.github.com/repos/{s.GitHubRepo}/contents/{path}";
         string branch = string.IsNullOrWhiteSpace(s.GitHubBranch) ? "main" : s.GitHubBranch;
-        var base64 = Convert.ToBase64String(await File.ReadAllBytesAsync(filePath));
+        var base64 = Convert.ToBase64String(await File.ReadAllBytesAsync(filePath, cancellationToken));
 
         using var req = new HttpRequestMessage(HttpMethod.Put, apiUrl);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", s.GitHubToken);
@@ -253,15 +254,15 @@ public static partial class UploadService
             branch
         }), Encoding.UTF8, "application/json");
 
-        using var resp = await Http.SendAsync(req);
-        var body = await resp.Content.ReadAsStringAsync();
+        using var resp = await Http.SendAsync(req, cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
         if (!resp.IsSuccessStatusCode)
             return new UploadResult { Error = $"GitHub upload failed: {resp.StatusCode}" };
 
         return new UploadResult { Success = true, Url = $"https://raw.githubusercontent.com/{s.GitHubRepo}/{branch}/{path}" };
     }
 
-    private static async Task<UploadResult> UploadImmich(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadImmich(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(s.ImmichBaseUrl) || string.IsNullOrWhiteSpace(s.ImmichApiKey))
             return new UploadResult { Error = "Immich base URL or API key not configured" };
@@ -280,8 +281,8 @@ public static partial class UploadService
         using var req = new HttpRequestMessage(HttpMethod.Post, s.ImmichBaseUrl.TrimEnd('/') + "/api/assets");
         req.Headers.TryAddWithoutValidation("x-api-key", s.ImmichApiKey);
         req.Content = content;
-        using var resp = await Http.SendAsync(req);
-        var body = await resp.Content.ReadAsStringAsync();
+        using var resp = await Http.SendAsync(req, cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
         if (!resp.IsSuccessStatusCode)
             return new UploadResult { Error = $"Immich upload failed: {resp.StatusCode}" };
 
@@ -308,8 +309,9 @@ public static partial class UploadService
         };
     }
 
-    private static async Task<UploadResult> UploadFtp(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadFtp(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(s.FtpUrl) || string.IsNullOrWhiteSpace(s.FtpUsername))
             return new UploadResult { Error = "FTP URL or username not configured" };
 
@@ -334,8 +336,11 @@ public static partial class UploadService
         };
 
         using var client = new AsyncFtpClient(baseUri.Host, s.FtpUsername, s.FtpPassword ?? string.Empty, baseUri.Port > 0 ? baseUri.Port : 21, config);
+        cancellationToken.ThrowIfCancellationRequested();
         await client.Connect();
+        cancellationToken.ThrowIfCancellationRequested();
         await client.UploadFile(filePath, remotePath, FtpRemoteExists.Overwrite, createRemoteDir: true);
+        cancellationToken.ThrowIfCancellationRequested();
         await client.Disconnect();
 
         return new UploadResult
@@ -345,10 +350,11 @@ public static partial class UploadService
         };
     }
 
-    private static Task<UploadResult> UploadSftp(string filePath, UploadSettings s)
+    private static Task<UploadResult> UploadSftp(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         return Task.Run(() =>
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(s.SftpHost) || string.IsNullOrWhiteSpace(s.SftpUsername))
                 return new UploadResult { Error = "SFTP host or username not configured" };
             if (!TryNormalizeSftpFingerprint(s.SftpHostKeyFingerprint, out var expectedFingerprint))
@@ -360,17 +366,21 @@ public static partial class UploadService
                 var actual = Convert.ToHexString(SHA256.HashData(e.HostKey));
                 e.CanTrust = string.Equals(actual, expectedFingerprint, StringComparison.OrdinalIgnoreCase);
             };
+            cancellationToken.ThrowIfCancellationRequested();
             client.Connect();
+            cancellationToken.ThrowIfCancellationRequested();
             string remoteDir = string.IsNullOrWhiteSpace(s.SftpRemotePath) ? "/" : s.SftpRemotePath;
             string remotePath = remoteDir.TrimEnd('/') + "/" + Path.GetFileName(filePath);
             using var fs = File.OpenRead(filePath);
+            cancellationToken.ThrowIfCancellationRequested();
             client.UploadFile(fs, remotePath, true);
+            cancellationToken.ThrowIfCancellationRequested();
             client.Disconnect();
             string publicUrl = string.IsNullOrWhiteSpace(s.SftpPublicUrl)
                 ? $"sftp://{s.SftpHost}{remotePath}"
                 : s.SftpPublicUrl.TrimEnd('/') + "/" + Path.GetFileName(filePath);
             return new UploadResult { Success = true, Url = publicUrl };
-        });
+        }, cancellationToken);
     }
 
     private static bool TryNormalizeSftpFingerprint(string? fingerprint, out string normalized)
@@ -383,7 +393,7 @@ public static partial class UploadService
         return normalized.Length == 64;
     }
 
-    private static async Task<UploadResult> UploadWebDav(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadWebDav(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(s.WebDavUrl) || string.IsNullOrWhiteSpace(s.WebDavUsername))
             return new UploadResult { Error = "WebDAV URL or username not configured" };
@@ -393,7 +403,7 @@ public static partial class UploadService
         var auth = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{s.WebDavUsername}:{s.WebDavPassword}"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Basic", auth);
         req.Content = CreateFileStreamContent(filePath);
-        using var resp = await Http.SendAsync(req);
+        using var resp = await Http.SendAsync(req, cancellationToken);
         if (!resp.IsSuccessStatusCode)
             return new UploadResult { Error = $"WebDAV upload failed: {resp.StatusCode}" };
         return new UploadResult { Success = true, Url = string.IsNullOrWhiteSpace(s.WebDavPublicUrl) ? url : s.WebDavPublicUrl.TrimEnd('/') + "/" + Path.GetFileName(filePath) };
@@ -401,8 +411,9 @@ public static partial class UploadService
 
     // ─── S3-Compatible (AWS S3, Cloudflare R2, Backblaze B2, etc.) ──
 
-    private static async Task<UploadResult> UploadS3(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadS3(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(s.S3Endpoint) || string.IsNullOrWhiteSpace(s.S3Bucket) ||
             string.IsNullOrWhiteSpace(s.S3AccessKey) || string.IsNullOrWhiteSpace(s.S3SecretKey))
             return new UploadResult { Error = "S3 configuration incomplete (endpoint, bucket, access key, secret key required)" };
@@ -432,7 +443,11 @@ public static partial class UploadService
         string amzDate = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
         string payloadHash;
         using (var hashStream = File.OpenRead(filePath))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             payloadHash = HashHex(hashStream);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
 
         string canonicalUri = $"/{s.S3Bucket}/{key}";
         string canonicalQueryString = "";
@@ -461,7 +476,7 @@ public static partial class UploadService
         request.Headers.TryAddWithoutValidation("x-amz-content-sha256", payloadHash);
         request.Headers.TryAddWithoutValidation("Authorization", authHeader);
 
-        using var resp = await Http.SendAsync(request);
+        using var resp = await Http.SendAsync(request, cancellationToken);
         if (resp.IsSuccessStatusCode)
         {
             // Build public URL
@@ -471,7 +486,7 @@ public static partial class UploadService
             return new UploadResult { Success = true, Url = publicUrl };
         }
 
-        var body = await resp.Content.ReadAsStringAsync();
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
         return new UploadResult { Error = $"S3 error ({resp.StatusCode}): {body[..Math.Min(body.Length, 200)]}" };
     }
 
@@ -524,7 +539,7 @@ public static partial class UploadService
 
     // ─── Custom HTTP uploader ────────────────────────────────────────
 
-    private static async Task<UploadResult> UploadCustom(string filePath, UploadSettings s)
+    private static async Task<UploadResult> UploadCustom(string filePath, UploadSettings s, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(s.CustomUploadUrl))
             return new UploadResult { Error = "Custom upload URL not configured" };
@@ -544,8 +559,8 @@ public static partial class UploadService
             }
         }
 
-        using var resp = await Http.SendAsync(request);
-        var body = await resp.Content.ReadAsStringAsync();
+        using var resp = await Http.SendAsync(request, cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
         string? url = null;
         if (!string.IsNullOrWhiteSpace(s.CustomResponseUrlPath))

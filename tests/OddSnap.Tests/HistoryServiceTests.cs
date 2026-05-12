@@ -103,6 +103,22 @@ public sealed class HistoryServiceTests
         Assert.DoesNotContain("try { File.Delete(e.FilePath); } catch { }", ioCode);
     }
 
+    [Fact]
+    public void RecoverFromDirectories_DoesDiskEnumerationOutsideHistoryLock()
+    {
+        var ioCode = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "HistoryService.IO.cs"));
+
+        var recoverBlock = GetMethodBlock(ioCode, "public void RecoverFromDirectories(params string[] dirs)");
+        Assert.Contains("var discoveredEntries = FindRecoverableEntries(snapshotEntries, dirs);", recoverBlock);
+
+        var discoverBlock = GetMethodBlock(ioCode, "private static List<HistoryEntry> FindRecoverableEntries(IReadOnlyList<HistoryEntry> currentEntries, params string[] dirs)");
+        Assert.Contains("Directory.EnumerateFiles(dir, \"*.*\", SearchOption.AllDirectories)", discoverBlock);
+        Assert.Contains("ImageThumbnailDir", discoverBlock);
+        Assert.Contains("\"history.recover.enumerate\"", discoverBlock);
+        Assert.Contains("\"history.recover.file\"", discoverBlock);
+        Assert.DoesNotContain("lock (_gate)", discoverBlock);
+    }
+
     private static string RepoPath(params string[] parts)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

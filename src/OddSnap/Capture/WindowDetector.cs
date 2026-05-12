@@ -10,6 +10,10 @@ namespace OddSnap.Capture;
 /// </summary>
 public static class WindowDetector
 {
+    private sealed record WindowSnapshot(Rectangle VirtualBounds, SnapshotWindow[] Windows);
+
+    private readonly record struct SnapshotWindow(Rectangle Rect, WindowHitResult Hit);
+
     private enum WindowHitResult
     {
         PassThrough,
@@ -19,6 +23,8 @@ public static class WindowDetector
 
     private static readonly HashSet<IntPtr> IgnoredHandles = new();
     private static readonly object IgnoredHandleLock = new();
+    private static readonly object SnapshotLock = new();
+    private static WindowSnapshot? _snapshot;
     private static readonly string[] IgnoredWindowClasses =
     {
         "Progman",
@@ -44,12 +50,64 @@ public static class WindowDetector
     public static Rectangle GetWindowRectAtPoint(Point screenPoint, Rectangle virtualBounds)
         => GetDetectionRectAtPoint(screenPoint, virtualBounds, WindowDetectionMode.WindowOnly);
 
-    /// <summary>
-    /// <summary>Legacy no-op kept so overlay startup callers do not need special casing.</summary>
-    public static void SnapshotWindows(Rectangle virtualBounds) { }
+    public static bool TryGetSnapshotDetectionRectAtPoint(
+        Point overlayPoint,
+        Rectangle virtualBounds,
+        WindowDetectionMode mode,
+        out Rectangle rect)
+    {
+        rect = Rectangle.Empty;
+        if (mode == WindowDetectionMode.Off)
+            return true;
 
-    /// <summary>Legacy no-op kept so overlay shutdown callers do not need special casing.</summary>
-    public static void ClearSnapshot() { }
+        WindowSnapshot? snapshot;
+        lock (SnapshotLock)
+            snapshot = _snapshot;
+
+        if (snapshot is null || snapshot.VirtualBounds != virtualBounds)
+            return false;
+
+        foreach (var window in snapshot.Windows)
+        {
+            if (!window.Rect.Contains(overlayPoint))
+                continue;
+
+            if (window.Hit == WindowHitResult.Snappable)
+                rect = window.Rect;
+            return true;
+        }
+
+        return true;
+    }
+
+    /// <summary>Builds a short-lived z-order snapshot for non-blocking overlay hover detection.</summary>
+    public static void SnapshotWindows(Rectangle virtualBounds)
+    {
+        var windows = new List<SnapshotWindow>();
+        var seen = new HashSet<IntPtr>();
+
+        User32.EnumWindows((hwnd, _) =>
+        {
+            if (hwnd == IntPtr.Zero || !seen.Add(hwnd))
+                return true;
+
+            var hit = TryGetWindowRect(hwnd, null, virtualBounds, out var rect);
+            if (hit != WindowHitResult.PassThrough && rect.Width > 0 && rect.Height > 0)
+                windows.Add(new SnapshotWindow(rect, hit));
+
+            return true;
+        }, IntPtr.Zero);
+
+        lock (SnapshotLock)
+            _snapshot = new WindowSnapshot(virtualBounds, windows.ToArray());
+    }
+
+    /// <summary>Clears the hover-detection snapshot owned by the active overlay.</summary>
+    public static void ClearSnapshot()
+    {
+        lock (SnapshotLock)
+            _snapshot = null;
+    }
 
     public static void RegisterIgnoredWindow(IntPtr hwnd)
     {
@@ -139,16 +197,17 @@ public static class WindowDetector
         int exStyle = User32.GetWindowLongA(hwnd, User32.GWL_EXSTYLE);
         string className = GetClassName(hwnd);
         string title = GetWindowTitle(hwnd);
-        if (!IsSnappableWindowCandidate(style, exStyle, className, title))
-            return IsPassThroughWindowCandidate(exStyle, className)
-                ? WindowHitResult.PassThrough
-                : WindowHitResult.Blocked;
-
         rect = new Rectangle(
             screenRect.Left - virtualBounds.X,
             screenRect.Top - virtualBounds.Y,
             screenRect.Width,
             screenRect.Height);
+
+        if (!IsSnappableWindowCandidate(style, exStyle, className, title))
+            return IsPassThroughWindowCandidate(exStyle, className)
+                ? WindowHitResult.PassThrough
+                : WindowHitResult.Blocked;
+
         return rect.Width > 2 && rect.Height > 2
             ? WindowHitResult.Snappable
             : WindowHitResult.PassThrough;

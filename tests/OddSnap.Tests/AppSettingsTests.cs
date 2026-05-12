@@ -96,6 +96,14 @@ public sealed class AppSettingsTests
     }
 
     [Fact]
+    public void HdrCaptureCompatibility_DefaultsToDisabled()
+    {
+        var settings = new AppSettings();
+
+        Assert.False(settings.HdrCaptureCompatibleMode);
+    }
+
+    [Fact]
     public void ToastButtons_DefaultToVisibleCornerLayout()
     {
         var settings = new AppSettings();

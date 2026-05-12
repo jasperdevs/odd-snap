@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Threading;
 using FluentFTP;
 using Renci.SshNet;
 using OddSnap.Models;
@@ -387,12 +388,13 @@ public static partial class UploadService
         return null;
     }
 
-    private static async Task<UploadResult> UploadTemporaryHostsAsync(string filePath, UploadSettings settings)
+    private static async Task<UploadResult> UploadTemporaryHostsAsync(string filePath, UploadSettings settings, CancellationToken cancellationToken)
     {
         var errors = new List<string>();
         foreach (var destination in TemporaryHostFallbacks)
         {
-            var result = await UploadAsync(filePath, destination, settings);
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await UploadAsync(filePath, destination, settings, cancellationToken);
             if (result.Success)
             {
                 return new UploadResult
@@ -414,10 +416,12 @@ public static partial class UploadService
     }
 
     public static async Task<UploadResult> UploadAsync(
-        string filePath, UploadDestination dest, UploadSettings settings)
+        string filePath, UploadDestination dest, UploadSettings settings, CancellationToken cancellationToken = default)
     {
+        var uploadStarted = PerformanceTrace.Timestamp();
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // Check file size limit
             var fileSize = new FileInfo(filePath).Length;
             var maxSize = GetMaxSize(dest, filePath);
@@ -438,40 +442,56 @@ public static partial class UploadService
 
             var result = dest switch
             {
-                UploadDestination.Imgur => await UploadImgur(filePath, settings),
-                UploadDestination.ImgBB => await UploadImgBB(filePath, settings),
-                UploadDestination.Catbox => await UploadCatbox(filePath),
-                UploadDestination.Litterbox => await UploadLitterbox(filePath),
-                UploadDestination.Gyazo => await UploadGyazo(filePath, settings),
-                UploadDestination.FileIo => await UploadFileIo(filePath),
-                UploadDestination.Uguu => await UploadUguu(filePath),
-                UploadDestination.TransferSh => await UploadTransferSh(filePath),
-                UploadDestination.TmpFiles => await UploadTmpFiles(filePath),
-                UploadDestination.Gofile => await UploadGofile(filePath),
-                UploadDestination.ImgPile => await UploadImgPile(filePath, settings),
-                UploadDestination.Dropbox => await UploadDropbox(filePath, settings),
-                UploadDestination.GoogleDrive => await UploadGoogleDrive(filePath, settings),
-                UploadDestination.OneDrive => await UploadOneDrive(filePath, settings),
-                UploadDestination.AzureBlob => await UploadAzureBlob(filePath, settings),
-                UploadDestination.GitHub => await UploadGitHub(filePath, settings),
-                UploadDestination.Immich => await UploadImmich(filePath, settings),
-                UploadDestination.Ftp => await UploadFtp(filePath, settings),
-                UploadDestination.Sftp => await UploadSftp(filePath, settings),
-                UploadDestination.WebDav => await UploadWebDav(filePath, settings),
-                UploadDestination.S3Compatible => await UploadS3(filePath, settings),
-                UploadDestination.CustomHttp => await UploadCustom(filePath, settings),
-                UploadDestination.TempHosts => await UploadTemporaryHostsAsync(filePath, settings),
+                UploadDestination.Imgur => await UploadImgur(filePath, settings, cancellationToken),
+                UploadDestination.ImgBB => await UploadImgBB(filePath, settings, cancellationToken),
+                UploadDestination.Catbox => await UploadCatbox(filePath, cancellationToken),
+                UploadDestination.Litterbox => await UploadLitterbox(filePath, cancellationToken),
+                UploadDestination.Gyazo => await UploadGyazo(filePath, settings, cancellationToken),
+                UploadDestination.FileIo => await UploadFileIo(filePath, cancellationToken),
+                UploadDestination.Uguu => await UploadUguu(filePath, cancellationToken),
+                UploadDestination.TransferSh => await UploadTransferSh(filePath, cancellationToken),
+                UploadDestination.TmpFiles => await UploadTmpFiles(filePath, cancellationToken),
+                UploadDestination.Gofile => await UploadGofile(filePath, cancellationToken),
+                UploadDestination.ImgPile => await UploadImgPile(filePath, settings, cancellationToken),
+                UploadDestination.Dropbox => await UploadDropbox(filePath, settings, cancellationToken),
+                UploadDestination.GoogleDrive => await UploadGoogleDrive(filePath, settings, cancellationToken),
+                UploadDestination.OneDrive => await UploadOneDrive(filePath, settings, cancellationToken),
+                UploadDestination.AzureBlob => await UploadAzureBlob(filePath, settings, cancellationToken),
+                UploadDestination.GitHub => await UploadGitHub(filePath, settings, cancellationToken),
+                UploadDestination.Immich => await UploadImmich(filePath, settings, cancellationToken),
+                UploadDestination.Ftp => await UploadFtp(filePath, settings, cancellationToken),
+                UploadDestination.Sftp => await UploadSftp(filePath, settings, cancellationToken),
+                UploadDestination.WebDav => await UploadWebDav(filePath, settings, cancellationToken),
+                UploadDestination.S3Compatible => await UploadS3(filePath, settings, cancellationToken),
+                UploadDestination.CustomHttp => await UploadCustom(filePath, settings, cancellationToken),
+                UploadDestination.TempHosts => await UploadTemporaryHostsAsync(filePath, settings, cancellationToken),
                 _ => new UploadResult { Error = "No upload destination configured" }
             };
 
             if (!result.Success)
                 LogUploadFailure(dest, filePath, result.Error);
 
+            PerformanceTrace.LogElapsed(
+                "perf.upload",
+                uploadStarted,
+                $"{GetName(dest)} success={result.Success} file={Path.GetFileName(filePath)}");
             return result;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            PerformanceTrace.LogElapsed(
+                "perf.upload",
+                uploadStarted,
+                $"{GetName(dest)} canceled file={Path.GetFileName(filePath)}");
+            return new UploadResult { Error = "Upload canceled." };
         }
         catch (Exception ex)
         {
             AppDiagnostics.LogError("upload.error", ex, $"{GetName(dest)} upload failed for {Path.GetFileName(filePath)}.");
+            PerformanceTrace.LogElapsed(
+                "perf.upload",
+                uploadStarted,
+                $"{GetName(dest)} failed file={Path.GetFileName(filePath)}");
             return new UploadResult { Error = ex.Message };
         }
     }

@@ -60,13 +60,19 @@ public static class OcrService
         return languages;
     }
 
-    public static async Task<string> RecognizeAsync(Bitmap bitmap, string? languageTag = null, OcrWorkload workload = OcrWorkload.Full)
+    public static async Task<string> RecognizeAsync(
+        Bitmap bitmap,
+        string? languageTag = null,
+        OcrWorkload workload = OcrWorkload.Full,
+        CancellationToken cancellationToken = default)
     {
-        await RecognizeGate.WaitAsync().ConfigureAwait(false);
+        var started = PerformanceTrace.Timestamp();
+        await RecognizeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             return await Task.Run(async () =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var engine = CreateEngine(languageTag);
                 if (engine == null)
                     return "";
@@ -75,13 +81,17 @@ public static class OcrService
                 using var ms = new MemoryStream();
                 CaptureOutputService.WritePng(bitmap, ms);
                 ms.Position = 0;
+                cancellationToken.ThrowIfCancellationRequested();
 
                 using var stream = ms.AsRandomAccessStream();
                 var decoder = await BitmapDecoder.CreateAsync(stream);
+                cancellationToken.ThrowIfCancellationRequested();
                 using var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
                     BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 var result = await engine.RecognizeAsync(softwareBitmap);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (result == null)
                     return "";
 
@@ -91,11 +101,16 @@ public static class OcrService
                     .ToList();
 
                 return FormatRecognizedText(lines, result.Text);
-            }).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             RecognizeGate.Release();
+            PerformanceTrace.LogIfSlow(
+                "perf.ocr.recognize",
+                started,
+                TimeSpan.FromMilliseconds(250),
+                $"{bitmap.Width}x{bitmap.Height} workload={workload}");
         }
     }
 

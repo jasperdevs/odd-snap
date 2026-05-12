@@ -112,6 +112,17 @@ public sealed class AppCapturePolishTests
     }
 
     [Fact]
+    public void OverlayToolCallbacksScheduleIdleTrimAfterDisposingCroppedBitmaps()
+    {
+        var source = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Capture.cs"));
+        var overlayBlock = GetMethodBlock(source, "private void RunOverlayCaptureSession(CaptureMode initialMode, bool useAiRedirect, long requestedAt)");
+
+        AssertBitmapDisposeSchedulesIdleTrim(overlayBlock, "scanned.Dispose();");
+        AssertBitmapDisposeSchedulesIdleTrim(overlayBlock, "sticker.Dispose();");
+        AssertBitmapDisposeSchedulesIdleTrim(overlayBlock, "upscaled.Dispose();");
+    }
+
+    [Fact]
     public void RecordingClipboardStatusIsShownInCompletionFeedback()
     {
         var source = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Capture.cs"));
@@ -167,7 +178,7 @@ public sealed class AppCapturePolishTests
         Assert.Contains("Use region capture or move the window onscreen.", activeWindowBlock);
         Assert.DoesNotContain("ToastWindow.ShowError(\"Capture error\", ex.Message);", activeWindowBlock);
 
-        var overlayBlock = GetMethodBlock(source, "private void LaunchOverlayNow(CaptureMode initialMode, bool useAiRedirect = false)");
+        var overlayBlock = GetMethodBlock(source, "private void RunOverlayCaptureSession(CaptureMode initialMode, bool useAiRedirect, long requestedAt)");
         Assert.Contains("OddSnap could not scan this region. Try a clearer QR/barcode region.", overlayBlock);
         Assert.Contains("OddSnap could not create the sticker. Check Settings -> Stickers and try again.", overlayBlock);
         Assert.Contains("OddSnap could not upscale this capture. Check Settings -> Upscale and try again.", overlayBlock);
@@ -187,6 +198,15 @@ public sealed class AppCapturePolishTests
         var copyIndex = methodBlock.IndexOf("TryCopyCaptureOutputToClipboard(persisted.Output);", StringComparison.Ordinal);
         var resetIndex = methodBlock.IndexOf("ResetCapturing();", copyIndex, StringComparison.Ordinal);
         Assert.True(resetIndex > copyIndex, $"{copiedText} flow should reset even after copy failures.");
+    }
+
+    private static void AssertBitmapDisposeSchedulesIdleTrim(string source, string disposeCall)
+    {
+        var disposeIndex = source.IndexOf(disposeCall, StringComparison.Ordinal);
+        Assert.True(disposeIndex >= 0, $"Missing dispose call: {disposeCall}");
+
+        var trimIndex = source.IndexOf("ScheduleIdleMemoryTrim();", disposeIndex, StringComparison.Ordinal);
+        Assert.True(trimIndex > disposeIndex, $"{disposeCall} should schedule an idle memory trim after disposal.");
     }
 
     private static int CountOccurrences(string source, string needle)

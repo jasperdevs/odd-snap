@@ -319,22 +319,45 @@ public partial class App
 
     private void LaunchOverlay(CaptureMode initialMode, bool useAiRedirect = false)
     {
+        Interlocked.Exchange(ref _captureRequestedTimestamp, PerformanceTrace.Timestamp());
         LaunchWithDelay(() => LaunchOverlayNow(initialMode, useAiRedirect));
     }
 
     private void LaunchOverlayNow(CaptureMode initialMode, bool useAiRedirect = false)
     {
-        var thread = new Thread(() =>
+        var requestedAt = Interlocked.Exchange(ref _captureRequestedTimestamp, 0);
+        if (requestedAt == 0)
+            requestedAt = PerformanceTrace.Timestamp();
+        try
         {
-            Bitmap? screenshot = null;
-            try
-            {
-                Theme.Refresh();
+            CaptureOverlayThread.Post(() => RunOverlayCaptureSession(initialMode, useAiRedirect, requestedAt));
+        }
+        catch (Exception ex)
+        {
+            ResetCapturing();
+            ShowCaptureProcessingFailed(
+                "Capture error",
+                "OddSnap could not start the capture overlay. Try again, or check capture settings.",
+                ex.Message);
+        }
+    }
+
+    private void RunOverlayCaptureSession(CaptureMode initialMode, bool useAiRedirect, long requestedAt)
+    {
+        Bitmap? screenshot = null;
+        try
+        {
+                var screenshotStarted = PerformanceTrace.Timestamp();
                 bool showCursor = _settingsService!.Settings.ShowCursor;
                 var (bmp, bounds) = _settingsService.Settings.OverlayCaptureAllMonitors
-                    ? ScreenCapture.CaptureAllScreens(showCursor)
-                    : ScreenCapture.CaptureCurrentScreen(showCursor);
+                    ? ScreenCapture.CaptureAllScreensLowLatency(showCursor)
+                    : ScreenCapture.CaptureCurrentScreenLowLatency(showCursor);
                 screenshot = bmp;
+                PerformanceTrace.LogIfSlow(
+                    "perf.capture.overlay-screenshot",
+                    screenshotStarted,
+                    TimeSpan.FromMilliseconds(80),
+                    $"{bounds.Width}x{bounds.Height} mode={initialMode}");
 
                 var overlay = new RegionOverlayForm(
                     screenshot,
@@ -352,6 +375,11 @@ public partial class App
                 };
                 overlay.SetEnabledTools(_settingsService.Settings.EnabledTools);
                 overlay.SetShowToolNumberBadges(_settingsService.Settings.ShowToolNumberBadges);
+                overlay.Shown += (_, _) =>
+                    PerformanceTrace.LogElapsed(
+                        "perf.capture.overlay-shown",
+                        requestedAt,
+                        $"{bounds.Width}x{bounds.Height} mode={initialMode}");
 
                 overlay.RegionSelected += sel =>
                 {
@@ -359,7 +387,6 @@ public partial class App
                     using var annotated = overlay.RenderAnnotatedBitmap();
                     var cropped = ScreenCapture.CropRegion(annotated, sel);
                     overlay.Close();
-                    System.Windows.Forms.Application.ExitThread();
                     HandleCaptureResult(cropped, useAiRedirect);
                 };
 
@@ -367,7 +394,6 @@ public partial class App
                 {
                     overlay.Hide();
                     overlay.Close();
-                    System.Windows.Forms.Application.ExitThread();
                     HandleCaptureResult(fbmp, useAiRedirect);
                 };
 
@@ -377,7 +403,6 @@ public partial class App
                     using var annotated = overlay.RenderAnnotatedBitmap();
                     var cropped = ScreenCapture.CropRegion(annotated, sel);
                     overlay.Close();
-                    System.Windows.Forms.Application.ExitThread();
                     HandleOcrResult(cropped);
                 };
 
@@ -388,7 +413,6 @@ public partial class App
                     using var annotated = overlay.RenderAnnotatedBitmap();
                     var scanned = ScreenCapture.CropRegion(annotated, sel);
                     overlay.Close();
-                    System.Windows.Forms.Application.ExitThread();
                     Dispatcher.BeginInvoke(() =>
                     {
                         try
@@ -420,6 +444,7 @@ public partial class App
                         finally
                         {
                             scanned.Dispose();
+                            ScheduleIdleMemoryTrim();
                         }
                     });
                 };
@@ -430,7 +455,6 @@ public partial class App
                     using var annotated = overlay.RenderAnnotatedBitmap();
                     var sticker = ScreenCapture.CropRegion(annotated, sel);
                     overlay.Close();
-                    System.Windows.Forms.Application.ExitThread();
 
                     Dispatcher.BeginInvoke(async () =>
                     {
@@ -460,6 +484,7 @@ public partial class App
                         finally
                         {
                             sticker.Dispose();
+                            ScheduleIdleMemoryTrim();
                         }
                     });
                 };
@@ -470,7 +495,6 @@ public partial class App
                     using var annotated = overlay.RenderAnnotatedBitmap();
                     var upscaled = ScreenCapture.CropRegion(annotated, sel);
                     overlay.Close();
-                    System.Windows.Forms.Application.ExitThread();
 
                     Dispatcher.BeginInvoke(async () =>
                     {
@@ -513,6 +537,7 @@ public partial class App
                         finally
                         {
                             upscaled.Dispose();
+                            ScheduleIdleMemoryTrim();
                         }
                     });
                 };
@@ -534,11 +559,13 @@ public partial class App
                             EnsureHistoryService().SaveColorEntry(bare);
                     });
                     overlay.Close();
-                    System.Windows.Forms.Application.ExitThread();
                 };
 
                 overlay.FormClosed += (_, _) =>
                 {
+                    screenshot?.Dispose();
+                    screenshot = null;
+
                     var mode = overlay.CurrentMode;
                     if (mode is CaptureMode.Rectangle or CaptureMode.Center or CaptureMode.Freeform)
                     {
@@ -552,31 +579,21 @@ public partial class App
                     Dispatcher.BeginInvoke(ResetCapturing);
                 };
 
-                try
-                {
-                    System.Windows.Forms.Application.Run(overlay);
-                }
-                finally
-                {
-                    screenshot.Dispose();
-                }
-            }
-            catch (Exception ex)
+                overlay.PrepareFirstMoveChrome();
+                overlay.Show();
+        }
+        catch (Exception ex)
+        {
+            screenshot?.Dispose();
+            Dispatcher.BeginInvoke(() =>
             {
-                screenshot?.Dispose();
-                Dispatcher.BeginInvoke(() =>
-                {
-                    ResetCapturing();
-                    ShowCaptureProcessingFailed(
-                        "Capture error",
-                        "OddSnap could not start the capture overlay. Try again, or check capture settings.",
-                        ex.Message);
-                });
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.IsBackground = true;
-        thread.Start();
+                ResetCapturing();
+                ShowCaptureProcessingFailed(
+                    "Capture error",
+                    "OddSnap could not start the capture overlay. Try again, or check capture settings.",
+                    ex.Message);
+            });
+        }
     }
 
     private static bool TryCopyCaptureTextToClipboard(string text)

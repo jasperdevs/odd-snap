@@ -19,6 +19,7 @@ public sealed partial class RecordingForm
 
     private void StartRecording()
     {
+        var startStarted = PerformanceTrace.Timestamp();
         _recordingStopRequested = 0;
         _magHelper?.Close();
         _selectionAdorner?.Close();
@@ -86,6 +87,10 @@ public sealed partial class RecordingForm
         };
         _tickTimer.Start();
         Invalidate(Rectangle.Union(_selection, _toolbarRect));
+        PerformanceTrace.LogElapsed(
+            "perf.recording.start",
+            startStarted,
+            $"{screenRegion.Width}x{screenRegion.Height} format={_format} fps={_fps}");
     }
 
     private void StopRecording()
@@ -103,6 +108,7 @@ public sealed partial class RecordingForm
         // Finalize the recording in the background after the UI closes.
         ThreadPool.QueueUserWorkItem(_ =>
         {
+            var stopStarted = PerformanceTrace.Timestamp();
             Bitmap? firstFrame = gifRec?.GetFirstFrame();
             try
             {
@@ -115,6 +121,10 @@ public sealed partial class RecordingForm
                 firstFrame ??= vidRec?.GetFirstFrame();
                 firstFrame ??= TryCreateToastPreviewFrame(_savePath);
                 RecordingCompleted?.Invoke(_savePath, firstFrame);
+                PerformanceTrace.LogElapsed(
+                    "perf.recording.stop",
+                    stopStarted,
+                    $"{Path.GetFileName(_savePath)}");
             }
             catch (Exception ex)
             {
@@ -122,6 +132,10 @@ public sealed partial class RecordingForm
                 TryDeleteZeroByteRecordingOutput(_savePath);
 
                 RecordingFailed?.Invoke(ex);
+                PerformanceTrace.LogElapsed(
+                    "perf.recording.stop",
+                    stopStarted,
+                    $"failed {Path.GetFileName(_savePath)}");
             }
             finally
             {
@@ -233,8 +247,17 @@ public sealed partial class RecordingForm
                     RedirectStandardError = true
                 });
 
-                proc?.WaitForExit(8000);
-                if (proc is null || proc.ExitCode != 0 || !File.Exists(tempPath))
+                if (proc is null)
+                    return null;
+
+                if (!proc.WaitForExit(8000))
+                {
+                    TryKillRecordingPreviewProcess(proc);
+                    return null;
+                }
+
+                try { proc.WaitForExit(500); } catch { }
+                if (proc.ExitCode != 0 || !File.Exists(tempPath))
                     return null;
 
                 using var frame = Image.FromFile(tempPath);
@@ -249,6 +272,21 @@ public sealed partial class RecordingForm
         {
             return null;
         }
+    }
+
+    private static void TryKillRecordingPreviewProcess(System.Diagnostics.Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("recording.preview-process-timeout", $"Failed to stop timed-out recording preview process: {ex.Message}", ex);
+        }
+
+        try { process.WaitForExit(2000); } catch { }
     }
 
     private static void TryDeleteZeroByteRecordingOutput(string path)

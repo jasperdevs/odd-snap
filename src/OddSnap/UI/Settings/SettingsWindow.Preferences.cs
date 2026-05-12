@@ -262,6 +262,25 @@ public partial class SettingsWindow
             value => OverlayAllMonitorsCheck.IsChecked = value);
     }
 
+    private void HdrCaptureCompatibleModeCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.HdrCaptureCompatibleMode;
+        var selected = HdrCaptureCompatibleModeCheck.IsChecked == true;
+        UpdateCaptureSavePreference(
+            "settings.hdr-capture-compatible-mode",
+            "HDR capture compatibility",
+            previous,
+            selected,
+            value =>
+            {
+                _settingsService.Settings.HdrCaptureCompatibleMode = value;
+                OddSnap.Capture.ScreenCapture.HdrCaptureCompatibleMode = value;
+            },
+            value => HdrCaptureCompatibleModeCheck.IsChecked = value);
+    }
+
     private void ShowCursorCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
@@ -801,4 +820,5 @@ public partial class SettingsWindow
             value => _settingsService.Settings.CaptureDelaySeconds = value,
             value => CaptureDelayCombo.SelectedIndex = value switch { 3 => 1, 5 => 2, 10 => 3, _ => 0 });
     }
+
 }

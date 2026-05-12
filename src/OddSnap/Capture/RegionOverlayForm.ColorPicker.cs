@@ -156,25 +156,23 @@ public sealed partial class RegionOverlayForm
 
         if (_lastRenderedCapturePickerPoint == overlayPoint &&
             _lastPickedArgb == _lastRenderedCapturePickerArgb &&
-            _captureMagnifierForm != null)
+            _captureMagnifierVisible)
             return;
 
         _pickerCursorPos = overlayPoint;
         BuildMagnifier();
-        EnsureCaptureMagnifierForm();
-        var magForm = _captureMagnifierForm;
-        if (magForm is null)
-            return;
 
         var avoidRect = GetCaptureMagnifierAvoidBounds();
         var (mx, my) = MagPos(_pickerCursorPos, showInfo: false, avoidRect);
-        magForm.Left = mx + _virtualBounds.X - 4;
-        magForm.Top = my + _virtualBounds.Y - 4;
-        if (!magForm.Visible)
-            magForm.Show(this);
-        magForm.UpdateMagnifier(_magBitmap, _pickerCursorPos, _pickedColor, _hexStr, _rgbStr, showInfo: false);
-        Native.User32.SetWindowPos(magForm.Handle, Native.User32.HWND_TOPMOST, 0, 0, 0, 0,
-            Native.User32.SWP_NOMOVE | Native.User32.SWP_NOSIZE | Native.User32.SWP_NOACTIVATE | Native.User32.SWP_SHOWWINDOW);
+        var oldBounds = _captureMagnifierBounds;
+        _captureMagnifierBounds = new Rectangle(
+            mx - 4,
+            my - 4,
+            PickerMagnifierForm.TotalW,
+            PickerMagnifierForm.GetTotalHeight(showInfo: false));
+        _captureMagnifierVisible = true;
+        InvalidateCaptureMagnifier(oldBounds);
+        InvalidateCaptureMagnifier(_captureMagnifierBounds);
         _lastRenderedCapturePickerPoint = overlayPoint;
         _lastRenderedCapturePickerArgb = _lastPickedArgb;
         _capturePickerStopwatch.Restart();
@@ -194,6 +192,10 @@ public sealed partial class RegionOverlayForm
 
     private void CloseCaptureMagnifier()
     {
+        if (_captureMagnifierVisible)
+            InvalidateCaptureMagnifier(_captureMagnifierBounds);
+        _captureMagnifierVisible = false;
+        _captureMagnifierBounds = Rectangle.Empty;
         if (_captureMagnifierForm != null)
             WindowDetector.UnregisterIgnoredWindow(_captureMagnifierForm.Handle);
         _captureMagnifierForm?.Close();
@@ -206,6 +208,14 @@ public sealed partial class RegionOverlayForm
         _captureMagnifierDragQuadrant = 0;
         _capturePickerStopwatch.Reset();
         _capturePickerStopwatch.Start();
+    }
+
+    private void InvalidateCaptureMagnifier(Rectangle bounds)
+    {
+        if (bounds.IsEmpty)
+            return;
+
+        Invalidate(InflateForRepaint(bounds, 10));
     }
 
     private void ResetCaptureMagnifierDragPlacement()
@@ -264,11 +274,25 @@ public sealed partial class RegionOverlayForm
 
     private void BuildMagnifier()
     {
-        var pixelData = GetPixelData();
         int cx = Math.Clamp(_pickerCursorPos.X, 0, _bmpW - 1);
         int cy = Math.Clamp(_pickerCursorPos.Y, 0, _bmpH - 1);
+        int half = Grid / 2;
+        var requestedSample = new Rectangle(cx - half, cy - half, Grid, Grid);
+        var samplePixels = ScreenshotPixelSampler.CopyArgbRegion(_screenshot, requestedSample, out var copiedSample);
+
+        int SampleAt(int sx, int sy)
+        {
+            if ((uint)sx >= (uint)_bmpW || (uint)sy >= (uint)_bmpH)
+                return ScreenshotPixelSampler.OpaqueBlack;
+
+            if (samplePixels.Length == 0 || !copiedSample.Contains(sx, sy))
+                return ScreenshotPixelSampler.OpaqueBlack;
+
+            return samplePixels[((sy - copiedSample.Y) * copiedSample.Width) + (sx - copiedSample.X)];
+        }
+
         var samplePoint = new Point(cx, cy);
-        int argb = pixelData[cy * _bmpW + cx];
+        int argb = SampleAt(cx, cy);
         bool colorChanged = argb != _lastPickedArgb;
         bool sampleChanged = samplePoint != _lastMagnifierSamplePoint;
         _lastPickedArgb = argb;
@@ -287,15 +311,13 @@ public sealed partial class RegionOverlayForm
         // Fill grid pixels directly into the mag bitmap buffer
         Array.Fill(_magPixels, unchecked((int)0xFF202020));
 
-        int half = Grid / 2;
         for (int gy = 0; gy < Grid; gy++)
         {
             int sy = cy - half + gy;
             for (int gx = 0; gx < Grid; gx++)
             {
                 int sx = cx - half + gx;
-                int c = ((uint)sx < (uint)_bmpW && (uint)sy < (uint)_bmpH)
-                    ? pixelData[sy * _bmpW + sx] : unchecked((int)0xFF000000);
+                int c = SampleAt(sx, sy);
 
                 int ox = PPad + gx * Cell;
                 int oy = PPad + gy * Cell;

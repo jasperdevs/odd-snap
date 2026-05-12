@@ -15,6 +15,8 @@ public sealed class RecordingFormTests
 
         Assert.Contains("TryDeleteZeroByteRecordingOutput(_savePath);", stopBlock);
         Assert.Contains("TryDeleteRecordingPreviewTempFile(tempPath);", previewBlock);
+        Assert.Contains("if (!proc.WaitForExit(8000))", previewBlock);
+        Assert.Contains("TryKillRecordingPreviewProcess(proc);", previewBlock);
         Assert.Contains("\"recording.output-cleanup\"", outputCleanupBlock);
         Assert.Contains("\"recording.preview-temp-cleanup\"", previewCleanupBlock);
         Assert.Contains("AppDiagnostics.LogWarning(", outputCleanupBlock);
@@ -22,6 +24,22 @@ public sealed class RecordingFormTests
         Assert.Contains("Path.GetFileName(path)", outputCleanupBlock);
         Assert.Contains("Path.GetFileName(tempPath)", previewCleanupBlock);
         Assert.DoesNotContain("try { File.Delete(tempPath); } catch { }", source);
+
+        var killBlock = GetMethodBlock(source, "private static void TryKillRecordingPreviewProcess(System.Diagnostics.Process process)");
+        Assert.Contains("process.Kill(entireProcessTree: true);", killBlock);
+        Assert.Contains("\"recording.preview-process-timeout\"", killBlock);
+    }
+
+    [Fact]
+    public void RecordingOverlayDoesNotApplyFullscreenCaptureExclusion()
+    {
+        var form = File.ReadAllText(RepoPath("src", "OddSnap", "Capture", "RecordingForm.cs"));
+        var recording = File.ReadAllText(RepoPath("src", "OddSnap", "Capture", "RecordingForm.Recording.cs"));
+
+        Assert.DoesNotContain("CaptureWindowExclusion.Apply(this);", form);
+        Assert.Contains("CaptureWindowExclusion.SetLogicalBounds(Handle, GetRecordingChromeScreenBounds);", recording);
+        Assert.Contains("WDA_EXCLUDEFROMCAPTURE", form);
+        Assert.Contains("blanks the whole recording region", form);
     }
 
     private static string RepoPath(params string[] parts)

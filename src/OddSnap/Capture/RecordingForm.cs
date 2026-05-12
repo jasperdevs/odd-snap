@@ -142,7 +142,8 @@ public sealed partial class RecordingForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        CaptureWindowExclusion.Apply(this);
+        // Do not apply WDA_EXCLUDEFROMCAPTURE to this full-screen surface.
+        // On some Windows 10 hybrid/HDR systems it blanks the whole recording region.
         User32.SetWindowPos(Handle, User32.HWND_TOPMOST, 0, 0, 0, 0,
             User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_SHOWWINDOW);
         User32.SetForegroundWindow(Handle);

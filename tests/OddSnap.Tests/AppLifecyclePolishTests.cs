@@ -47,6 +47,138 @@ public sealed class AppLifecyclePolishTests
         Assert.Contains("ShowSettings();", startupBlock);
     }
 
+    [Fact]
+    public void StartupWarmsPersistentCaptureOverlayThreadWithoutBlockingFirstHotkey()
+    {
+        var startup = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Startup.cs"));
+
+        var startupBlock = GetMethodBlock(startup, "protected override void OnStartup(StartupEventArgs e)");
+        Assert.Contains("CaptureOverlayThread.Start();", startupBlock);
+        Assert.Contains("CaptureOverlayThread.Post(CaptureOverlayHotPathWarmup.Warm);", startupBlock);
+        Assert.DoesNotContain("QueueCaptureOverlayPrewarm();", startupBlock);
+        Assert.DoesNotContain("CaptureOverlayPrewarmer.Warm", startup);
+    }
+
+    [Fact]
+    public void HdrCaptureCompatibilityIsAppliedAtStartupAndRuntime()
+    {
+        var startup = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Startup.cs"));
+        var lifecycle = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Lifecycle.cs"));
+        var screenCapture = File.ReadAllText(RepoPath("src", "OddSnap", "Capture", "ScreenCapture.cs"));
+        var preferences = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "Settings", "SettingsWindow.Preferences.cs"));
+        var xaml = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "SettingsWindow.xaml"));
+
+        Assert.Contains("ScreenCapture.HdrCaptureCompatibleMode = _settingsService.Settings.HdrCaptureCompatibleMode;", startup);
+        Assert.Contains("ScreenCapture.HdrCaptureCompatibleMode = _settingsService!.Settings.HdrCaptureCompatibleMode;", lifecycle);
+        Assert.Contains("if (HdrCaptureCompatibleMode)", screenCapture);
+        Assert.Contains("return CaptureAllScreensLegacy(includeCursor, bounds);", screenCapture);
+        Assert.Contains("return CaptureRegionLegacy(region, includeCursor);", screenCapture);
+        Assert.Contains("HdrCaptureCompatibleModeCheck_Changed", preferences);
+        Assert.Contains("x:Name=\"HdrCaptureCompatibleModeCheck\"", xaml);
+        Assert.Contains("HDR capture compatibility", xaml);
+    }
+
+    [Fact]
+    public void HistoryMaintenanceDoesNotHoldAppGateDuringDiskWork()
+    {
+        var lifecycle = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Lifecycle.cs"));
+        var maintenanceBlock = GetMethodBlock(lifecycle, "private void QueueHistoryMaintenance()");
+
+        var recoverIndex = maintenanceBlock.IndexOf("historyService.RecoverFromDirectories(saveDirectory);", StringComparison.Ordinal);
+        var pruneIndex = maintenanceBlock.IndexOf("historyService.PruneByRetention(retention);", StringComparison.Ordinal);
+        var requestSyncIndex = maintenanceBlock.IndexOf("imageSearchIndexService.RequestSync(", StringComparison.Ordinal);
+        var taskIndex = maintenanceBlock.IndexOf("_ = Task.Run(() =>", StringComparison.Ordinal);
+
+        Assert.True(taskIndex >= 0, "History maintenance should run in the background.");
+        Assert.True(recoverIndex > taskIndex, "History recovery should run in the background task.");
+        Assert.True(pruneIndex > taskIndex, "Retention pruning should run in the background task.");
+        Assert.True(requestSyncIndex > taskIndex, "Search indexing should be requested from the background task.");
+        Assert.Contains("saveDirectory = _settingsService.Settings.SaveDirectory;", maintenanceBlock);
+        Assert.Contains("retention = _settingsService.Settings.HistoryRetention;", maintenanceBlock);
+        Assert.Contains("ocrLanguageTag = _settingsService.Settings.OcrLanguageTag;", maintenanceBlock);
+        Assert.DoesNotContain("_historyService.RecoverFromDirectories", maintenanceBlock);
+        Assert.DoesNotContain("_historyService.PruneByRetention", maintenanceBlock);
+    }
+
+    [Fact]
+    public void TrayIconDoesNotExposeCustomActionSettings()
+    {
+        var tray = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "TrayIcon.cs"));
+        var startup = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Startup.cs"));
+        var lifecycle = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Lifecycle.cs"));
+        var preferences = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "Settings", "SettingsWindow.Preferences.cs"));
+        var appearance = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "Settings", "SettingsWindow.Appearance.cs"));
+        var xaml = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "SettingsWindow.xaml"));
+
+        Assert.Contains("private void HandleMouseClick(MouseButtons button)", tray);
+        Assert.Contains("case MouseButtons.Left:", tray);
+        Assert.Contains("case MouseButtons.Middle:", tray);
+        Assert.Contains("case MouseButtons.Right:", tray);
+        Assert.DoesNotContain("TrayIconAction", tray);
+        Assert.DoesNotContain("OnScan", tray);
+        Assert.DoesNotContain("OnSticker", tray);
+        Assert.DoesNotContain("OnUpscale", tray);
+        Assert.DoesNotContain("OnAiRedirect", tray);
+        Assert.DoesNotContain("OnOpenLatestImage", startup);
+        Assert.DoesNotContain("OnOpenScreenshotsFolder", startup);
+        Assert.DoesNotContain("OnRunCustomCommand", startup);
+        Assert.DoesNotContain("OpenLatestImageFromTray", lifecycle);
+        Assert.DoesNotContain("OpenScreenshotsFolderFromTray", lifecycle);
+        Assert.DoesNotContain("RunCustomTrayAction", lifecycle);
+        Assert.DoesNotContain("CustomTrayAction", lifecycle);
+        Assert.DoesNotContain("TrayActionOptions", preferences);
+        Assert.DoesNotContain("TrayLeftClickActionCombo", preferences);
+        Assert.DoesNotContain("CustomTrayActionBox_LostFocus", preferences);
+        Assert.DoesNotContain("TrayTab", xaml);
+        Assert.DoesNotContain("TrayLeftClickActionCombo", xaml);
+        Assert.DoesNotContain("CustomTrayActionTargetBox", xaml);
+        Assert.DoesNotContain("TrayTab", appearance);
+    }
+
+    [Fact]
+    public void TrayIconUsesShellThemeForTaskbarContrast()
+    {
+        var tray = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "TrayIcon.cs"));
+
+        Assert.Contains("private static bool IsTrayBackgroundDark()", tray);
+        Assert.Contains("SystemUsesLightTheme", tray);
+        Assert.Contains("var tint = IsTrayBackgroundDark() ? Color.White : Color.Black;", tray);
+        Assert.Contains("SystemEvents.UserPreferenceChanged += _themePreferenceHandler;", tray);
+        Assert.Contains("SystemEvents.UserPreferenceChanged -= _themePreferenceHandler;", tray);
+        Assert.DoesNotContain("var tint = Theme.IsDark ? Color.White : Color.Black;", tray);
+    }
+
+    [Fact]
+    public void TrayIconThemeRefreshAvoidsPerPixelSettersAndDisposesIntermediateBitmaps()
+    {
+        var tray = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "TrayIcon.cs"));
+
+        var createBlock = GetMethodBlock(tray, "private static Icon CreateLogoIcon(Color tint, bool recording)");
+        Assert.Contains("using var source = LoadLogoBitmap();", createBlock);
+        Assert.Contains("using var mono = CreateTintedLogoBitmap(source, tint);", createBlock);
+        Assert.DoesNotContain(".GetPixel(", createBlock);
+        Assert.DoesNotContain(".SetPixel(", createBlock);
+
+        var loadBlock = GetMethodBlock(tray, "private static Bitmap LoadLogoBitmap()");
+        Assert.Contains("using var stream = info.Stream;", loadBlock);
+        Assert.Contains("bitmap.LockBits", loadBlock);
+        Assert.Contains("Marshal.Copy(pixels, 0, data.Scan0, pixels.Length);", loadBlock);
+        Assert.DoesNotContain(".SetPixel(", loadBlock);
+
+        var tintBlock = GetMethodBlock(tray, "private static Bitmap CreateTintedLogoBitmap(Bitmap source, Color tint)");
+        Assert.Contains("source.LockBits", tintBlock);
+        Assert.Contains("tinted.LockBits", tintBlock);
+        Assert.Contains("Marshal.Copy", tintBlock);
+        Assert.DoesNotContain(".GetPixel(", tintBlock);
+        Assert.DoesNotContain(".SetPixel(", tintBlock);
+
+        var overlayBlock = GetMethodBlock(tray, "private static Icon OverlayRecordingDot(Icon baseIcon)");
+        Assert.Contains("using var bmp = new Bitmap", overlayBlock);
+
+        var fallbackBlock = GetMethodBlock(tray, "private static Icon CreateFallbackIcon(bool recording, Color strokeColor)");
+        Assert.Contains("using var bmp = new Bitmap", fallbackBlock);
+    }
+
     private static string GetMethodBlock(string source, string signature)
     {
         var start = source.IndexOf(signature, StringComparison.Ordinal);

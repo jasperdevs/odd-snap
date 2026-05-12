@@ -1,6 +1,10 @@
 using System.Runtime;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using OddSnap.Capture;
+using OddSnap.Models;
 using OddSnap.Native;
 using OddSnap.Services;
 using OddSnap.UI;
@@ -93,7 +97,7 @@ public partial class App
     private void ShowSettingsWindow(HistoryService historyService, ImageSearchIndexService imageSearchIndexService, bool openHistory = false)
     {
         var win = new SettingsWindow(_settingsService!, historyService, imageSearchIndexService);
-        Action hotkeyHandler = RegisterHotkeys;
+        Action hotkeyHandler = ApplyRuntimeSettings;
         Action uninstallHandler = BeginUninstall;
         Action localizationHandler = () => _trayIcon?.RefreshLocalization();
         win.HotkeyChanged += hotkeyHandler;
@@ -116,6 +120,13 @@ public partial class App
     private void ShowHistory()
     {
         ShowSettings(openHistory: true);
+    }
+
+    private void ApplyRuntimeSettings()
+    {
+        ScreenCapture.HdrCaptureCompatibleMode = _settingsService!.Settings.HdrCaptureCompatibleMode;
+        _trayIcon?.UpdateSettings(_settingsService.Settings);
+        RegisterHotkeys();
     }
 
     private void BeginUninstall()
@@ -207,37 +218,47 @@ public partial class App
 
     private void QueueHistoryMaintenance()
     {
+        HistoryService historyService;
+        ImageSearchIndexService? imageSearchIndexService;
+        string saveDirectory;
+        HistoryRetentionPeriod retention;
+        bool shouldRecover;
+        bool shouldIndex;
+        string? ocrLanguageTag;
+
         lock (_historyGate)
         {
             if (_historyMaintenanceScheduled || _historyService is null || _settingsService is null)
                 return;
 
             _historyMaintenanceScheduled = true;
+            historyService = _historyService;
+            imageSearchIndexService = _imageSearchIndexService;
+            saveDirectory = _settingsService.Settings.SaveDirectory;
+            retention = _settingsService.Settings.HistoryRetention;
+            shouldRecover = !_historyRecovered;
+            shouldIndex = _settingsService.Settings.AutoIndexImages;
+            ocrLanguageTag = _settingsService.Settings.OcrLanguageTag;
         }
 
         _ = Task.Run(() =>
         {
             try
             {
-                lock (_historyGate)
+                if (shouldRecover)
                 {
-                    if (_historyService is null || _settingsService is null)
-                        return;
-
-                    if (!_historyRecovered)
-                    {
-                        _historyService.RecoverFromDirectories(_settingsService.Settings.SaveDirectory);
+                    historyService.RecoverFromDirectories(saveDirectory);
+                    lock (_historyGate)
                         _historyRecovered = true;
-                    }
+                }
 
-                    _historyService.PruneByRetention(_settingsService.Settings.HistoryRetention);
+                historyService.PruneByRetention(retention);
 
-                    if (_settingsService.Settings.AutoIndexImages && _imageSearchIndexService is not null)
-                    {
-                        _imageSearchIndexService.RequestSync(
-                            _historyService.ImageEntries,
-                            _settingsService.Settings.OcrLanguageTag);
-                    }
+                if (shouldIndex && imageSearchIndexService is not null)
+                {
+                    imageSearchIndexService.RequestSync(
+                        historyService.ImageEntries,
+                        ocrLanguageTag);
                 }
             }
             catch (Exception ex)

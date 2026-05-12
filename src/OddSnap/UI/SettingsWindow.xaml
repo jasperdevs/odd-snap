@@ -195,8 +195,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
-                        <Grid SnapsToDevicePixels="True">
+                        <Grid MinWidth="{TemplateBinding MinWidth}"
+                              SnapsToDevicePixels="True">
                             <ToggleButton x:Name="ToggleSite"
+                                          MinWidth="{TemplateBinding MinWidth}"
                                           Background="Transparent"
                                           BorderThickness="0"
                                           Focusable="False"
@@ -208,6 +210,7 @@
                                     </ControlTemplate>
                                 </ToggleButton.Template>
                                 <Border x:Name="Bd"
+                                        MinWidth="{TemplateBinding MinWidth}"
                                         MinHeight="{TemplateBinding MinHeight}"
                                         Background="{TemplateBinding Background}"
                                         BorderBrush="{TemplateBinding BorderBrush}"
@@ -870,6 +873,25 @@
                                           ToolTip="Use one overlay across the full virtual desktop"
                                           AutomationProperties.Name="Span selection overlay across all monitors"
                                           Checked="OverlayAllMonitorsCheck_Changed" Unchecked="OverlayAllMonitorsCheck_Changed"/>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE790;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="HDR capture compatibility" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Use the Windows color-managed capture path on HDR displays." Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                                <CheckBox x:Name="HdrCaptureCompatibleModeCheck" Grid.Column="2" Content="" FontSize="13" VerticalAlignment="Center"
+                                          ToolTip="Use the Windows color-managed capture path on HDR displays"
+                                          AutomationProperties.Name="HDR capture compatibility"
+                                          Checked="HdrCaptureCompatibleModeCheck_Changed" Unchecked="HdrCaptureCompatibleModeCheck_Changed"/>
                             </Grid>
                             <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
                             <Grid Style="{StaticResource SettingRow}">

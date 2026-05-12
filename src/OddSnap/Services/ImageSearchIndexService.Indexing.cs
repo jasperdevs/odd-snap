@@ -87,6 +87,7 @@ public sealed partial class ImageSearchIndexService
 
     private async Task SyncSnapshotAsync(IReadOnlyList<HistoryEntry> entries, string? ocrLanguageTag, CancellationToken cancellationToken)
     {
+        var syncStarted = PerformanceTrace.Timestamp();
         cancellationToken.ThrowIfCancellationRequested();
         var totalCount = entries.Count;
         List<HistoryEntry> pending;
@@ -169,11 +170,17 @@ public sealed partial class ImageSearchIndexService
         lock (_gate)
             Persist_NoLock();
         SetStatus($"Indexed {totalCount} screenshot{(totalCount == 1 ? "" : "s")}");
+        PerformanceTrace.LogIfSlow(
+            "perf.history.index-sync",
+            syncStarted,
+            TimeSpan.FromMilliseconds(500),
+            $"pending={pending.Count} total={totalCount}");
         NotifyChanged();
     }
 
     private async Task<ImageSearchIndexRecord> BuildRecordAsync(HistoryEntry entry, string? ocrLanguageTag, OcrWorkload workload, CancellationToken cancellationToken)
     {
+        var recordStarted = PerformanceTrace.Timestamp();
         cancellationToken.ThrowIfCancellationRequested();
         using var bitmap = BitmapPerf.LoadDetached(entry.FilePath);
         string ocrText = "";
@@ -181,7 +188,7 @@ public sealed partial class ImageSearchIndexService
 
         try
         {
-            ocrText = await OcrService.RecognizeAsync(bitmap, ocrLanguageTag, workload).ConfigureAwait(false);
+            ocrText = await OcrService.RecognizeAsync(bitmap, ocrLanguageTag, workload, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
         }
         catch (Exception ex)
@@ -203,7 +210,7 @@ public sealed partial class ImageSearchIndexService
             ocrState = ImageSearchOcrState.RetryableError;
         }
 
-        return new ImageSearchIndexRecord
+        var record = new ImageSearchIndexRecord
         {
             FilePath = entry.FilePath,
             FileLengthBytes = TryGetFileLength(entry.FilePath),
@@ -218,6 +225,12 @@ public sealed partial class ImageSearchIndexService
             IndexedAt = DateTime.UtcNow,
             LastError = ocrError ?? ""
         };
+        PerformanceTrace.LogIfSlow(
+            "perf.history.index-record",
+            recordStarted,
+            TimeSpan.FromMilliseconds(250),
+            $"{Path.GetFileName(entry.FilePath)} workload={workload}");
+        return record;
     }
 
     private bool NeedsRefresh_NoLock(HistoryEntry entry, string? ocrLanguageTag)

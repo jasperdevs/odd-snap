@@ -32,6 +32,7 @@ public partial class ToastWindow : Window
     private bool _closeAfterOpacityAnimation;
     private int _dismissAnimationToken;
     private bool _resumeDismissOnMouseLeave;
+    private bool _entryStarted;
 
     private static ToastWindow? _current;
     private static OddSnap.Models.ToastPosition _position = OddSnap.Models.ToastPosition.Right;
@@ -50,16 +51,6 @@ public partial class ToastWindow : Window
     private System.Windows.Controls.ContextMenu? _officeMenu;
     private readonly DispatcherTimer _officeMenuDismissTimer;
     private bool _officeMenuMouseWasDown;
-
-    private static System.Windows.Media.Effects.DropShadowEffect CreateToastShadow()
-        => new()
-        {
-            BlurRadius = 18,
-            ShadowDepth = 3,
-            Opacity = Theme.IsDark ? 0.32 : 0.20,
-            Direction = 270,
-            Color = Colors.Black
-        };
 
     internal static (int Width, int Height, bool Framed) ComputeImageOnlyPreviewLayout(int sourceWidth, int sourceHeight)
     {
@@ -99,7 +90,7 @@ public partial class ToastWindow : Window
         _spec = spec;
         InitializeComponent();
         OddSnapWindowChrome.ApplyRoundedCorners(this, 12);
-        Opacity = 0;
+        Opacity = 1;
         Theme.Refresh();
         LoadOverlayIcons();
         UiScale.ApplyToWindow(this, OuterShell, scaleWindowBounds: false);
@@ -156,25 +147,22 @@ public partial class ToastWindow : Window
 
     private void ConfigureShell()
     {
-        OuterShell.Background = System.Windows.Media.Brushes.Transparent;
-        OuterShell.BorderBrush = Theme.Brush(Color.FromArgb(180, 255, 255, 255));
-        OuterShell.BorderThickness = new Thickness(2.0);
-        OuterShell.Effect = CreateToastShadow();
+        Background = Theme.Brush(Theme.ToastBg);
+        OuterShell.Background = Theme.Brush(Theme.ToastBg);
+        ApplyStrokeFreeShell();
+        OuterShell.Effect = null;
         Root.Background = Theme.Brush(Theme.ToastBg);
         Root.BorderBrush = System.Windows.Media.Brushes.Transparent;
         Root.BorderThickness = new Thickness(0);
         TitleText.Foreground = Theme.Brush(Theme.TextPrimary);
         BodyText.Foreground = Theme.Brush(Theme.TextSecondary);
-        ImageFrame.BorderBrush = Theme.Brush(Theme.IsDark
-            ? Color.FromArgb(28, 255, 255, 255)
-            : Color.FromArgb(18, 0, 0, 0));
-        ImageFrame.BorderThickness = new Thickness(1);
+        ImageFrame.BorderBrush = System.Windows.Media.Brushes.Transparent;
+        ImageFrame.BorderThickness = new Thickness(0);
         InlinePreviewHost.Background = Theme.Brush(Theme.IsDark
             ? Color.FromArgb(22, 255, 255, 255)
             : Color.FromArgb(12, 0, 0, 0));
-        InlinePreviewHost.BorderBrush = Theme.Brush(Theme.IsDark
-            ? Color.FromArgb(34, 255, 255, 255)
-            : Color.FromArgb(20, 0, 0, 0));
+        InlinePreviewHost.BorderBrush = System.Windows.Media.Brushes.Transparent;
+        InlinePreviewHost.BorderThickness = new Thickness(0);
         ProgressBar.Background = Theme.Brush(Theme.IsDark
             ? Color.FromArgb(100, 255, 255, 255)
             : Color.FromArgb(60, 0, 0, 0));
@@ -185,10 +173,13 @@ public partial class ToastWindow : Window
         if (!IsLoaded || _isDragging)
             return false;
 
+        if (!CanUpdateInPlace(_spec, spec))
+            return false;
+
         CancelActiveToastState();
+        BeginAtomicToastContentSwap();
         _spec = spec;
         ApplySpec(spec);
-        Opacity = 1;
         Root.Opacity = 1;
         OuterShell.Opacity = 1;
         SlideTransform.X = 0;
@@ -197,7 +188,7 @@ public partial class ToastWindow : Window
         DragScale.ScaleY = 1;
         UpdateLayout();
         UpdateRootClip();
-        ApplyPlacement(animateEntry: true, subtleEntry: false);
+        ApplyPlacement(animateEntry: true, subtleEntry: true);
 
         _isHovered = IsMouseOver;
         if (_spec.ShowOverlayButtons && _isHovered)
@@ -207,6 +198,32 @@ public partial class ToastWindow : Window
             RestartVisibleTimer(_durationSeconds);
 
         return true;
+    }
+
+    private static bool CanUpdateInPlace(ToastSpec current, ToastSpec next)
+    {
+        return IsTextOnlyToast(current)
+            && IsTextOnlyToast(next)
+            && current.IsError == next.IsError
+            && current.TransparentShell == next.TransparentShell
+            && current.ShowOverlayButtons == next.ShowOverlayButtons;
+    }
+
+    private static bool IsTextOnlyToast(ToastSpec spec)
+        => spec.PreviewBitmap is null
+            && spec.InlinePreviewBitmap is null
+            && !spec.SwatchColor.HasValue;
+
+    private void BeginAtomicToastContentSwap()
+    {
+        BeginAnimation(OpacityProperty, null);
+        Opacity = 1;
+        Root.Opacity = 1;
+        OuterShell.Opacity = 1;
+        ImageArea.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageArea.Opacity = 1;
+        ImageFrame.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageFrame.Opacity = 1;
     }
 
     private void ApplySpec(ToastSpec spec)
@@ -254,11 +271,14 @@ public partial class ToastWindow : Window
         {
             _previewBitmap = spec.PreviewBitmap;
             ImageArea.Visibility = Visibility.Visible;
+            PreparePreviewFrameForUnifiedEntry();
             ConfigureImagePreview(spec);
         }
         else
         {
             ImageArea.Visibility = Visibility.Collapsed;
+            ImageFrame.BeginAnimation(UIElement.OpacityProperty, null);
+            ImageFrame.Opacity = 1;
             PreviewImage.Source = null;
             CloseBtn.Visibility = Visibility.Collapsed;
             PinBtn.Visibility = Visibility.Collapsed;
@@ -276,10 +296,13 @@ public partial class ToastWindow : Window
             Root.Background = Theme.Brush(Theme.IsDark
                 ? Color.FromRgb(60, 28, 28)
                 : Color.FromRgb(255, 240, 240));
-            OuterShell.BorderBrush = Theme.Brush(Color.FromArgb(160, red.R, red.G, red.B));
-            OuterShell.BorderThickness = new Thickness(2.0);
+            ApplyStrokeFreeShell();
             ProgressBar.Background = Theme.Brush(Color.FromArgb(180, red.R, red.G, red.B));
             TitleText.Foreground = Theme.Brush(red);
+        }
+        else if (spec.PreviewBitmap is not null)
+        {
+            ApplyStrokeFreeShell();
         }
 
         RefreshInteractiveTooltip(spec);
@@ -337,7 +360,7 @@ public partial class ToastWindow : Window
             Root.Background = Theme.Brush(Theme.ToastBg);
             ImageFrame.Background = Theme.Brush(Theme.ToastBg);
             ImageFrame.CornerRadius = new CornerRadius(10, 10, 0, 0);
-            ImageFrame.BorderThickness = new Thickness(1);
+            ImageFrame.BorderThickness = new Thickness(0);
         }
 
         PreviewImage.Stretch = previewStretch;
@@ -349,6 +372,28 @@ public partial class ToastWindow : Window
         PreviewImage.Source = ToBitmapSource(preview);
 
         RefreshOverlayButtonLayout();
+    }
+
+    private void PreparePreviewFrameForUnifiedEntry()
+    {
+        ImageArea.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageArea.Opacity = 1;
+        ImageFrame.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageFrame.Opacity = 1;
+    }
+
+    private void RevealPreviewFrame(bool animateEntry)
+    {
+        ImageArea.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageArea.Opacity = 1;
+        ImageFrame.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageFrame.Opacity = 1;
+    }
+
+    private void ApplyStrokeFreeShell()
+    {
+        OuterShell.BorderBrush = System.Windows.Media.Brushes.Transparent;
+        OuterShell.BorderThickness = new Thickness(0);
     }
 
     private void ConfigureInlinePreviewLayout(Bitmap preview)
@@ -1476,8 +1521,7 @@ public partial class ToastWindow : Window
         CancelDismissForHover();
         _dragBorderThickness = OuterShell.BorderThickness;
         _dragBorderBrush = OuterShell.BorderBrush;
-        OuterShell.BorderBrush = Theme.Brush(Color.FromArgb(230, 255, 255, 255));
-        OuterShell.BorderThickness = new Thickness(2.4);
+        ApplyStrokeFreeShell();
         DragScale.CenterX = ActualWidth / 2;
         DragScale.CenterY = ActualHeight / 2;
         DragScale.BeginAnimation(ScaleTransform.ScaleXProperty,
@@ -1492,6 +1536,7 @@ public partial class ToastWindow : Window
         if (_dragBorderBrush is not null)
             OuterShell.BorderBrush = _dragBorderBrush;
         OuterShell.BorderThickness = _dragBorderThickness;
+        ApplyStrokeFreeShell();
         _dragBorderBrush = null;
         DragScale.BeginAnimation(ScaleTransform.ScaleXProperty,
             Motion.To(1, 140, Motion.SmoothOut));
@@ -1579,20 +1624,82 @@ public partial class ToastWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        Dispatcher.BeginInvoke(() =>
-        {
-            UpdateLayout();
-            UpdateRootClip();
-            ApplyPlacement(animateEntry: true, subtleEntry: false);
+        QueueEntryAfterFirstComposedFrame();
+    }
 
-            if (!_isPinned)
-                RestartVisibleTimer(_durationSeconds);
-        }, DispatcherPriority.Render);
+    internal void PrepareForShow()
+    {
+        UpdateLayout();
+        UpdateRootClip();
+
+        var width = GetPreparedWidth();
+        var height = GetPreparedHeight();
+        var wa = PopupWindowHelper.GetCurrentWorkArea();
+        var (_, _, startLeft, startTop, _) = PopupWindowHelper.GetPlacement(
+            _position, width, height, wa, Edge);
+
+        BeginAnimation(OpacityProperty, null);
+        BeginAnimation(LeftProperty, null);
+        BeginAnimation(TopProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        Left = startLeft;
+        Top = startTop;
+        SlideTransform.X = 0;
+        SlideTransform.Y = 0;
+        RevealPreviewFrame(animateEntry: false);
+        Root.Opacity = 1;
+        OuterShell.Opacity = 1;
+        Opacity = 1;
+    }
+
+    private double GetPreparedWidth()
+    {
+        if (ActualWidth > 0)
+            return ActualWidth;
+
+        OuterShell.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        return Math.Max(1, OuterShell.DesiredSize.Width);
+    }
+
+    private double GetPreparedHeight()
+    {
+        if (ActualHeight > 0)
+            return ActualHeight;
+
+        OuterShell.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        return Math.Max(1, OuterShell.DesiredSize.Height);
+    }
+
+    private void QueueEntryAfterFirstComposedFrame()
+    {
+        var entryToken = _toastStateVersion;
+        EventHandler? rendered = null;
+        rendered = (_, _) =>
+        {
+            CompositionTarget.Rendering -= rendered;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_entryStarted || _toastStateVersion != entryToken || !IsLoaded)
+                    return;
+
+                _entryStarted = true;
+                UpdateLayout();
+                UpdateRootClip();
+                ApplyPlacement(animateEntry: true, subtleEntry: false);
+
+                if (!_isPinned)
+                    RestartVisibleTimer(_durationSeconds);
+            }), DispatcherPriority.Render);
+        };
+
+        Dispatcher.BeginInvoke(new Action(() => CompositionTarget.Rendering += rendered), DispatcherPriority.Render);
     }
 
     private void CancelActiveToastState()
     {
         _toastStateVersion++;
+        _entryStarted = false;
         _timer.Stop();
         _isHovered = false;
         _isDragging = false;
@@ -1623,6 +1730,10 @@ public partial class ToastWindow : Window
         BeginAnimation(OpacityProperty, null);
         Root.BeginAnimation(UIElement.OpacityProperty, null);
         OuterShell.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageArea.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageArea.Opacity = 1;
+        ImageFrame.BeginAnimation(UIElement.OpacityProperty, null);
+        ImageFrame.Opacity = 1;
         SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
         SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
         DragScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
@@ -1632,10 +1743,12 @@ public partial class ToastWindow : Window
         ProgressBar.Visibility = Visibility.Visible;
         if (_dragBorderBrush is not null)
             OuterShell.BorderBrush = _dragBorderBrush;
-        OuterShell.BorderThickness = _dragBorderThickness == default ? new Thickness(2.0) : _dragBorderThickness;
+        OuterShell.BorderThickness = _dragBorderThickness == default ? new Thickness(0) : _dragBorderThickness;
+        ApplyStrokeFreeShell();
         _dragBorderBrush = null;
         _dragBorderThickness = default;
         Mouse.OverrideCursor = null;
+        EndCompositedToastAnimation();
     }
 
     private void PulseRefreshAnimation()
@@ -1644,10 +1757,8 @@ public partial class ToastWindow : Window
         DragScale.CenterY = ActualHeight / 2;
         DragScale.ScaleX = 0.985;
         DragScale.ScaleY = 0.985;
-        Root.Opacity = 0.94;
         DragScale.BeginAnimation(ScaleTransform.ScaleXProperty, Motion.To(1, 140, Motion.SmoothOut));
         DragScale.BeginAnimation(ScaleTransform.ScaleYProperty, Motion.To(1, 140, Motion.SmoothOut));
-        Root.BeginAnimation(UIElement.OpacityProperty, Motion.To(1, 140, Motion.SmoothOut));
     }
 
     private void ApplyPlacement(bool animateEntry, bool subtleEntry)
@@ -1656,60 +1767,97 @@ public partial class ToastWindow : Window
         var (targetLeft, targetTop, startLeft, startTop, animateLeft) = PopupWindowHelper.GetPlacement(
             _position, ActualWidth, ActualHeight, wa, Edge);
 
-        Left = targetLeft;
-        Top = targetTop;
-        Opacity = 1;
-        Root.Opacity = 1;
-        OuterShell.Opacity = 1;
-
         SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
         SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
 
         if (!animateEntry)
         {
+            Left = targetLeft;
+            Top = targetTop;
             SlideTransform.X = 0;
             SlideTransform.Y = 0;
+            RevealPreviewFrame(animateEntry: false);
+            Opacity = 1;
+            Root.Opacity = 1;
+            OuterShell.Opacity = 1;
             return;
         }
 
-        double offsetX;
-        double offsetY;
+        double entryLeft;
+        double entryTop;
         if (subtleEntry)
         {
             const double subtleDistance = 18;
-            offsetX = animateLeft
-                ? (startLeft < targetLeft ? -subtleDistance : subtleDistance)
-                : 0;
-            offsetY = animateLeft
-                ? 0
-                : (startTop < targetTop ? -subtleDistance : subtleDistance);
+            entryLeft = animateLeft
+                ? targetLeft + (startLeft < targetLeft ? -subtleDistance : subtleDistance)
+                : targetLeft;
+            entryTop = animateLeft
+                ? targetTop
+                : targetTop + (startTop < targetTop ? -subtleDistance : subtleDistance);
         }
         else
         {
-            offsetX = animateLeft ? startLeft - targetLeft : 0;
-            offsetY = animateLeft ? 0 : startTop - targetTop;
+            entryLeft = startLeft;
+            entryTop = startTop;
         }
 
-        SlideTransform.X = offsetX;
-        SlideTransform.Y = offsetY;
+        SlideTransform.X = 0;
+        SlideTransform.Y = 0;
+        RevealPreviewFrame(animateEntry: true);
+        Left = entryLeft;
+        Top = entryTop;
+        Root.Opacity = 1;
+        OuterShell.Opacity = 1;
 
         var dur = Motion.Ms(subtleEntry ? 160 : 200);
         var ease = Motion.Ease(Motion.SmoothOut);
-        SlideTransform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation
+        BeginAnimation(OpacityProperty, null);
+        BeginAnimation(LeftProperty, null);
+        BeginAnimation(TopProperty, null);
+        Opacity = 1;
+        BeginCompositedToastAnimation();
+        BeginAnimation(LeftProperty, new DoubleAnimation
         {
-            To = 0,
+            To = targetLeft,
             Duration = dur,
             EasingFunction = ease
         });
-        SlideTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation
+        BeginAnimation(TopProperty, new DoubleAnimation
         {
-            To = 0,
+            To = targetTop,
             Duration = dur,
             EasingFunction = ease
         });
+        if (dur == TimeSpan.Zero)
+        {
+            EndCompositedToastAnimation();
+            return;
+        }
 
-        if (subtleEntry)
-            PulseRefreshAnimation();
+        var cleanupTimer = new DispatcherTimer { Interval = dur };
+        cleanupTimer.Tick += (_, _) =>
+        {
+            cleanupTimer.Stop();
+            EndCompositedToastAnimation();
+        };
+        cleanupTimer.Start();
+    }
+
+    private void BeginCompositedToastAnimation()
+    {
+        if (OuterShell.CacheMode is null)
+        {
+            OuterShell.CacheMode = new BitmapCache
+            {
+                EnableClearType = true,
+                SnapsToDevicePixels = true
+            };
+        }
+    }
+
+    private void EndCompositedToastAnimation()
+    {
+        OuterShell.CacheMode = null;
     }
 
     private void DismissAnimated()
@@ -1796,6 +1944,7 @@ public partial class ToastWindow : Window
             ? Motion.SmoothOut
             : Motion.SmoothInOut;
 
+        BeginCompositedToastAnimation();
         if (slide)
         {
             var wa = PopupWindowHelper.GetCurrentWorkArea();
@@ -1819,6 +1968,9 @@ public partial class ToastWindow : Window
                     EasingFunction = ease
                 });
             }
+
+            StartDismissCloseTimer(duration, dismissToken);
+            return;
         }
 
         var opacityAnimation = new DoubleAnimation
@@ -1837,6 +1989,25 @@ public partial class ToastWindow : Window
                 Dispatcher.BeginInvoke(new Action(() => TryForceClose()));
         };
         BeginAnimation(OpacityProperty, opacityAnimation);
+    }
+
+    private void StartDismissCloseTimer(TimeSpan duration, int dismissToken)
+    {
+        if (duration == TimeSpan.Zero)
+        {
+            if (dismissToken == _dismissAnimationToken && _closeAfterOpacityAnimation)
+                Dispatcher.BeginInvoke(new Action(() => TryForceClose()));
+            return;
+        }
+
+        var closeTimer = new DispatcherTimer { Interval = duration };
+        closeTimer.Tick += (_, _) =>
+        {
+            closeTimer.Stop();
+            if (dismissToken == _dismissAnimationToken && _closeAfterOpacityAnimation)
+                Dispatcher.BeginInvoke(new Action(() => TryForceClose()));
+        };
+        closeTimer.Start();
     }
 
     private void StopDismissAnimationTimer()
@@ -1877,6 +2048,8 @@ public partial class ToastWindow : Window
         if (_isPinned && !force)
             return false;
 
+        HideToastSurfaceForClose();
+
         if (_current == this) _current = null;
         try
         {
@@ -1888,6 +2061,14 @@ public partial class ToastWindow : Window
         }
 
         return true;
+    }
+
+    private void HideToastSurfaceForClose()
+    {
+        BeginAnimation(OpacityProperty, null);
+        Opacity = 0;
+        Visibility = System.Windows.Visibility.Hidden;
+        EndCompositedToastAnimation();
     }
 
     protected override void OnClosed(EventArgs e)

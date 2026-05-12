@@ -2,7 +2,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using OddSnap.Helpers;
 using OddSnap.Models;
@@ -13,7 +12,6 @@ namespace OddSnap.Capture;
 public sealed partial class RegionOverlayForm : Form
 {
     private readonly Bitmap _screenshot;
-    private int[]? _pixelData;
     private readonly int _bmpW, _bmpH;
     private readonly Rectangle _virtualBounds;
     private readonly WindowDetectionMode _windowDetectionMode;
@@ -62,17 +60,26 @@ public sealed partial class RegionOverlayForm : Form
     private Rectangle _lastAutoDetectRect;
     private LiveSelectionAdornerForm? _selectionAdorner;
     private CaptureEscapeKeyHook? _escapeHook;
-    private CrosshairGuideForm? _verticalCrosshairForm;
-    private CrosshairGuideForm? _horizontalCrosshairForm;
     private readonly System.Windows.Forms.Timer _animTimer;
     private readonly System.Windows.Forms.Timer _autoDetectTimer;
+    private readonly System.Windows.Forms.Timer _selectionMoveTimer;
     private DateTime _showTime;
     private ToolbarForm? _toolbarForm;
     private bool _allowDeactivation;
     private bool _cancelRequested;
     private Point _pendingAutoDetectPoint = Point.Empty;
+    private bool _firstPaintLogged;
+    private long _lastDragPaintLogTicks;
+    private bool _crosshairVisible;
+    private Point _crosshairPoint = Point.Empty;
+    private bool _captureMagnifierVisible;
+    private Rectangle _captureMagnifierBounds;
+    private Point _pendingSelectionMovePoint = Point.Empty;
+    private bool _selectionMoveQueued;
+    private long _lastSelectionMoveFrameMs;
 
     private const int TopBarHeight = 110;
+    private const int AutoDetectHoverDelayMs = 80;
 
     // Color picker state
     private readonly Bitmap _magBitmap;
@@ -368,7 +375,6 @@ public sealed partial class RegionOverlayForm : Form
         WindowDetectionMode windowDetectionMode = WindowDetectionMode.WindowOnly,
         CenterSelectionAspectRatio centerSelectionAspectRatio = CenterSelectionAspectRatio.Free)
     {
-        OddSnap.UI.Theme.Refresh();
         _screenshot = screenshot;
         _virtualBounds = virtualBounds;
         _windowDetectionMode = windowDetectionMode;
@@ -413,7 +419,7 @@ public sealed partial class RegionOverlayForm : Form
         _pickerTimer.Tick += OnPickerTick;
         if (_mode == CaptureMode.ColorPicker) _pickerTimer.Start();
 
-        _autoDetectTimer = new System.Windows.Forms.Timer { Interval = UiChrome.FrameIntervalMs };
+        _autoDetectTimer = new System.Windows.Forms.Timer { Interval = AutoDetectHoverDelayMs };
         _autoDetectTimer.Tick += (_, _) =>
         {
             _autoDetectTimer.Stop();
@@ -422,6 +428,9 @@ public sealed partial class RegionOverlayForm : Form
 
             UpdateAutoDetectRect(_pendingAutoDetectPoint);
         };
+
+        _selectionMoveTimer = new System.Windows.Forms.Timer { Interval = UiChrome.FrameIntervalMs };
+        _selectionMoveTimer.Tick += (_, _) => FlushPendingSelectionDragMove();
 
         _currentOverlay = this;
     }
@@ -446,27 +455,6 @@ public sealed partial class RegionOverlayForm : Form
         {
             return false;
         }
-    }
-
-    private int[] GetPixelData()
-    {
-        if (_pixelData != null)
-            return _pixelData;
-
-        var pixelData = new int[_bmpW * _bmpH];
-        var bits = _screenshot.LockBits(new Rectangle(0, 0, _bmpW, _bmpH),
-            ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-        try
-        {
-            Marshal.Copy(bits.Scan0, pixelData, 0, pixelData.Length);
-        }
-        finally
-        {
-            _screenshot.UnlockBits(bits);
-        }
-
-        _pixelData = pixelData;
-        return pixelData;
     }
 
     private static float EaseOutCubic(float t)

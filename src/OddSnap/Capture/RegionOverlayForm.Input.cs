@@ -254,18 +254,12 @@ public sealed partial class RegionOverlayForm
                 var previousAutoDetectRect = _autoDetectRect;
                 bool previousSelectionVisible = _hasSelection;
                 bool previousAutoDetectVisible = _autoDetectActive;
-                if (_windowDetectionMode == WindowDetectionMode.Off)
-                {
-                    _autoDetectRect = Rectangle.Empty;
-                    _autoDetectActive = false;
-                }
-                else
-                {
-                    _autoDetectRect = WindowDetector.GetDetectionRectAtPoint(
-                        e.Location, _virtualBounds, _windowDetectionMode);
-                    _autoDetectActive = _autoDetectRect.Width > 0 && _autoDetectRect.Height > 0;
-                }
+                _autoDetectTimer.Stop();
+                _pendingAutoDetectPoint = Point.Empty;
+                _autoDetectRect = Rectangle.Empty;
+                _autoDetectActive = false;
                 _isSelecting = true;
+                ResetSelectionDragMoveQueue();
                 _selectionStart = _selectionEnd = e.Location;
                 _selectionRect = Rectangle.Empty;
                 _hasSelection = false;
@@ -361,10 +355,9 @@ public sealed partial class RegionOverlayForm
                 break;
             case CaptureMode.Eraser:
                 HideToolbarForCaptureTool();
-                var pixelData = GetPixelData();
                 int cx = Math.Clamp(e.Location.X, 0, _bmpW - 1);
                 int cy = Math.Clamp(e.Location.Y, 0, _bmpH - 1);
-                _eraserColor = Color.FromArgb(pixelData[cy * _bmpW + cx]);
+                _eraserColor = Color.FromArgb(ScreenshotPixelSampler.ReadArgb(_screenshot, cx, cy));
                 _eraserStart = e.Location;
                 _isEraserDragging = true;
                 break;

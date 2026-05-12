@@ -128,6 +128,29 @@ public sealed class PickerMagnifierForm : Form
         _lastRgb = rgb;
     }
 
+    internal void WarmSurface(bool showInfo = false)
+    {
+        var oldLeft = Left;
+        var oldTop = Top;
+        var oldShowInfo = _showInfo;
+        try
+        {
+            Left = -32000;
+            Top = -32000;
+            _showInfo = showInfo;
+            var targetSize = new Size(TotalW, GetTotalHeight(showInfo));
+            if (Size != targetSize)
+                Size = targetSize;
+            UpdateSurface();
+        }
+        finally
+        {
+            Left = oldLeft;
+            Top = oldTop;
+            _showInfo = oldShowInfo;
+        }
+    }
+
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);

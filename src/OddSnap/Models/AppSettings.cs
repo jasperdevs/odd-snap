@@ -197,6 +197,7 @@ public sealed class AppSettings
     public string InterfaceLanguage { get; set; } = "auto";
     public bool ShowCrosshairGuides { get; set; } // off by default
     public bool ShowCursor { get; set; }
+    public bool HdrCaptureCompatibleMode { get; set; }
     public bool ShowCaptureMagnifier { get; set; } = true;
     public bool OverlayCaptureAllMonitors { get; set; } = true;
     public bool DetectWindows { get; set; } = true;
@@ -213,7 +214,6 @@ public sealed class AppSettings
     public bool ImageSearchExactMatch { get; set; }
     public bool ShowImageSearchDiagnostics { get; set; }
     public bool AutoIndexImages { get; set; } = true;
-
     // Upload settings
     public bool AutoUploadScreenshots { get; set; } = true;
     public bool AutoUploadGifs { get; set; }
