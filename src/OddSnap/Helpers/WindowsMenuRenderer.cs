@@ -9,6 +9,7 @@ public static class WindowsMenuRenderer
 {
     public const int DefaultWidth = 340;
     public const int RowHeight = 29;
+    private const int BaseDpi = 96;
 
     public static ContextMenuStrip Create(bool showImages = true, int minWidth = DefaultWidth)
     {
@@ -33,11 +34,14 @@ public static class WindowsMenuRenderer
             Renderer = new Renderer(bg, fg, hover, active, muted, sep, showImages)
         };
 
+        ApplyMenuMetricsForCurrentDpi(menu, minWidth);
+        menu.Opening += (_, _) => ApplyMenuMetricsForCurrentDpi(menu, minWidth);
         menu.HandleCreated += (s, _) =>
         {
             try
             {
                 var strip = (ContextMenuStrip)s!;
+                ApplyMenuMetricsForCurrentDpi(strip, minWidth);
                 var handle = strip.Handle;
                 OddSnap.Native.Dwm.TrySetWindowCornerPreference(handle, OddSnap.Native.Dwm.DWMWCP_ROUND);
                 OddSnap.Native.Dwm.TrySetImmersiveDarkMode(handle, UiChrome.IsDark);
@@ -84,7 +88,11 @@ public static class WindowsMenuRenderer
 
     public static int NormalizeItemWidths(ContextMenuStrip menu, int minWidth = DefaultWidth)
     {
-        int width = minWidth;
+        ApplyMenuMetricsForCurrentDpi(menu, minWidth);
+
+        int dpi = GetDeviceDpi(menu);
+        int width = ScaleForDpi(minWidth, dpi);
+        int textPadding = ScaleForDpi(menu.ShowImageMargin ? 124 : 76, dpi);
         using var g = Graphics.FromHwnd(IntPtr.Zero);
         foreach (ToolStripItem item in menu.Items)
         {
@@ -95,7 +103,7 @@ public static class WindowsMenuRenderer
             int shortcut = string.IsNullOrWhiteSpace(menuItem.ShortcutKeyDisplayString)
                 ? 0
                 : TextRenderer.MeasureText(g, menuItem.ShortcutKeyDisplayString, menuItem.Font).Width;
-            width = Math.Max(width, text + shortcut + (menu.ShowImageMargin ? 124 : 76));
+            width = Math.Max(width, text + shortcut + textPadding);
         }
 
         SetMenuWidth(menu, width);
@@ -104,7 +112,11 @@ public static class WindowsMenuRenderer
 
     public static void SetMenuWidth(ContextMenuStrip menu, int width)
     {
-        width = Math.Max(120, width);
+        int dpi = GetDeviceDpi(menu);
+        int inset = ScaleForDpi(8, dpi);
+        int rowHeight = GetScaledRowHeight(menu);
+
+        width = Math.Max(ScaleForDpi(120, dpi), width);
         menu.MinimumSize = new Size(width, 0);
         menu.Width = width;
         foreach (ToolStripItem item in menu.Items)
@@ -112,11 +124,46 @@ public static class WindowsMenuRenderer
             if (item is ToolStripMenuItem menuItem)
             {
                 menuItem.AutoSize = false;
-                menuItem.Width = width - 8;
-                menuItem.Height = RowHeight;
+                menuItem.Width = width - inset;
+                menuItem.Height = rowHeight;
             }
         }
     }
+
+    public static int GetScaledRowHeight(ContextMenuStrip? menu)
+    {
+        int dpi = GetDeviceDpi(menu);
+        int scaledMinimum = ScaleForDpi(RowHeight, dpi);
+        if (menu is null)
+            return scaledMinimum;
+
+        int measuredText = TextRenderer.MeasureText("Ag", menu.Font).Height + ScaleForDpi(12, dpi);
+        return Math.Max(scaledMinimum, measuredText);
+    }
+
+    public static int EstimateMenuHeight(ContextMenuStrip? menu, int itemCount)
+    {
+        int dpi = GetDeviceDpi(menu);
+        return GetScaledRowHeight(menu) * Math.Max(1, itemCount) + ScaleForDpi(12, dpi);
+    }
+
+    private static void ApplyMenuMetricsForCurrentDpi(ContextMenuStrip menu, int minWidth)
+    {
+        int dpi = GetDeviceDpi(menu);
+        menu.Padding = new Padding(
+            ScaleForDpi(4, dpi),
+            ScaleForDpi(5, dpi),
+            ScaleForDpi(4, dpi),
+            ScaleForDpi(5, dpi));
+
+        SetMenuWidth(menu, Math.Max(menu.Width, ScaleForDpi(minWidth, dpi)));
+    }
+
+    private static int GetDeviceDpi(Control? control)
+        => Math.Max(BaseDpi, control?.DeviceDpi ?? BaseDpi);
+
+    private static int ScaleForDpi(int value, int dpi)
+        => Math.Max(1, (int)Math.Round(value * (dpi / (double)BaseDpi), MidpointRounding.AwayFromZero));
 
     private static void ApplyRoundedRegion(ContextMenuStrip menu)
     {
@@ -174,9 +221,11 @@ public static class WindowsMenuRenderer
                 return;
 
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            var rect = new Rectangle(4, 2, e.Item.Width - 8, e.Item.Height - 4);
+            int insetX = ScaleForDpi(e.ToolStrip, 4);
+            int insetY = ScaleForDpi(e.ToolStrip, 2);
+            var rect = new Rectangle(insetX, insetY, e.Item.Width - (insetX * 2), e.Item.Height - (insetY * 2));
             using var brush = new SolidBrush(active ? _active : _hover);
-            using var path = RoundedRect(rect, 6);
+            using var path = RoundedRect(rect, ScaleForDpi(e.ToolStrip, 6));
             e.Graphics.FillPath(brush, path);
         }
 
@@ -185,8 +234,9 @@ public static class WindowsMenuRenderer
             if (e.Image is null)
                 return;
 
-            int size = Math.Min(16, Math.Min(e.Item.Height - 9, e.Image.Width));
-            int x = 14 + (20 - size) / 2;
+            int iconBox = ScaleForDpi(e.ToolStrip, 20);
+            int size = Math.Min(ScaleForDpi(e.ToolStrip, 16), Math.Min(e.Item.Height - ScaleForDpi(e.ToolStrip, 9), e.Image.Width));
+            int x = ScaleForDpi(e.ToolStrip, 14) + (iconBox - size) / 2;
             int y = e.Item.ContentRectangle.Y + (e.Item.Height - size) / 2;
             e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
             e.Graphics.DrawImage(e.Image, new Rectangle(x, y, size, size));
@@ -202,15 +252,15 @@ public static class WindowsMenuRenderer
 
             e.Graphics.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             string shortcut = item.ShortcutKeyDisplayString ?? string.Empty;
-            int left = _showImages ? 43 : 14;
+            int left = ScaleForDpi(e.ToolStrip, _showImages ? 43 : 14);
             int shortcutWidth = string.IsNullOrEmpty(shortcut)
                 ? 0
-                : TextRenderer.MeasureText(e.Graphics, shortcut, item.Font).Width + 18;
+                : TextRenderer.MeasureText(e.Graphics, shortcut, item.Font).Width + ScaleForDpi(e.ToolStrip, 18);
 
             var labelRect = new Rectangle(
                 left,
                 0,
-                Math.Max(24, item.Width - left - shortcutWidth - 12),
+                Math.Max(ScaleForDpi(e.ToolStrip, 24), item.Width - left - shortcutWidth - ScaleForDpi(e.ToolStrip, 12)),
                 item.Height);
             TextRenderer.DrawText(
                 e.Graphics,
@@ -223,7 +273,7 @@ public static class WindowsMenuRenderer
             if (shortcut.Length == 0)
                 return;
 
-            var shortcutRect = new Rectangle(item.Width - shortcutWidth - 12, 0, shortcutWidth, item.Height);
+            var shortcutRect = new Rectangle(item.Width - shortcutWidth - ScaleForDpi(e.ToolStrip, 12), 0, shortcutWidth, item.Height);
             TextRenderer.DrawText(
                 e.Graphics,
                 shortcut,
@@ -235,11 +285,14 @@ public static class WindowsMenuRenderer
 
         protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
         {
-            int left = _showImages ? 42 : 10;
+            int left = ScaleForDpi(e.ToolStrip, _showImages ? 42 : 10);
             int y = e.Item.Height / 2;
             using var pen = new Pen(_sep);
-            e.Graphics.DrawLine(pen, left, y, e.Item.Width - 10, y);
+            e.Graphics.DrawLine(pen, left, y, e.Item.Width - ScaleForDpi(e.ToolStrip, 10), y);
         }
+
+        private static int ScaleForDpi(ToolStrip? toolStrip, int value)
+            => WindowsMenuRenderer.ScaleForDpi(value, GetDeviceDpi(toolStrip));
 
         public static GraphicsPath RoundedRect(Rectangle rect, int radius)
         {

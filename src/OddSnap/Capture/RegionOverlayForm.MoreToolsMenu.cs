@@ -183,7 +183,7 @@ public sealed partial class RegionOverlayForm
         var clampBounds = GetToolbarAnchorClientBounds();
         int width = Math.Max(WindowsMenuRenderer.DefaultWidth, _moreToolsMenu?.Width ?? WindowsMenuRenderer.DefaultWidth);
         int itemCount = Math.Max(1, _moreToolsMenu?.Items.Count ?? 14);
-        int estimatedHeight = WindowsMenuRenderer.RowHeight * itemCount + 12;
+        int estimatedHeight = WindowsMenuRenderer.EstimateMenuHeight(_moreToolsMenu, itemCount);
         width = Math.Min(width, Math.Max(160, clampBounds.Width - 16));
         if (_moreToolsMenu is not null)
             WindowsMenuRenderer.SetMenuWidth(_moreToolsMenu, width);

@@ -1,17 +1,9 @@
-# OddSnap v0.8.37
-
-## Changed
-- reduce first region-capture latency with warmed capture, overlay, and selection chrome paths.
-- coalesce region-selection drag repaint and magnifier work to the display frame interval.
-- reduce recording CPU pressure with realtime FFmpeg presets and bounded encoder threads.
-- keep the tray icon visible on dark Windows taskbars and add full-screen capture to the tray menu.
+# OddSnap v0.8.38
 
 ## Fixed
-- preserve crosshair and pixel magnifier chrome while selecting without extra overlay windows.
-- fix toast preview entry and update ghosting with a stroke-free shell and atomic content swaps.
-- capture layered windows consistently in BitBlt screenshot and recording paths.
-- harden OCR, upload, history indexing, scrolling capture, and recording cancellation cleanup.
+- scale the tray context menu rows, padding, shortcuts, and icon spacing to the monitor DPI.
+- keep tray menu text from clipping on 4K displays at 200% Windows scaling.
+- recalculate tray menu width right before opening so recording labels and localized text still fit.
 
 ## Fixed issues
-- fixes #47
-- fixes #48
+- fixes #50

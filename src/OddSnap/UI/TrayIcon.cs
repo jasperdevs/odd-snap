@@ -192,7 +192,11 @@ public sealed class TrayIcon : IDisposable
 
     private void ShowMenu()
     {
+        if (_menu is null)
+            return;
+
         UpdateRecordingMenuItem();
+        WindowsMenuRenderer.NormalizeItemWidths(_menu);
         _notifyIcon.ContextMenuStrip = _menu;
 
         var showMethod = typeof(NotifyIcon).GetMethod("ShowContextMenu",

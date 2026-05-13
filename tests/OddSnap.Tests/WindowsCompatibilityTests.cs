@@ -82,7 +82,8 @@ public sealed class WindowsCompatibilityTests
 
         Assert.Contains("public const int DefaultWidth = 340;", menu);
         Assert.Contains("public static int NormalizeItemWidths", menu);
-        Assert.Contains("text + shortcut + (menu.ShowImageMargin ? 124 : 76)", menu);
+        Assert.Contains("int textPadding = ScaleForDpi(menu.ShowImageMargin ? 124 : 76, dpi);", menu);
+        Assert.Contains("text + shortcut + textPadding", menu);
         Assert.Contains("menu.Width = width;", menu);
         Assert.Contains("return width;", menu);
         Assert.Contains("public static void SetMenuWidth", menu);

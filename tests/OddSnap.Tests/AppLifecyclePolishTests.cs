@@ -179,6 +179,39 @@ public sealed class AppLifecyclePolishTests
         Assert.Contains("using var bmp = new Bitmap", fallbackBlock);
     }
 
+    [Fact]
+    public void TrayMenuRowsScaleWithCurrentMonitorDpi()
+    {
+        var tray = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "TrayIcon.cs"));
+        var renderer = File.ReadAllText(RepoPath("src", "OddSnap", "Helpers", "WindowsMenuRenderer.cs"));
+        var flyout = File.ReadAllText(RepoPath("src", "OddSnap", "Capture", "RegionOverlayForm.MoreToolsMenu.cs"));
+
+        Assert.Contains("ApplyMenuMetricsForCurrentDpi(menu, minWidth);", renderer);
+        Assert.Contains("menu.Opening += (_, _) => ApplyMenuMetricsForCurrentDpi(menu, minWidth);", renderer);
+        Assert.Contains("ApplyMenuMetricsForCurrentDpi(strip, minWidth);", renderer);
+        Assert.Contains("int textPadding = ScaleForDpi(menu.ShowImageMargin ? 124 : 76, dpi);", renderer);
+        Assert.Contains("WindowsMenuRenderer.NormalizeItemWidths(_menu);", tray);
+        Assert.Contains("TextRenderer.MeasureText(\"Ag\", menu.Font).Height + ScaleForDpi(12, dpi);", renderer);
+        Assert.DoesNotContain("menuItem.Height = RowHeight;", renderer);
+        Assert.Contains("WindowsMenuRenderer.EstimateMenuHeight(_moreToolsMenu, itemCount);", flyout);
+    }
+
+    [Fact]
+    public void TrayMenuRowsAreTallEnoughForRenderedText()
+    {
+        using var menu = OddSnap.Helpers.WindowsMenuRenderer.Create(showImages: true);
+        var item = OddSnap.Helpers.WindowsMenuRenderer.Item(
+            "Stop recording",
+            "Ctrl+Shift+Alt+PrtSc");
+        menu.Items.Add(item);
+
+        OddSnap.Helpers.WindowsMenuRenderer.NormalizeItemWidths(menu);
+
+        var measuredTextHeight = System.Windows.Forms.TextRenderer.MeasureText("Ag", menu.Font).Height;
+        Assert.True(item.Height >= measuredTextHeight, $"Menu row height {item.Height} should fit rendered text height {measuredTextHeight}.");
+        Assert.True(item.Width > measuredTextHeight, "Menu item width should be normalized after measuring text and shortcut content.");
+    }
+
     private static string GetMethodBlock(string source, string signature)
     {
         var start = source.IndexOf(signature, StringComparison.Ordinal);
