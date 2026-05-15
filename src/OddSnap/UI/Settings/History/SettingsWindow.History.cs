@@ -50,7 +50,7 @@ public partial class SettingsWindow
     private const int ImageHistoryPageSize = HistoryInitialPageSize;
     private const int HistoryAppendPageSize = 18;
     private const int HistoryLookaheadCount = 6;
-    private const int HistoryVirtualizationThreshold = 240;
+    private const int HistoryVirtualizationThreshold = 120;
     private const double HistoryCardMargin = 3d;
     private const double HistoryCardPreferredWidth = 168d;
     private const double HistoryCardMinWidth = 148d;
@@ -61,7 +61,7 @@ public partial class SettingsWindow
     private const double HistoryVirtualRowHeight = 156d;
     private const int HistoryVirtualRowBuffer = 3;
     private const int HistoryPrefetchRowBuffer = 2;
-    private const int HistoryPrefetchLimit = 48;
+    private const int HistoryPrefetchLimit = 24;
     private bool _useVirtualizedImageHistory;
     private bool _imageHistoryLoadFailed;
     private int _virtualizedHistoryColumns = 1;
@@ -473,6 +473,7 @@ public partial class SettingsWindow
         var totalCount = _filteredHistoryItems.Count;
         if (totalCount == 0)
         {
+            ReleaseHistoryCards(_historyItems);
             _historyVirtualizedPanel.Children.Clear();
             _historyTopSpacer.Height = 0;
             _historyBottomSpacer.Height = 0;
@@ -503,7 +504,9 @@ public partial class SettingsWindow
         _historyBottomSpacer.Height = Math.Max(0, (totalRows - endRowExclusive) * HistoryVirtualRowHeight);
 
         var visibleCount = endIndex - startIndex;
+        var previousVisibleItems = _historyItems;
         var visibleItems = _filteredHistoryItems.GetRange(startIndex, visibleCount);
+        ReleaseHistoryCards(previousVisibleItems, visibleItems);
         _historyItems = visibleItems;
         _historyVirtualizedPanel.Children.Clear();
         for (int i = 0; i < visibleItems.Count; i++)
@@ -686,6 +689,55 @@ public partial class SettingsWindow
         }
 
         return CreateHistoryCard(vm);
+    }
+
+    private static void ReleaseHistoryCards(IEnumerable<HistoryItemVM> items, IReadOnlyCollection<HistoryItemVM>? keep = null)
+    {
+        HashSet<HistoryItemVM>? keepSet = keep is null ? null : new HashSet<HistoryItemVM>(keep);
+        foreach (var item in items)
+        {
+            if (keepSet?.Contains(item) == true)
+                continue;
+
+            ReleaseHistoryCard(item);
+        }
+    }
+
+    private static void ReleaseHistoryCard(HistoryItemVM vm)
+    {
+        if (vm.Card is FrameworkElement card)
+            DetachElementFromParent(card);
+
+        if (vm.ThumbnailImage is not null)
+            vm.ThumbnailImage.Source = null;
+
+        vm.Card = null;
+        vm.ThumbnailImage = null;
+        vm.SelectionBadge = null;
+        vm.FileNameTextBlock = null;
+        vm.TimeStatusTextBlock = null;
+        vm.ImageSearchMatchTextBlock = null;
+    }
+
+    private void ReleaseHistoryUiState()
+    {
+        ReleaseHistoryCards(_historyItems);
+        ReleaseHistoryCards(_gifItems);
+        ReleaseHistoryCards(_stickerItems);
+        ReleaseHistoryCards(_allHistoryItems);
+        ReleaseHistoryCards(_allGifItems);
+        ReleaseHistoryCards(_allStickerItems);
+        _historyItems.Clear();
+        _filteredHistoryItems.Clear();
+        _gifItems.Clear();
+        _stickerItems.Clear();
+        _allHistoryItems.Clear();
+        _allHistoryItemsByPath.Clear();
+        _allGifItems.Clear();
+        _allStickerItems.Clear();
+        _filteredGifItems.Clear();
+        _filteredStickerItems.Clear();
+        _lastImmediateSearchResults.Clear();
     }
 
     private void RefreshHistoryCardTextMetadata(HistoryItemVM vm)

@@ -193,6 +193,9 @@ internal static class SettingsMediaCache
     {
         lock (ThumbInflight)
             ThumbInflight.Remove(cacheKey);
+
+        lock (ThumbWaiters)
+            ThumbWaiters.Remove(cacheKey);
     }
 
     public static void RegisterWaiter(string cacheKey, Image image)

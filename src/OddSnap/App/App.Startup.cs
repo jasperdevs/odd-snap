@@ -129,7 +129,7 @@ public partial class App
             try
             {
                 var historyService = EnsureHistoryService();
-                SettingsWindow.WarmHistoryThumbsInBackground(historyService.ImageEntries, maxCount: 96, immediateCount: 24, batchSize: 12);
+                SettingsWindow.WarmHistoryThumbsInBackground(historyService.ImageEntries, maxCount: 48, immediateCount: 8, batchSize: 8);
             }
             catch (Exception ex)
             {

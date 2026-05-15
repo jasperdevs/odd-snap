@@ -32,7 +32,7 @@ public partial class SettingsWindow : Window
         ("{aspect}", "Aspect"),
         ("{rand}", "Random"),
     ];
-    private static readonly SemaphoreSlim ThumbDecodeGate = new(4);
+    private static readonly SemaphoreSlim ThumbDecodeGate = new(2);
     private readonly System.Windows.Threading.DispatcherTimer _historyMonitorTimer = new()
     {
         Interval = TimeSpan.FromSeconds(2.5)
@@ -155,6 +155,8 @@ public partial class SettingsWindow : Window
             _ocrSearchDebounceTimer.Stop();
             _colorSearchDebounceTimer.Stop();
             _historyMonitorTimer.Stop();
+            ReleaseHistoryUiState();
+            TrimThumbCache(24);
         };
     }
 

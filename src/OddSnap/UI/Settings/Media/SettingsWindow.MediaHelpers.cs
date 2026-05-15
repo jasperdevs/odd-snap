@@ -41,7 +41,7 @@ public partial class SettingsWindow
         }
     }
 
-    internal static void WarmHistoryThumbsInBackground(IEnumerable<HistoryEntry> entries, int maxCount = 192, int immediateCount = 48, int batchSize = 24) =>
+    internal static void WarmHistoryThumbsInBackground(IEnumerable<HistoryEntry> entries, int maxCount = 96, int immediateCount = 18, int batchSize = 12) =>
         SettingsMediaCache.WarmHistoryThumbsInBackground(
             entries,
             (cacheKey, thumbPath, kind) => PrimeThumbLoad(cacheKey, GetHistoryThumbPath(cacheKey, kind), kind),

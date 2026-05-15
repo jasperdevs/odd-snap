@@ -239,7 +239,7 @@ public sealed partial class ImageSearchIndexService : IDisposable
 {
     private const int SearchDatabaseSchemaVersion = 3;
     private const int MaxOcrRetryCount = 4;
-    private const int MaxConcurrentIndexTasks = 3;
+    private const int MaxConcurrentIndexTasks = 2;
     private static readonly string LegacyAppDataIndexPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OddSnap", "history", "image_search_index.json");
     private static readonly string LegacyDbPath = Path.Combine(
@@ -264,7 +264,7 @@ public sealed partial class ImageSearchIndexService : IDisposable
     private int _version;
     private string _statusText = "Search index idle";
     private Task? _syncLoopTask;
-    private const int MaxSearchCacheEntries = 96;
+    private const int MaxSearchCacheEntries = 32;
 
     public event Action? Changed;
     public event Action<string>? StatusChanged;

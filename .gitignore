@@ -27,6 +27,7 @@ bld/
 
 ## Release artifacts
 release-hdr/
+artifacts/
 
 ## OS
 Thumbs.db
@@ -41,8 +42,6 @@ src/OddSnap/oddsnap_*.png
 
 ## Release zips
 *.zip
-.omx/
-.claude/
 site/node_modules/
 *.tsbuildinfo
 site/vite-dev.*.log

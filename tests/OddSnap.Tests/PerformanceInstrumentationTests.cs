@@ -62,6 +62,36 @@ public sealed class PerformanceInstrumentationTests
         Assert.Contains("TryFindScrollingAppend(result, currentImage, bestMatchCount, bestMatchIndex, bestIgnoreBottomOffset, cancellationToken)", stitching);
     }
 
+    [Fact]
+    public void SettingsHistoryReleasesVirtualizedCardsAndTrimsStaticThumbnailCache()
+    {
+        var settingsWindow = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "SettingsWindow.xaml.cs"));
+        var history = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "Settings", "History", "SettingsWindow.History.cs"));
+        var mediaCache = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "Settings", "Infrastructure", "SettingsMediaCache.cs"));
+        var mediaHelpers = File.ReadAllText(RepoPath("src", "OddSnap", "UI", "Settings", "Media", "SettingsWindow.MediaHelpers.cs"));
+        var startup = File.ReadAllText(RepoPath("src", "OddSnap", "App", "App.Startup.cs"));
+
+        Assert.Contains("ReleaseHistoryUiState();", settingsWindow);
+        Assert.Contains("TrimThumbCache(24);", settingsWindow);
+        Assert.Contains("ReleaseHistoryCards(previousVisibleItems, visibleItems);", history);
+        Assert.Contains("vm.ThumbnailImage.Source = null;", history);
+        Assert.Contains("private const int HistoryVirtualizationThreshold = 120;", history);
+        Assert.Contains("private const int HistoryPrefetchLimit = 24;", history);
+        Assert.Contains("private static readonly SemaphoreSlim ThumbDecodeGate = new(2);", settingsWindow);
+        Assert.Contains("ThumbWaiters.Remove(cacheKey);", mediaCache);
+        Assert.Contains("maxCount = 96, int immediateCount = 18, int batchSize = 12", mediaHelpers);
+        Assert.Contains("maxCount: 48, immediateCount: 8, batchSize: 8", startup);
+    }
+
+    [Fact]
+    public void ImageSearchKeepsBackgroundIndexingConservative()
+    {
+        var imageSearch = File.ReadAllText(RepoPath("src", "OddSnap", "Services", "ImageSearchIndexService.cs"));
+
+        Assert.Contains("private const int MaxConcurrentIndexTasks = 2;", imageSearch);
+        Assert.Contains("private const int MaxSearchCacheEntries = 32;", imageSearch);
+    }
+
     private static string RepoPath(params string[] parts)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
