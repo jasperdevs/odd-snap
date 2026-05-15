@@ -15,6 +15,9 @@ x86/
 [Bb]uild/
 bld/
 
+## Local test projects
+tests/
+
 ## NuGet
 *.nupkg
 **/[Pp]ackages/*

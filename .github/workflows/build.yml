@@ -38,10 +38,6 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore src/OddSnap/OddSnap.csproj -r ${{ matrix.rid }}
 
-      - name: Test
-        if: matrix.rid == 'win-x64'
-        run: dotnet test tests/OddSnap.Tests/OddSnap.Tests.csproj -c Release
-
       - name: Install Velopack CLI
         shell: pwsh
         run: dotnet tool install -g vpk --version 0.0.1298

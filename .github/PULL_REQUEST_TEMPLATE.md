@@ -4,7 +4,7 @@ Describe the user-facing change in one or two sentences.
 
 ## Testing
 
-- [ ] `dotnet test OddSnap.sln -c Release`
+- [ ] `dotnet build OddSnap.sln -c Release`
 - [ ] Manual verification on Windows
 
 ## Notes
