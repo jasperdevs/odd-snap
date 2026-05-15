@@ -32,11 +32,19 @@ public sealed class ImageSearchIndexRecord
     public string? LastError { get; set; }
 
     [JsonIgnore]
-    public string SearchText => string.Join(" ", new[]
+    public string SearchText
     {
-        Path.GetFileNameWithoutExtension(FilePath),
-        OcrText
-    }.Where(part => !string.IsNullOrWhiteSpace(part)));
+        get
+        {
+            var fileName = Path.GetFileNameWithoutExtension(FilePath);
+            if (string.IsNullOrWhiteSpace(fileName))
+                return OcrText ?? "";
+            if (string.IsNullOrWhiteSpace(OcrText))
+                return fileName;
+
+            return $"{fileName} {OcrText}";
+        }
+    }
 }
 
 public sealed class ImageSearchRecordDiagnostics

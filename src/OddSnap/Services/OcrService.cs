@@ -18,6 +18,7 @@ public enum OcrWorkload
 public static class OcrService
 {
     public const string EngineId = "winocr-v1";
+    private const int FastWorkloadMaxLongEdge = 1600;
     private static readonly SemaphoreSlim RecognizeGate = new(1, 1);
     private static readonly object EngineCacheGate = new();
     private static readonly Dictionary<string, OcrEngine> EngineCache = new(StringComparer.OrdinalIgnoreCase);
@@ -31,7 +32,6 @@ public static class OcrService
     /// <summary>Windows OCR is always ready — no downloads needed.</summary>
     public static bool IsReady() => true;
 
-    /// <summary>Dispose is a no-op for Windows OCR.</summary>
     public static void ClearEngines()
     {
         lock (EngineCacheGate)
@@ -39,6 +39,12 @@ public static class OcrService
             EngineCache.Clear();
             AvailableLanguageCache = null;
         }
+    }
+
+    public static void TrimMemory()
+    {
+        lock (EngineCacheGate)
+            EngineCache.Clear();
     }
 
     /// <summary>Returns BCP-47 language tags for all installed Windows OCR languages.</summary>
@@ -77,9 +83,12 @@ public static class OcrService
                 if (engine == null)
                     return "";
 
+                using var fastBitmap = CreateFastWorkloadBitmap(bitmap, workload);
+                var inputBitmap = fastBitmap ?? bitmap;
+
                 // Convert GDI Bitmap to SoftwareBitmap via in-memory PNG
                 using var ms = new MemoryStream();
-                CaptureOutputService.WritePng(bitmap, ms);
+                CaptureOutputService.WritePng(inputBitmap, ms);
                 ms.Position = 0;
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -243,6 +252,17 @@ public static class OcrService
         }
 
         return engine;
+    }
+
+    private static Bitmap? CreateFastWorkloadBitmap(Bitmap bitmap, OcrWorkload workload)
+    {
+        if (workload != OcrWorkload.Fast)
+            return null;
+
+        var longEdge = Math.Max(bitmap.Width, bitmap.Height);
+        return longEdge > FastWorkloadMaxLongEdge
+            ? CaptureOutputService.PrepareBitmap(bitmap, FastWorkloadMaxLongEdge)
+            : null;
     }
 
     private static string GetEngineCacheKey(string? languageTag)

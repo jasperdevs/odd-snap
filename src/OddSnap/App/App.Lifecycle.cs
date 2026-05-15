@@ -364,6 +364,8 @@ public partial class App
                 }
 
                 try { _imageSearchIndexService?.TrimMemory(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.image-search", ex); }
+                try { OcrService.TrimMemory(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.ocr", ex); }
+                try { DxgiScreenCapture.ResetCache(); } catch (Exception ex) { AppDiagnostics.LogError("lifecycle.trim-idle-memory.dxgi", ex); }
 
                 GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false, compacting: true);

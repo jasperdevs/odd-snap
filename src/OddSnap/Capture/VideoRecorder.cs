@@ -17,6 +17,7 @@ public sealed class VideoRecorder : IDisposable
 {
     private const int DefaultInitialCaptureDelayMs = 0;
     private const double DurationValidationToleranceSeconds = 0.35d;
+    private const int MaxPreviewLongEdge = 640;
     private const string H264ScreenRecordingArgs = "-c:v libx264 -preset veryfast -tune zerolatency -crf 21 -pix_fmt yuv420p -threads 2";
     private const string Vp9ScreenRecordingArgs = "-c:v libvpx-vp9 -deadline realtime -cpu-used 6 -row-mt 1 -threads 2 -crf 30 -b:v 0 -pix_fmt yuv420p";
     public enum Format { MP4, WebM, MKV }
@@ -446,7 +447,10 @@ public sealed class VideoRecorder : IDisposable
         lock (_previewFrameLock)
         {
             if (_firstFramePreview is null)
-                _firstFramePreview = frameCapturer.CloneCurrentFrame();
+            {
+                using var frame = frameCapturer.CloneCurrentFrame();
+                _firstFramePreview = CaptureOutputService.PrepareBitmap(frame, MaxPreviewLongEdge);
+            }
         }
     }
 
