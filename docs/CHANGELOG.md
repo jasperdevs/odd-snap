@@ -1,9 +1,7 @@
-# OddSnap v0.8.38
+# OddSnap v0.8.39
 
-## Fixed
-- scale the tray context menu rows, padding, shortcuts, and icon spacing to the monitor DPI.
-- keep tray menu text from clipping on 4K displays at 200% Windows scaling.
-- recalculate tray menu width right before opening so recording labels and localized text still fit.
-
-## Fixed issues
-- fixes #50
+## Changed
+- lower idle RAM use by trimming OCR engines, DXGI capture resources, icon caches, and history thumbnail caches.
+- reduce GIF/video recording memory spikes with smaller queues and preview frames.
+- make automatic image indexing lighter by downscaling large screenshots for fast OCR.
+- cut search/cache allocations in history and image indexing paths.
