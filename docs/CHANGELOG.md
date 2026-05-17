@@ -1,7 +1,8 @@
-# OddSnap v0.8.39
+# OddSnap v0.8.40
 
 ## Changed
-- lower idle RAM use by trimming OCR engines, DXGI capture resources, icon caches, and history thumbnail caches.
-- reduce GIF/video recording memory spikes with smaller queues and preview frames.
-- make automatic image indexing lighter by downscaling large screenshots for fast OCR.
-- cut search/cache allocations in history and image indexing paths.
+- encode MP4/MKV recordings with OBS-style x264 settings: CRF 18, High profile, 2-second keyframes, and no zerolatency tune.
+- sharpen scaled video recordings with Lanczos filtering.
+
+## Fixed
+- find FFmpeg from common local WinGet, Scoop, Chocolatey, and app-folder installs instead of caching a missing encoder result.

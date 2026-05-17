@@ -18,8 +18,10 @@ public sealed class VideoRecorder : IDisposable
     private const int DefaultInitialCaptureDelayMs = 0;
     private const double DurationValidationToleranceSeconds = 0.35d;
     private const int MaxPreviewLongEdge = 640;
-    private const string H264ScreenRecordingArgs = "-c:v libx264 -preset veryfast -tune zerolatency -crf 21 -pix_fmt yuv420p -threads 2";
-    private const string Vp9ScreenRecordingArgs = "-c:v libvpx-vp9 -deadline realtime -cpu-used 6 -row-mt 1 -threads 2 -crf 30 -b:v 0 -pix_fmt yuv420p";
+    private const int H264Crf = 18;
+    private const int Vp9Crf = 26;
+    private const string H264ScreenRecordingArgs = "-c:v libx264 -preset veryfast -profile:v high -crf {0} -pix_fmt yuv420p -g {1} -threads 0";
+    private const string Vp9ScreenRecordingArgs = "-c:v libvpx-vp9 -deadline realtime -cpu-used 5 -row-mt 1 -threads 0 -crf {0} -b:v 0 -pix_fmt yuv420p -g {1}";
     public enum Format { MP4, WebM, MKV }
     private static readonly object FfmpegPathLock = new();
     private static string? _cachedFfmpegPath;
@@ -103,22 +105,24 @@ public sealed class VideoRecorder : IDisposable
             if (_ffmpegPathResolved)
                 return _cachedFfmpegPath;
 
-            _cachedFfmpegPath = ResolveFfmpegPath();
-            _ffmpegPathResolved = true;
+            var resolved = ResolveFfmpegPath();
+            if (!string.IsNullOrWhiteSpace(resolved))
+            {
+                _cachedFfmpegPath = resolved;
+                _ffmpegPathResolved = true;
+            }
+
             return _cachedFfmpegPath;
         }
     }
 
     private static string? ResolveFfmpegPath()
     {
-        // Check common locations
-        string[] candidates =
+        foreach (var candidate in GetFfmpegCandidates())
         {
-            Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OddSnap", "ffmpeg.exe"),
-        };
-        foreach (var p in candidates)
-            if (File.Exists(p)) return p;
+            if (File.Exists(candidate))
+                return candidate;
+        }
 
         // Check PATH
         try
@@ -136,6 +140,67 @@ public sealed class VideoRecorder : IDisposable
         catch { }
 
         return null;
+    }
+
+    private static IEnumerable<string> GetFfmpegCandidates()
+    {
+        yield return Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe");
+        yield return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OddSnap", "ffmpeg.exe");
+
+        foreach (var pathEntry in GetPathEntries())
+            yield return Path.Combine(pathEntry, "ffmpeg.exe");
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (!string.IsNullOrWhiteSpace(localAppData))
+        {
+            var wingetPackages = Path.Combine(localAppData, "Microsoft", "WinGet", "Packages");
+            foreach (var ffmpeg in FindFfmpegInDirectoryTree(wingetPackages))
+                yield return ffmpeg;
+
+            yield return Path.Combine(localAppData, "Microsoft", "WinGet", "Links", "ffmpeg.exe");
+            yield return Path.Combine(localAppData, "Programs", "FFmpeg", "bin", "ffmpeg.exe");
+            yield return Path.Combine(localAppData, "scoop", "shims", "ffmpeg.exe");
+        }
+
+        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        if (!string.IsNullOrWhiteSpace(programFiles))
+            yield return Path.Combine(programFiles, "ffmpeg", "bin", "ffmpeg.exe");
+
+        var chocolateyInstall = Environment.GetEnvironmentVariable("ChocolateyInstall");
+        if (!string.IsNullOrWhiteSpace(chocolateyInstall))
+            yield return Path.Combine(chocolateyInstall, "bin", "ffmpeg.exe");
+    }
+
+    private static IEnumerable<string> GetPathEntries()
+    {
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path))
+            yield break;
+
+        foreach (var entry in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!string.IsNullOrWhiteSpace(entry))
+                yield return entry;
+        }
+    }
+
+    private static IEnumerable<string> FindFfmpegInDirectoryTree(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            yield break;
+
+        IEnumerable<string> matches;
+        try
+        {
+            matches = Directory.EnumerateFiles(root, "ffmpeg.exe", SearchOption.AllDirectories).ToArray();
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var match in matches)
+            yield return match;
     }
 
     public void Start(string outputPath, int initialCaptureDelayMs = DefaultInitialCaptureDelayMs)
@@ -160,7 +225,7 @@ public sealed class VideoRecorder : IDisposable
         outW = outW / 2 * 2;
         outH = outH / 2 * 2;
 
-        string codecArgs = BuildVideoCodecArguments(_format, _region.Width, _region.Height, outW, outH);
+        string codecArgs = BuildVideoCodecArguments(_format, _fps, _region.Width, _region.Height, outW, outH);
 
         var args = $"-y -f rawvideo -pix_fmt bgra -s {_region.Width}x{_region.Height} -r {_fps} -i pipe:0 {codecArgs} \"{outputPath}\"";
 
@@ -618,7 +683,7 @@ public sealed class VideoRecorder : IDisposable
     {
         string expectedDuration = GetCapturedVideoDurationSeconds().ToString("0.###", CultureInfo.InvariantCulture);
         string padDuration = Math.Max(0d, GetCapturedVideoDurationSeconds() - actualDurationSeconds).ToString("0.###", CultureInfo.InvariantCulture);
-        string videoCodec = GetRepairVideoCodecArguments(_format);
+        string videoCodec = GetRepairVideoCodecArguments(_format, _fps);
         string audioCodec = GetRepairAudioCodec(_format);
 
         if (!hasAudioTrack)
@@ -810,26 +875,43 @@ public sealed class VideoRecorder : IDisposable
         }
     }
 
-    private static string GetRepairVideoCodecArguments(Format format) => format switch
+    private static string GetRepairVideoCodecArguments(Format format, int fps) => format switch
     {
-        Format.WebM => Vp9ScreenRecordingArgs,
-        Format.MKV => H264ScreenRecordingArgs,
-        _ => $"{H264ScreenRecordingArgs} -movflags +faststart",
+        Format.WebM => BuildVp9ScreenRecordingArguments(fps),
+        Format.MKV => BuildH264ScreenRecordingArguments(fps),
+        _ => $"{BuildH264ScreenRecordingArguments(fps)} -movflags +faststart",
     };
 
-    internal static string BuildVideoCodecArguments(Format format, int inputWidth, int inputHeight, int outputWidth, int outputHeight)
+    internal static string BuildVideoCodecArguments(Format format, int fps, int inputWidth, int inputHeight, int outputWidth, int outputHeight)
     {
         string scaleFilter = inputWidth == outputWidth && inputHeight == outputHeight
             ? string.Empty
-            : $" -vf scale={outputWidth}:{outputHeight}:flags=bicubic";
+            : $" -vf scale={outputWidth}:{outputHeight}:flags=lanczos";
 
         return format switch
         {
-            Format.WebM => $"{Vp9ScreenRecordingArgs}{scaleFilter}",
-            Format.MKV => $"{H264ScreenRecordingArgs}{scaleFilter}",
-            _ => $"{H264ScreenRecordingArgs}{scaleFilter} -movflags +faststart",
+            Format.WebM => $"{BuildVp9ScreenRecordingArguments(fps)}{scaleFilter}",
+            Format.MKV => $"{BuildH264ScreenRecordingArguments(fps)}{scaleFilter}",
+            _ => $"{BuildH264ScreenRecordingArguments(fps)}{scaleFilter} -movflags +faststart",
         };
     }
+
+    private static string BuildH264ScreenRecordingArguments(int fps)
+        => string.Format(
+            CultureInfo.InvariantCulture,
+            H264ScreenRecordingArgs,
+            H264Crf,
+            GetKeyframeInterval(fps));
+
+    private static string BuildVp9ScreenRecordingArguments(int fps)
+        => string.Format(
+            CultureInfo.InvariantCulture,
+            Vp9ScreenRecordingArgs,
+            Vp9Crf,
+            GetKeyframeInterval(fps));
+
+    private static int GetKeyframeInterval(int fps)
+        => Math.Clamp(fps, 1, 240) * 2;
 
     private static string GetRepairAudioCodec(Format format)
         => format == Format.WebM ? "libopus" : "aac";
