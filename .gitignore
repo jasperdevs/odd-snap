@@ -27,6 +27,8 @@ tests/
 .idea/
 *.sln.iml
 .vscode/
+.claude/
+.codex-tmp/
 
 ## Release artifacts
 release-hdr/

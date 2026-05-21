@@ -701,6 +701,66 @@ public partial class SettingsWindow : Window
             value => AskFileNameCheck.IsChecked = value);
     }
 
+    private void TemporaryCaptureModeCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.TemporaryCaptureMode;
+        var selected = TemporaryCaptureModeCheck.IsChecked == true;
+        UpdateCaptureSavePreference(
+            "settings.temporary-capture-mode",
+            "Temporary capture mode",
+            previous,
+            selected,
+            value => _settingsService.Settings.TemporaryCaptureMode = value,
+            value => TemporaryCaptureModeCheck.IsChecked = value);
+    }
+
+    private void CopyAfterCaptureCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.CopyAfterCapture;
+        var selected = CopyAfterCaptureCheck.IsChecked == true;
+        UpdateCaptureSavePreference(
+            "settings.copy-after-capture",
+            "Copy to clipboard automatically",
+            previous,
+            selected,
+            value => _settingsService.Settings.CopyAfterCapture = value,
+            value => CopyAfterCaptureCheck.IsChecked = value);
+    }
+
+    private void OverlayTimeoutCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var selectedIndex = OverlayTimeoutCombo.SelectedIndex;
+        var selectedSeconds = selectedIndex switch
+        {
+            0 => 5,
+            1 => 10,
+            2 => 30,
+            3 => 0,
+            _ => 10
+        };
+        var previous = _settingsService.Settings.OverlayTimeoutSeconds;
+        UpdateCaptureSavePreference(
+            "settings.overlay-timeout",
+            "Overlay timeout",
+            previous,
+            selectedSeconds,
+            value => _settingsService.Settings.OverlayTimeoutSeconds = value,
+            value => OverlayTimeoutCombo.SelectedIndex = value switch
+            {
+                5 => 0,
+                10 => 1,
+                30 => 2,
+                0 => 3,
+                _ => 1
+            });
+    }
+
     private void LoadFileNameTemplate(string currentTemplate)
     {
         FileNameTemplateBox.Text = currentTemplate;

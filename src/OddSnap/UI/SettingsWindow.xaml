@@ -2002,6 +2002,80 @@
                                Visibility="Collapsed"
                                Margin="4,8,0,0"/>
 
+                    <TextBlock Text="Temporary overlay" Style="{StaticResource SectionLabel}" Margin="4,16,0,9"/>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE7C3;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Temporary capture mode" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Show captures in a temporary overlay. Nothing is written to disk until you click Save." Style="{StaticResource SettingDescription}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox x:Name="TemporaryCaptureModeCheck" Grid.Column="2" Content="" FontSize="13" VerticalAlignment="Center"
+                                          ToolTip="Show captures in a temporary overlay instead of saving them automatically."
+                                          AutomationProperties.Name="Temporary capture mode"
+                                          Checked="TemporaryCaptureModeCheck_Changed" Unchecked="TemporaryCaptureModeCheck_Changed"/>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE916;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Overlay timeout" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="How long the temporary overlay stays on screen before auto-dismissing." Style="{StaticResource SettingDescription}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <ComboBox x:Name="OverlayTimeoutCombo" Grid.Column="2" MinWidth="150"
+                                          VerticalAlignment="Center"
+                                          AutomationProperties.Name="Overlay timeout"
+                                          ToolTip="How long the temporary overlay stays on screen before auto-dismissing."
+                                          SelectionChanged="OverlayTimeoutCombo_SelectionChanged">
+                                    <ComboBoxItem Content="5 seconds" Tag="5"
+                                                  AutomationProperties.Name="5 second overlay timeout"/>
+                                    <ComboBoxItem Content="10 seconds" Tag="10"
+                                                  AutomationProperties.Name="10 second overlay timeout"/>
+                                    <ComboBoxItem Content="30 seconds" Tag="30"
+                                                  AutomationProperties.Name="30 second overlay timeout"/>
+                                    <ComboBoxItem Content="Never" Tag="0"
+                                                  AutomationProperties.Name="No overlay timeout"
+                                                  AutomationProperties.HelpText="Pin the overlay so it stays open until dismissed."/>
+                                </ComboBox>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE16F;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Copy to clipboard automatically" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Copy the temporary capture to the clipboard as soon as it is taken." Style="{StaticResource SettingDescription}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox x:Name="CopyAfterCaptureCheck" Grid.Column="2" Content="" FontSize="13" VerticalAlignment="Center"
+                                          ToolTip="Copy the temporary capture to the clipboard automatically."
+                                          AutomationProperties.Name="Copy to clipboard automatically"
+                                          Checked="CopyAfterCaptureCheck_Changed" Unchecked="CopyAfterCaptureCheck_Changed"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <TextBlock Text="Search" Style="{StaticResource SectionLabel}" Margin="4,16,0,9"/>
                     <Border x:Name="GeneralImageSearchSettingsCard" Style="{StaticResource Card}">
                         <StackPanel>
@@ -2494,6 +2568,23 @@
                                                             Drop="ToastLayoutButton_Drop"
                                                             Tag="Save">
                                                         <Image x:Name="ToastLayoutSaveIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <Border x:Name="ToastLayoutCopyBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            ToolTip="Move the copy toast button"
+                                                            AutomationProperties.Name="Copy toast button"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastLayoutButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastLayoutButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastLayoutButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastLayoutButton_DragEnter"
+                                                            Drop="ToastLayoutButton_Drop"
+                                                            Tag="Copy">
+                                                        <Image x:Name="ToastLayoutCopyIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
                                                                RenderOptions.BitmapScalingMode="HighQuality"
                                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     </Border>

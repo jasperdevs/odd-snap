@@ -221,5 +221,18 @@
   "Update available": "Update available",
   "Update failed": "Update failed",
   "Update check failed": "Update check failed",
-  "OddSnap is up to date": "OddSnap is up to date"
+  "OddSnap is up to date": "OddSnap is up to date",
+  "Temporary overlay": "Temporary overlay",
+  "Temporary capture mode": "Temporary capture mode",
+  "Overlay timeout": "Overlay timeout",
+  "Copy to clipboard automatically": "Copy to clipboard automatically",
+  "Copy preview": "Copy preview",
+  "Copy failed": "Copy failed",
+  "Save to disk": "Save to disk",
+  "Copy to clipboard": "Copy to clipboard",
+  "Discard pinned capture": "Discard pinned capture",
+  "Save pinned capture": "Save pinned capture",
+  "Copy pinned capture": "Copy pinned capture",
+  "Window opacity": "Window opacity",
+  "Pinned capture opacity": "Pinned capture opacity"
 }

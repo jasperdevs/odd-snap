@@ -10,7 +10,8 @@ public enum ToastButtonKind
     Save,
     Office,
     AiRedirect,
-    Delete
+    Delete,
+    Copy
 }
 
 public static class ToastButtonLayout
@@ -38,6 +39,7 @@ public static class ToastButtonLayout
             ToastButtonKind.Close => settings.CloseSlot,
             ToastButtonKind.Pin => settings.PinSlot,
             ToastButtonKind.Save => settings.SaveSlot,
+            ToastButtonKind.Copy => settings.CopySlot,
             ToastButtonKind.Office => settings.OfficeSlot,
             ToastButtonKind.AiRedirect => settings.AiRedirectSlot,
             _ => settings.DeleteSlot
@@ -49,6 +51,7 @@ public static class ToastButtonLayout
             ToastButtonKind.Close => settings.ShowClose,
             ToastButtonKind.Pin => settings.ShowPin,
             ToastButtonKind.Save => settings.ShowSave,
+            ToastButtonKind.Copy => settings.ShowCopy,
             ToastButtonKind.Office => settings.ShowOffice,
             ToastButtonKind.AiRedirect => settings.ShowAiRedirect,
             _ => settings.ShowDelete
@@ -61,6 +64,7 @@ public static class ToastButtonLayout
             case ToastButtonKind.Close: settings.ShowClose = visible; break;
             case ToastButtonKind.Pin: settings.ShowPin = visible; break;
             case ToastButtonKind.Save: settings.ShowSave = visible; break;
+            case ToastButtonKind.Copy: settings.ShowCopy = visible; break;
             case ToastButtonKind.Office: settings.ShowOffice = visible; break;
             case ToastButtonKind.AiRedirect: settings.ShowAiRedirect = visible; break;
             default: settings.ShowDelete = visible; break;
@@ -84,6 +88,7 @@ public static class ToastButtonLayout
         if (settings.CloseSlot == slot) return ToastButtonKind.Close;
         if (settings.PinSlot == slot) return ToastButtonKind.Pin;
         if (settings.SaveSlot == slot) return ToastButtonKind.Save;
+        if (settings.CopySlot == slot) return ToastButtonKind.Copy;
         if (settings.OfficeSlot == slot) return ToastButtonKind.Office;
         if (settings.AiRedirectSlot == slot) return ToastButtonKind.AiRedirect;
         if (settings.DeleteSlot == slot) return ToastButtonKind.Delete;
@@ -97,6 +102,7 @@ public static class ToastButtonLayout
             case ToastButtonKind.Close: settings.CloseSlot = slot; break;
             case ToastButtonKind.Pin: settings.PinSlot = slot; break;
             case ToastButtonKind.Save: settings.SaveSlot = slot; break;
+            case ToastButtonKind.Copy: settings.CopySlot = slot; break;
             case ToastButtonKind.Office: settings.OfficeSlot = slot; break;
             case ToastButtonKind.AiRedirect: settings.AiRedirectSlot = slot; break;
             default: settings.DeleteSlot = slot; break;

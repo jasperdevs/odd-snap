@@ -159,6 +159,16 @@ public partial class SettingsWindow
         HdrCaptureCompatibleModeCheck.IsChecked = s.HdrCaptureCompatibleMode;
         ShowToolNumberBadgesCheck.IsChecked = s.ShowToolNumberBadges;
         AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
+        TemporaryCaptureModeCheck.IsChecked = s.TemporaryCaptureMode;
+        CopyAfterCaptureCheck.IsChecked = s.CopyAfterCapture;
+        OverlayTimeoutCombo.SelectedIndex = s.OverlayTimeoutSeconds switch
+        {
+            5 => 0,
+            10 => 1,
+            30 => 2,
+            0 => 3,
+            _ => 1
+        };
         MonthlyFoldersCheck.IsChecked = s.SaveInMonthlyFolders;
         LoadFileNameTemplate(s.FileNameTemplate);
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;

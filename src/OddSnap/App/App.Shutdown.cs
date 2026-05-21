@@ -1,5 +1,6 @@
 using System.Windows;
 using OddSnap.Services;
+using OddSnap.UI;
 
 namespace OddSnap;
 
@@ -8,6 +9,7 @@ public partial class App
     protected override void OnExit(ExitEventArgs e)
     {
         _idleTrimTimer?.Stop();
+        try { PinnedCaptureWindow.CloseAll(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.close-pinned-captures", ex); }
         try { BackgroundRuntimeJobService.CancelAllRunningJobs(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.cancel-runtime-jobs", ex); }
         _hotkeyService?.Dispose();
         try { _settingsService?.Dispose(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.dispose-settings", ex); }

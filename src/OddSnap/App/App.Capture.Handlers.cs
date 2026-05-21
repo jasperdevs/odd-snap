@@ -15,6 +15,16 @@ public partial class App
     private void HandleCaptureResult(Bitmap result, bool useAiRedirect = false)
     {
         var settings = _settingsService!.Settings;
+
+        // Shottr-style flow: keep the capture in memory and show a temporary overlay.
+        // No file is written and no history entry is created until the user clicks Save.
+        // AI Redirect requires a saved file, so this branch is intentionally skipped when useAiRedirect is true.
+        if (settings.TemporaryCaptureMode && !useAiRedirect)
+        {
+            HandleTemporaryCaptureResult(result, settings);
+            return;
+        }
+
         var ext = CaptureOutputService.GetExtension(settings.CaptureImageFormat);
         string? requestedPath = null;
         if (settings.SaveToFile)
@@ -100,6 +110,50 @@ public partial class App
                     ScheduleIdleMemoryTrim();
                 });
             }, TaskScheduler.Default);
+    }
+
+    private void HandleTemporaryCaptureResult(Bitmap result, AppSettings settings)
+    {
+        // Critical invariant: PermanentPath stays null for this flow. The Save button
+        // on the toast preview is the only path that writes to disk and creates a
+        // history entry. We skip PersistCaptureAsync (and history-on-capture)
+        // entirely so the user owns the persistence decision.
+        Dispatcher.BeginInvoke(() =>
+        {
+            ResetCapturing();
+
+            Bitmap? preview = null;
+            try
+            {
+                preview = CaptureOutputService.PrepareBitmap(result, settings.CaptureMaxLongEdge);
+
+                if (settings.CopyAfterCapture)
+                    TryCopyCaptureOutputToClipboard(preview);
+
+                bool autoPin = settings.AutoPinPreviews || settings.OverlayTimeoutSeconds == 0;
+                if (autoPin)
+                    ToastWindow.ShowImagePreview(preview, filePath: null, autoPin: true);
+                else
+                    ToastWindow.ShowImagePreviewWithDuration(preview, filePath: null, autoPin: false, settings.OverlayTimeoutSeconds);
+
+                // Toast now owns the preview bitmap.
+                preview = null;
+            }
+            catch (Exception ex)
+            {
+                preview?.Dispose();
+                ShowCaptureProcessingFailed(
+                    "Capture error",
+                    "OddSnap could not finish the capture. Try again, or turn off Temporary capture mode in Settings -> General.",
+                    ex.Message);
+            }
+            finally
+            {
+                result.Dispose();
+            }
+
+            ScheduleIdleMemoryTrim();
+        });
     }
 
     private void HandleStickerResult(Bitmap result, string providerName)

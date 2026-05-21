@@ -22,6 +22,16 @@ public partial class SettingsWindow
     private System.Windows.Point _toastDragStart;
     private ToastButtonKind _selectedBeforePress;
     private bool _pressedButtonWasHidden;
+    private static readonly ToastButtonKind[] ToastLayoutButtons =
+    [
+        ToastButtonKind.Close,
+        ToastButtonKind.Pin,
+        ToastButtonKind.Save,
+        ToastButtonKind.Copy,
+        ToastButtonKind.Office,
+        ToastButtonKind.AiRedirect,
+        ToastButtonKind.Delete
+    ];
 
     private AppSettings.ToastButtonLayoutSettings ToastButtons
     {
@@ -44,6 +54,7 @@ public partial class SettingsWindow
         ToastLayoutCloseIcon.Source = Helpers.FluentIcons.RenderWpf("close", iconColor, 20);
         ToastLayoutPinIcon.Source = Helpers.FluentIcons.RenderWpf("pin", iconColor, 20);
         ToastLayoutSaveIcon.Source = Helpers.FluentIcons.RenderWpf("download", iconColor, 20);
+        ToastLayoutCopyIcon.Source = Helpers.FluentIcons.RenderWpf("copy", iconColor, 20);
         ToastLayoutOfficeIcon.Source = Helpers.FluentIcons.RenderWpf("copy", iconColor, 20);
         ToastLayoutAiRedirectIcon.Source = Helpers.ToolIcons.RenderAiRedirectWpf(iconColor, 20);
         ToastLayoutDeleteIcon.Source = Helpers.FluentIcons.RenderWpf("trash", iconColor, 20);
@@ -60,6 +71,7 @@ public partial class SettingsWindow
         UpdateToastLayoutButton(ToastLayoutCloseBtn, ToastButtonKind.Close);
         UpdateToastLayoutButton(ToastLayoutPinBtn, ToastButtonKind.Pin);
         UpdateToastLayoutButton(ToastLayoutSaveBtn, ToastButtonKind.Save);
+        UpdateToastLayoutButton(ToastLayoutCopyBtn, ToastButtonKind.Copy);
         UpdateToastLayoutButton(ToastLayoutOfficeBtn, ToastButtonKind.Office);
         UpdateToastLayoutButton(ToastLayoutAiRedirectBtn, ToastButtonKind.AiRedirect);
         UpdateToastLayoutButton(ToastLayoutDeleteBtn, ToastButtonKind.Delete);
@@ -116,6 +128,9 @@ public partial class SettingsWindow
                 break;
             case ToastButtonKind.Save:
                 ToastLayoutSaveIcon.Source = Helpers.FluentIcons.RenderWpf("download", color, 22, active);
+                break;
+            case ToastButtonKind.Copy:
+                ToastLayoutCopyIcon.Source = Helpers.FluentIcons.RenderWpf("copy", color, 22, active);
                 break;
             case ToastButtonKind.Office:
                 ToastLayoutOfficeIcon.Source = Helpers.FluentIcons.RenderWpf("copy", color, 22, active);
@@ -353,6 +368,7 @@ public partial class SettingsWindow
     {
         "Pin" => ToastButtonKind.Pin,
         "Save" => ToastButtonKind.Save,
+        "Copy" => ToastButtonKind.Copy,
         "Office" => ToastButtonKind.Office,
         "AiRedirect" => ToastButtonKind.AiRedirect,
         "Delete" => ToastButtonKind.Delete,
@@ -384,7 +400,7 @@ public partial class SettingsWindow
         ToastHiddenShelfDropCue.Visibility = Visibility.Collapsed;
         ToastHiddenButtonsPanel.Children.Clear();
 
-        foreach (var button in new[] { ToastButtonKind.Close, ToastButtonKind.Pin, ToastButtonKind.Save, ToastButtonKind.Office, ToastButtonKind.AiRedirect, ToastButtonKind.Delete })
+        foreach (var button in ToastLayoutButtons)
         {
             if (ToastButtonLayout.IsVisible(ToastButtons, button))
                 continue;
@@ -423,6 +439,7 @@ public partial class SettingsWindow
             ToastButtonKind.Close => BuildCloseGlyph(),
             ToastButtonKind.Pin => BuildPinGlyph(),
             ToastButtonKind.Save => BuildSaveGlyph(),
+            ToastButtonKind.Copy => BuildCopyGlyph(),
             ToastButtonKind.Office => BuildOfficeGlyph(),
             ToastButtonKind.AiRedirect => BuildAiRedirectGlyph(),
             _ => BuildDeleteGlyph()
@@ -507,6 +524,7 @@ public partial class SettingsWindow
         if (IsPointOverElement(ToastLayoutCloseBtn, pos) && ToastLayoutCloseBtn.Visibility == Visibility.Visible) return ToastButtonKind.Close;
         if (IsPointOverElement(ToastLayoutPinBtn, pos) && ToastLayoutPinBtn.Visibility == Visibility.Visible) return ToastButtonKind.Pin;
         if (IsPointOverElement(ToastLayoutSaveBtn, pos) && ToastLayoutSaveBtn.Visibility == Visibility.Visible) return ToastButtonKind.Save;
+        if (IsPointOverElement(ToastLayoutCopyBtn, pos) && ToastLayoutCopyBtn.Visibility == Visibility.Visible) return ToastButtonKind.Copy;
         if (IsPointOverElement(ToastLayoutOfficeBtn, pos) && ToastLayoutOfficeBtn.Visibility == Visibility.Visible) return ToastButtonKind.Office;
         if (IsPointOverElement(ToastLayoutAiRedirectBtn, pos) && ToastLayoutAiRedirectBtn.Visibility == Visibility.Visible) return ToastButtonKind.AiRedirect;
         if (IsPointOverElement(ToastLayoutDeleteBtn, pos) && ToastLayoutDeleteBtn.Visibility == Visibility.Visible) return ToastButtonKind.Delete;
@@ -557,6 +575,7 @@ public partial class SettingsWindow
                 ToastButtonKind.Close => BuildCloseGlyph(),
                 ToastButtonKind.Pin => BuildPinGlyph(),
                 ToastButtonKind.Save => BuildSaveGlyph(),
+                ToastButtonKind.Copy => BuildCopyGlyph(),
                 ToastButtonKind.Office => BuildOfficeGlyph(),
                 ToastButtonKind.AiRedirect => BuildAiRedirectGlyph(),
                 _ => BuildDeleteGlyph()
@@ -636,6 +655,7 @@ public partial class SettingsWindow
         ToastButtonKind.Close => "close",
         ToastButtonKind.Pin => "pin",
         ToastButtonKind.Save => "save",
+        ToastButtonKind.Copy => "copy",
         ToastButtonKind.Office => "office export",
         ToastButtonKind.AiRedirect => "AI redirect",
         ToastButtonKind.Delete => "delete",
@@ -674,6 +694,7 @@ public partial class SettingsWindow
     private static System.Windows.Controls.Image BuildCloseGlyph() => BuildFluentIcon("close");
     private static System.Windows.Controls.Image BuildPinGlyph() => BuildFluentIcon("pin");
     private static System.Windows.Controls.Image BuildSaveGlyph() => BuildFluentIcon("download");
+    private static System.Windows.Controls.Image BuildCopyGlyph() => BuildFluentIcon("copy");
     private static System.Windows.Controls.Image BuildOfficeGlyph() => BuildFluentIcon("copy");
     private static System.Windows.Controls.Image BuildAiRedirectGlyph()
     {

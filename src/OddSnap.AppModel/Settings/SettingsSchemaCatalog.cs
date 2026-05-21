@@ -34,6 +34,21 @@ public static class SettingsSchemaCatalog
                         new SettingDefinition("auto_updates", "Check for updates", SettingsValueKind.Toggle, "Look for new releases on startup.", "AutoCheckForUpdates"),
                         new SettingDefinition("after_capture", "After capture behavior", SettingsValueKind.Choice, "Default post-capture action.", "AfterCapture"),
                     ]),
+                new SettingsSectionDefinition(
+                    "temporary_overlay",
+                    "Temporary overlay",
+                    "Shottr-style workflow: keep new captures in memory until you explicitly Save them. Disables auto-save and skips history-on-capture; the Save button on the preview becomes the only permanent write path.",
+                    [
+                        new SettingDefinition("temporary_capture_mode", "Temporary capture mode", SettingsValueKind.Toggle, "Show new captures in a temporary overlay instead of saving them automatically.", "TemporaryCaptureMode"),
+                        new SettingDefinition("overlay_timeout", "Overlay timeout", SettingsValueKind.Choice, "How long the temporary overlay stays on screen before auto-dismissing.", "OverlayTimeoutSeconds",
+                        [
+                            new("5",  "5 seconds"),
+                            new("10", "10 seconds"),
+                            new("30", "30 seconds"),
+                            new("0",  "Never"),
+                        ]),
+                        new SettingDefinition("copy_after_capture", "Copy to clipboard automatically", SettingsValueKind.Toggle, "Copy the temporary capture to the clipboard as soon as it is taken.", "CopyAfterCapture"),
+                    ]),
             ]),
         new(
             "capture",

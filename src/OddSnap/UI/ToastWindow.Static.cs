@@ -15,7 +15,12 @@ public partial class ToastWindow
     private const string DefaultImagePreviewTitle = "";
 
     public static void SetPosition(OddSnap.Models.ToastPosition position) => _position = position;
-    public static void SetDuration(double seconds) => _durationSeconds = Math.Clamp(seconds, 1, 10);
+    public static void SetDuration(double seconds)
+    {
+        var clamped = Math.Clamp(seconds, 1, 60);
+        _baseDurationSeconds = clamped;
+        _durationSeconds = clamped;
+    }
     public static void SetButtonLayout(Models.AppSettings.ToastButtonLayoutSettings? layout)
     {
         _buttonLayout = layout is null
@@ -28,6 +33,8 @@ public partial class ToastWindow
                 PinSlot = layout.PinSlot,
                 ShowSave = layout.ShowSave,
                 SaveSlot = layout.SaveSlot,
+                ShowCopy = layout.ShowCopy,
+                CopySlot = layout.CopySlot,
                 ShowOffice = layout.ShowOffice,
                 OfficeSlot = layout.OfficeSlot,
                 ShowAiRedirect = layout.ShowAiRedirect,
@@ -104,6 +111,18 @@ public partial class ToastWindow
             autoPin,
             transparentShell: false,
             showOverlayButtons: true));
+    }
+
+    public static void ShowImagePreviewWithDuration(Bitmap screenshot, string? filePath, bool autoPin, double durationSeconds)
+    {
+        Show(ToastSpec.ImagePreview(
+            screenshot,
+            DefaultImagePreviewTitle,
+            string.Empty,
+            filePath,
+            autoPin,
+            transparentShell: false,
+            showOverlayButtons: true) with { Duration = durationSeconds });
     }
 
     public static void ShowImagePreview(Bitmap screenshot, string title, string body, string? filePath, bool autoPin, string? clickActionUrl, string? clickActionLabel)

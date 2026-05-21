@@ -343,8 +343,20 @@ public sealed class SettingsService : IDisposable
 
         NormalizeUnsafeModifierlessHotkeys(settings);
         NormalizeToastButtonLayout(settings.ToastButtons);
+        NormalizeOverlayTimeoutSeconds(settings);
 
         return settings;
+    }
+
+    private static void NormalizeOverlayTimeoutSeconds(AppSettings settings)
+    {
+        // 0 = never (auto-pin); otherwise clamp to a sensible range.
+        if (settings.OverlayTimeoutSeconds < 0)
+            settings.OverlayTimeoutSeconds = 8;
+        else if (settings.OverlayTimeoutSeconds > 0 && settings.OverlayTimeoutSeconds < 1)
+            settings.OverlayTimeoutSeconds = 1;
+        else if (settings.OverlayTimeoutSeconds > 60)
+            settings.OverlayTimeoutSeconds = 60;
     }
 
     private static void NormalizeEnums(AppSettings settings)
@@ -434,6 +446,7 @@ public sealed class SettingsService : IDisposable
         settings.CloseSlot = TakeSlot(settings.CloseSlot, ToastButtonSlot.TopRight, used);
         settings.PinSlot = TakeSlot(settings.PinSlot, ToastButtonSlot.TopLeft, used);
         settings.SaveSlot = TakeSlot(settings.SaveSlot, ToastButtonSlot.BottomRight, used);
+        settings.CopySlot = TakeSlot(settings.CopySlot, ToastButtonSlot.TopInnerRight, used);
         settings.OfficeSlot = TakeSlot(settings.OfficeSlot, ToastButtonSlot.TopInnerLeft, used);
         settings.AiRedirectSlot = TakeSlot(settings.AiRedirectSlot, ToastButtonSlot.BottomLeft, used);
         settings.DeleteSlot = TakeSlot(settings.DeleteSlot, ToastButtonSlot.BottomInnerRight, used);

@@ -199,6 +199,30 @@ public partial class App
         }
     }
 
+    // Called from the toast preview's Save flow so the temporary-overlay workflow can
+    // register the file it just wrote without depending on the auto-save pipeline.
+    // Returns the created HistoryEntry on success, or null when history is disabled or unavailable.
+    internal static HistoryEntry? TryTrackSavedCapture(string filePath, int width, int height, HistoryKind kind = HistoryKind.Image)
+    {
+        if (Application.Current is not App app || app._settingsService is null)
+            return null;
+
+        if (!app._settingsService.Settings.SaveHistory)
+            return null;
+
+        try
+        {
+            var entry = app.EnsureHistoryService().TrackExistingCapture(filePath, width, height, kind);
+            SettingsWindow.WarmRecentHistoryThumbs(new[] { entry }, maxCount: 1);
+            return entry;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("toast.track-saved-capture", ex, $"Failed to track {System.IO.Path.GetFileName(filePath)} in history.");
+            return null;
+        }
+    }
+
     private ImageSearchIndexService EnsureImageSearchIndexService()
     {
         lock (_historyGate)

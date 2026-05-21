@@ -136,6 +136,43 @@ public partial class App
                 AppDiagnostics.LogError("startup.preload-history-search", ex);
             }
         });
+
+        _ = Task.Run(SweepOrphanedTemporaryDragFiles);
+    }
+
+    // Garbage-collect drag-out temp PNGs left behind by crashed drag operations.
+    // The toast and PinnedCaptureWindow each clean up their own temp files on success;
+    // this sweep catches the ones a process kill leaves behind.
+    private static void SweepOrphanedTemporaryDragFiles()
+    {
+        try
+        {
+            var tempDir = System.IO.Path.GetTempPath();
+            if (!System.IO.Directory.Exists(tempDir))
+                return;
+
+            var cutoff = DateTime.UtcNow - TimeSpan.FromHours(1);
+            foreach (var pattern in new[] { "oddsnap_toast_*.png", "oddsnap_pin_*.png" })
+            {
+                foreach (var file in System.IO.Directory.EnumerateFiles(tempDir, pattern, System.IO.SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        var info = new System.IO.FileInfo(file);
+                        if (info.LastWriteTimeUtc < cutoff)
+                            info.Delete();
+                    }
+                    catch (Exception ex)
+                    {
+                        AppDiagnostics.LogWarning("startup.sweep-temp-drag", $"Could not delete orphaned drag file {System.IO.Path.GetFileName(file)}: {ex.Message}", ex);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("startup.sweep-temp-drag", ex.Message, ex);
+        }
     }
 
     private void ConfigureTrayIcon()

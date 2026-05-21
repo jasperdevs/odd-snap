@@ -27,6 +27,8 @@ internal sealed record ToastSpec
     public double? PreviewMaxHeight { get; init; }
     public int? MaxWidthOverride { get; init; }
     public int? MinWidthOverride { get; init; }
+    /// <summary>Per-spec auto-dismiss duration in seconds. Null falls back to the global ToastDurationSeconds.</summary>
+    public double? Duration { get; init; }
 
     public static ToastSpec Standard(string title, string body = "", string? filePath = null) => new()
     {

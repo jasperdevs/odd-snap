@@ -23,6 +23,7 @@ public partial class ToastWindow : Window
     private bool _isHovered;
     private bool _isFading;
     private bool _isSavingPreview;
+    private bool _isCopyingPreview;
     private bool _isOpeningAiRedirect;
     private bool _isDeletingSavedFile;
     private bool _isRunningOfficeAction;
@@ -37,6 +38,7 @@ public partial class ToastWindow : Window
     private static ToastWindow? _current;
     private static OddSnap.Models.ToastPosition _position = OddSnap.Models.ToastPosition.Right;
     private static double _durationSeconds = 2.5;
+    private static double _baseDurationSeconds = 2.5;
     private static bool _fadeOutEnabled;
     private static double _fadeOutSeconds = 1.0;
     private static Models.AppSettings.ToastButtonLayoutSettings _buttonLayout = new();
@@ -229,6 +231,12 @@ public partial class ToastWindow : Window
     private void ApplySpec(ToastSpec spec)
     {
         _isPinned = false;
+        // Per-spec duration override falls back to the configured base duration.
+        // Confirmation toasts after a temporary-overlay capture should dismiss using the base value,
+        // not the longer overlay timeout that drove the previous spec.
+        _durationSeconds = spec.Duration.HasValue
+            ? Math.Clamp(spec.Duration.Value, 1, 60)
+            : _baseDurationSeconds;
         ConfigureShell();
         ProgressBar.Visibility = Visibility.Visible;
         ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: false);
@@ -283,6 +291,7 @@ public partial class ToastWindow : Window
             CloseBtn.Visibility = Visibility.Collapsed;
             PinBtn.Visibility = Visibility.Collapsed;
             SaveBtn.Visibility = Visibility.Collapsed;
+            CopyBtn.Visibility = Visibility.Collapsed;
         }
 
         if (spec.TransparentShell)
@@ -421,12 +430,14 @@ public partial class ToastWindow : Window
         CloseIcon.Source = FluentIcons.RenderWpf("close", IconWhite, 20);
         PinIcon.Source = FluentIcons.RenderWpf("pin", IconWhite, 20);
         SaveIcon.Source = FluentIcons.RenderWpf("download", IconWhite, 20);
+        CopyIcon.Source = FluentIcons.RenderWpf("copy", IconWhite, 20);
         OfficeIcon.Source = FluentIcons.RenderWpf("copy", IconWhite, 20);
         AiRedirectIcon.Source = ToolIcons.RenderAiRedirectWpf(System.Drawing.Color.FromArgb(230, 255, 255, 255), 20);
         DeleteIcon.Source = FluentIcons.RenderWpf("trash", IconWhite, 20);
         ApplyToastOverlayButtonVisual(CloseBtn, CloseIcon, "close", active: false);
         ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: false);
         ApplyToastOverlayButtonVisual(SaveBtn, SaveIcon, "download", active: false);
+        ApplyToastOverlayButtonVisual(CopyBtn, CopyIcon, "copy", active: false);
         ApplyToastOverlayButtonVisual(OfficeBtn, OfficeIcon, "copy", active: false);
         ApplyAiRedirectOverlayButtonVisual(AiRedirectBtn, AiRedirectIcon, active: false);
         ApplyToastOverlayButtonVisual(DeleteBtn, DeleteIcon, "trash", active: false);
@@ -435,6 +446,7 @@ public partial class ToastWindow : Window
         HookOverlayHover(CloseBtn, CloseIcon, "close");
         HookOverlayHover(PinBtn, PinIcon, "pin");
         HookOverlayHover(SaveBtn, SaveIcon, "download");
+        HookOverlayHover(CopyBtn, CopyIcon, "copy");
         HookOverlayHover(OfficeBtn, OfficeIcon, "copy");
         HookAiRedirectHover(AiRedirectBtn, AiRedirectIcon);
         HookOverlayHover(DeleteBtn, DeleteIcon, "trash");
@@ -486,6 +498,7 @@ public partial class ToastWindow : Window
         CloseBtn.MouseLeftButtonDown -= CloseBtn_MouseLeftButtonDown;
         PinBtn.MouseLeftButtonDown -= PinBtn_MouseLeftButtonDown;
         SaveBtn.MouseLeftButtonDown -= SaveBtn_MouseLeftButtonDown;
+        CopyBtn.MouseLeftButtonDown -= CopyBtn_MouseLeftButtonDown;
         OfficeBtn.MouseLeftButtonDown -= OfficeBtn_MouseLeftButtonDown;
         AiRedirectBtn.MouseLeftButtonDown -= AiRedirectBtn_MouseLeftButtonDown;
         DeleteBtn.MouseLeftButtonDown -= DeleteBtn_MouseLeftButtonDown;
@@ -500,6 +513,7 @@ public partial class ToastWindow : Window
         CloseBtn.MouseLeftButtonDown += CloseBtn_MouseLeftButtonDown;
         PinBtn.MouseLeftButtonDown += PinBtn_MouseLeftButtonDown;
         SaveBtn.MouseLeftButtonDown += SaveBtn_MouseLeftButtonDown;
+        CopyBtn.MouseLeftButtonDown += CopyBtn_MouseLeftButtonDown;
         OfficeBtn.MouseLeftButtonDown += OfficeBtn_MouseLeftButtonDown;
         AiRedirectBtn.MouseLeftButtonDown += AiRedirectBtn_MouseLeftButtonDown;
         DeleteBtn.MouseLeftButtonDown += DeleteBtn_MouseLeftButtonDown;
@@ -510,6 +524,7 @@ public partial class ToastWindow : Window
         ApplyOverlayButton(CloseBtn, Helpers.ToastButtonKind.Close);
         ApplyOverlayButton(PinBtn, Helpers.ToastButtonKind.Pin);
         ApplyOverlayButton(SaveBtn, Helpers.ToastButtonKind.Save);
+        ApplyOverlayButton(CopyBtn, Helpers.ToastButtonKind.Copy);
         ApplyOverlayButton(OfficeBtn, Helpers.ToastButtonKind.Office);
         ApplyOverlayButton(AiRedirectBtn, Helpers.ToastButtonKind.AiRedirect);
         ApplyOverlayButton(DeleteBtn, Helpers.ToastButtonKind.Delete);
@@ -581,6 +596,9 @@ public partial class ToastWindow : Window
             Helpers.ToastButtonKind.Save => _isSavingPreview
                 ? ("Saving preview", "Save is already running.")
                 : ("Save preview", "Save this preview image."),
+            Helpers.ToastButtonKind.Copy => _isCopyingPreview
+                ? ("Copying preview", "Copy is already running.")
+                : ("Copy preview", "Copy this preview image to the clipboard."),
             Helpers.ToastButtonKind.Office => _isRunningOfficeAction
                 ? ("Office action running", "Open with or Office export is already running.")
                 : ("Open with or send to Office", "Open this preview with another app or send it to Office."),
@@ -632,7 +650,7 @@ public partial class ToastWindow : Window
         }
 
         e.Handled = true;
-        TogglePinned();
+        HandlePinPressed();
     }
 
     private void PinBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -641,7 +659,53 @@ public partial class ToastWindow : Window
             return;
 
         e.Handled = true;
+        HandlePinPressed();
+    }
+
+    private void HandlePinPressed()
+    {
+        // Temporary captures (no backing file yet) "pin" by promoting to a movable floating window.
+        // This runs whether the toast is currently pinned (e.g. when OverlayTimeoutSeconds=Never)
+        // or not. Legacy previews that already have a saved file keep the in-place freeze behavior.
+        if (_previewBitmap is not null && !HasSavedFileOnDisk())
+        {
+            if (PromoteToPinnedFloatingWindow())
+                return;
+        }
+
         TogglePinned();
+    }
+
+    private bool PromoteToPinnedFloatingWindow()
+    {
+        if (_previewBitmap is null)
+            return false;
+
+        Bitmap clone;
+        try
+        {
+            clone = new Bitmap(_previewBitmap);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("toast.pin.clone-bitmap", ex.Message, ex);
+            return false;
+        }
+
+        try
+        {
+            var window = new PinnedCaptureWindow(clone, GetExistingSavedFilePathOrNull());
+            window.Show();
+        }
+        catch (Exception ex)
+        {
+            clone.Dispose();
+            AppDiagnostics.LogError("toast.pin.show-floating", ex, "Could not promote toast preview to a pinned floating window.");
+            return false;
+        }
+
+        DismissAnimated();
+        return true;
     }
 
     private void SaveBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -663,6 +727,74 @@ public partial class ToastWindow : Window
 
         e.Handled = true;
         SavePreview();
+    }
+
+    private void CopyBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        e.Handled = true;
+        CopyPreviewToClipboard();
+    }
+
+    private void CopyBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
+            return;
+
+        e.Handled = true;
+        CopyPreviewToClipboard();
+    }
+
+    private void CopyPreviewToClipboard()
+    {
+        if (_previewBitmap is null || _isCopyingPreview)
+            return;
+
+        _isCopyingPreview = true;
+        CopyBtn.IsEnabled = false;
+        RefreshOverlayButtonAccessibility(CopyBtn, Helpers.ToastButtonKind.Copy);
+        string? feedbackName = null;
+        string? feedbackHelpText = null;
+        try
+        {
+            ClipboardService.CopyToClipboard(_previewBitmap, GetExistingSavedFilePathOrNull());
+            feedbackName = "Copied preview";
+            feedbackHelpText = "Copied preview to clipboard.";
+        }
+        catch (Exception ex)
+        {
+            feedbackName = "Copy failed";
+            feedbackHelpText = BuildToastActionFailureBody("OddSnap could not copy the preview to the clipboard. Try again or save the capture and copy it manually.", ex.Message);
+            AppDiagnostics.LogWarning("toast.copy-preview", feedbackHelpText, ex);
+        }
+        finally
+        {
+            _isCopyingPreview = false;
+            CopyBtn.IsEnabled = true;
+            if (!string.IsNullOrWhiteSpace(feedbackName) && !string.IsNullOrWhiteSpace(feedbackHelpText))
+                ShowCopyActionStatus(feedbackName, feedbackHelpText);
+            else
+                RefreshOverlayButtonAccessibility(CopyBtn, Helpers.ToastButtonKind.Copy);
+        }
+    }
+
+    private void ShowCopyActionStatus(string name, string helpText)
+    {
+        SetToastElementAccessibility(CopyBtn, name, helpText);
+        var stateVersion = _toastStateVersion;
+        var resetTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.6) };
+        resetTimer.Tick += (_, _) =>
+        {
+            resetTimer.Stop();
+            if (IsCurrentToastState(stateVersion) && !_isCopyingPreview)
+                RefreshOverlayButtonAccessibility(CopyBtn, Helpers.ToastButtonKind.Copy);
+        };
+        resetTimer.Start();
     }
 
     private static bool IsKeyboardActivateKey(System.Windows.Input.KeyEventArgs e) =>
@@ -693,6 +825,18 @@ public partial class ToastWindow : Window
             ApplyPinnedState(true);
             RegionOverlayForm.CloseTransientUi();
 
+            var settings = SettingsService.LoadStatic();
+            bool quickSave =
+                _savedFilePath is null
+                && settings is { AskForFileNameOnSave: false }
+                && !string.IsNullOrWhiteSpace(settings.SaveDirectory);
+
+            if (quickSave)
+            {
+                TryQuickSavePreview(settings!);
+                return;
+            }
+
             var dlg = new Microsoft.Win32.SaveFileDialog
             {
                 FileName = _savedFilePath != null ? Path.GetFileName(_savedFilePath) : "screenshot.png",
@@ -714,8 +858,10 @@ public partial class ToastWindow : Window
 
             try
             {
-                CaptureOutputService.SaveBitmap(_previewBitmap, dlg.FileName, format, jpegQuality: 92);
-                Show(ToastSpec.Standard("Saved", Path.GetFileName(dlg.FileName)));
+                CaptureOutputService.SaveBitmap(_previewBitmap, dlg.FileName, format, jpegQuality: settings?.JpegQuality ?? 92);
+                _savedFilePath = dlg.FileName;
+                App.TryTrackSavedCapture(dlg.FileName, _previewBitmap.Width, _previewBitmap.Height);
+                Show(ToastSpec.Standard("Saved", Path.GetFileName(dlg.FileName), dlg.FileName));
             }
             catch (Exception ex)
             {
@@ -731,6 +877,56 @@ public partial class ToastWindow : Window
             SaveBtn.IsEnabled = true;
             RefreshOverlayButtonAccessibility(SaveBtn, Helpers.ToastButtonKind.Save);
         }
+    }
+
+    private void TryQuickSavePreview(Models.AppSettings settings)
+    {
+        // Quick-save path: only the "Save" button takes the temporary capture to disk.
+        // Used when the preview was shown without a backing file (TemporaryCaptureMode)
+        // or whenever the user has AskForFileNameOnSave turned off.
+        if (_previewBitmap is null)
+            return;
+
+        var format = settings.CaptureImageFormat;
+        var extension = CaptureOutputService.GetExtension(format);
+        var baseName = Helpers.FileNameTemplate.Format(settings.FileNameTemplate, _previewBitmap.Width, _previewBitmap.Height);
+        var fileName = $"{baseName}.{extension}";
+        string savePath;
+        try
+        {
+            savePath = Helpers.CaptureSavePath.BuildAvailablePath(
+                settings.SaveDirectory,
+                fileName,
+                settings.SaveInMonthlyFolders);
+        }
+        catch (Exception ex)
+        {
+            Show(ToastSpec.Error(
+                "Save failed",
+                BuildToastActionFailureBody("OddSnap could not pick a save path. Check the save folder in Settings.", ex.Message),
+                GetExistingSavedFilePathOrNull()));
+            return;
+        }
+
+        try
+        {
+            var directory = Path.GetDirectoryName(savePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+            CaptureOutputService.SaveBitmap(_previewBitmap, savePath, format, settings.JpegQuality);
+        }
+        catch (Exception ex)
+        {
+            Show(ToastSpec.Error(
+                "Save failed",
+                BuildToastActionFailureBody("OddSnap could not save the preview to the configured folder. Check Settings -> Saving.", ex.Message),
+                GetExistingSavedFilePathOrNull()));
+            return;
+        }
+
+        _savedFilePath = savePath;
+        App.TryTrackSavedCapture(savePath, _previewBitmap.Width, _previewBitmap.Height);
+        Show(ToastSpec.Standard("Saved", Path.GetFileName(savePath), savePath));
     }
 
     private double PauseToastAutoDismiss()
@@ -1344,6 +1540,7 @@ public partial class ToastWindow : Window
     {
         CloseBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         SaveBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
+        CopyBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         OfficeBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         AiRedirectBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         DeleteBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
@@ -1594,6 +1791,7 @@ public partial class ToastWindow : Window
         IsChildOf(source, CloseBtn) ||
         IsChildOf(source, PinBtn) ||
         IsChildOf(source, SaveBtn) ||
+        IsChildOf(source, CopyBtn) ||
         IsChildOf(source, OfficeBtn) ||
         IsChildOf(source, AiRedirectBtn) ||
         IsChildOf(source, DeleteBtn) ||
@@ -1708,6 +1906,7 @@ public partial class ToastWindow : Window
         _closeAfterOpacityAnimation = false;
         _resumeDismissOnMouseLeave = false;
         _isSavingPreview = false;
+        _isCopyingPreview = false;
         _isOpeningAiRedirect = false;
         _isDeletingSavedFile = false;
         _isRunningOfficeAction = false;
@@ -1720,6 +1919,7 @@ public partial class ToastWindow : Window
         if (IsMouseCaptured)
             ReleaseMouseCapture();
         SaveBtn.IsEnabled = true;
+        CopyBtn.IsEnabled = true;
         AiRedirectBtn.IsEnabled = true;
         DeleteBtn.IsEnabled = true;
         OfficeBtn.IsEnabled = true;

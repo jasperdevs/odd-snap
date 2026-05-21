@@ -118,6 +118,8 @@ public sealed class AppSettings
         public ToastButtonSlot PinSlot { get; set; } = ToastButtonSlot.TopLeft;
         public bool ShowSave { get; set; } = true;
         public ToastButtonSlot SaveSlot { get; set; } = ToastButtonSlot.BottomRight;
+        public bool ShowCopy { get; set; } = true;
+        public ToastButtonSlot CopySlot { get; set; } = ToastButtonSlot.TopInnerRight;
         public bool ShowOffice { get; set; }
         public ToastButtonSlot OfficeSlot { get; set; } = ToastButtonSlot.TopInnerLeft;
         public bool ShowAiRedirect { get; set; } = true;
@@ -230,6 +232,14 @@ public sealed class AppSettings
     public double ToastFadeOutSeconds { get; set; } = 1.0;
     public bool AutoPinPreviews { get; set; }
     public ToastButtonLayoutSettings ToastButtons { get; set; } = new();
+
+    // Shottr-style temporary overlay: keep captures in memory until the user clicks Save.
+    // Off by default to preserve auto-save behavior for existing installs.
+    public bool TemporaryCaptureMode { get; set; }
+    // Seconds before the temporary overlay auto-dismisses. 0 = never (pin permanently).
+    public int OverlayTimeoutSeconds { get; set; } = 10;
+    // Whether to copy the temporary capture to the clipboard automatically on capture.
+    public bool CopyAfterCapture { get; set; }
     public Dictionary<string, string> OpenWithApps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public SoundPack SoundPack { get; set; } = SoundPack.Default;
 
