@@ -41,7 +41,9 @@
 <h2 align="center">Download</h2>
 
 <p align="center">
-  Grab the latest release from the <a href="https://github.com/jasperdevs/odd-snap/releases/latest"><strong>Releases page</strong></a>.
+  <a href="https://github.com/jasperdevs/odd-snap/releases/latest/download/App-OddSnap-Setup-x64.exe"><strong>Download latest Windows installer</strong></a>
+  <br />
+  Need ARM64, x86, or portable builds? Open the <a href="https://github.com/jasperdevs/odd-snap/releases/latest">latest release</a>.
 </p>
 
 <h2 align="center">Winget</h2>
