@@ -718,20 +718,7 @@ public sealed partial class RegionOverlayForm
                 {
                     if (_windowDetectionMode != WindowDetectionMode.Off)
                     {
-                        var detectedAtRelease = _clickAutoDetectRect.Contains(e.Location)
-                            ? _clickAutoDetectRect
-                            : Rectangle.Empty;
-                        if (detectedAtRelease.IsEmpty)
-                        {
-                            bool snapshotAvailable = WindowDetector.TryGetSnapshotDetectionRectAtPoint(
-                                e.Location, _virtualBounds, _windowDetectionMode, out detectedAtRelease);
-                            if (!snapshotAvailable || detectedAtRelease.IsEmpty)
-                            {
-                                detectedAtRelease = WindowDetector.GetFastDetectionRectAtPoint(
-                                    e.Location, _virtualBounds, _windowDetectionMode);
-                            }
-                        }
-
+                        var detectedAtRelease = ResolveClickAutoDetectRect(e.Location);
                         if (detectedAtRelease.Width > 0 && detectedAtRelease.Height > 0)
                             _autoDetectRect = detectedAtRelease;
                     }
@@ -772,6 +759,19 @@ public sealed partial class RegionOverlayForm
                 else if (_freeformPoints.Count > 2) CompleteFreeform();
                 break;
         }
+    }
+
+    private Rectangle ResolveClickAutoDetectRect(Point location)
+    {
+        if (_clickAutoDetectRect.Contains(location))
+            return _clickAutoDetectRect;
+
+        bool snapshotAvailable = WindowDetector.TryGetSnapshotDetectionRectAtPoint(
+            location, _virtualBounds, _windowDetectionMode, out var detected);
+        if (snapshotAvailable && !detected.IsEmpty)
+            return detected;
+
+        return WindowDetector.GetFastDetectionRectAtPoint(location, _virtualBounds, _windowDetectionMode);
     }
 
     protected override void OnMouseLeave(EventArgs e)

@@ -1,4 +1,4 @@
-# OddSnap v0.8.42
+# OddSnap v0.8.43
 
-## Changed
-- improve German localization strings and fill missing German translations (#52).
+## Fixed
+- fix click-to-capture window selection falling back to fullscreen screenshots.
