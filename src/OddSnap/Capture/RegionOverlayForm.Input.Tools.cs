@@ -718,8 +718,20 @@ public sealed partial class RegionOverlayForm
                 {
                     if (_windowDetectionMode != WindowDetectionMode.Off)
                     {
-                        var detectedAtRelease = WindowDetector.GetFastDetectionRectAtPoint(
-                            e.Location, _virtualBounds, _windowDetectionMode);
+                        var detectedAtRelease = _clickAutoDetectRect.Contains(e.Location)
+                            ? _clickAutoDetectRect
+                            : Rectangle.Empty;
+                        if (detectedAtRelease.IsEmpty)
+                        {
+                            bool snapshotAvailable = WindowDetector.TryGetSnapshotDetectionRectAtPoint(
+                                e.Location, _virtualBounds, _windowDetectionMode, out detectedAtRelease);
+                            if (!snapshotAvailable || detectedAtRelease.IsEmpty)
+                            {
+                                detectedAtRelease = WindowDetector.GetFastDetectionRectAtPoint(
+                                    e.Location, _virtualBounds, _windowDetectionMode);
+                            }
+                        }
+
                         if (detectedAtRelease.Width > 0 && detectedAtRelease.Height > 0)
                             _autoDetectRect = detectedAtRelease;
                     }
@@ -728,6 +740,7 @@ public sealed partial class RegionOverlayForm
                         _autoDetectRect = Rectangle.Empty;
                         _autoDetectActive = false;
                     }
+                    _clickAutoDetectRect = Rectangle.Empty;
 
                     // Use auto-detected window region if available, else fullscreen
                     var clickRect = (_autoDetectRect.Width > 0 && _autoDetectRect.Height > 0)

@@ -156,6 +156,7 @@ public sealed partial class RegionOverlayForm : Form
     // Region auto-detect
     private Rectangle _autoDetectRect;
     private bool _autoDetectActive;
+    private Rectangle _clickAutoDetectRect;
 
     // Color picker popup state
     private bool _colorPickerOpen;

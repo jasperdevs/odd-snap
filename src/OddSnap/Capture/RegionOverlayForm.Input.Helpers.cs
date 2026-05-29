@@ -134,6 +134,7 @@ public sealed partial class RegionOverlayForm
         _lastSelectionRect = Rectangle.Empty;
         _selectionEnd = Point.Empty;
         _freeformPoints.Clear();
+        _clickAutoDetectRect = Rectangle.Empty;
 
         _isBlurring = false;
         _isHighlighting = false;
@@ -196,6 +197,7 @@ public sealed partial class RegionOverlayForm
         _autoDetectActive = false;
         _autoDetectRect = Rectangle.Empty;
         _lastAutoDetectRect = Rectangle.Empty;
+        _clickAutoDetectRect = Rectangle.Empty;
 
         if (m == CaptureMode.ColorPicker)
         {

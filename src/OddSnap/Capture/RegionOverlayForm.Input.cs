@@ -259,6 +259,9 @@ public sealed partial class RegionOverlayForm
                 var previousAutoDetectRect = _autoDetectRect;
                 bool previousSelectionVisible = _hasSelection;
                 bool previousAutoDetectVisible = _autoDetectActive;
+                _clickAutoDetectRect = previousAutoDetectVisible && previousAutoDetectRect.Contains(e.Location)
+                    ? previousAutoDetectRect
+                    : Rectangle.Empty;
                 ResetAutoDetectUpdateQueue();
                 _autoDetectRect = Rectangle.Empty;
                 _autoDetectActive = false;
