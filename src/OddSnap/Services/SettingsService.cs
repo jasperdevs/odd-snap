@@ -329,6 +329,8 @@ public sealed class SettingsService : IDisposable
         settings.ToastButtons ??= new AppSettings.ToastButtonLayoutSettings();
         settings.OpenWithApps = NormalizeOpenWithApps(settings.OpenWithApps);
         settings.EnabledTools = NormalizeEnabledTools(settings.EnabledTools);
+        settings.ToolbarToolOrderIds = NormalizeToolbarToolOrder(settings.ToolbarToolOrderIds);
+        settings.ToolbarPinnedToolIds = NormalizeToolbarPinnedTools(settings.ToolbarPinnedToolIds);
         settings.ToolHotkeys = NormalizeToolHotkeys(settings.ToolHotkeys);
         SensitiveSettingsProtection.Unprotect(settings);
 
@@ -558,6 +560,54 @@ public sealed class SettingsService : IDisposable
 
         if (!normalized.Any(id => known[id].Group == 0))
             normalized.Insert(0, ToolDef.AllTools.First(tool => tool.Group == 0).Id);
+
+        return normalized;
+    }
+
+    private static List<string>? NormalizeToolbarToolOrder(List<string>? toolIds)
+    {
+        if (toolIds is null)
+            return null;
+
+        var known = ToolDef.AllToolbarItems().ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var toolId in toolIds)
+        {
+            if (string.IsNullOrWhiteSpace(toolId) || !known.TryGetValue(toolId.Trim(), out var tool))
+                continue;
+
+            if (seen.Add(tool.Id))
+                normalized.Add(tool.Id);
+        }
+
+        foreach (var tool in ToolDef.AllToolbarItems())
+        {
+            if (seen.Add(tool.Id))
+                normalized.Add(tool.Id);
+        }
+
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static List<string>? NormalizeToolbarPinnedTools(List<string>? toolIds)
+    {
+        if (toolIds is null)
+            return null;
+
+        var known = ToolDef.AllToolbarItems().ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
+        var normalized = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var toolId in toolIds)
+        {
+            if (string.IsNullOrWhiteSpace(toolId) || !known.TryGetValue(toolId.Trim(), out var tool))
+                continue;
+
+            if (seen.Add(tool.Id))
+                normalized.Add(tool.Id);
+        }
 
         return normalized;
     }

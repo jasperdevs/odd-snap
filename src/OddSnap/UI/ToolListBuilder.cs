@@ -19,12 +19,7 @@ namespace OddSnap.UI;
 public static class ToolListBuilder
 {
     public static readonly (string id, string label, char icon)[] ExtraTools =
-    {
-        ("_fullscreen",    "Fullscreen capture",  ToolGlyphs.FullscreenGlyph),
-        ("_activeWindow",  "Active window",       ToolGlyphs.ActiveWindowGlyph),
-        ("_scrollCapture", "Scroll capture",      ToolGlyphs.ScrollCaptureGlyph),
-        ("_record",        "Record",              ToolGlyphs.RecordGlyph),
-    };
+        ToolDef.ToolbarActions.Select(tool => (tool.Id, tool.Label, tool.Icon)).ToArray();
 
     private static readonly HashSet<StackPanel> RestoringEnabledToolPanels = new();
 

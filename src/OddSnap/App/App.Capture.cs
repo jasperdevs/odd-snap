@@ -420,6 +420,9 @@ public partial class App
                 UiScale = _settingsService.Settings.UiScale
             };
             overlay.SetEnabledTools(_settingsService.Settings.EnabledTools);
+            overlay.SetToolbarLayout(
+                _settingsService.Settings.ToolbarToolOrderIds,
+                _settingsService.Settings.ToolbarPinnedToolIds);
             overlay.SetShowToolNumberBadges(_settingsService.Settings.ShowToolNumberBadges);
             overlay.Shown += (_, _) =>
                 PerformanceTrace.LogElapsed(
@@ -629,6 +632,19 @@ public partial class App
                 overlay.Close();
             };
 
+            overlay.ToolbarActionRequested += actionId =>
+            {
+                overlay.Hide();
+                overlay.Close();
+                if (!TryPostToAppDispatcher(
+                        () => LaunchToolbarActionFromOverlay(actionId),
+                        DispatcherPriority.Background,
+                        "capture.toolbar-action-post"))
+                {
+                    ResetCapturingWithoutUiRestore();
+                }
+            };
+
             overlay.FormClosed += (_, _) =>
             {
                 screenshot?.Dispose();
@@ -666,6 +682,38 @@ public partial class App
                 AppDiagnostics.LogError("capture.overlay-start", ex);
                 ResetCapturingWithoutUiRestore();
             }
+        }
+    }
+
+    private void LaunchToolbarActionFromOverlay(string actionId)
+    {
+        Volatile.Write(ref _isCapturing, 1);
+
+        switch (actionId)
+        {
+            case "_fullscreen":
+                LaunchWithDelay(CaptureFullscreenNow);
+                break;
+            case "_activeWindow":
+                LaunchWithDelay(CaptureActiveWindowNow);
+                break;
+            case "_scrollCapture":
+                LaunchScrollingCapture();
+                break;
+            case "_record":
+                if (RecordingForm.Current != null)
+                {
+                    RecordingForm.Current.RequestStop();
+                    ResetCapturing();
+                }
+                else
+                {
+                    LaunchGifRecording();
+                }
+                break;
+            default:
+                ResetCapturing();
+                break;
         }
     }
 

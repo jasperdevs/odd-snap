@@ -246,6 +246,11 @@ public sealed class AppSettings
     // null = all tools enabled (default). List of tool IDs from ToolDef.AllTools.
     public List<string>? EnabledTools { get; set; }
 
+    // Toolbar layout customization: item order and which items stay pinned on the toolbar.
+    // null = default order/pins. IDs come from ToolDef.AllToolbarItems().
+    public List<string>? ToolbarToolOrderIds { get; set; }
+    public List<string>? ToolbarPinnedToolIds { get; set; }
+
     // Generic hotkeys for any tool by ID. Key = tool id, Value = [modifiers, virtualKey].
     // Tools with dedicated properties (rect, ocr, picker, etc.) are mapped to those properties instead.
     public Dictionary<string, uint[]>? ToolHotkeys { get; set; }
@@ -380,6 +385,27 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
         new("emoji",       "Emoji",        '\uE167', CaptureMode.Emoji,       1), // smile
         new("eraser",      "Eraser",       '\uE28E', CaptureMode.Eraser,      1), // eraser
     };
+
+    /// <summary>Toolbar actions that launch a capture flow instead of selecting an overlay mode.</summary>
+    public static readonly ToolDef[] ToolbarActions =
+    {
+        new("_fullscreen",    "Fullscreen capture", ToolGlyphs.FullscreenGlyph, null, 2),
+        new("_activeWindow",  "Active window",      ToolGlyphs.ActiveWindowGlyph, null, 2),
+        new("_scrollCapture", "Scroll capture",     ToolGlyphs.ScrollCaptureGlyph, null, 2),
+        new("_record",        "Record",             ToolGlyphs.RecordGlyph, null, 2),
+    };
+
+    public static ToolDef[] AllToolbarItems() =>
+        AllTools.Where(t => t.Group == 0)
+            .Concat(ToolbarActions)
+            .Concat(AllTools.Where(t => t.Group == 1))
+            .ToArray();
+
+    public static List<string> DefaultToolbarOrderIds() =>
+        AllToolbarItems().Select(t => t.Id).ToList();
+
+    public static List<string> DefaultPinnedToolbarIds() =>
+        AllTools.Where(t => t.Group == 0).Select(t => t.Id).ToList();
 
     public static bool IsCaptureTool(CaptureMode mode) =>
         AllTools.Any(t => t.Mode == mode && t.Group == 0);

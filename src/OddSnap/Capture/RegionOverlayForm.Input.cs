@@ -29,8 +29,8 @@ public sealed partial class RegionOverlayForm
                     ShowMoreToolsDropdown();
                 return;
             }
-            if (btn < _mainBarTools.Length && _mainBarTools[btn].Mode.HasValue)
-                SetTool(_mainBarTools[btn]);
+            if (btn < _mainBarTools.Length)
+                ActivateToolbarItem(_mainBarTools[btn]);
             return;
         }
 

@@ -105,6 +105,17 @@ public sealed partial class RegionOverlayForm
             SetMode(mode, tool.Id);
     }
 
+    private void ActivateToolbarItem(ToolDef tool)
+    {
+        if (tool.Mode is { } mode)
+        {
+            SetMode(mode, tool.Id);
+            return;
+        }
+
+        ToolbarActionRequested?.Invoke(tool.Id);
+    }
+
     private void SetToolColor(Color color)
     {
         _toolColor = color;

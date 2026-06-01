@@ -50,7 +50,6 @@ public sealed partial class RegionOverlayForm
 
     public void SetEnabledTools(List<string>? enabledIds)
     {
-        var flyoutIds = ToolDef.FlyoutToolIds();
         if (enabledIds == null)
         {
             var defaultEnabled = ToolDef.DefaultEnabledIds();
@@ -62,8 +61,13 @@ public sealed partial class RegionOverlayForm
         }
 
         RefreshToolHotkeyCache();
-        _mainBarTools = _visibleTools.Where(t => !flyoutIds.Contains(t.Id)).ToArray();
-        _flyoutTools = _visibleTools.Where(t => flyoutIds.Contains(t.Id)).ToArray();
+        RefreshToolbar();
+    }
+
+    public void SetToolbarLayout(List<string>? orderedIds, List<string>? pinnedIds)
+    {
+        _toolbarToolOrderIds = orderedIds;
+        _toolbarPinnedToolIds = pinnedIds;
         RefreshToolbar();
     }
 

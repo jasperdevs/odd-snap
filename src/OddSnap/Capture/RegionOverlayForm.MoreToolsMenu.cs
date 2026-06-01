@@ -154,21 +154,18 @@ public sealed partial class RegionOverlayForm
         var settings = SettingsService.LoadStatic();
         foreach (var tool in _flyoutTools)
         {
-            if (tool.Mode is not { } mode)
-                continue;
-
             bool active = string.Equals(_activeToolId, tool.Id, StringComparison.OrdinalIgnoreCase);
             var (mod, key) = settings?.GetToolHotkey(tool.Id) ?? (0u, 0u);
             var item = WindowsMenuRenderer.Item(
                 LocalizationService.Translate(tool.Label),
                 key == 0 ? null : HotkeyFormatter.Format(mod, key),
-                tool.Id,
+                GetToolbarIconId(tool.Id),
                 active);
 
             item.Click += (_, _) =>
             {
                 _flyoutOpen = false;
-                SetTool(tool);
+                ActivateToolbarItem(tool);
             };
             menu.Items.Add(item);
         }

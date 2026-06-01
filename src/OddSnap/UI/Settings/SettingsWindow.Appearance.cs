@@ -191,6 +191,7 @@ public partial class SettingsWindow
         ToastFadeDurationSeparator.Visibility = fadeDurationVisibility;
         ToastFadeDurationRow.Visibility = fadeDurationVisibility;
         LoadToastButtonLayoutDesigner();
+        LoadToolbarLayoutDesigner();
 
         SelectUploadDestByTag((int)s.ImageUploadDestination);
         AutoUploadScreenshotsCheck.IsChecked = s.AutoUploadScreenshots;
@@ -360,6 +361,7 @@ public partial class SettingsWindow
         SettingsPanel.Visibility = SettingsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         ToastPanel.Visibility = ToastTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         HotkeysPanel.Visibility = HotkeysTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        ToolbarPanel.Visibility = ToolbarTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         CapturePanel.Visibility = CaptureTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         RecordingPanel.Visibility = RecordingTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         OcrPanel.Visibility = OcrTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
@@ -384,6 +386,7 @@ public partial class SettingsWindow
     {
         if (ToastTab.IsChecked == true) return "Toast";
         if (HotkeysTab.IsChecked == true) return "Tools";
+        if (ToolbarTab.IsChecked == true) return "Toolbar";
         if (CaptureTab.IsChecked == true) return "Capture";
         if (RecordingTab.IsChecked == true) return "Recording";
         if (OcrTab.IsChecked == true) return "OCR";

@@ -124,6 +124,9 @@
                             <Trigger Property="Content" Value="Tools">
                                 <Setter TargetName="Icon" Property="Text" Value="&#xE90F;"/>
                             </Trigger>
+                            <Trigger Property="Content" Value="Toolbar">
+                                <Setter TargetName="Icon" Property="Text" Value="&#xE7C9;"/>
+                            </Trigger>
                             <Trigger Property="Content" Value="Capture">
                                 <Setter TargetName="Icon" Property="Text" Value="&#xE722;"/>
                             </Trigger>
@@ -671,6 +674,8 @@
                                  Click="TabChanged" Style="{StaticResource NavItem}"/>
                     <RadioButton x:Name="HotkeysTab" Content="Tools" GroupName="Main"
                                  Click="TabChanged" Style="{StaticResource NavItem}"/>
+                    <RadioButton x:Name="ToolbarTab" Content="Toolbar" GroupName="Main"
+                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
                     <RadioButton x:Name="CaptureTab" Content="Capture" GroupName="Main"
                                  Click="TabChanged" Style="{StaticResource NavItem}"/>
                     <RadioButton x:Name="RecordingTab" Content="Recording" GroupName="Main"
@@ -707,6 +712,46 @@
                     <CheckBox x:Name="ShowToolNumberBadgesCheck" Visibility="Collapsed"
                               Checked="ShowToolNumberBadgesCheck_Changed" Unchecked="ShowToolNumberBadgesCheck_Changed"/>
                     <StackPanel x:Name="ToolTogglePanel"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Toolbar layout -->
+            <ScrollViewer x:Name="ToolbarPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="18,42,18,18">
+                <StackPanel>
+                    <TextBlock Text="Pinned" Style="{StaticResource SectionLabel}"/>
+                    <Border Style="{StaticResource Card}" AllowDrop="True" Drop="ToolbarPinnedList_Drop" DragOver="ToolbarList_DragOver">
+                        <StackPanel>
+                            <StackPanel x:Name="ToolbarPinnedList"/>
+                            <TextBlock x:Name="ToolbarPinnedEmptyText" Text="Drop toolbar items here to pin them." Style="{StaticResource InfoText}" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="More" Style="{StaticResource SectionLabel}" Margin="4,16,0,9"/>
+                    <Border Style="{StaticResource Card}" AllowDrop="True" Drop="ToolbarMoreList_Drop" DragOver="ToolbarList_DragOver">
+                        <StackPanel>
+                            <StackPanel x:Name="ToolbarMoreList"/>
+                            <TextBlock x:Name="ToolbarMoreEmptyText" Text="Unpinned items appear in the toolbar's More menu." Style="{StaticResource InfoText}" Visibility="Collapsed"/>
+                        </StackPanel>
+                    </Border>
+
+                    <DockPanel Margin="0,12,0,0">
+                        <TextBlock x:Name="ToolbarLayoutStatusText"
+                                   DockPanel.Dock="Left"
+                                   Style="{StaticResource SettingsStatusText}"
+                                   Visibility="Collapsed"
+                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                                   AutomationProperties.Name="Toolbar layout status"
+                                   AutomationProperties.LiveSetting="Polite"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="ResetToolbarLayoutBtn"
+                                DockPanel.Dock="Right"
+                                Content="Reset"
+                                MinWidth="82"
+                                HorizontalAlignment="Right"
+                                AutomationProperties.Name="Reset toolbar layout"
+                                ToolTip="Restore the default toolbar layout."
+                                Click="ResetToolbarLayoutBtn_Click"/>
+                    </DockPanel>
                 </StackPanel>
             </ScrollViewer>
 

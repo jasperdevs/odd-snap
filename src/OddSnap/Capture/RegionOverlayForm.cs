@@ -30,6 +30,8 @@ public sealed partial class RegionOverlayForm : Form
     private ToolDef[] _visibleTools = ToolDef.AllTools;
     private ToolDef[] _mainBarTools = Array.Empty<ToolDef>();
     private ToolDef[] _flyoutTools = Array.Empty<ToolDef>();
+    private List<string>? _toolbarToolOrderIds;
+    private List<string>? _toolbarPinnedToolIds;
     private int BtnCount => _mainBarTools.Length + (_flyoutTools.Length > 0 ? 1 : 0) + 2; // +more +color +close
     private int ColorButtonIndex => BtnCount - 2;
     private int _moreButtonIndex = -1; // index of "..." button in _toolbarButtons
@@ -373,6 +375,7 @@ public sealed partial class RegionOverlayForm : Form
     public event Action<Rectangle>? ScanRegionSelected;
     public event Action<Rectangle>? StickerRegionSelected;
     public event Action<Rectangle>? UpscaleRegionSelected;
+    public event Action<string>? ToolbarActionRequested;
     public event Action? SelectionCancelled;
 
     public RegionOverlayForm(Bitmap screenshot, Rectangle virtualBounds,
@@ -523,7 +526,7 @@ public sealed partial class RegionOverlayForm : Form
 
         for (int i = 0; i < _mainBarTools.Length; i++)
         {
-            _toolbarIcons[i] = _mainBarTools[i].Id == "crop" ? "rect" : _mainBarTools[i].Id;
+            _toolbarIcons[i] = GetToolbarIconId(_mainBarTools[i].Id);
             _toolbarLabels[i] = LocalizationService.Translate(_mainBarTools[i].Label);
             _toolbarToolIds[i] = _mainBarTools[i].Id;
             _toolbarModes[i] = _mainBarTools[i].Mode;
@@ -590,9 +593,10 @@ public sealed partial class RegionOverlayForm : Form
 
     private void BuildToolbarToolSplit(Rectangle screenBounds, int buttonSize, int buttonSpacing, int pad)
     {
-        var flyoutIds = ToolDef.FlyoutToolIds();
-        var mainBarTools = _visibleTools.Where(t => !flyoutIds.Contains(t.Id)).ToList();
-        var flyoutTools = _visibleTools.Where(t => flyoutIds.Contains(t.Id)).ToList();
+        var availableTools = GetOrderedAvailableToolbarItems();
+        var pinnedIds = GetPinnedToolbarIds();
+        var mainBarTools = availableTools.Where(t => pinnedIds.Contains(t.Id)).ToList();
+        var flyoutTools = availableTools.Where(t => !pinnedIds.Contains(t.Id)).ToList();
 
         int availablePrimarySpan = Math.Max(1, (IsVerticalDock ? screenBounds.Height : screenBounds.Width) - UiChrome.ScaleInt(16));
         while (mainBarTools.Count > 1)
@@ -612,6 +616,52 @@ public sealed partial class RegionOverlayForm : Form
         _mainBarTools = mainBarTools.ToArray();
         _flyoutTools = flyoutTools.ToArray();
     }
+
+    private ToolDef[] GetOrderedAvailableToolbarItems()
+    {
+        var enabled = new HashSet<string>(_visibleTools.Select(t => t.Id), StringComparer.OrdinalIgnoreCase);
+        var known = ToolDef.AllToolbarItems().ToDictionary(t => t.Id, StringComparer.OrdinalIgnoreCase);
+        var order = _toolbarToolOrderIds is { Count: > 0 }
+            ? _toolbarToolOrderIds
+            : ToolDef.DefaultToolbarOrderIds();
+
+        var result = new List<ToolDef>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var id in order)
+        {
+            if (!known.TryGetValue(id, out var tool) || !seen.Add(tool.Id))
+                continue;
+
+            if (tool.Mode is null || enabled.Contains(tool.Id))
+                result.Add(tool);
+        }
+
+        foreach (var tool in ToolDef.AllToolbarItems())
+        {
+            if (!seen.Add(tool.Id))
+                continue;
+
+            if (tool.Mode is null || enabled.Contains(tool.Id))
+                result.Add(tool);
+        }
+
+        return result.ToArray();
+    }
+
+    private HashSet<string> GetPinnedToolbarIds() =>
+        new(
+            _toolbarPinnedToolIds ?? ToolDef.DefaultPinnedToolbarIds(),
+            StringComparer.OrdinalIgnoreCase);
+
+    private static string GetToolbarIconId(string toolId) => toolId switch
+    {
+        "_fullscreen" => "fullscreen",
+        "_activeWindow" => "activeWindow",
+        "_scrollCapture" => "scrollCapture",
+        "_record" => "record",
+        _ => toolId
+    };
 
     private static int[] GetToolbarSeparatorIndices(IReadOnlyList<ToolDef> mainBarTools, bool hasMore)
     {
