@@ -163,6 +163,9 @@ public partial class PreviewWindow : Window
         HookOverlayHover(SaveBtn, SaveIcon, "download");
         RefreshPreviewAccessibility();
 
+        Theme.Changed += ApplyTheme;
+        Closed += (_, _) => Theme.Changed -= ApplyTheme;
+
         SourceInitialized += (_, _) => PopupWindowHelper.ApplyNoActivateChrome(this);
         Loaded += OnLoaded;
     }

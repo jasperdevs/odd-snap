@@ -32,6 +32,7 @@ public static class OddSnapWindowChrome
                 return;
 
             Dwm.TrySetWindowCornerPreference(hwnd, Dwm.DWMWCP_ROUND);
+            Dwm.TrySetImmersiveDarkMode(hwnd, Theme.IsDark);
             if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
                 return;
 

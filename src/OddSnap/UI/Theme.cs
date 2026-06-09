@@ -87,6 +87,31 @@ public static class Theme
         IsDark = DetectDarkMode();
     }
 
+    /// <summary>Raised on the UI thread after the OS light/dark preference flips and app-level resources have been re-applied.</summary>
+    public static event Action? Changed;
+
+    /// <summary>Re-detect the OS theme, push the palette app-wide, refresh DWM chrome on open windows, and notify subscribers.</summary>
+    public static void OnSystemThemeChanged()
+    {
+        bool wasDark = IsDark;
+        Refresh();
+
+        var app = System.Windows.Application.Current;
+        if (app is null)
+            return;
+
+        ApplyTo(app.Resources);
+        foreach (System.Windows.Window window in app.Windows)
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            if (hwnd != IntPtr.Zero)
+                Native.Dwm.TrySetImmersiveDarkMode(hwnd, IsDark);
+        }
+
+        if (wasDark != IsDark)
+            Changed?.Invoke();
+    }
+
     private static bool DetectDarkMode()
     {
         try

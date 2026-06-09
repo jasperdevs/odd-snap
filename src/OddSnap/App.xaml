@@ -4,9 +4,24 @@
              ThemeMode="System"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
+        <!-- Keyboard focus ring (shown only during keyboard navigation, like the Windows 11 focus rect) -->
+        <Style x:Key="OddSnapFocusVisual">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Rectangle Margin="-3"
+                                   RadiusX="7" RadiusY="7"
+                                   Stroke="{DynamicResource ThemeAccentBrush}"
+                                   StrokeThickness="2"
+                                   SnapsToDevicePixels="True"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Shared button chrome used by app-wide and page-specific styles -->
         <Style x:Key="ChromeButtonBase" TargetType="Button">
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OddSnapFocusVisual}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
             <Setter Property="FontSize" Value="12"/>

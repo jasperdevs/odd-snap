@@ -122,6 +122,7 @@ public partial class SettingsWindow : Window
         Theme.Refresh();
         Theme.ApplyTo(Application.Current.Resources);
         ApplyThemeColors();
+        Theme.Changed += ApplyThemeColors;
         LoadStaticFluentIcons();
         LoadFileNameTokenButtons();
         LoadSettings();
@@ -152,6 +153,7 @@ public partial class SettingsWindow : Window
         Closed += (_, _) =>
         {
             _isClosed = true;
+            Theme.Changed -= ApplyThemeColors;
             _historyService.Changed -= HistoryService_Changed;
             _imageSearchIndexService.Changed -= ImageSearchIndexService_Changed;
             _imageSearchIndexService.StatusChanged -= ImageSearchIndexService_StatusChanged;

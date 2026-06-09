@@ -392,6 +392,12 @@ public sealed class TrayIcon : IDisposable
         return CreateOwnedIcon(bmp);
     }
 
+    private void RefreshAppTheme()
+    {
+        Theme.OnSystemThemeChanged();
+        RefreshTrayIconTheme();
+    }
+
     private void RefreshTrayIconTheme()
     {
         if (_disposed)
@@ -418,7 +424,7 @@ public sealed class TrayIcon : IDisposable
             try
             {
                 _ = dispatcher.BeginInvoke(
-                    new Action(RefreshTrayIconTheme),
+                    new Action(RefreshAppTheme),
                     System.Windows.Threading.DispatcherPriority.Background);
             }
             catch (InvalidOperationException ex)
@@ -428,7 +434,7 @@ public sealed class TrayIcon : IDisposable
             return;
         }
 
-        RefreshTrayIconTheme();
+        RefreshAppTheme();
     }
 
     private static Icon CreateOwnedIcon(Bitmap bitmap)

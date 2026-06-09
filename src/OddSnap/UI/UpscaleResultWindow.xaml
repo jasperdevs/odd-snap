@@ -190,31 +190,31 @@
                                 </Grid>
                             </Grid>
 
-                            <TextBlock x:Name="BeforeCornerLabel"
-                                       Text="Before"
-                                       Margin="14,12,0,0"
-                                       HorizontalAlignment="Left"
-                                       VerticalAlignment="Top"
-                                       FontSize="11"
-                                       FontWeight="SemiBold"
-                                       Foreground="White">
-                                <TextBlock.Effect>
-                                    <DropShadowEffect Color="Black" BlurRadius="8" ShadowDepth="0" Opacity="0.45"/>
-                                </TextBlock.Effect>
-                            </TextBlock>
+                            <Border x:Name="BeforeCornerLabel"
+                                    Margin="14,12,0,0"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Background="#99111113"
+                                    CornerRadius="4"
+                                    Padding="7,2">
+                                <TextBlock Text="Before"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="White"/>
+                            </Border>
 
-                            <TextBlock x:Name="AfterCornerLabel"
-                                       Text="After"
-                                       Margin="0,12,14,0"
-                                       HorizontalAlignment="Right"
-                                       VerticalAlignment="Top"
-                                       FontSize="11"
-                                       FontWeight="SemiBold"
-                                       Foreground="White">
-                                <TextBlock.Effect>
-                                    <DropShadowEffect Color="Black" BlurRadius="8" ShadowDepth="0" Opacity="0.45"/>
-                                </TextBlock.Effect>
-                            </TextBlock>
+                            <Border x:Name="AfterCornerLabel"
+                                    Margin="0,12,14,0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Background="#99111113"
+                                    CornerRadius="4"
+                                    Padding="7,2">
+                                <TextBlock Text="After"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="White"/>
+                            </Border>
 
                             <Grid x:Name="AfterLoadingOverlay"
                                   Background="#66111113"

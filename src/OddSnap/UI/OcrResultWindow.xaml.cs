@@ -33,6 +33,8 @@ public partial class OcrResultWindow : Window
 
         Theme.Refresh();
         ApplyTheme();
+        Theme.Changed += ApplyTheme;
+        Closed += (_, _) => Theme.Changed -= ApplyTheme;
         LocalizationService.ApplyCurrentCulture(settingsService.Settings.InterfaceLanguage);
 
         OcrTextBox.Text = ocrText;

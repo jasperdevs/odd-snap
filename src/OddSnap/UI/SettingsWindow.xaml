@@ -31,7 +31,7 @@
         <sys:Double x:Key="SettingsControlMinWidth">88</sys:Double>
 
         <Style x:Key="TabPill" TargetType="RadioButton">
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OddSnapFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
@@ -57,7 +57,7 @@
         </Style>
 
         <Style x:Key="SubTab" TargetType="RadioButton">
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OddSnapFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
@@ -92,7 +92,7 @@
         </Style>
 
         <Style x:Key="NavItem" TargetType="RadioButton">
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource OddSnapFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">

@@ -414,6 +414,24 @@ public static partial class UploadService
             return "S3 uploads require an HTTPS endpoint.";
         }
 
+        if (dest == UploadDestination.Immich)
+        {
+            if (!Uri.TryCreate(settings.ImmichBaseUrl, UriKind.Absolute, out var immichUri) ||
+                immichUri.Scheme != Uri.UriSchemeHttps)
+            {
+                return "Immich uploads require an HTTPS server URL.";
+            }
+        }
+
+        if (dest == UploadDestination.CustomHttp)
+        {
+            if (!Uri.TryCreate(settings.CustomUploadUrl, UriKind.Absolute, out var customUri) ||
+                customUri.Scheme != Uri.UriSchemeHttps)
+            {
+                return "Custom uploads require an HTTPS URL.";
+            }
+        }
+
         return null;
     }
 

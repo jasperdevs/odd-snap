@@ -55,7 +55,7 @@ jobs:
           $pfxPath = Join-Path $env:RUNNER_TEMP "oddsnap-signing-cert.pfx"
           [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_SIGN_PFX_BASE64))
           Add-Content -Path $env:GITHUB_OUTPUT -Value "pfx_path=$pfxPath" -Encoding utf8
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "sign_params=/fd SHA256 /f `"$pfxPath`" /p `"$env:WINDOWS_SIGN_PFX_PASSWORD`" /tr `"http://timestamp.digicert.com`" /td SHA256" -Encoding utf8
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "sign_params=/fd SHA256 /f `"$pfxPath`" /p `"$env:WINDOWS_SIGN_PFX_PASSWORD`" /tr `"https://timestamp.digicert.com`" /td SHA256" -Encoding utf8
 
       - name: Publish
         run: >

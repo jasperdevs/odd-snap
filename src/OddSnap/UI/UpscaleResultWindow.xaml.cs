@@ -41,7 +41,15 @@ public partial class UpscaleResultWindow : Window
 
         Theme.Refresh();
         ApplyTheme();
+        Theme.Changed += OnSystemThemeChanged;
+        Closed += (_, _) => Theme.Changed -= OnSystemThemeChanged;
         LoadInitialState();
+    }
+
+    private void OnSystemThemeChanged()
+    {
+        ApplyTheme();
+        LoadIcons();
     }
 
     private void LoadInitialState()

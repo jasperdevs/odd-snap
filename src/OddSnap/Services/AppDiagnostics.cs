@@ -7,7 +7,7 @@ namespace OddSnap.Services;
 public static class AppDiagnostics
 {
     private static readonly Regex SensitiveAssignmentPattern = new(
-        @"(?i)\b(api[-_ ]?key|access[-_ ]?token|token|password|secret|authorization|x-api-key|key)=([^&\s;,]+)",
+        @"(?i)\b(api[-_ ]?key|access[-_ ]?token|token|password|secret|authorization|x-api-key|key|sig(?:nature)?|x-amz-signature|x-amz-credential)=([^&\s;,]+)",
         RegexOptions.Compiled);
 
     private static readonly Regex SensitiveJsonPattern = new(
