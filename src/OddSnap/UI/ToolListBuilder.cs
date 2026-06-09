@@ -324,7 +324,7 @@ public static class ToolListBuilder
             uint mod = HotkeyFormatter.GetActiveModifiers();
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(rawKey);
             if (vk == 0) return;
-            if (IsUnsafeModifierlessHotkey(mod, vk))
+            if (!IsOverlayOnlyTool(toolId) && IsUnsafeModifierlessHotkey(mod, vk))
             {
                 ToastWindow.ShowError(
                     "Hotkey needs a modifier",
@@ -431,6 +431,11 @@ public static class ToolListBuilder
 
     private static bool IsUnsafeModifierlessHotkey(uint mod, uint vk) =>
         mod == 0 && vk != Native.User32.VK_SNAPSHOT;
+
+    // Annotation tools are overlay-local quick keys (defaults are bare 1..9); they are never
+    // registered system-wide, so a modifierless key is safe for them.
+    private static bool IsOverlayOnlyTool(string toolId) =>
+        ToolDef.AllTools.Any(t => t.Group == 1 && string.Equals(t.Id, toolId, StringComparison.OrdinalIgnoreCase));
 
     private static HotkeyConflict? FindHotkeyConflict(AppSettings settings, string currentToolId, uint mod, uint key)
     {
