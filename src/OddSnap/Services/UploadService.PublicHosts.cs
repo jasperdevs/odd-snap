@@ -278,7 +278,7 @@ public static partial class UploadService
             : new UploadResult { Error = BuildHttpError("tmpfiles.org", resp, json, node) };
     }
 
-    private static string? ToTmpFilesDownloadUrl(string? url)
+    internal static string? ToTmpFilesDownloadUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
             return null;

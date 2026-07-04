@@ -125,6 +125,7 @@ public partial class SettingsWindow : Window
         Theme.Changed += ApplyThemeColors;
         LoadStaticFluentIcons();
         LoadFileNameTokenButtons();
+        InitializeSidebarIdentity();
         LoadSettings();
         Loaded += (_, _) => EnsureSettingsWindowFitsWorkArea();
         Loaded += (_, _) => ApplyMicaBackdrop();

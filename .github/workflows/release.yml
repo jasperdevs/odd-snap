@@ -10,7 +10,31 @@ permissions:
   contents: write
 
 jobs:
+  # Releases must not ship with a red test suite.
+  test:
+    runs-on: windows-latest
+    name: Solution build + tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore solution
+        run: dotnet restore OddSnap.sln
+
+      - name: Build solution (Debug)
+        run: dotnet build OddSnap.sln -c Debug --no-restore
+
+      - name: Run tests
+        run: dotnet test src/OddSnap.Tests/OddSnap.Tests.csproj -c Debug --no-build --logger "console;verbosity=normal"
+
   build:
+    needs: test
     strategy:
       fail-fast: false
       matrix:

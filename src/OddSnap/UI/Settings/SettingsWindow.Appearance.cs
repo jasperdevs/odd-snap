@@ -19,23 +19,23 @@ public partial class SettingsWindow
     {
         Theme.Refresh();
         Theme.ApplyTo(Application.Current.Resources);
+        // All values come from the Theme token set — no inline hex here, so the
+        // settings palette cannot drift from the rest of the app.
         Resources["ThemeTextPrimaryBrush"] = Theme.Brush(Theme.TextPrimary);
         Resources["ThemeTextSecondaryBrush"] = Theme.Brush(Theme.TextSecondary);
         Resources["ThemeMutedBrush"] = Theme.Brush(Theme.TextMuted);
-        var settingsBg = Theme.IsDark ? MediaColor.FromRgb(31, 31, 31) : MediaColor.FromRgb(243, 243, 243);
-        var settingsCard = Theme.IsDark ? MediaColor.FromRgb(43, 43, 43) : MediaColor.FromRgb(255, 255, 255);
-        var settingsInput = Theme.IsDark ? MediaColor.FromRgb(36, 36, 36) : MediaColor.FromRgb(249, 249, 249);
-        Resources["ThemeCardBrush"] = Theme.Brush(settingsCard);
-        Resources["ThemeTabActiveBrush"] = Theme.Brush(Theme.IsDark ? MediaColor.FromArgb(26, 255, 255, 255) : MediaColor.FromArgb(18, 0, 0, 0));
-        Resources["ThemeTabHoverBrush"] = Theme.Brush(Theme.IsDark ? MediaColor.FromArgb(16, 255, 255, 255) : MediaColor.FromArgb(12, 0, 0, 0));
-        Resources["ThemeInputBackgroundBrush"] = Theme.Brush(settingsInput);
-        Resources["ThemeInputBorderBrush"] = Theme.Brush(Theme.IsDark ? MediaColor.FromArgb(28, 255, 255, 255) : MediaColor.FromArgb(22, 0, 0, 0));
-        Resources["ThemeWindowBorderBrush"] = Theme.Brush(Theme.IsDark ? MediaColor.FromArgb(30, 255, 255, 255) : MediaColor.FromArgb(22, 0, 0, 0));
+        Resources["ThemeCardBrush"] = Theme.Brush(Theme.SettingsCardBg);
+        Resources["ThemeTabActiveBrush"] = Theme.Brush(Theme.SettingsTabActive);
+        Resources["ThemeTabHoverBrush"] = Theme.Brush(Theme.SettingsTabHover);
+        Resources["ThemeInputBackgroundBrush"] = Theme.Brush(Theme.SettingsInputBg);
+        Resources["ThemeInputBorderBrush"] = Theme.Brush(Theme.SettingsInputBorder);
+        Resources["ThemeWindowBorderBrush"] = Theme.Brush(Theme.SettingsWindowBorder);
         Resources["ThemeAccentBrush"] = Theme.Brush(Theme.Accent);
-        Resources["ThemeSeparatorBrush"] = Theme.Brush(Theme.IsDark ? MediaColor.FromArgb(20, 255, 255, 255) : MediaColor.FromArgb(18, 0, 0, 0));
-        OuterBorder.Background = Theme.Brush(settingsBg);
+        Resources["ThemeSeparatorBrush"] = Theme.Brush(Theme.SettingsSeparator);
+        OuterBorder.Background = Theme.Brush(Theme.BgPrimary);
         OuterBorder.BorderBrush = Theme.Brush(Theme.WindowBorder);
         Icon = ThemedLogo.Square(32);
+        SidebarLogo.Source = ThemedLogo.Square(30);
         Foreground = Theme.Brush(Theme.TextPrimary);
         UiScale.ApplyToWindow(this, OuterBorder, scaleWindowBounds: true);
 
@@ -332,6 +332,7 @@ public partial class SettingsWindow
     {
         LocalizationService.ApplyCurrentCulture(_settingsService.Settings.InterfaceLanguage);
         LocalizationService.ApplyTo(this, _settingsService.Settings.InterfaceLanguage);
+        InvalidateSearchIndex();
     }
 
     private void SelectUiScale(double scale)

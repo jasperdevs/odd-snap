@@ -395,7 +395,7 @@ public static partial class UploadService
     public static bool HasCredentials(UploadDestination dest, UploadSettings settings)
         => GetConfigurationError(dest, settings) is null;
 
-    private static string? ValidateTransportSecurity(UploadDestination dest, UploadSettings settings)
+    internal static string? ValidateTransportSecurity(UploadDestination dest, UploadSettings settings)
     {
         if (dest == UploadDestination.WebDav)
         {

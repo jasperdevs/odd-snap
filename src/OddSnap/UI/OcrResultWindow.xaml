@@ -16,15 +16,9 @@
         Deactivated="Window_Deactivated">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#FFF0F0F0"/>
-        <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#FF9A9A9A"/>
-        <SolidColorBrush x:Key="ThemeMutedBrush" Color="#FF686868"/>
-        <SolidColorBrush x:Key="ThemeCardBrush" Color="#FF2D2D2D"/>
-        <SolidColorBrush x:Key="ThemeInputBackgroundBrush" Color="#FF1E1E1E"/>
-        <SolidColorBrush x:Key="ThemeInputBorderBrush" Color="#15FFFFFF"/>
-        <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#12FFFFFF"/>
-        <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FFFFFFFF"/>
-        <SolidColorBrush x:Key="ThemeSeparatorBrush" Color="#0CFFFFFF"/>
+        <!-- Theme brushes are published by ApplyTheme() in the ctor from the
+             UI.Theme token set (app-level copies exist via Theme.ApplyTo).
+             Do not add hardcoded brush values here — they would be dark-only. -->
         <SolidColorBrush x:Key="TranslationShimmerBrush" Color="#14FFFFFF"/>
 
         <Style x:Key="OcrThumbStyle" TargetType="{x:Type Thumb}">
@@ -201,7 +195,7 @@
                             ClipToBounds="True"
                             IsHitTestVisible="False">
                         <Grid>
-                            <Rectangle x:Name="TranslationShimmerRect" Fill="{StaticResource TranslationShimmerBrush}" RadiusX="6" RadiusY="6"/>
+                            <Rectangle x:Name="TranslationShimmerRect" Fill="{DynamicResource TranslationShimmerBrush}" RadiusX="6" RadiusY="6"/>
                             <StackPanel Margin="12,8,12,8" VerticalAlignment="Center">
                                 <Border Height="10" Width="150" CornerRadius="5" Background="#12FFFFFF" HorizontalAlignment="Left"/>
                                 <Border Height="8" Margin="0,8,0,0" CornerRadius="4" Background="#0EFFFFFF"/>

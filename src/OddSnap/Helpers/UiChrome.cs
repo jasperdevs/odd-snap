@@ -80,21 +80,26 @@ public static class UiChrome
     public static FontFamily FontFamily =>
         TryCreateFontFamily(PreferredFamilyName) ?? TryCreateFontFamily(FallbackFamilyName) ?? SystemFonts.DefaultFont.FontFamily;
 
-    public static System.Drawing.Color SurfaceWindowBackground => IsDark ? System.Drawing.Color.FromArgb(28, 28, 28) : System.Drawing.Color.FromArgb(245, 245, 245);
-    public static System.Drawing.Color SurfaceBackground => IsDark ? System.Drawing.Color.FromArgb(32, 32, 32) : System.Drawing.Color.FromArgb(252, 252, 252);
-    public static System.Drawing.Color SurfaceElevated => IsDark ? System.Drawing.Color.FromArgb(255, 44, 44, 44) : System.Drawing.Color.FromArgb(255, 255, 255);
-    public static System.Drawing.Color SurfaceBorder => IsDark ? System.Drawing.Color.FromArgb(24, 255, 255, 255) : System.Drawing.Color.FromArgb(24, 0, 0, 0);
-    public static System.Drawing.Color SurfaceBorderStrong => IsDark ? System.Drawing.Color.FromArgb(34, 255, 255, 255) : System.Drawing.Color.FromArgb(36, 0, 0, 0);
-    public static System.Drawing.Color SurfaceBorderSubtle => IsDark ? System.Drawing.Color.FromArgb(16, 255, 255, 255) : System.Drawing.Color.FromArgb(14, 0, 0, 0);
-    public static System.Drawing.Color SurfaceTextPrimary => IsDark ? System.Drawing.Color.FromArgb(255, 255, 255, 255) : System.Drawing.Color.FromArgb(24, 24, 24);
-    public static System.Drawing.Color SurfaceTextSecondary => IsDark ? System.Drawing.Color.FromArgb(190, 255, 255, 255) : System.Drawing.Color.FromArgb(120, 0, 0, 0);
-    public static System.Drawing.Color SurfaceTextMuted => IsDark ? System.Drawing.Color.FromArgb(120, 255, 255, 255) : System.Drawing.Color.FromArgb(90, 0, 0, 0);
-    public static System.Drawing.Color SurfaceHover => IsDark ? System.Drawing.Color.FromArgb(22, 255, 255, 255) : System.Drawing.Color.FromArgb(14, 0, 0, 0);
-    public static System.Drawing.Color SurfacePill => IsDark ? System.Drawing.Color.FromArgb(255, 44, 44, 44) : System.Drawing.Color.FromArgb(255, 255, 255, 255);
-    public static System.Drawing.Color SurfaceTooltip => IsDark ? System.Drawing.Color.FromArgb(255, 48, 48, 48) : System.Drawing.Color.FromArgb(255, 255, 255, 255);
-    public static System.Drawing.Color SurfaceShadow => System.Drawing.Color.FromArgb(IsDark ? 60 : 34, 0, 0, 0);
-    public static System.Drawing.Color SurfaceDimOverlay => System.Drawing.Color.FromArgb(IsDark ? 35 : 18, 0, 0, 0);
-    public static System.Drawing.Color SurfaceSelectionOverlay => System.Drawing.Color.FromArgb(IsDark ? 100 : 72, 0, 0, 0);
+    // Surface colors are single-sourced from UI.Theme (the WPF token set) and
+    // converted to System.Drawing here. Add or tune tokens in Theme, not here.
+    public static System.Drawing.Color SurfaceWindowBackground => Gdi(OddSnap.UI.Theme.SurfaceWindowBackground);
+    public static System.Drawing.Color SurfaceBackground => Gdi(OddSnap.UI.Theme.SurfaceBackground);
+    public static System.Drawing.Color SurfaceElevated => Gdi(OddSnap.UI.Theme.SurfaceElevated);
+    public static System.Drawing.Color SurfaceBorder => Gdi(OddSnap.UI.Theme.SurfaceBorder);
+    public static System.Drawing.Color SurfaceBorderStrong => Gdi(OddSnap.UI.Theme.SurfaceBorderStrong);
+    public static System.Drawing.Color SurfaceBorderSubtle => Gdi(OddSnap.UI.Theme.SurfaceBorderSubtle);
+    public static System.Drawing.Color SurfaceTextPrimary => Gdi(OddSnap.UI.Theme.SurfaceTextPrimary);
+    public static System.Drawing.Color SurfaceTextSecondary => Gdi(OddSnap.UI.Theme.SurfaceTextSecondary);
+    public static System.Drawing.Color SurfaceTextMuted => Gdi(OddSnap.UI.Theme.SurfaceTextMuted);
+    public static System.Drawing.Color SurfaceHover => Gdi(OddSnap.UI.Theme.SurfaceHover);
+    public static System.Drawing.Color SurfacePill => Gdi(OddSnap.UI.Theme.SurfacePill);
+    public static System.Drawing.Color SurfaceTooltip => Gdi(OddSnap.UI.Theme.SurfaceTooltip);
+    public static System.Drawing.Color SurfaceShadow => Gdi(OddSnap.UI.Theme.SurfaceShadow);
+    public static System.Drawing.Color SurfaceDimOverlay => Gdi(OddSnap.UI.Theme.SurfaceDimOverlay);
+    public static System.Drawing.Color SurfaceSelectionOverlay => Gdi(OddSnap.UI.Theme.SurfaceSelectionOverlay);
+
+    private static System.Drawing.Color Gdi(System.Windows.Media.Color c)
+        => System.Drawing.Color.FromArgb(c.A, c.R, c.G, c.B);
 
     // ─── Monitor refresh rate ────────────────────────────────────────
 

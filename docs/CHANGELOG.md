@@ -1,16 +1,15 @@
-# OddSnap v0.8.44
+# OddSnap v0.8.45
 
-## Fixed
-- Annotation tool hotkeys can be set to a single key (like the default 1-9) again, without requiring Ctrl/Alt/Shift. (#55)
+## New
+- Settings search: type in the new "Find a setting" box in the sidebar to jump straight to any setting on any page, with the matching card highlighted.
+- The settings sidebar now shows the app logo and version, with a roomier Windows 11-style navigation rail and selection indicator.
 
 ## Improved
-- Improved Japanese translation: fixed mistranslations, standardized style, translated remaining strings. Thanks @hu-ja-ja! (#54)
-- Switching the Windows light/dark theme now restyles all open OddSnap windows instantly instead of requiring them to be reopened.
-- Keyboard navigation now shows a visible focus outline on buttons and settings tabs.
-- Window borders and shadows now follow the system dark mode.
-- The upscale Before/After labels now stay readable over light images.
+- Larger settings window with bigger page titles and more comfortable spacing throughout.
+- The OCR translation loading shimmer is now visible in light mode.
+- The color palette is now single-sourced across the WPF windows and the capture chrome, so light/dark styling can no longer drift between surfaces.
 
-## Security
-- Immich and custom HTTP upload destinations now require HTTPS, matching WebDAV and S3.
-- Diagnostics logs now redact SAS and presigned URL signatures.
-- Release code signing now uses the HTTPS timestamp server.
+## Under the hood
+- Added the project's first automated test suite (292 tests covering settings persistence and migrations, upload URL validation, localization fallback, filename templates, hotkey formatting, history utilities, and toolbar layout).
+- CI now builds the full solution and runs the test suite on every push and pull request, and releases are blocked if tests fail.
+- Website: added a web app manifest and icons, canonical/social metadata, structured data, a skip-to-content link, and image sizing for faster, steadier loading.

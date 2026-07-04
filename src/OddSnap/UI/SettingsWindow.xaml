@@ -4,8 +4,8 @@
         xmlns:controls="clr-namespace:OddSnap.UI.Controls"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         Title="OddSnap"
-        Height="680" Width="960"
-        MinHeight="560" MinWidth="860"
+        Height="720" Width="1080"
+        MinHeight="560" MinWidth="900"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         Background="Transparent"
@@ -14,17 +14,11 @@
         Icon="pack://application:,,,/Assets/oddsnap.ico">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#FFF0F0F0"/>
-        <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#FF9A9A9A"/>
-        <SolidColorBrush x:Key="ThemeMutedBrush" Color="#FF686868"/>
-        <SolidColorBrush x:Key="ThemeCardBrush" Color="#FF2D2D2D"/>
-        <SolidColorBrush x:Key="ThemeTabActiveBrush" Color="#18FFFFFF"/>
-        <SolidColorBrush x:Key="ThemeTabHoverBrush" Color="#0EFFFFFF"/>
-        <SolidColorBrush x:Key="ThemeInputBackgroundBrush" Color="#FF1E1E1E"/>
-        <SolidColorBrush x:Key="ThemeInputBorderBrush" Color="#15FFFFFF"/>
-        <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#12FFFFFF"/>
-        <SolidColorBrush x:Key="ThemeAccentBrush" Color="#FFFFFFFF"/>
-        <SolidColorBrush x:Key="ThemeSeparatorBrush" Color="#0CFFFFFF"/>
+        <!-- Theme brushes (ThemeTextPrimaryBrush, ThemeCardBrush, …) are published
+             into this window's resources by ApplyThemeColors() during construction,
+             sourced from the UI.Theme token set. App-level copies exist as parse-time
+             fallback via Theme.ApplyTo(Application.Current.Resources). Do not add
+             hardcoded brush values here — they would be dark-only and drift. -->
         <sys:Double x:Key="SettingsControlHeight">30</sys:Double>
         <Thickness x:Key="SettingsControlPadding">10,5</Thickness>
         <sys:Double x:Key="SettingsControlFontSize">12</sys:Double>
@@ -97,22 +91,26 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Grid>
-                            <Border x:Name="Bd" Padding="9,0" Height="34" CornerRadius="4" Cursor="Hand" Background="Transparent"
+                            <Border x:Name="Bd" Padding="12,0" Height="37" CornerRadius="6" Cursor="Hand" Background="Transparent"
                                     Margin="0,1">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="22"/>
+                                        <ColumnDefinition Width="28"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock x:Name="Icon" Grid.Column="0" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                               FontSize="14" Text="&#xE713;" Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                               FontSize="16" Text="&#xE713;" Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                                                Opacity="0.74" HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="Tb" Grid.Column="1" Text="{TemplateBinding Content}" FontSize="12"
+                                    <TextBlock x:Name="Tb" Grid.Column="1" Text="{TemplateBinding Content}" FontSize="13"
                                                FontFamily="Segoe UI Variable Text"
                                                Foreground="{DynamicResource ThemeTextPrimaryBrush}" Opacity="0.82"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                             </Border>
+                            <!-- Win11-style selection indicator -->
+                            <Rectangle x:Name="Ind" Width="3" Height="16" RadiusX="1.5" RadiusY="1.5"
+                                       HorizontalAlignment="Left" VerticalAlignment="Center"
+                                       Fill="{DynamicResource ThemeAccentBrush}" Opacity="0"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="Content" Value="General">
@@ -150,6 +148,7 @@
                                 <Setter TargetName="Tb" Property="Opacity" Value="1"/>
                                 <Setter TargetName="Tb" Property="FontWeight" Value="SemiBold"/>
                                 <Setter TargetName="Icon" Property="Opacity" Value="0.92"/>
+                                <Setter TargetName="Ind" Property="Opacity" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabHoverBrush}"/>
@@ -660,45 +659,143 @@
         <!-- Sidebar + Content -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="150"/>
+                <ColumnDefinition Width="232"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Sidebar navigation -->
             <Border Grid.Column="0" BorderBrush="{DynamicResource ThemeSeparatorBrush}" BorderThickness="0,0,1,0"
-                    Padding="10,14,8,18">
-                <StackPanel>
-                    <RadioButton x:Name="SettingsTab" Content="General" GroupName="Main"
-                                 IsChecked="True" Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <RadioButton x:Name="ToastTab" Content="Toast" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <RadioButton x:Name="HotkeysTab" Content="Tools" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <RadioButton x:Name="ToolbarTab" Content="Toolbar" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <RadioButton x:Name="CaptureTab" Content="Capture" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <RadioButton x:Name="RecordingTab" Content="Recording" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <RadioButton x:Name="OcrTab" Content="OCR" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
-                    <RadioButton x:Name="HistoryTab" Content="History" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <RadioButton x:Name="UploadsTab" Content="Uploads" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                    <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,10,0,10"/>
-                    <RadioButton x:Name="AboutTab" Content="About" GroupName="Main"
-                                 Click="TabChanged" Style="{StaticResource NavItem}"/>
-                </StackPanel>
+                    Padding="12,10,10,14">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- App identity -->
+                    <Grid Grid.Row="0" Margin="6,4,4,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Image x:Name="SidebarLogo" Width="30" Height="30" VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="OddSnap" FontSize="13.5" FontWeight="SemiBold"
+                                       FontFamily="Segoe UI Variable Text"
+                                       Foreground="{DynamicResource ThemeTextPrimaryBrush}"/>
+                            <TextBlock x:Name="SidebarVersionText" Text="" FontSize="10.5"
+                                       FontFamily="Segoe UI Variable Text" Margin="0,1,0,0"
+                                       Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Settings search -->
+                    <Grid Grid.Row="1" Margin="2,0,2,10">
+                        <Border Background="{DynamicResource ThemeInputBackgroundBrush}"
+                                BorderBrush="{DynamicResource ThemeInputBorderBrush}"
+                                BorderThickness="1" CornerRadius="6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE721;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                           FontSize="12" Margin="9,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ThemeTextSecondaryBrush}"
+                                           IsHitTestVisible="False"/>
+                                <TextBox x:Name="SettingsSearchBox" Grid.Column="1"
+                                         Background="Transparent" BorderThickness="0"
+                                         Foreground="{DynamicResource ThemeTextPrimaryBrush}"
+                                         CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"
+                                         FontSize="12" FontFamily="Segoe UI Variable Text"
+                                         Padding="6,7" VerticalContentAlignment="Center"
+                                         AutomationProperties.Name="Search settings"
+                                         TextChanged="SettingsSearchBox_TextChanged"
+                                         PreviewKeyDown="SettingsSearchBox_PreviewKeyDown"/>
+                                <TextBlock x:Name="SettingsSearchHint" Grid.Column="1" Text="Find a setting"
+                                           FontSize="12" FontFamily="Segoe UI Variable Text"
+                                           Margin="10,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ThemeMutedBrush}"
+                                           IsHitTestVisible="False"/>
+                            </Grid>
+                        </Border>
+                        <Popup x:Name="SettingsSearchPopup" PlacementTarget="{Binding ElementName=SettingsSearchBox}"
+                               Placement="Bottom" VerticalOffset="6" HorizontalOffset="-24"
+                               StaysOpen="True" AllowsTransparency="True">
+                            <Border Background="{DynamicResource ThemeCardBrush}"
+                                    BorderBrush="{DynamicResource ThemeWindowBorderBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="4"
+                                    MinWidth="260" MaxWidth="320" MaxHeight="340">
+                                <ListBox x:Name="SettingsSearchResults" Background="Transparent" BorderThickness="0"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         PreviewMouseLeftButtonUp="SettingsSearchResults_MouseUp"
+                                         PreviewKeyDown="SettingsSearchResults_PreviewKeyDown">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border x:Name="ItemBd" CornerRadius="5" Padding="10,7" Margin="0,1"
+                                                                Background="Transparent" Cursor="Hand">
+                                                            <ContentPresenter/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="ItemBd" Property="Background" Value="{DynamicResource ThemeTabHoverBrush}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="ItemBd" Property="Background" Value="{DynamicResource ThemeTabActiveBrush}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                </ListBox>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    <!-- Nav items -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <RadioButton x:Name="SettingsTab" Content="General" GroupName="Main"
+                                         IsChecked="True" Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <RadioButton x:Name="ToastTab" Content="Toast" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <RadioButton x:Name="HotkeysTab" Content="Tools" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <RadioButton x:Name="ToolbarTab" Content="Toolbar" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <RadioButton x:Name="CaptureTab" Content="Capture" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <RadioButton x:Name="RecordingTab" Content="Recording" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <RadioButton x:Name="OcrTab" Content="OCR" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="8,10,8,10"/>
+                            <RadioButton x:Name="HistoryTab" Content="History" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <RadioButton x:Name="UploadsTab" Content="Uploads" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="8,10,8,10"/>
+                            <RadioButton x:Name="AboutTab" Content="About" GroupName="Main"
+                                         Click="TabChanged" Style="{StaticResource NavItem}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
             </Border>
 
             <!-- Content area -->
             <Grid Grid.Column="1">
                 <TextBlock x:Name="PageTitleText"
                            Text="General"
-                           Margin="18,10,18,0"
-                           FontSize="20"
+                           Margin="26,14,26,0"
+                           FontSize="26"
                            FontWeight="SemiBold"
                            FontFamily="Segoe UI Variable Display"
                            Foreground="{DynamicResource ThemeTextPrimaryBrush}"
@@ -707,7 +804,7 @@
 
 
             <!-- Tools (unified hotkeys + toolbar) -->
-            <ScrollViewer x:Name="HotkeysPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="18,42,18,18">
+            <ScrollViewer x:Name="HotkeysPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="26,58,26,22">
                 <StackPanel>
                     <CheckBox x:Name="ShowToolNumberBadgesCheck" Visibility="Collapsed"
                               Checked="ShowToolNumberBadgesCheck_Changed" Unchecked="ShowToolNumberBadgesCheck_Changed"/>
@@ -716,7 +813,7 @@
             </ScrollViewer>
 
             <!-- Toolbar layout -->
-            <ScrollViewer x:Name="ToolbarPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="18,42,18,18">
+            <ScrollViewer x:Name="ToolbarPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="26,58,26,22">
                 <StackPanel>
                     <TextBlock Text="Pinned" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}" AllowDrop="True" Drop="ToolbarPinnedList_Drop" DragOver="ToolbarList_DragOver">
@@ -756,7 +853,7 @@
             </ScrollViewer>
 
             <!-- Capture + Saving -->
-            <ScrollViewer x:Name="CapturePanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="18,42,18,18">
+            <ScrollViewer x:Name="CapturePanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="26,58,26,22">
                 <StackPanel>
                     <TextBlock Text="Capture Tool" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
@@ -1443,7 +1540,7 @@
             </ScrollViewer>
 
             <!-- Recording -->
-            <ScrollViewer x:Name="RecordingPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="18,42,18,18">
+            <ScrollViewer x:Name="RecordingPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="26,58,26,22">
                 <StackPanel>
                     <TextBlock Text="Recording" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
@@ -1641,7 +1738,7 @@
             </ScrollViewer>
 
             <!-- OCR & Translation -->
-            <ScrollViewer x:Name="OcrPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="18,42,18,18">
+            <ScrollViewer x:Name="OcrPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="26,58,26,22">
                 <StackPanel>
                     <TextBlock Text="Recognition" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
@@ -1893,7 +1990,7 @@
 
             <!-- General panel content gets populated from the XAML below -->
             <!-- We need to close and reopen for the General section -->
-            <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="18,42,18,18">
+            <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="26,58,26,22">
                 <StackPanel>
                     <TextBlock Text="Language" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
@@ -2139,7 +2236,7 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <ScrollViewer x:Name="ToastPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="18,42,18,18"
+            <ScrollViewer x:Name="ToastPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="26,58,26,22"
                           PreviewMouseMove="ToastPanel_PreviewMouseMove"
                           PreviewMouseLeftButtonUp="ToastPanel_PreviewMouseLeftButtonUp">
                 <StackPanel>
@@ -2681,7 +2778,7 @@
             </ScrollViewer>
 
             <!-- About -->
-            <ScrollViewer x:Name="AboutPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="18,42,18,18">
+            <ScrollViewer x:Name="AboutPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="26,58,26,22">
                 <StackPanel>
                     <TextBlock Text="Updates" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
@@ -2906,7 +3003,7 @@
             </ScrollViewer>
 
             <!-- History (merged: Screenshots + Text sub-tabs) -->
-            <Grid x:Name="HistoryPanel" Visibility="Collapsed" Margin="22,42,22,10">
+            <Grid x:Name="HistoryPanel" Visibility="Collapsed" Margin="26,58,26,12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -3163,7 +3260,7 @@
             </Grid>
 
             <!-- Uploads -->
-            <ScrollViewer x:Name="UploadsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="18,42,18,18">
+            <ScrollViewer x:Name="UploadsPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="26,58,26,22">
                 <StackPanel>
                     <Border Padding="0,0,0,10">
                         <WrapPanel>

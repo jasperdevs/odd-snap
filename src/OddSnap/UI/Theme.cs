@@ -58,6 +58,38 @@ public static class Theme
     public static Color ToastBg => IsDark ? C(48, 48, 48) : C(252, 252, 252);
     public static Color ToastBorder => IsDark ? CA(255, 255, 255, 30) : CA(0, 0, 0, 18);
 
+    // Loading shimmer overlay (OCR translation, upscale preview)
+    public static Color Shimmer => IsDark ? CA(255, 255, 255, 20) : CA(0, 0, 0, 18);
+
+    // Floating capture chrome (rendered via GDI on the WinForms capture surfaces).
+    // Helpers.UiChrome converts these to System.Drawing colors — add new surface
+    // tokens here, not there, so the WPF and GDI palettes cannot drift.
+    public static Color SurfaceWindowBackground => IsDark ? C(28, 28, 28) : C(245, 245, 245);
+    public static Color SurfaceBackground => IsDark ? C(32, 32, 32) : C(252, 252, 252);
+    public static Color SurfaceElevated => IsDark ? C(44, 44, 44) : C(255, 255, 255);
+    public static Color SurfaceBorder => IsDark ? CA(255, 255, 255, 24) : CA(0, 0, 0, 24);
+    public static Color SurfaceBorderStrong => IsDark ? CA(255, 255, 255, 34) : CA(0, 0, 0, 36);
+    public static Color SurfaceBorderSubtle => IsDark ? CA(255, 255, 255, 16) : CA(0, 0, 0, 14);
+    public static Color SurfaceTextPrimary => IsDark ? C(255, 255, 255) : C(24, 24, 24);
+    public static Color SurfaceTextSecondary => IsDark ? CA(255, 255, 255, 190) : CA(0, 0, 0, 120);
+    public static Color SurfaceTextMuted => IsDark ? CA(255, 255, 255, 120) : CA(0, 0, 0, 90);
+    public static Color SurfaceHover => IsDark ? CA(255, 255, 255, 22) : CA(0, 0, 0, 14);
+    public static Color SurfacePill => IsDark ? C(44, 44, 44) : C(255, 255, 255);
+    public static Color SurfaceTooltip => IsDark ? C(48, 48, 48) : C(255, 255, 255);
+    public static Color SurfaceShadow => CA(0, 0, 0, IsDark ? (byte)60 : (byte)34);
+    public static Color SurfaceDimOverlay => CA(0, 0, 0, IsDark ? (byte)35 : (byte)18);
+    public static Color SurfaceSelectionOverlay => CA(0, 0, 0, IsDark ? (byte)100 : (byte)72);
+
+    // Settings window palette (slightly tuned variants of the base surfaces).
+    // SettingsWindow.ApplyThemeColors publishes these into its resource dictionary.
+    public static Color SettingsCardBg => IsDark ? C(43, 43, 43) : C(255, 255, 255);
+    public static Color SettingsInputBg => IsDark ? C(36, 36, 36) : C(249, 249, 249);
+    public static Color SettingsTabActive => IsDark ? CA(255, 255, 255, 26) : CA(0, 0, 0, 18);
+    public static Color SettingsTabHover => IsDark ? CA(255, 255, 255, 16) : CA(0, 0, 0, 12);
+    public static Color SettingsInputBorder => IsDark ? CA(255, 255, 255, 28) : CA(0, 0, 0, 22);
+    public static Color SettingsWindowBorder => IsDark ? CA(255, 255, 255, 30) : CA(0, 0, 0, 22);
+    public static Color SettingsSeparator => IsDark ? CA(255, 255, 255, 20) : CA(0, 0, 0, 18);
+
     public static SolidColorBrush Brush(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
 
     public static void ApplyTo(System.Windows.ResourceDictionary resources)

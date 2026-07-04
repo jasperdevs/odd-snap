@@ -15,13 +15,9 @@
         PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
-        <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#FFF0F0F0"/>
-        <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#FF9A9A9A"/>
-        <SolidColorBrush x:Key="ThemeMutedBrush" Color="#FF686868"/>
-        <SolidColorBrush x:Key="ThemeCardBrush" Color="#FF2D2D2D"/>
-        <SolidColorBrush x:Key="ThemeInputBackgroundBrush" Color="#FF1E1E1E"/>
-        <SolidColorBrush x:Key="ThemeInputBorderBrush" Color="#15FFFFFF"/>
-        <SolidColorBrush x:Key="ThemeWindowBorderBrush" Color="#12FFFFFF"/>
+        <!-- Theme brushes are published by ApplyTheme() in the ctor from the
+             UI.Theme token set (app-level copies exist via Theme.ApplyTo).
+             Do not add hardcoded brush values here — they would be dark-only. -->
         <SolidColorBrush x:Key="UpscaleShimmerBrush" Color="#14FFFFFF"/>
         <SolidColorBrush x:Key="LoadingTextBrush" Color="#FFFFFFFF"/>
     </Window.Resources>

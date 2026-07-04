@@ -12,7 +12,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>Assets\oddsnap.ico</ApplicationIcon>
-    <Version>0.8.44</Version>
+    <Version>0.8.45</Version>
     <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
     <Authors>jasperdevs</Authors>
     <AssemblyName>OddSnap</AssemblyName>
@@ -81,6 +81,10 @@
     <Resource Include="Assets\tmpfiles_sq.png" />
     <Resource Include="Assets\uguu.png" />
     <Resource Include="Assets\uguu_sq.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OddSnap.Tests" />
   </ItemGroup>
 
   <ItemGroup>

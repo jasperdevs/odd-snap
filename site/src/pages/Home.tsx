@@ -35,15 +35,15 @@ const features = [
 ];
 
 const showcase = [
-  { title: "annotate", desc: "arrows, text, shapes, blur, highlights, freehand, step numbers, emoji, and ruler with undo/redo.", img: "annotations.webp" },
-  { title: "ocr & translate", desc: "extract text from any region with 100+ ocr languages. translate offline with argos or online with google.", img: "ocr-screenshot.webp" },
-  { title: "ai redirects", desc: "open chatgpt, claude, gemini, or google lens right after capture. image stays pinned and ready to drop in.", img: "ai-redirects.webp" },
-  { title: "upscale", desc: "upscale any capture locally with swinir x4 or real-esrgan x4plus. compare before and after side by side.", img: "upscale.webp" },
-  { title: "stickers", desc: "remove backgrounds locally with 5 ai models. add stroke and shadow finishing, save as transparent png.", img: "sticker-showcase.webp" },
-  { title: "record", desc: "save as gif, mp4, webm, or mkv. microphone and desktop audio at 15/24/30/60 fps.", img: "recording.webp" },
-  { title: "search", desc: "find past screenshots by filename, ocr text, or ai-powered semantic similarity.", img: "search-screenshot.webp" },
-  { title: "color picker", desc: "pick any color on screen with a magnified preview. hex and rgb to clipboard.", img: "color-picker.webp" },
-  { title: "uploads", desc: "19 destinations: imgur, s3/r2/b2, dropbox, github, onedrive, immich, webdav, and more.", img: "uploads.webp" },
+  { title: "annotate", desc: "arrows, text, shapes, blur, highlights, freehand, step numbers, emoji, and ruler with undo/redo.", img: "annotations.webp", w: 1821, h: 1016 },
+  { title: "ocr & translate", desc: "extract text from any region with 100+ ocr languages. translate offline with argos or online with google.", img: "ocr-screenshot.webp", w: 691, h: 480 },
+  { title: "ai redirects", desc: "open chatgpt, claude, gemini, or google lens right after capture. image stays pinned and ready to drop in.", img: "ai-redirects.webp", w: 930, h: 265 },
+  { title: "upscale", desc: "upscale any capture locally with swinir x4 or real-esrgan x4plus. compare before and after side by side.", img: "upscale.webp", w: 1177, h: 747 },
+  { title: "stickers", desc: "remove backgrounds locally with 5 ai models. add stroke and shadow finishing, save as transparent png.", img: "sticker-showcase.webp", w: 1248, h: 506 },
+  { title: "record", desc: "save as gif, mp4, webm, or mkv. microphone and desktop audio at 15/24/30/60 fps.", img: "recording.webp", w: 672, h: 474 },
+  { title: "search", desc: "find past screenshots by filename, ocr text, or ai-powered semantic similarity.", img: "search-screenshot.webp", w: 576, h: 555 },
+  { title: "color picker", desc: "pick any color on screen with a magnified preview. hex and rgb to clipboard.", img: "color-picker.webp", w: 589, h: 312 },
+  { title: "uploads", desc: "19 destinations: imgur, s3/r2/b2, dropbox, github, onedrive, immich, webdav, and more.", img: "uploads.webp", w: 829, h: 628 },
 ];
 
 const faq = [
@@ -162,8 +162,11 @@ function Showcase() {
                 <img
                   src={assetBase + s.img}
                   alt={s.title}
+                  width={s.w}
+                  height={s.h}
                   className="w-full h-full object-cover object-top"
                   loading={i <= 1 ? "eager" : "lazy"}
+                  decoding="async"
                 />
               </div>
             ))}
@@ -209,6 +212,8 @@ export default function Home() {
             <img
               src={assetBase + "oddsnap-square.webp"}
               alt=""
+              width={1024}
+              height={1024}
               className="h-28 w-28 sm:h-32 sm:w-32"
             />
           </div>
@@ -216,6 +221,8 @@ export default function Home() {
             <img
               src={assetBase + "oddsnap.png"}
               alt="OddSnap"
+              width={1250}
+              height={232}
               className="w-full"
               style={{
                 filter: "brightness(0) saturate(100%) invert(8%) sepia(8%) saturate(879%) hue-rotate(353deg) brightness(91%) contrast(94%)",

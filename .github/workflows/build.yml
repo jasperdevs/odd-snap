@@ -8,6 +8,55 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: windows-latest
+    name: Solution build + tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore solution
+        run: dotnet restore OddSnap.sln
+
+      # Builds every project in the solution (WPF app, AppModel, WinUI shell,
+      # tests) so compile regressions in non-released projects surface in PRs.
+      - name: Build solution (Debug)
+        run: dotnet build OddSnap.sln -c Debug --no-restore
+
+      - name: Run tests
+        run: dotnet test src/OddSnap.Tests/OddSnap.Tests.csproj -c Debug --no-build --logger "console;verbosity=normal"
+
+  site:
+    runs-on: ubuntu-latest
+    name: Website build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        working-directory: site
+        run: npm ci
+
+      # Type-checks and produces the docs/ bundle; the output is discarded here.
+      # Deployment still happens by committing a locally built docs/ folder.
+      - name: Build site
+        working-directory: site
+        run: npm run build
+
   build:
     strategy:
       fail-fast: false

@@ -129,9 +129,7 @@ public partial class UpscaleResultWindow : Window
         Resources["ThemeInputBackgroundBrush"] = Theme.Brush(Theme.BgSecondary);
         Resources["ThemeInputBorderBrush"] = Theme.Brush(Theme.BorderSubtle);
         Resources["ThemeWindowBorderBrush"] = Theme.Brush(Theme.WindowBorder);
-        Resources["UpscaleShimmerBrush"] = Theme.Brush(Theme.IsDark
-            ? System.Windows.Media.Color.FromArgb(20, 255, 255, 255)
-            : System.Windows.Media.Color.FromArgb(18, 0, 0, 0));
+        Resources["UpscaleShimmerBrush"] = Theme.Brush(Theme.Shimmer);
         Resources["LoadingTextBrush"] = Theme.Brush(System.Windows.Media.Colors.White);
         Icon = ThemedLogo.Square(32);
     }
