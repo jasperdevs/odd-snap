@@ -200,6 +200,14 @@ public sealed partial class RegionOverlayForm
         // Select tool: check resize handles first, then hit-test annotations
         if (_mode == CaptureMode.Select)
         {
+            // The delete badge sits outside the frame, so it has to win over the handles below it.
+            if (IsPointInSelectDeleteButton(e.Location))
+            {
+                _hoveredSelectDelete = false;
+                DeleteSelectedAnnotation();
+                return;
+            }
+
             // Check resize handles on already-selected annotation
             int handle = GetSelectHandle(e.Location);
             if (handle >= 0 && _selectedAnnotationIndex >= 0)

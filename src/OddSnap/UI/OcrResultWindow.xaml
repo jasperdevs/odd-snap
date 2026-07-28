@@ -92,7 +92,7 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="RootBorder" CornerRadius="12" ClipToBounds="True">
+    <Border x:Name="RootBorder" CornerRadius="{DynamicResource OddSnapWindowCornerRadius}" ClipToBounds="True">
         <Border.Effect>
             <DropShadowEffect BlurRadius="24" ShadowDepth="2" Opacity="0.4" Color="Black"/>
         </Border.Effect>

@@ -84,6 +84,8 @@ public sealed partial class RegionOverlayForm
                 };
                 foreach (var c in corners)
                     WindowsHandleRenderer.Paint(g, WindowsHandleRenderer.CenteredAt(c));
+
+                PaintSelectDeleteButton(g);
             }
         }
 
@@ -498,4 +500,40 @@ public sealed partial class RegionOverlayForm
         }
     }
 
+    /// <summary>
+    /// Draws the delete badge on the selected annotation. Keyboard Delete already worked, but there
+    /// was nothing on screen telling you an annotation could be removed at all.
+    /// </summary>
+    private void PaintSelectDeleteButton(Graphics g)
+    {
+        var rect = GetSelectDeleteButtonRect();
+        if (rect.IsEmpty)
+            return;
+
+        bool hovered = _hoveredSelectDelete;
+        var fill = hovered
+            ? Color.FromArgb(255, 232, 68, 58)
+            : Color.FromArgb(235, 200, 48, 40);
+
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        using (var shadow = new SolidBrush(Color.FromArgb(70, 0, 0, 0)))
+            g.FillEllipse(shadow, rect.X + 1, rect.Y + 1, rect.Width, rect.Height);
+
+        using (var brush = new SolidBrush(fill))
+            g.FillEllipse(brush, rect);
+
+        using (var border = new Pen(Color.FromArgb(190, 255, 255, 255), 1f))
+            g.DrawEllipse(border, rect);
+
+        // The glyph is a plain X so it reads at any UI scale.
+        float inset = rect.Width * 0.32f;
+        using var cross = new Pen(Color.White, Math.Max(1.6f, rect.Width * 0.11f))
+        {
+            StartCap = System.Drawing.Drawing2D.LineCap.Round,
+            EndCap = System.Drawing.Drawing2D.LineCap.Round
+        };
+        g.DrawLine(cross, rect.Left + inset, rect.Top + inset, rect.Right - inset, rect.Bottom - inset);
+        g.DrawLine(cross, rect.Right - inset, rect.Top + inset, rect.Left + inset, rect.Bottom - inset);
+    }
 }

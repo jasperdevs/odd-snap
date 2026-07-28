@@ -9,6 +9,20 @@ public enum AfterCaptureAction
     PreviewOnly
 }
 
+/// <summary>What a left click on the tray icon does.</summary>
+public enum TrayClickAction
+{
+    Capture,
+    FullScreen,
+    TextCapture,
+    ColorPicker,
+    Record,
+    ScrollCapture,
+    History,
+    Settings,
+    Nothing
+}
+
 public enum ToastPosition
 {
     Right,
@@ -175,6 +189,8 @@ public sealed class AppSettings
     public bool SaveToFile { get; set; } = true;
     public bool AskForFileNameOnSave { get; set; }
     public string FileNameTemplate { get; set; } = Helpers.FileNameTemplate.DefaultTemplate;
+    /// <summary>Append the source app name to saved captures when the template has no {app} token.</summary>
+    public bool IncludeSourceAppInFileName { get; set; } = true;
     public CaptureImageFormat CaptureImageFormat { get; set; } = CaptureImageFormat.Png;
     public bool StyleScreenshots { get; set; }
     public bool AddScreenshotShadow { get; set; }
@@ -193,6 +209,8 @@ public sealed class AppSettings
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }
     public bool DisableAnimations { get; set; }
+    /// <summary>Rounded window/card corners. Off gives OddSnap square, flat chrome.</summary>
+    public bool UseRoundedCorners { get; set; } = true;
     public double UiScale { get; set; } = 1.0;
     public string InterfaceLanguage { get; set; } = "auto";
     public bool ShowCrosshairGuides { get; set; } // off by default
@@ -205,6 +223,7 @@ public sealed class AppSettings
     public int JpegQuality { get; set; } = 85;
     public bool HasCompletedSetup { get; set; }
     public ToastPosition ToastPosition { get; set; } = ToastPosition.Right;
+    public TrayClickAction TrayLeftClickAction { get; set; } = TrayClickAction.Capture;
     public CaptureMode DefaultCaptureMode { get; set; } = CaptureMode.Rectangle;
     public CenterSelectionAspectRatio CenterSelectionAspectRatio { get; set; } = CenterSelectionAspectRatio.Free;
     public bool ShowToolNumberBadges { get; set; } = true;
@@ -404,8 +423,14 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
     public static List<string> DefaultToolbarOrderIds() =>
         AllToolbarItems().Select(t => t.Id).ToList();
 
+    /// <summary>
+    /// Capture tools plus Select. Select is the gateway to moving, resizing and deleting
+    /// annotations, so leaving it in the annotation flyout made editing look impossible.
+    /// </summary>
     public static List<string> DefaultPinnedToolbarIds() =>
-        AllTools.Where(t => t.Group == 0).Select(t => t.Id).ToList();
+        AllTools.Where(t => t.Group == 0).Select(t => t.Id)
+            .Append("select")
+            .ToList();
 
     public static bool IsCaptureTool(CaptureMode mode) =>
         AllTools.Any(t => t.Mode == mode && t.Group == 0);

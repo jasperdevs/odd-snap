@@ -390,7 +390,7 @@
         </Style>
 
         <Style x:Key="Card" TargetType="Border">
-            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource OddSnapCardCornerRadius}"/>
             <Setter Property="Padding" Value="14,9"/>
             <Setter Property="Margin" Value="0,0,0,10"/>
             <Setter Property="Background" Value="{DynamicResource ThemeCardBrush}"/>
@@ -644,7 +644,7 @@
     </Window.Resources>
 
         <Border Margin="1" CornerRadius="12">
-    <Border x:Name="OuterBorder" CornerRadius="12" ClipToBounds="True"
+    <Border x:Name="OuterBorder" CornerRadius="{DynamicResource OddSnapWindowCornerRadius}" ClipToBounds="True"
             BorderThickness="1">
     <Grid>
         <Grid.RowDefinitions>
@@ -1297,6 +1297,26 @@
                                                Visibility="Collapsed"
                                                Margin="0,6,0,0"/>
                                 </StackPanel>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE737;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Add the source app to file names" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Append the app a capture came from (Discord, Task Manager) so files stay searchable. Use the {app} token to place it yourself." Style="{StaticResource SettingDescription}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox x:Name="IncludeSourceAppInFileNameCheck" Grid.Column="2" Content="" FontSize="13" VerticalAlignment="Center"
+                                          ToolTip="Append the app a capture came from to the saved file name"
+                                          AutomationProperties.Name="Add the source app to file names"
+                                          AutomationProperties.HelpText="Append the app a capture came from, such as Discord or Task Manager, to saved capture file names."
+                                          Checked="IncludeSourceAppInFileNameCheck_Changed" Unchecked="IncludeSourceAppInFileNameCheck_Changed"/>
                             </Grid>
                             <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
                             <Grid Style="{StaticResource SettingRow}">
@@ -2015,6 +2035,66 @@
                         </Grid>
                     </Border>
 
+                    <TextBlock Text="Tray Icon" Style="{StaticResource SectionLabel}" Margin="4,16,0,9"/>
+                    <Border Style="{StaticResource Card}">
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource SettingIconFrame}">
+                                <TextBlock Text="&#xE962;" Style="{StaticResource SettingIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Left click action" Style="{StaticResource SettingTitle}"/>
+                                <TextBlock Text="Choose what a left click on the OddSnap tray icon does. Right click always opens the menu." Style="{StaticResource SettingDescription}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <ComboBox x:Name="TrayLeftClickCombo" Grid.Column="2" MinWidth="150"
+                                      VerticalAlignment="Center"
+                                      AutomationProperties.Name="Tray icon left click action"
+                                      ToolTip="Choose what a left click on the OddSnap tray icon does."
+                                      SelectionChanged="TrayLeftClickCombo_SelectionChanged">
+                                <ComboBoxItem Content="Screenshot"
+                                              ToolTip="Start a region screenshot."
+                                              AutomationProperties.Name="Screenshot tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon starts a region screenshot."/>
+                                <ComboBoxItem Content="Full screen"
+                                              ToolTip="Capture the whole screen."
+                                              AutomationProperties.Name="Full screen tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon captures the whole screen."/>
+                                <ComboBoxItem Content="Text capture"
+                                              ToolTip="Start a text (OCR) capture."
+                                              AutomationProperties.Name="Text capture tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon starts a text capture."/>
+                                <ComboBoxItem Content="Color picker"
+                                              ToolTip="Open the color picker."
+                                              AutomationProperties.Name="Color picker tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon opens the color picker."/>
+                                <ComboBoxItem Content="Record"
+                                              ToolTip="Start a screen recording."
+                                              AutomationProperties.Name="Record tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon starts a recording."/>
+                                <ComboBoxItem Content="Scroll capture"
+                                              ToolTip="Start a scrolling capture."
+                                              AutomationProperties.Name="Scroll capture tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon starts a scrolling capture."/>
+                                <ComboBoxItem Content="History"
+                                              ToolTip="Open the capture history."
+                                              AutomationProperties.Name="History tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon opens the capture history."/>
+                                <ComboBoxItem Content="Settings"
+                                              ToolTip="Open OddSnap settings."
+                                              AutomationProperties.Name="Settings tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon opens OddSnap settings."/>
+                                <ComboBoxItem Content="Do nothing"
+                                              ToolTip="Ignore left clicks on the tray icon."
+                                              AutomationProperties.Name="Do nothing tray action"
+                                              AutomationProperties.HelpText="Left-clicking the tray icon does nothing."/>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
                     <TextBlock Text="Sound &amp; Motion" Style="{StaticResource SectionLabel}"/>
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
@@ -2054,6 +2134,26 @@
                                           AutomationProperties.Name="Disable animations"
                                           ToolTip="Reduce motion effects across the app."
                                           Checked="DisableAnimationsCheck_Changed" Unchecked="DisableAnimationsCheck_Changed"/>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE1A5;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Rounded corners" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Round the corners of OddSnap windows, toasts, and cards. Turn off for square, flat chrome." Style="{StaticResource SettingDescription}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox x:Name="RoundedCornersCheck" Grid.Column="2" Content="" FontSize="13" VerticalAlignment="Center"
+                                          AutomationProperties.Name="Rounded corners"
+                                          AutomationProperties.HelpText="Round the corners of OddSnap windows, toasts, and cards."
+                                          ToolTip="Round the corners of OddSnap windows, toasts, and cards."
+                                          Checked="RoundedCornersCheck_Changed" Unchecked="RoundedCornersCheck_Changed"/>
                             </Grid>
                             <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
                             <Grid Style="{StaticResource SettingRow}">

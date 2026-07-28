@@ -41,10 +41,10 @@ public sealed class TrayIcon : IDisposable
         _defaultIcon = CreateDefaultIcon();
         _notifyIcon = new NotifyIcon
         {
-            Text = T("OddSnap - Click to capture, right-click for menu"),
             Icon = _defaultIcon,
             Visible = true
         };
+        SetTrayText(BuildTooltipText());
 
         _notifyIcon.MouseClick += (_, e) => HandleMouseClick(e.Button);
 
@@ -79,20 +79,20 @@ public sealed class TrayIcon : IDisposable
         {
             _recordingIcon ??= CreateRecordingIcon();
             _notifyIcon.Icon = _recordingIcon;
-            _notifyIcon.Text = T("OddSnap recording - click to stop, right-click for menu");
+            SetTrayText(T("OddSnap recording - click to stop, right-click for menu"));
         }
         else
         {
             _notifyIcon.Icon = _defaultIcon;
-            _notifyIcon.Text = T("OddSnap - Click to capture, right-click for menu");
+            SetTrayText(BuildTooltipText());
         }
     }
 
     public void RefreshLocalization()
     {
-        _notifyIcon.Text = _isShowingRecording
+        SetTrayText(_isShowingRecording
             ? T("OddSnap recording - click to stop, right-click for menu")
-            : T("OddSnap - Click to capture, right-click for menu");
+            : BuildTooltipText());
 
         var oldMenu = _menu;
         _menu = CreateThemedMenu();
@@ -160,7 +160,7 @@ public sealed class TrayIcon : IDisposable
         switch (button)
         {
             case MouseButtons.Left:
-                OnCapture?.Invoke();
+                InvokeTrayAction(_settings?.TrayLeftClickAction ?? TrayClickAction.Capture);
                 break;
             case MouseButtons.Middle:
                 OnHistory?.Invoke();
@@ -169,6 +169,63 @@ public sealed class TrayIcon : IDisposable
                 ShowMenu();
                 break;
         }
+    }
+
+    private void InvokeTrayAction(TrayClickAction action)
+    {
+        switch (action)
+        {
+            case TrayClickAction.Capture:
+                OnCapture?.Invoke();
+                break;
+            case TrayClickAction.FullScreen:
+                OnFullScreenCapture?.Invoke();
+                break;
+            case TrayClickAction.TextCapture:
+                OnOcr?.Invoke();
+                break;
+            case TrayClickAction.ColorPicker:
+                OnColorPicker?.Invoke();
+                break;
+            case TrayClickAction.Record:
+                OnGifRecord?.Invoke();
+                break;
+            case TrayClickAction.ScrollCapture:
+                OnScrollCapture?.Invoke();
+                break;
+            case TrayClickAction.History:
+                OnHistory?.Invoke();
+                break;
+            case TrayClickAction.Settings:
+                OnSettings?.Invoke();
+                break;
+            case TrayClickAction.Nothing:
+                break;
+        }
+    }
+
+    private string BuildTooltipText()
+    {
+        var action = _settings?.TrayLeftClickAction ?? TrayClickAction.Capture;
+        var actionLabel = action switch
+        {
+            TrayClickAction.FullScreen => T("OddSnap - Click for a full screen capture, right-click for menu"),
+            TrayClickAction.TextCapture => T("OddSnap - Click for text capture, right-click for menu"),
+            TrayClickAction.ColorPicker => T("OddSnap - Click for the color picker, right-click for menu"),
+            TrayClickAction.Record => T("OddSnap - Click to record, right-click for menu"),
+            TrayClickAction.ScrollCapture => T("OddSnap - Click for scroll capture, right-click for menu"),
+            TrayClickAction.History => T("OddSnap - Click to open history, right-click for menu"),
+            TrayClickAction.Settings => T("OddSnap - Click to open settings, right-click for menu"),
+            TrayClickAction.Nothing => T("OddSnap - Right-click for menu"),
+            _ => T("OddSnap - Click to capture, right-click for menu")
+        };
+        return actionLabel;
+    }
+
+    /// <summary>Shell tray tooltips are capped at 63 characters; translations can overrun that.</summary>
+    private void SetTrayText(string text)
+    {
+        _notifyIcon.Text = text.Length <= 63 ? text : text[..63];
     }
 
     private string? HotkeyHint(string toolId)

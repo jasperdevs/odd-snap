@@ -340,9 +340,11 @@ public partial class PreviewWindow : Window
         if (PreviewFrame.ActualWidth <= 0 || PreviewFrame.ActualHeight <= 0)
             return;
 
+        var radius = OddSnapWindowChrome.RoundedCornersEnabled ? PreviewCornerRadius : 0;
+        PreviewFrame.CornerRadius = new CornerRadius(radius);
         ImageClip.Rect = new System.Windows.Rect(0, 0, PreviewFrame.ActualWidth, PreviewFrame.ActualHeight);
-        ImageClip.RadiusX = PreviewCornerRadius;
-        ImageClip.RadiusY = PreviewCornerRadius;
+        ImageClip.RadiusX = radius;
+        ImageClip.RadiusY = radius;
     }
 
     private void SetThumbnail()

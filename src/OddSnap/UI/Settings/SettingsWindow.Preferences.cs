@@ -388,6 +388,53 @@ public partial class SettingsWindow
             });
     }
 
+    private void RoundedCornersCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressGeneralPreferenceChange) return;
+
+        var previous = _settingsService.Settings.UseRoundedCorners;
+        var enabled = RoundedCornersCheck.IsChecked == true;
+        UpdateGeneralPreference(
+            "settings.rounded-corners",
+            "Rounded corners",
+            previous,
+            enabled,
+            value => _settingsService.Settings.UseRoundedCorners = value,
+            value => RoundedCornersCheck.IsChecked = value,
+            value =>
+            {
+                OddSnapWindowChrome.SetRoundedCornersEnabled(value);
+                // History cards bake their radius in when they are built, so drop the cached cards
+                // and let the current tab rebuild them at the new radius.
+                RebuildHistoryCardsForChromeChange();
+            });
+    }
+
+    private void RebuildHistoryCardsForChromeChange()
+    {
+        foreach (var item in _allHistoryItems.Concat(_allGifItems).Concat(_allStickerItems))
+            ReleaseHistoryCard(item);
+
+        if (HistoryTab.IsChecked == true)
+            LoadCurrentHistoryTab();
+    }
+
+    private void TrayLeftClickCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || _suppressGeneralPreferenceChange) return;
+
+        var previous = _settingsService.Settings.TrayLeftClickAction;
+        var selected = (TrayClickAction)Math.Clamp(TrayLeftClickCombo.SelectedIndex, 0, (int)TrayClickAction.Nothing);
+        UpdateGeneralPreference(
+            "settings.tray-left-click",
+            "Tray left click action",
+            previous,
+            selected,
+            value => _settingsService.Settings.TrayLeftClickAction = value,
+            value => TrayLeftClickCombo.SelectedIndex = (int)value,
+            _ => HotkeyChanged?.Invoke());
+    }
+
     private void UiScaleCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded || _suppressGeneralPreferenceChange) return;

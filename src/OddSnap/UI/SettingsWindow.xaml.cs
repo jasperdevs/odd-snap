@@ -32,9 +32,14 @@ public partial class SettingsWindow : Window
         ("{w}", "Width"),
         ("{h}", "Height"),
         ("{aspect}", "Aspect"),
+        ("{app}", "Source app"),
         ("{rand}", "Random"),
     ];
     private static readonly SemaphoreSlim ThumbDecodeGate = new(2);
+    private readonly System.Windows.Threading.DispatcherTimer _historyResizeTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(90)
+    };
     private readonly System.Windows.Threading.DispatcherTimer _historyMonitorTimer = new()
     {
         Interval = TimeSpan.FromSeconds(2.5)
@@ -146,10 +151,25 @@ public partial class SettingsWindow : Window
             UpdateLocalEngineUi();
             UpdateUpscaleLocalEngineUi();
         };
+        // A resize drag fires SizeChanged every frame, and each viewport update can rebuild the
+        // whole visible card set when the column count changes. Coalesce them so the drag stays
+        // smooth and the grid settles once the user stops.
+        _historyResizeTimer.Tick += (_, _) =>
+        {
+            _historyResizeTimer.Stop();
+            if (_isClosed || !IsLoaded)
+                return;
+
+            if (HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
+                UpdateVirtualizedHistoryViewport();
+        };
         SizeChanged += (_, _) =>
         {
-            if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
-                UpdateVirtualizedHistoryViewport();
+            if (!IsLoaded || HistoryTab.IsChecked != true || HistoryCategoryCombo.SelectedIndex != 0)
+                return;
+
+            _historyResizeTimer.Stop();
+            _historyResizeTimer.Start();
         };
         Closed += (_, _) =>
         {
@@ -165,6 +185,7 @@ public partial class SettingsWindow : Window
             CancelImageSearchWork();
             _imageIndexRefreshTimer.Stop();
             _historyRefreshTimer.Stop();
+            _historyResizeTimer.Stop();
             _imageSearchDebounceTimer.Stop();
             _ocrSearchDebounceTimer.Stop();
             _ocrSearchDebounceTimer.Tick -= FlushOcrSearchDebounce;
@@ -1026,7 +1047,11 @@ public partial class SettingsWindow : Window
         if (FileNameTemplatePreviewText is null)
             return;
 
-        FileNameTemplatePreviewText.Text = $"Preview: {Helpers.FileNameTemplate.FormatExample(template)}.png";
+        var example = Helpers.FileNameTemplate.FormatExample(
+            template,
+            "Discord",
+            _settingsService.Settings.IncludeSourceAppInFileName);
+        FileNameTemplatePreviewText.Text = $"Preview: {example}.png";
     }
 
     private void LoadFileNameTokenButtons()
@@ -1135,6 +1160,26 @@ public partial class SettingsWindow : Window
             selected,
             value => _settingsService.Settings.SaveInMonthlyFolders = value,
             value => MonthlyFoldersCheck.IsChecked = value);
+    }
+
+    private void IncludeSourceAppInFileNameCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.IncludeSourceAppInFileName;
+        var selected = IncludeSourceAppInFileNameCheck.IsChecked == true;
+        UpdateCaptureSavePreference(
+            "settings.include-source-app-in-file-name",
+            "Source app in file names",
+            previous,
+            selected,
+            value => _settingsService.Settings.IncludeSourceAppInFileName = value,
+            value =>
+            {
+                IncludeSourceAppInFileNameCheck.IsChecked = value;
+                UpdateFileNameTemplatePreview(_settingsService.Settings.FileNameTemplate);
+            },
+            () => UpdateFileNameTemplatePreview(_settingsService.Settings.FileNameTemplate));
     }
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)

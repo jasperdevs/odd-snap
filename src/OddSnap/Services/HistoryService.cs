@@ -26,6 +26,8 @@ public sealed class HistoryEntry
     public string? UploadUrl { get; set; }
     public string? UploadProvider { get; set; }
     public string? UploadError { get; set; }
+    /// <summary>App the capture was taken from ("Discord", "Task Manager"), when it could be attributed.</summary>
+    public string? SourceApp { get; set; }
 }
 
 public sealed class OcrHistoryEntry
@@ -303,7 +305,7 @@ public sealed partial class HistoryService : IDisposable
         return entry;
     }
 
-    public HistoryEntry TrackExistingCapture(string filePath, int width, int height, HistoryKind kind = HistoryKind.Image, string? providerName = null)
+    public HistoryEntry TrackExistingCapture(string filePath, int width, int height, HistoryKind kind = HistoryKind.Image, string? providerName = null, string? sourceApp = null)
     {
         var info = new FileInfo(filePath);
         if (!info.Exists)
@@ -325,6 +327,8 @@ public sealed partial class HistoryService : IDisposable
             entry.FileSizeBytes = info.Length;
             entry.Kind = kind;
             entry.UploadProvider = providerName;
+            if (!string.IsNullOrWhiteSpace(sourceApp))
+                entry.SourceApp = sourceApp;
 
             _entries.Insert(0, entry);
             _entriesByPath[entry.FilePath] = entry;
@@ -337,7 +341,7 @@ public sealed partial class HistoryService : IDisposable
         return entry;
     }
 
-    public HistoryEntry SaveCapture(Bitmap screenshot)
+    public HistoryEntry SaveCapture(Bitmap screenshot, string? sourceApp = null)
     {
         var now = DateTime.Now;
         string ext = CaptureOutputService.GetExtension(CaptureImageFormat);
@@ -360,7 +364,8 @@ public sealed partial class HistoryService : IDisposable
                 Width = screenshot.Width,
                 Height = screenshot.Height,
                 FileSizeBytes = fileSizeBytes,
-                Kind = HistoryKind.Image
+                Kind = HistoryKind.Image,
+                SourceApp = sourceApp
             };
             _entries.Insert(0, entry);
             _entriesByPath[entry.FilePath] = entry;

@@ -18,7 +18,7 @@ namespace OddSnap.UI;
 
 public partial class SettingsWindow
 {
-    private sealed record MediaCardShell(Border Card, Grid ImageContainer, StackPanel InfoPanel, Border CopyButton, System.Windows.Controls.Image Image, Border SelectionBadge);
+    private sealed record MediaCardShell(Border Card, Grid ImageContainer, StackPanel InfoPanel, System.Windows.Controls.Image Image, Border SelectionBadge);
 
     private static bool IsDraggableFile(string? path) =>
         !string.IsNullOrWhiteSpace(path) && File.Exists(path);
@@ -64,125 +64,41 @@ public partial class SettingsWindow
         };
         vm.ThumbnailImage = img;
         img.Source = vm.ThumbnailSource ?? GetHistoryPlaceholder(vm.Entry.Kind);
+        ApplyThumbnailStretch(img);
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
 
         img.Loaded += (_, _) => RefreshCardThumbnail(vm);
 
-        var actionMenuBtn = new Border
-        {
-            Width = 40,
-            Height = 40,
-            CornerRadius = new CornerRadius(8),
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 0, 0, 0)),
-            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(210, 255, 255, 255)),
-            BorderThickness = new Thickness(1),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 8, 8, 0),
-            Cursor = Cursors.Hand,
-            Opacity = 0,
-            IsHitTestVisible = true,
-            Focusable = true,
-            ToolTip = "Open history item actions",
-            Child = new TextBlock
-            {
-                Text = "⋯",
-                Foreground = Brushes.White,
-                FontSize = 20,
-                FontWeight = FontWeights.SemiBold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            }
-        };
-        AutomationProperties.SetName(actionMenuBtn, $"{kindLabel} actions");
-        AutomationProperties.SetHelpText(actionMenuBtn, "Press Enter or Space to open this history item's actions.");
-
         var actionMenu = CreateCardActionMenu();
         var hasUploadUrl = !string.IsNullOrWhiteSpace(vm.Entry.UploadUrl);
-        actionMenu.Items.Add(CreateCardActionMenuItem(GetHistoryCopyMenuLabel(vm.Entry), () =>
-        {
-            suppressOpenAction = true;
-            copyAction();
-        }, GetHistoryCopyMenuHelpText(vm.Entry, kindLabel)));
+        actionMenu.Items.Add(CreateCardActionMenuItem(
+            GetHistoryCopyMenuLabel(vm.Entry),
+            copyAction,
+            GetHistoryCopyMenuHelpText(vm.Entry, kindLabel)));
         if (hasUploadUrl)
         {
-            actionMenu.Items.Add(CreateCardActionMenuItem(GetHistoryOpenUrlMenuLabel(vm.Entry), () =>
-            {
-                suppressOpenAction = true;
-                OpenExternal(vm.Entry.UploadUrl!);
-            }, GetHistoryOpenUrlMenuHelpText(vm.Entry)));
+            actionMenu.Items.Add(CreateCardActionMenuItem(
+                GetHistoryOpenUrlMenuLabel(vm.Entry),
+                () => OpenExternal(vm.Entry.UploadUrl!),
+                GetHistoryOpenUrlMenuHelpText(vm.Entry)));
         }
         if (IsDraggableFile(vm.Entry.FilePath))
         {
-            var uploadInProgress = IsHistoryUploadInProgress(vm.Entry.FilePath);
-            var uploadHelpText = GetHistoryUploadMenuHelpText(vm.Entry, uploadInProgress);
             MenuItem? uploadItem = null;
-            uploadItem = CreateCardActionMenuItem(GetHistoryUploadMenuLabel(vm.Entry, uploadInProgress), () =>
-            {
-                suppressOpenAction = true;
-                if (uploadItem is not null)
-                {
-                    uploadItem.Header = "Uploading...";
-                    uploadItem.ToolTip = "This history item upload is already running.";
-                    AutomationProperties.SetName(uploadItem, "Uploading history item");
-                    AutomationProperties.SetHelpText(uploadItem, "This history item upload is already running.");
-                    uploadItem.IsEnabled = false;
-                }
-                _ = RetryHistoryUploadAsync(vm);
-            }, uploadHelpText);
-            uploadItem.IsEnabled = !uploadInProgress;
-            if (uploadInProgress)
-            {
-                AutomationProperties.SetName(uploadItem, "Uploading history item");
-                AutomationProperties.SetHelpText(uploadItem, uploadHelpText);
-            }
+            uploadItem = CreateCardActionMenuItem(
+                GetHistoryUploadMenuLabel(vm.Entry, IsHistoryUploadInProgress(vm.Entry.FilePath)),
+                () => _ = RunHistoryUploadFromMenuAsync(vm, uploadItem!),
+                GetHistoryUploadMenuHelpText(vm.Entry, IsHistoryUploadInProgress(vm.Entry.FilePath)));
+            UpdateHistoryUploadMenuItem(uploadItem, vm);
             actionMenu.Items.Add(uploadItem);
         }
         if (HasHistoryFilePath(vm.Entry.FilePath))
         {
-            actionMenu.Items.Add(CreateCardActionMenuItem("Show in folder", () =>
-            {
-                suppressOpenAction = true;
-                ShowFileInFolder(vm.Entry.FilePath);
-            }, "Show this file in File Explorer."));
+            actionMenu.Items.Add(CreateCardActionMenuItem(
+                "Show in folder",
+                () => ShowFileInFolder(vm.Entry.FilePath),
+                "Show this file in File Explorer."));
         }
-
-        actionMenuBtn.ContextMenu = actionMenu;
-        void OpenActionMenu()
-        {
-            suppressOpenAction = true;
-            actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(1, 100, Motion.SmoothOut));
-            actionMenu.PlacementTarget = actionMenuBtn;
-            actionMenu.IsOpen = true;
-        }
-
-        actionMenuBtn.PreviewMouseLeftButtonUp += (_, e) =>
-        {
-            e.Handled = true;
-            OpenActionMenu();
-        };
-        actionMenuBtn.KeyDown += (_, e) =>
-        {
-            if (!IsHistoryCardActivationKey(e))
-                return;
-
-            e.Handled = true;
-            OpenActionMenu();
-        };
-        actionMenuBtn.GotKeyboardFocus += (_, _) =>
-        {
-            actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(1, 100, Motion.SmoothOut));
-        };
-        actionMenuBtn.LostKeyboardFocus += (_, _) =>
-        {
-            if (!actionMenu.IsOpen)
-                actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(0, 120, Motion.SmoothOut));
-        };
-        actionMenu.Closed += (_, _) =>
-        {
-            if (!actionMenuBtn.IsKeyboardFocusWithin && !actionMenuBtn.IsMouseOver)
-                actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(0, 120, Motion.SmoothOut));
-        };
 
         var selectionBadge = CreateSelectionBadge(vm.IsSelected);
 
@@ -194,7 +110,6 @@ public partial class SettingsWindow
         var imgContainer = new Grid();
         imgContainer.Children.Add(img);
         imgContainer.Children.Add(selectionBadge);
-        imgContainer.Children.Add(actionMenuBtn);
         Grid.SetRow(imgContainer, 0);
         root.Children.Add(imgContainer);
 
@@ -209,57 +124,56 @@ public partial class SettingsWindow
             MinWidth = HistoryCardMinWidth,
             MaxWidth = HistoryCardMaxWidth,
             Margin = new Thickness(HistoryCardMargin),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(OddSnapWindowChrome.CardRadius()),
             Background = Theme.Brush(Theme.BgCard),
             BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(1),
             Cursor = Cursors.Hand,
             Focusable = true,
-            ToolTip = $"Open this {kindLabel} history item",
+            ToolTip = $"Open this {kindLabel} history item. Right-click for actions.",
             Child = root,
             Tag = vm,
+            ContextMenu = actionMenu,
         };
         AutomationProperties.SetName(card, $"{kindLabel} history item");
-        AutomationProperties.SetHelpText(card, "Press Enter or Space to open this history item. Press Ctrl+C to copy it or its upload link. In select mode, press Enter or Space to select it.");
+        AutomationProperties.SetHelpText(card, "Press Enter or Space to open this history item. Right-click or press the Menu key for its actions. Press Ctrl+C to copy it or its upload link. In select mode, press Enter or Space to select it.");
 
-        card.SizeChanged += (s, _) =>
+        // Resizing the window re-widths every visible card, so this runs on every drag frame for
+        // every card. Allocating a fresh geometry and re-setting the row height each time was the
+        // bulk of the resize stutter in History — reuse the clip and only write real changes.
+        var cardRadius = OddSnapWindowChrome.CardRadius();
+        var cardClip = new System.Windows.Media.RectangleGeometry
+        {
+            RadiusX = cardRadius,
+            RadiusY = cardRadius
+        };
+        card.Clip = cardClip;
+        card.SizeChanged += (s, e) =>
         {
             var b = (Border)s!;
-            imageRow.Height = new GridLength(GetHistoryCardImageHeight(b.ActualWidth));
-            b.Clip = new System.Windows.Media.RectangleGeometry(
-                new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight), 8, 8);
+            if (e.WidthChanged)
+            {
+                var imageHeight = GetHistoryCardImageHeight(b.ActualWidth);
+                if (Math.Abs(imageRow.Height.Value - imageHeight) > 0.5)
+                    imageRow.Height = new GridLength(imageHeight);
+            }
+
+            cardClip.Rect = new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight);
         };
 
-        card.MouseEnter += (s, _) =>
-        {
-            card.BorderBrush = cardFocusBrush;
-            actionMenuBtn.BeginAnimation(OpacityProperty,
-                Motion.To(1, 150, Motion.SmoothOut));
-        };
-        card.MouseLeave += (s, _) =>
+        card.MouseEnter += (_, _) => card.BorderBrush = cardFocusBrush;
+        card.MouseLeave += (_, _) =>
         {
             if (!card.IsKeyboardFocusWithin)
                 card.BorderBrush = Brushes.Transparent;
-
-            if (!card.IsKeyboardFocusWithin && !actionMenu.IsOpen)
-            {
-                actionMenuBtn.BeginAnimation(OpacityProperty,
-                    Motion.To(0, 150, Motion.SmoothOut));
-            }
         };
-        card.GotKeyboardFocus += (_, _) =>
-        {
-            card.BorderBrush = cardFocusBrush;
-            actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(1, 100, Motion.SmoothOut));
-        };
+        card.GotKeyboardFocus += (_, _) => card.BorderBrush = cardFocusBrush;
         card.LostKeyboardFocus += (_, _) =>
         {
             if (card.IsKeyboardFocusWithin || actionMenu.IsOpen)
                 return;
 
             card.BorderBrush = Brushes.Transparent;
-            if (!card.IsMouseOver)
-                actionMenuBtn.BeginAnimation(OpacityProperty, Motion.To(0, 120, Motion.SmoothOut));
         };
 
         void ActivateCard(RoutedEventArgs e)
@@ -273,7 +187,7 @@ public partial class SettingsWindow
 
             if (!_selectMode)
             {
-                OpenFileWithDefaultApp(vm.Entry.FilePath);
+                OpenHistoryItem(vm);
                 e.Handled = true;
                 return;
             }
@@ -333,7 +247,40 @@ public partial class SettingsWindow
         vm.SelectionBadge = selectionBadge;
         UpdateCardSelection(vm);
 
-        return new MediaCardShell(card, imgContainer, info, actionMenuBtn, img, selectionBadge);
+        return new MediaCardShell(card, imgContainer, info, img, selectionBadge);
+    }
+
+    /// <summary>
+    /// Runs a history upload from the card menu, restoring the menu item afterwards. The item used
+    /// to be flipped to "Uploading..." optimistically and never put back, so an upload that was
+    /// refused outright — no destination configured, for instance — left the card stuck showing
+    /// "Uploading..." with the action disabled for the rest of the session.
+    /// </summary>
+    private async Task RunHistoryUploadFromMenuAsync(HistoryItemVM vm, MenuItem uploadItem)
+    {
+        UpdateHistoryUploadMenuItem(uploadItem, vm, isUploadInProgress: true);
+        try
+        {
+            await RetryHistoryUploadAsync(vm);
+        }
+        finally
+        {
+            UpdateHistoryUploadMenuItem(uploadItem, vm);
+        }
+    }
+
+    /// <summary>Syncs the upload menu item's label, tooltip and enabled state with the real state.</summary>
+    private void UpdateHistoryUploadMenuItem(MenuItem uploadItem, HistoryItemVM vm, bool? isUploadInProgress = null)
+    {
+        var inProgress = isUploadInProgress ?? IsHistoryUploadInProgress(vm.Entry.FilePath);
+        var label = GetHistoryUploadMenuLabel(vm.Entry, inProgress);
+        var helpText = GetHistoryUploadMenuHelpText(vm.Entry, inProgress);
+
+        uploadItem.Header = label;
+        uploadItem.ToolTip = helpText;
+        uploadItem.IsEnabled = !inProgress;
+        AutomationProperties.SetName(uploadItem, label);
+        AutomationProperties.SetHelpText(uploadItem, helpText);
     }
 
     private static string GetHistoryUploadMenuLabel(HistoryEntry entry, bool isUploadInProgress)
@@ -519,6 +466,39 @@ public partial class SettingsWindow
             ? "This history item is selected."
             : "Shows whether this history item is selected in select mode.");
     }
+
+    /// <summary>
+    /// Opening a history card shows the in-app preview for still images; videos and GIFs still go to
+    /// the system player, which handles playback we don't.
+    /// </summary>
+    private void OpenHistoryItem(HistoryItemVM vm)
+    {
+        if (vm.Entry.Kind is not (HistoryKind.Image or HistoryKind.Sticker))
+        {
+            OpenFileWithDefaultApp(vm.Entry.FilePath);
+            return;
+        }
+
+        var siblings = GetCurrentHistorySelectionItems()
+            .Where(item => item.Entry.Kind is HistoryKind.Image or HistoryKind.Sticker)
+            .Select(item => item.Entry)
+            .ToList();
+
+        var index = siblings.FindIndex(entry =>
+            string.Equals(entry.FilePath, vm.Entry.FilePath, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            siblings = new List<HistoryEntry> { vm.Entry };
+            index = 0;
+        }
+
+        if (!ImageViewerWindow.TryShow(this, siblings, index))
+            OpenFileWithDefaultApp(vm.Entry.FilePath);
+    }
+
+    internal static bool ShowHistoryFileInFolder(string filePath) => ShowFileInFolder(filePath);
+
+    internal static bool OpenHistoryFileWithDefaultApp(string filePath) => OpenFileWithDefaultApp(filePath);
 
     private static bool ShowFileInFolder(string filePath)
     {

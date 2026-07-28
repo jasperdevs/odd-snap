@@ -398,6 +398,7 @@ public sealed class SettingsService : IDisposable
         settings.ScrollingCaptureMode = NormalizeEnum(settings.ScrollingCaptureMode, ScrollingCaptureMode.Automatic);
         settings.HistoryRetention = NormalizeEnum(settings.HistoryRetention, HistoryRetentionPeriod.Never);
         settings.ToastPosition = NormalizeEnum(settings.ToastPosition, ToastPosition.Right);
+        settings.TrayLeftClickAction = NormalizeEnum(settings.TrayLeftClickAction, TrayClickAction.Capture);
         settings.SoundPack = NormalizeEnum(settings.SoundPack, SoundPack.Default);
         settings.RecordingFormat = NormalizeEnum(settings.RecordingFormat, RecordingFormat.MP4);
         settings.RecordingQuality = NormalizeEnum(settings.RecordingQuality, RecordingQuality.Original);

@@ -151,6 +151,7 @@ public partial class SettingsWindow
         AutoIndexImagesCheck.IsChecked = s.AutoIndexImages;
         MuteSoundsCheck.IsChecked = s.MuteSounds;
         DisableAnimationsCheck.IsChecked = s.DisableAnimations;
+        RoundedCornersCheck.IsChecked = s.UseRoundedCorners;
         SelectUiScale(s.UiScale);
         OcrAutoCopyCheck.IsChecked = s.OcrAutoCopyToClipboard;
         CrosshairGuidesCheck.IsChecked = s.ShowCrosshairGuides;
@@ -160,8 +161,10 @@ public partial class SettingsWindow
         ShowToolNumberBadgesCheck.IsChecked = s.ShowToolNumberBadges;
         AskFileNameCheck.IsChecked = s.AskForFileNameOnSave;
         MonthlyFoldersCheck.IsChecked = s.SaveInMonthlyFolders;
+        IncludeSourceAppInFileNameCheck.IsChecked = s.IncludeSourceAppInFileName;
         LoadFileNameTemplate(s.FileNameTemplate);
         ToastPositionCombo.SelectedIndex = (int)s.ToastPosition;
+        TrayLeftClickCombo.SelectedIndex = (int)s.TrayLeftClickAction;
         CaptureDockSideCombo.SelectedIndex = (int)s.CaptureDockSide;
         ScrollingCaptureModeCombo.SelectedIndex = Enum.IsDefined(typeof(ScrollingCaptureMode), s.ScrollingCaptureMode)
             ? (int)s.ScrollingCaptureMode

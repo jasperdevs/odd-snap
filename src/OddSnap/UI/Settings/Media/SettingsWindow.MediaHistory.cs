@@ -326,7 +326,8 @@ public partial class SettingsWindow
             }
         });
 
-        shell.Image.Stretch = Stretch.UniformToFill;
+        // Stretch is chosen per thumbnail once its dimensions are known — see ApplyThumbnailStretch.
+        ApplyThumbnailStretch(shell.Image);
 
         if (!string.IsNullOrEmpty(vm.Entry.UploadProvider))
         {
@@ -844,6 +845,7 @@ public partial class SettingsWindow
         if (vm.ThumbnailLoaded && vm.ThumbnailSource != null && !IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))
         {
             img.Source = vm.ThumbnailSource;
+            ApplyThumbnailStretch(img);
             img.Opacity = 1;
             return;
         }
@@ -856,6 +858,7 @@ public partial class SettingsWindow
             vm.ThumbnailSource = cached;
             vm.ThumbnailLoaded = true;
             img.Source = cached;
+            ApplyThumbnailStretch(img);
             img.Opacity = 1;
             ApplyThumbnailToWaiters(cacheKey, cached, animate: false);
             return;
@@ -866,6 +869,7 @@ public partial class SettingsWindow
             vm.ThumbnailSource = cachedDisk;
             vm.ThumbnailLoaded = true;
             img.Source = cachedDisk;
+            ApplyThumbnailStretch(img);
             img.Opacity = 1;
             ApplyThumbnailToWaiters(cacheKey, cachedDisk, animate: false);
             return;
@@ -1080,6 +1084,7 @@ public partial class SettingsWindow
         _ = TryPostToImageDispatcher(image, () =>
         {
             image.Source = bitmap;
+            ApplyThumbnailStretch(image);
             image.Opacity = 1;
             if (animate)
             {
@@ -1121,6 +1126,7 @@ public partial class SettingsWindow
             _ = TryPostToImageDispatcher(target, () =>
             {
                 target.Source = bitmap;
+                ApplyThumbnailStretch(target);
                 target.Opacity = 1;
                 if (animate)
                 {

@@ -57,7 +57,7 @@
         <Border.Effect>
             <DropShadowEffect BlurRadius="28" ShadowDepth="4" Opacity="0.5" Color="{DynamicResource WizShadowColor}"/>
         </Border.Effect>
-    <Border x:Name="WizardBorder" CornerRadius="12" ClipToBounds="True"
+    <Border x:Name="WizardBorder" CornerRadius="{DynamicResource OddSnapWindowCornerRadius}" ClipToBounds="True"
             Background="{DynamicResource WizBg}" BorderBrush="{DynamicResource WizBorder}" BorderThickness="1">
     <Grid>
         <Grid.RowDefinitions>

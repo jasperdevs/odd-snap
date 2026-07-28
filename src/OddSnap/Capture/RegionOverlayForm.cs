@@ -169,6 +169,7 @@ public sealed partial class RegionOverlayForm : Form
 
     // Select tool state
     private int _selectedAnnotationIndex = -1;
+    private bool _hoveredSelectDelete;
     private bool _isSelectDragging;
     private bool _isSelectResizing;
     private int _selectResizeHandle = -1; // 0=TL,1=TR,2=BL,3=BR

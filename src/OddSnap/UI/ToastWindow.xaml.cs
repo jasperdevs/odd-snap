@@ -59,37 +59,84 @@ public partial class ToastWindow : Window
     private readonly DispatcherTimer _officeMenuDismissTimer;
     private bool _officeMenuMouseWasDown;
 
+    private const int PreviewMaxWidth = 332;
+    private const int PreviewMaxHeight = 220;
+    private const int PreviewMinWidth = 140;
+    private const int PreviewMinHeight = 56;
+
+    /// <summary>
+    /// The overlay buttons (close/pin/save) are 40px and sit in the toast's corners. A toast sized
+    /// purely to a thin capture leaves them overlapping and unpressable, so these are the smallest
+    /// dimensions that still give the buttons somewhere to live. Below them the toast keeps this
+    /// size and letterboxes the image rather than shrinking around it.
+    /// </summary>
+    private const int PreviewButtonSafeWidth = 152;
+    private const int PreviewButtonSafeHeight = 100;
+
+    /// <summary>Small grabs get scaled up for legibility, but only so far before they turn to mush.</summary>
+    private const double PreviewMaxUpscale = 2.0;
+
+    /// <summary>
+    /// Sizes an image-only toast to the capture's own aspect ratio, so a narrow strip produces a
+    /// narrow toast rather than a letterboxed box. Only genuinely extreme aspect ratios — where
+    /// honouring the ratio would leave an edge a couple of pixels tall — fall back to a framed box.
+    /// </summary>
     internal static (int Width, int Height, bool Framed) ComputeImageOnlyPreviewLayout(int sourceWidth, int sourceHeight)
     {
         int safeWidth = Math.Max(1, sourceWidth);
         int safeHeight = Math.Max(1, sourceHeight);
         double aspect = safeWidth / (double)safeHeight;
-        bool framed = Math.Min(safeWidth, safeHeight) < 72 || aspect > 2.5 || aspect < 0.85;
 
-        if (framed)
+        // Fit inside the maximum box, preserving the aspect ratio.
+        double width = PreviewMaxWidth;
+        double height = width / aspect;
+        if (height > PreviewMaxHeight)
         {
-            if (aspect < 0.85)
-                return (188, 220, true);
-
-            return (280, 176, true);
+            height = PreviewMaxHeight;
+            width = height * aspect;
         }
 
-        const int targetHeight = 188;
-        double width = targetHeight * aspect;
-        double height = targetHeight;
-
-        if (width > 332)
+        // Don't blow a tiny capture up to full toast size.
+        double upscaleCap = Math.Max(1.0, PreviewMaxUpscale);
+        if (width > safeWidth * upscaleCap)
         {
-            width = 332;
+            width = safeWidth * upscaleCap;
             height = width / aspect;
         }
-        else if (width < 188)
+
+        // Grow towards the minimums, but only when the ratio still fits the box.
+        if (width < PreviewMinWidth && PreviewMinWidth / aspect <= PreviewMaxHeight)
         {
-            width = 188;
-            height = Math.Min(targetHeight, width / aspect);
+            width = PreviewMinWidth;
+            height = width / aspect;
         }
 
-        return ((int)Math.Round(width), (int)Math.Round(height), false);
+        if (height < PreviewMinHeight && PreviewMinHeight * aspect <= PreviewMaxWidth)
+        {
+            height = PreviewMinHeight;
+            width = height * aspect;
+        }
+
+        width = Math.Clamp(width, 1, PreviewMaxWidth);
+        height = Math.Clamp(height, 1, PreviewMaxHeight);
+
+        // Pad out to keep the overlay buttons reachable. This is the one case where letterboxing is
+        // the right answer: a strip-shaped toast with no room for its own controls is worse than a
+        // little blank space around the image.
+        bool framed = false;
+        if (width < PreviewButtonSafeWidth)
+        {
+            width = PreviewButtonSafeWidth;
+            framed = true;
+        }
+
+        if (height < PreviewButtonSafeHeight)
+        {
+            height = PreviewButtonSafeHeight;
+            framed = true;
+        }
+
+        return ((int)Math.Round(width), (int)Math.Round(height), framed);
     }
 
     private ToastWindow(ToastSpec spec)
@@ -147,7 +194,10 @@ public partial class ToastWindow : Window
         MouseMove += OnMouseMove;
         MouseLeftButtonUp += OnMouseLeftButtonUp;
         Cursor = System.Windows.Input.Cursors.Hand;
-        SourceInitialized += (_, _) => PopupWindowHelper.ApplyNoActivateChrome(this);
+        SourceInitialized += (_, _) =>
+        {
+            PopupWindowHelper.ApplyNoActivateChrome(this);
+        };
         SizeChanged += (_, _) => UpdateRootClip();
         Loaded += OnLoaded;
     }
@@ -371,7 +421,7 @@ public partial class ToastWindow : Window
             System.Windows.Controls.Grid.SetRowSpan(ImageArea, 2);
             Root.Background = Theme.Brush(Theme.ToastBg);
             ImageFrame.Background = Theme.Brush(Theme.ToastBg);
-            ImageFrame.CornerRadius = new CornerRadius(10);
+            ImageFrame.CornerRadius = OddSnapWindowChrome.RadiusFor(10);
             ImageFrame.BorderThickness = new Thickness(0);
         }
         else
@@ -388,7 +438,9 @@ public partial class ToastWindow : Window
             System.Windows.Controls.Grid.SetRowSpan(ImageArea, 1);
             Root.Background = Theme.Brush(Theme.ToastBg);
             ImageFrame.Background = Theme.Brush(Theme.ToastBg);
-            ImageFrame.CornerRadius = new CornerRadius(10, 10, 0, 0);
+            ImageFrame.CornerRadius = OddSnapWindowChrome.RoundedCornersEnabled
+                ? new CornerRadius(10, 10, 0, 0)
+                : new CornerRadius(0);
             ImageFrame.BorderThickness = new Thickness(0);
         }
 
@@ -1462,10 +1514,15 @@ public partial class ToastWindow : Window
             return;
 
         const double inset = 0.5;
+        // This clip, not Root.CornerRadius, is what actually rounds the toast — including the
+        // bottom corners the progress bar sits in — so it has to honour the setting too.
+        var radius = OddSnapWindowChrome.RoundedCornersEnabled
+            ? Math.Max(0, RootCornerRadius - inset)
+            : 0;
         Root.Clip = new RectangleGeometry(
             new Rect(inset, inset, Math.Max(0, Root.ActualWidth - (inset * 2)), Math.Max(0, Root.ActualHeight - (inset * 2))),
-            Math.Max(0, RootCornerRadius - inset),
-            Math.Max(0, RootCornerRadius - inset));
+            radius,
+            radius);
     }
 
     private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -2131,6 +2188,9 @@ public partial class ToastWindow : Window
         _isFading = false;
         _closeAfterOpacityAnimation = false;
         StopDismissAnimationTimer();
+        BeginAnimation(OpacityProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
         Opacity = 1;
         Root.Opacity = 1;
         OuterShell.Opacity = 1;
@@ -2172,51 +2232,30 @@ public partial class ToastWindow : Window
         StopDismissAnimationTimer();
         BeginAnimation(LeftProperty, null);
         BeginAnimation(TopProperty, null);
+        BeginAnimation(OpacityProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
         Opacity = 1;
         Root.Opacity = 1;
         OuterShell.Opacity = 1;
+        SlideTransform.X = 0;
+        SlideTransform.Y = 0;
+
         var dismissToken = _dismissAnimationToken;
         IEasingFunction ease = slide
             ? Motion.SmoothOut
             : Motion.SmoothInOut;
 
         BeginCompositedToastAnimation();
-        if (slide)
-        {
-            var wa = PopupWindowHelper.GetCurrentWorkArea();
-            var (exitLeft, exitTop, animateLeft) = PopupWindowHelper.GetDismissPlacement(
-                _position, ActualWidth, ActualHeight, wa, Edge);
-            if (animateLeft)
-            {
-                BeginAnimation(LeftProperty, new DoubleAnimation
-                {
-                    To = exitLeft,
-                    Duration = duration,
-                    EasingFunction = ease
-                });
-            }
-            else
-            {
-                BeginAnimation(TopProperty, new DoubleAnimation
-                {
-                    To = exitTop,
-                    Duration = duration,
-                    EasingFunction = ease
-                });
-            }
 
-            StartDismissCloseTimer(duration, dismissToken);
-            return;
-        }
-
-        var opacityAnimation = new DoubleAnimation
+        var fadeAnimation = new DoubleAnimation
         {
             To = 0,
             Duration = duration,
             EasingFunction = ease,
             FillBehavior = FillBehavior.HoldEnd
         };
-        opacityAnimation.Completed += (_, _) =>
+        fadeAnimation.Completed += (_, _) =>
         {
             if (dismissToken != _dismissAnimationToken)
                 return;
@@ -2227,7 +2266,44 @@ public partial class ToastWindow : Window
                     DispatcherPriority.Background,
                     "toast.dismiss-close-post");
         };
-        BeginAnimation(OpacityProperty, opacityAnimation);
+
+        if (slide)
+        {
+            // Slide the *content* out inside the window rather than moving the window itself.
+            // Animating Window.Left/Top walked the toast onto the neighbouring monitor on
+            // multi-display setups; translating inside the window clips it at the window edge and
+            // keeps the whole animation on the screen the toast belongs to.
+            var travelX = offsetX == 0 ? 0 : Math.Sign(offsetX) * (ActualWidth + 24);
+            var travelY = offsetY == 0 ? 0 : Math.Sign(offsetY) * (ActualHeight + 24);
+
+            if (travelX != 0)
+            {
+                SlideTransform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation
+                {
+                    To = travelX,
+                    Duration = duration,
+                    EasingFunction = ease,
+                    FillBehavior = FillBehavior.HoldEnd
+                });
+            }
+
+            if (travelY != 0)
+            {
+                SlideTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation
+                {
+                    To = travelY,
+                    Duration = duration,
+                    EasingFunction = ease,
+                    FillBehavior = FillBehavior.HoldEnd
+                });
+            }
+        }
+
+        BeginAnimation(OpacityProperty, fadeAnimation);
+
+        // Backstop: if the animation is dropped (a theme change or a re-entrant dismiss can clear
+        // it) the Completed handler never runs and the toast would sit on screen forever.
+        StartDismissCloseTimer(duration, dismissToken);
     }
 
     private void StartDismissCloseTimer(TimeSpan duration, int dismissToken)

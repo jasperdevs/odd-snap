@@ -13,7 +13,7 @@
         MouseLeave="OnMouseLeave">
 
     <Border x:Name="ImageBorder" MinWidth="120" MinHeight="80"
-            CornerRadius="18" Background="#12000000"
+            CornerRadius="{DynamicResource OddSnapWindowCornerRadius}" Background="#12000000"
             BorderBrush="#D8FFFFFF" BorderThickness="2">
         <Border.Effect>
             <DropShadowEffect BlurRadius="32" ShadowDepth="6" Opacity="0.4" Color="Black"/>
@@ -93,7 +93,7 @@
 
             <Border x:Name="ProgressBar" Grid.Row="1" Height="2"
                     Margin="4,0,4,4"
-                    Background="#55FFFFFF" CornerRadius="0,0,14,14"
+                    Background="#55FFFFFF" CornerRadius="{DynamicResource OddSnapProgressCornerRadius}"
                     HorizontalAlignment="Stretch"
                     RenderTransformOrigin="0,0.5">
                 <Border.RenderTransform>

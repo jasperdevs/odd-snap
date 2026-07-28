@@ -22,7 +22,7 @@
         <SolidColorBrush x:Key="LoadingTextBrush" Color="#FFFFFFFF"/>
     </Window.Resources>
 
-    <Border x:Name="RootBorder" CornerRadius="12" ClipToBounds="True">
+    <Border x:Name="RootBorder" CornerRadius="{DynamicResource OddSnapWindowCornerRadius}" ClipToBounds="True">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="40"/>

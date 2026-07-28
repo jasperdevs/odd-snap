@@ -500,6 +500,104 @@ public sealed partial class RegionOverlayForm
     private static Point Offset(Point p, int dx, int dy) => new(p.X + dx, p.Y + dy);
     private static Rectangle OffsetRect(Rectangle r, int dx, int dy) => new(r.X + dx, r.Y + dy, r.Width, r.Height);
 
+    /// <summary>Diameter of the delete badge shown on a selected annotation.</summary>
+    private const int SelectDeleteButtonSize = 22;
+
+    /// <summary>Gap between the selection frame and the delete badge.</summary>
+    private const int SelectDeleteButtonGap = 6;
+
+    private bool HasSelectedAnnotation =>
+        _selectedAnnotationIndex >= 0 && _selectedAnnotationIndex < _undoStack.Count;
+
+    /// <summary>
+    /// On-screen delete affordance for the selected annotation. Sits just outside the top-right of
+    /// the selection frame, folding inside when the annotation is against a screen edge. Empty when
+    /// nothing is selected.
+    /// </summary>
+    private Rectangle GetSelectDeleteButtonRect()
+    {
+        if (!HasSelectedAnnotation)
+            return Rectangle.Empty;
+
+        return GetSelectDeleteButtonRectFor(_selectPreviewAnnotation ?? _undoStack[_selectedAnnotationIndex]);
+    }
+
+    /// <summary>
+    /// Selection frame plus its delete badge. Repaint regions must use this, not the raw annotation
+    /// bounds — the badge hangs outside the frame and would otherwise smear while dragging.
+    /// </summary>
+    private Rectangle GetSelectionChromeBounds(Annotation a)
+    {
+        var bounds = GetAnnotationBounds(a);
+        var badge = GetSelectDeleteButtonRectFor(a);
+        return badge.IsEmpty ? bounds : Rectangle.Union(bounds, badge);
+    }
+
+    private Rectangle GetSelectDeleteButtonRectFor(Annotation a)
+    {
+        var bounds = GetAnnotationBounds(a);
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            return Rectangle.Empty;
+
+        var selRect = Rectangle.Inflate(bounds, 4, 4);
+        int size = Helpers.UiChrome.ScaleInt(SelectDeleteButtonSize);
+        int gap = Helpers.UiChrome.ScaleInt(SelectDeleteButtonGap);
+
+        int x = selRect.Right + gap;
+        int y = selRect.Y - size - gap;
+
+        if (x + size > ClientSize.Width - 2)
+            x = Math.Max(2, selRect.Right - size);
+        if (y < 2)
+            y = Math.Min(ClientSize.Height - size - 2, selRect.Y + gap);
+
+        if (x < 2 || y < 2)
+            return Rectangle.Empty;
+
+        return new Rectangle(x, y, size, size);
+    }
+
+    private bool IsPointInSelectDeleteButton(Point p)
+    {
+        var rect = GetSelectDeleteButtonRect();
+        return !rect.IsEmpty && rect.Contains(p);
+    }
+
+    private void SetSelectDeleteHovered(bool hovered)
+    {
+        if (_hoveredSelectDelete == hovered)
+            return;
+
+        _hoveredSelectDelete = hovered;
+        var badge = GetSelectDeleteButtonRect();
+        if (!badge.IsEmpty)
+            Invalidate(InflateForRepaint(badge));
+    }
+
+    /// <summary>Removes the selected annotation. Shared by the delete badge and the Delete key.</summary>
+    private bool DeleteSelectedAnnotation()
+    {
+        if (!HasSelectedAnnotation)
+            return false;
+
+        var bounds = InflateForRepaint(GetAnnotationBounds(_undoStack[_selectedAnnotationIndex]));
+        var badge = GetSelectDeleteButtonRect();
+        CancelActivePointerInteraction();
+        _undoStack.RemoveAt(_selectedAnnotationIndex);
+        _redoStack.Clear();
+        MarkCommittedAnnotationsDirty();
+        _selectedAnnotationIndex = -1;
+        _selectPreviewAnnotation = null;
+        _renderSkipIndex = -1;
+        _isSelectDragging = false;
+        _isSelectResizing = false;
+
+        if (!badge.IsEmpty)
+            bounds = Rectangle.Union(bounds, InflateForRepaint(badge));
+        Invalidate(bounds);
+        return true;
+    }
+
     /// <summary>Returns the handle index (0=TL,1=TR,2=BL,3=BR) at point, or -1.</summary>
     private int GetSelectHandle(Point p)
     {

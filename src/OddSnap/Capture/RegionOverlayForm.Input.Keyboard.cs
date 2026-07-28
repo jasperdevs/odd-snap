@@ -85,20 +85,15 @@ public sealed partial class RegionOverlayForm
             return;
         }
 
-        // Delete selected annotation
-        if (e.KeyCode == Keys.Delete && _mode == CaptureMode.Select && _selectedAnnotationIndex >= 0 && _selectedAnnotationIndex < _undoStack.Count)
+        // Delete selected annotation. Backspace is accepted too — it's the key most people reach
+        // for, and nothing else in the overlay uses it outside text editing (handled above).
+        if (e.KeyCode is Keys.Delete or Keys.Back && _mode == CaptureMode.Select)
         {
-            var bounds = InflateForRepaint(GetAnnotationBounds(_undoStack[_selectedAnnotationIndex]));
-            CancelActivePointerInteraction();
-            _undoStack.RemoveAt(_selectedAnnotationIndex);
-            _redoStack.Clear();
-            MarkCommittedAnnotationsDirty();
-            _selectedAnnotationIndex = -1;
-            _selectPreviewAnnotation = null;
-            _renderSkipIndex = -1;
-            _isSelectDragging = false;
-            _isSelectResizing = false;
-            Invalidate(bounds);
+            if (DeleteSelectedAnnotation())
+            {
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+            }
             return;
         }
     }

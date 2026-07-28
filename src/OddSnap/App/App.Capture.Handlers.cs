@@ -15,9 +15,10 @@ public partial class App
     private void HandleCaptureResult(Bitmap result, bool useAiRedirect = false)
     {
         var settings = _settingsService!.Settings;
+        var sourceApp = _captureSourceApp;
         var ext = CaptureOutputService.GetExtension(settings.CaptureImageFormat);
         if (!TryResolveCaptureOutputPath(
-                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}.{ext}",
+                () => $"{FormatCaptureFileName(settings, result.Width, result.Height, sourceApp)}.{ext}",
                 settings.CaptureImageFormat,
                 "Capture error",
                 "OddSnap could not prepare the capture save path. Choose another save folder in Settings and try again.",
@@ -27,7 +28,7 @@ public partial class App
             return;
         }
 
-        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: false, providerName: null)
+        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: false, providerName: null, sourceApp: sourceApp)
             .ContinueWith(task =>
             {
                 if (task.IsFaulted)
@@ -102,8 +103,9 @@ public partial class App
     private void HandleStickerResult(Bitmap result, string providerName)
     {
         var settings = _settingsService!.Settings;
+        var sourceApp = _captureSourceApp;
         if (!TryResolveCaptureOutputPath(
-                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}_sticker.png",
+                () => $"{FormatCaptureFileName(settings, result.Width, result.Height, sourceApp)}_sticker.png",
                 CaptureImageFormat.Png,
                 "Sticker error",
                 "OddSnap could not prepare the sticker save path. Choose another save folder in Settings and try again.",
@@ -113,7 +115,7 @@ public partial class App
             return;
         }
 
-        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: true, providerName: providerName)
+        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: true, providerName: providerName, sourceApp: sourceApp)
             .ContinueWith(task =>
             {
                 if (task.IsFaulted)
@@ -173,8 +175,9 @@ public partial class App
     private void HandleUpscaleResult(Bitmap result, string providerName)
     {
         var settings = _settingsService!.Settings;
+        var sourceApp = _captureSourceApp;
         if (!TryResolveCaptureOutputPath(
-                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}_upscale.png",
+                () => $"{FormatCaptureFileName(settings, result.Width, result.Height, sourceApp)}_upscale.png",
                 CaptureImageFormat.Png,
                 "Upscale error",
                 "OddSnap could not prepare the upscale save path. Choose another save folder in Settings and try again.",
@@ -184,7 +187,7 @@ public partial class App
             return;
         }
 
-        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: false, providerName: providerName)
+        _ = PersistCaptureAsync(result, requestedPath, saveHistory: settings.SaveHistory, isSticker: false, providerName: providerName, sourceApp: sourceApp)
             .ContinueWith(task =>
             {
                 if (task.IsFaulted)
@@ -299,12 +302,21 @@ public partial class App
         }
     }
 
+    private static string FormatCaptureFileName(AppSettings settings, int width, int height, string? sourceApp) =>
+        Helpers.FileNameTemplate.Format(
+            settings.FileNameTemplate,
+            width,
+            height,
+            sourceApp,
+            settings.IncludeSourceAppInFileName);
+
     private Task<PersistedCaptureResult> PersistCaptureAsync(
         Bitmap source,
         string? requestedPath,
         bool saveHistory,
         bool isSticker,
-        string? providerName)
+        string? providerName,
+        string? sourceApp = null)
     {
         var settings = _settingsService!.Settings;
         int maxLongEdge = settings.CaptureMaxLongEdge;
@@ -338,10 +350,12 @@ public partial class App
                         throw new InvalidOperationException("Save path must include a directory.");
 
                     Directory.CreateDirectory(directory);
-                    if (isSticker)
-                        CaptureOutputService.SaveBitmap(output, requestedPath, CaptureImageFormat.Png, jpegQuality);
-                    else
-                        CaptureOutputService.SaveBitmap(output, requestedPath, captureFormat, jpegQuality);
+                    var savedFormat = isSticker ? CaptureImageFormat.Png : captureFormat;
+                    CaptureOutputService.SaveBitmap(output, requestedPath, savedFormat, jpegQuality);
+                    Helpers.ImageMetadataWriter.TryWrite(
+                        requestedPath,
+                        savedFormat,
+                        Helpers.ImageMetadataWriter.BuildCaptureMetadata(sourceApp, DateTime.Now));
 
                     filePath = requestedPath;
                 }
@@ -355,13 +369,14 @@ public partial class App
                             output.Width,
                             output.Height,
                             isSticker ? HistoryKind.Sticker : HistoryKind.Image,
-                            providerName);
+                            providerName,
+                            sourceApp);
                     }
                     else
                     {
                         historyEntry = isSticker
                             ? historyService.SaveStickerEntry(output, providerName)
-                            : historyService.SaveCapture(output);
+                            : historyService.SaveCapture(output, sourceApp);
                         filePath = historyEntry.FilePath;
                     }
                 }

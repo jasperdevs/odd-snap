@@ -122,6 +122,46 @@ public class FileNameTemplateTests
     }
 
     [Fact]
+    public void FormatExample_AppToken_ExpandsToSourceApp()
+    {
+        Assert.Equal("shot_Discord", FileNameTemplate.FormatExample("shot_{app}", "Discord", appendSourceApp: false));
+    }
+
+    [Fact]
+    public void FormatExample_AppToken_CollapsesWhenSourceAppIsUnknown()
+    {
+        Assert.Equal("shot", FileNameTemplate.FormatExample("shot_{app}", null, appendSourceApp: false));
+    }
+
+    [Fact]
+    public void FormatExample_AppendSourceApp_AppendsWhenTemplateHasNoAppToken()
+    {
+        Assert.Equal(
+            "2026-04-05-14-30-52-a3f1_Task-Manager",
+            FileNameTemplate.FormatExample(FileNameTemplate.DefaultTemplate, "Task Manager", appendSourceApp: true));
+    }
+
+    [Fact]
+    public void FormatExample_AppendSourceApp_DoesNotDuplicateExplicitAppToken()
+    {
+        Assert.Equal("Discord_shot", FileNameTemplate.FormatExample("{app}_shot", "Discord", appendSourceApp: true));
+    }
+
+    [Fact]
+    public void FormatExample_AppendSourceApp_IsANoOpWithoutASourceApp()
+    {
+        Assert.Equal(
+            FileNameTemplate.FormatExample(FileNameTemplate.DefaultTemplate),
+            FileNameTemplate.FormatExample(FileNameTemplate.DefaultTemplate, null, appendSourceApp: true));
+    }
+
+    [Fact]
+    public void FormatExample_AppToken_SanitizesUnsafeSourceAppCharacters()
+    {
+        Assert.Equal("shot_Visual-Studio-Code", FileNameTemplate.FormatExample("shot_{app}", "Visual Studio: Code", appendSourceApp: false));
+    }
+
+    [Fact]
     public void Presets_AllRenderToNonEmptyNames()
     {
         Assert.NotEmpty(FileNameTemplate.Presets);

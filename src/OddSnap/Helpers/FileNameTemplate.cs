@@ -5,25 +5,56 @@ public static class FileNameTemplate
     public const string DefaultTemplate = "{year}-{month}-{day}-{hour}-{min}-{sec}-{rand}";
     public const string LegacyDefaultTemplate = "oddsnap_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}";
 
+    public const string SourceAppToken = "{app}";
+
     public static string Format(string template, int width = 0, int height = 0)
     {
         var now = DateTime.Now;
         var randomToken = Guid.NewGuid().ToString("N").Substring(0, 4);
-        return Render(template, now, randomToken, width, height);
+        return Render(template, now, randomToken, width, height, sourceApp: null, appendSourceApp: false);
+    }
+
+    /// <summary>
+    /// Format a template for a capture taken from <paramref name="sourceApp"/>. When the template has no
+    /// <c>{app}</c> token and <paramref name="appendSourceApp"/> is set, the app name is appended instead,
+    /// so saved files stay searchable by the app they came from.
+    /// </summary>
+    public static string Format(string template, int width, int height, string? sourceApp, bool appendSourceApp)
+    {
+        var now = DateTime.Now;
+        var randomToken = Guid.NewGuid().ToString("N").Substring(0, 4);
+        return Render(template, now, randomToken, width, height, sourceApp, appendSourceApp);
     }
 
     /// <summary>Format a preset with a fixed example date (2026-04-05 14:30:52) for display.</summary>
     public static string FormatExample(string template)
-        => Render(template, new DateTime(2026, 4, 5, 14, 30, 52), "a3f1", 1920, 1080);
+        => Render(template, new DateTime(2026, 4, 5, 14, 30, 52), "a3f1", 1920, 1080, sourceApp: null, appendSourceApp: false);
 
-    private static string Render(string template, DateTime now, string randomToken, int width, int height)
+    /// <summary>Preview a template as it will look for a capture taken from <paramref name="sourceApp"/>.</summary>
+    public static string FormatExample(string template, string? sourceApp, bool appendSourceApp)
+        => Render(template, new DateTime(2026, 4, 5, 14, 30, 52), "a3f1", 1920, 1080, sourceApp, appendSourceApp);
+
+    private static string Render(
+        string template,
+        DateTime now,
+        string randomToken,
+        int width,
+        int height,
+        string? sourceApp,
+        bool appendSourceApp)
     {
         bool blankTemplate = string.IsNullOrWhiteSpace(template);
         template = NormalizeLegacyPlaceholders(template);
         if (blankTemplate)
             template = DefaultTemplate;
 
+        var appToken = CaptureSourceApp.SanitizeForFileName(sourceApp);
+        bool templateHasAppToken = template.Contains(SourceAppToken, StringComparison.OrdinalIgnoreCase);
+        if (appendSourceApp && !templateHasAppToken && appToken is not null)
+            template += $"_{SourceAppToken}";
+
         var result = template
+            .Replace(SourceAppToken, appToken ?? "", StringComparison.OrdinalIgnoreCase)
             .Replace("{datetime}", now.ToString("yyyyMMdd_HHmmss"))
             .Replace("{date}", now.ToString("yyyyMMdd"))
             .Replace("{time}", now.ToString("HHmmss"))

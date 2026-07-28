@@ -31,7 +31,8 @@ internal static class HistoryEntryUtilities
             Kind = entry.Kind,
             UploadUrl = entry.UploadUrl,
             UploadProvider = entry.UploadProvider,
-            UploadError = entry.UploadError
+            UploadError = entry.UploadError,
+            SourceApp = entry.SourceApp
         };
     }
 

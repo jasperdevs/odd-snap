@@ -865,6 +865,7 @@ public partial class SettingsWindow
         }
 
         image.Source = vm.ThumbnailSource ?? GetHistoryPlaceholder(vm.Entry.Kind);
+        ApplyThumbnailStretch(image);
         image.Opacity = 1;
 
         if (!vm.ThumbnailLoaded || vm.ThumbnailSource is null || IsStaleHistoryPlaceholder(vm.ThumbnailSource, vm.Entry.Kind))

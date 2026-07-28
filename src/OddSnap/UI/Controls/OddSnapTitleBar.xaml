@@ -5,7 +5,7 @@
     <Border x:Name="TitleBarBorder"
             MinHeight="40"
             Padding="14,0,0,0"
-            CornerRadius="11,11,0,0"
+            CornerRadius="{DynamicResource OddSnapTitleBarCornerRadius}"
             Background="Transparent"
             MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <Grid>

@@ -38,6 +38,28 @@ public partial class App
         }, DispatcherPriority.Background, "capture.restore-settings-post");
     }
 
+    /// <summary>
+    /// App the current capture is attributed to. Seeded from the foreground window before any
+    /// OddSnap overlay takes focus, then narrowed to the window actually under the selection once
+    /// the user picks a region. Deliberately cleared when nothing can be attributed (our own
+    /// windows, the shell, the bare desktop) — a stale app name would be worse than no name.
+    /// </summary>
+    private string? _captureSourceApp;
+
+    private void CaptureSourceAppForCurrentCapture()
+    {
+        _captureSourceApp = Helpers.CaptureSourceApp.ResolveForeground();
+    }
+
+    /// <summary>
+    /// Re-attribute the capture to whatever window the selection was dragged over. The foreground
+    /// window is only a fallback: you can select a region of a background window without focusing it.
+    /// </summary>
+    private void AttributeCaptureToRegion(Rectangle region)
+    {
+        _captureSourceApp = Helpers.CaptureSourceApp.ResolveForRegion(region) ?? _captureSourceApp;
+    }
+
     private sealed class PersistedCaptureResult
     {
         public required Bitmap Output { get; init; }
@@ -305,6 +327,7 @@ public partial class App
         Bitmap? bmp = null;
         try
         {
+            CaptureSourceAppForCurrentCapture();
             (bmp, _) = ScreenCapture.CaptureAllScreens(_settingsService!.Settings.ShowCursor);
             HandleCaptureResult(bmp);
             bmp = null;
@@ -327,6 +350,7 @@ public partial class App
         {
             var bounds = ScreenCapture.GetVirtualScreenBounds();
             var hwnd = Native.User32.GetForegroundWindow();
+            _captureSourceApp = Helpers.CaptureSourceApp.ResolveForWindow(hwnd);
             if (!WindowDetector.TryGetCapturableWindowBounds(hwnd, bounds, out var windowRect, out var failureMessage))
             {
                 ResetCapturing();
@@ -393,12 +417,17 @@ public partial class App
         Bitmap? screenshot = null;
         try
         {
+            CaptureSourceAppForCurrentCapture();
             var screenshotStarted = PerformanceTrace.Timestamp();
             bool showCursor = _settingsService!.Settings.ShowCursor;
             var (bmp, bounds) = _settingsService.Settings.OverlayCaptureAllMonitors
                 ? ScreenCapture.CaptureAllScreensLowLatency(showCursor)
                 : ScreenCapture.CaptureCurrentScreenLowLatency(showCursor);
             screenshot = bmp;
+
+            // Record the window layout that matches these pixels, so a selection can be attributed
+            // to the window it was dragged over rather than to whatever happened to have focus.
+            Helpers.CaptureSourceApp.SnapshotWindows(bounds);
             PerformanceTrace.LogIfSlow(
                 "perf.capture.overlay-screenshot",
                 screenshotStarted,
@@ -433,6 +462,7 @@ public partial class App
             overlay.RegionSelected += sel =>
             {
                 overlay.Hide();
+                AttributeCaptureToRegion(sel);
                 using var annotated = overlay.RenderAnnotatedBitmap();
                 var cropped = ScreenCapture.CropRegion(annotated, sel);
                 overlay.Close();
@@ -449,6 +479,7 @@ public partial class App
             overlay.OcrRegionSelected += sel =>
             {
                 overlay.Hide();
+                AttributeCaptureToRegion(sel);
                 using var annotated = overlay.RenderAnnotatedBitmap();
                 var cropped = ScreenCapture.CropRegion(annotated, sel);
                 overlay.Close();
@@ -517,6 +548,7 @@ public partial class App
             overlay.StickerRegionSelected += sel =>
             {
                 overlay.Hide();
+                AttributeCaptureToRegion(sel);
                 using var annotated = overlay.RenderAnnotatedBitmap();
                 var sticker = ScreenCapture.CropRegion(annotated, sel);
                 overlay.Close();
@@ -560,6 +592,7 @@ public partial class App
             overlay.UpscaleRegionSelected += sel =>
             {
                 overlay.Hide();
+                AttributeCaptureToRegion(sel);
                 using var annotated = overlay.RenderAnnotatedBitmap();
                 var upscaled = ScreenCapture.CropRegion(annotated, sel);
                 overlay.Close();
@@ -647,6 +680,7 @@ public partial class App
 
             overlay.FormClosed += (_, _) =>
             {
+                Helpers.CaptureSourceApp.ClearSnapshot();
                 screenshot?.Dispose();
                 screenshot = null;
 

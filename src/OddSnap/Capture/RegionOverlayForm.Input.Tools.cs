@@ -186,7 +186,7 @@ public sealed partial class RegionOverlayForm
         {
             ClearCrosshairGuides();
             SetSnapGuides(false, false);
-            var oldBounds = GetAnnotationBounds(_selectPreviewAnnotation ?? _undoStack[_selectedAnnotationIndex]);
+            var oldBounds = GetSelectionChromeBounds(_selectPreviewAnnotation ?? _undoStack[_selectedAnnotationIndex]);
             int dx = e.Location.X - _selectDragStart.X;
             int dy = e.Location.Y - _selectDragStart.Y;
             var ob = _selectHandleBounds;
@@ -202,8 +202,7 @@ public sealed partial class RegionOverlayForm
             {
                 var scaled = ScaleAnnotation(_selectResizeOriginalAnnotation, ob, nb);
                 _selectPreviewAnnotation = scaled;
-                var newBounds = GetAnnotationBounds(scaled);
-                InvalidateLiveTransform(oldBounds, newBounds);
+                InvalidateLiveTransform(oldBounds, GetSelectionChromeBounds(scaled));
             }
             return;
         }
@@ -224,7 +223,9 @@ public sealed partial class RegionOverlayForm
             {
                 var moved = MoveAnnotation(current, dx, dy);
                 _selectPreviewAnnotation = moved;
-                InvalidateLiveTransform(currentBounds, GetAnnotationBounds(moved));
+                InvalidateLiveTransform(
+                    GetSelectionChromeBounds(current),
+                    GetSelectionChromeBounds(moved));
             }
             else
                 SetSnapGuides(false, false);
@@ -269,7 +270,11 @@ public sealed partial class RegionOverlayForm
         else if (_mode == CaptureMode.Select)
         {
             int sh = GetSelectHandle(e.Location);
-            if (sh >= 0) target = sh is 0 or 3 ? Cursors.SizeNWSE : Cursors.SizeNESW;
+            bool overDelete = IsPointInSelectDeleteButton(e.Location);
+            SetSelectDeleteHovered(overDelete);
+
+            if (overDelete) target = Cursors.Hand;
+            else if (sh >= 0) target = sh is 0 or 3 ? Cursors.SizeNWSE : Cursors.SizeNESW;
             else if (_selectedAnnotationIndex >= 0 && GetAnnotationBounds(_undoStack[_selectedAnnotationIndex]).Contains(e.Location))
                 target = Cursors.SizeAll;
             else

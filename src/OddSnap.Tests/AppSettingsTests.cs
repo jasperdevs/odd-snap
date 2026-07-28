@@ -164,10 +164,20 @@ public class AppSettingsTests
     }
 
     [Fact]
-    public void DefaultPinnedToolbarIds_AreExactlyCaptureTools()
+    public void DefaultPinnedToolbarIds_AreCaptureToolsPlusSelect()
     {
-        var expected = ToolDef.AllTools.Where(t => t.Group == 0).Select(t => t.Id).ToList();
+        // Select is pinned because it is the only way to move, resize or delete an annotation.
+        var expected = ToolDef.AllTools.Where(t => t.Group == 0).Select(t => t.Id)
+            .Append("select")
+            .ToList();
         Assert.Equal(expected, ToolDef.DefaultPinnedToolbarIds());
+    }
+
+    [Fact]
+    public void DefaultPinnedToolbarIds_AreAllKnownToolbarItems()
+    {
+        var known = ToolDef.AllToolbarItems().Select(t => t.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.All(ToolDef.DefaultPinnedToolbarIds(), id => Assert.Contains(id, known));
     }
 
     [Fact]

@@ -255,6 +255,42 @@ public partial class SettingsWindow
             ? ImagePlaceholder.Value
             : VideoPlaceholder.Value;
 
+    /// <summary>
+    /// How far a capture's shape may stray from the card's before cropping it to fill stops making
+    /// sense. Inside this, crop-to-fill keeps the grid tidy; beyond it, filling would show a sliver
+    /// of a wide strip, so the thumbnail is letterboxed and you see the whole capture instead.
+    /// </summary>
+    private const double HistoryThumbnailFillAspectTolerance = 1.5;
+
+    private static readonly double HistoryCardImageAreaAspect = HistoryCardPreferredWidth / 100d;
+
+    private static void ApplyThumbnailStretch(System.Windows.Controls.Image image)
+    {
+        image.Stretch = ShouldLetterboxThumbnail(image.Source)
+            ? Stretch.Uniform
+            : Stretch.UniformToFill;
+    }
+
+    private static bool ShouldLetterboxThumbnail(ImageSource? source)
+    {
+        // Placeholders are icons, not captures — they are drawn to fill on purpose.
+        if (source is null ||
+            ReferenceEquals(source, ImagePlaceholder.Value) ||
+            ReferenceEquals(source, VideoPlaceholder.Value))
+        {
+            return false;
+        }
+
+        if (source.Width <= 0 || source.Height <= 0)
+            return false;
+
+        var aspect = source.Width / source.Height;
+        var divergence = aspect > HistoryCardImageAreaAspect
+            ? aspect / HistoryCardImageAreaAspect
+            : HistoryCardImageAreaAspect / aspect;
+        return divergence > HistoryThumbnailFillAspectTolerance;
+    }
+
     private static bool IsStaleHistoryPlaceholder(BitmapSource? source, HistoryKind kind) =>
         source is not null &&
         (kind == HistoryKind.Image || kind == HistoryKind.Gif || kind == HistoryKind.Sticker || kind == HistoryKind.Video) &&
