@@ -9,6 +9,25 @@ internal static class PythonRuntimeEnvironment
     public static Task<ProcessRunResult> RunLauncherAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
         => ProcessRunner.RunAsync("py", arguments, cancellationToken);
 
+    public static Task<ProcessRunResult> RunUtf8LauncherAsync(
+        IEnumerable<string> arguments,
+        CancellationToken cancellationToken,
+        string diagnosticCategory,
+        string? standardInput = null)
+        => ProcessRunner.RunAsync(
+            "py",
+            arguments,
+            cancellationToken,
+            standardInput,
+            configure: psi =>
+            {
+                psi.EnvironmentVariables["PYTHONUTF8"] = "1";
+                psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+                psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
+            },
+            startFailureMessage: "Could not start Python launcher.",
+            onStartFailure: message => AppDiagnostics.LogWarning(diagnosticCategory, message));
+
     public static async Task<string?> ResolveCompatibleOnnxRuntimeLauncherAsync(CancellationToken cancellationToken)
     {
         var list = await ListAvailableLaunchersAsync(cancellationToken).ConfigureAwait(false);

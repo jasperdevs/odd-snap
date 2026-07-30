@@ -195,19 +195,6 @@ public partial class SettingsWindow
             SetOcrPreferenceStatus);
     }
 
-    private static string GetLanguageLabel(string languageTag)
-    {
-        try
-        {
-            var lang = new Windows.Globalization.Language(languageTag);
-            return $"{lang.DisplayName} ({languageTag})";
-        }
-        catch
-        {
-            return languageTag;
-        }
-    }
-
     private void LoadTranslateLanguageCombos()
     {
         _translateFromItems.Clear();

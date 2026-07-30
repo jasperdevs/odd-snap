@@ -17,11 +17,14 @@ public static class AudioService
             using var enumerator = new MMDeviceEnumerator();
             foreach (var dev in enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active))
             {
-                list.Add(new AudioDevice(dev.ID, dev.FriendlyName, true));
-                dev.Dispose();
+                using (dev)
+                    list.Add(new AudioDevice(dev.ID, dev.FriendlyName, true));
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("audio.enumerate-microphones", "Failed to enumerate active microphone devices.", ex);
+        }
         return list;
     }
 
@@ -34,11 +37,14 @@ public static class AudioService
             using var enumerator = new MMDeviceEnumerator();
             foreach (var dev in enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
             {
-                list.Add(new AudioDevice(dev.ID, dev.FriendlyName, false));
-                dev.Dispose();
+                using (dev)
+                    list.Add(new AudioDevice(dev.ID, dev.FriendlyName, false));
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("audio.enumerate-desktop-devices", "Failed to enumerate active desktop audio devices.", ex);
+        }
         return list;
     }
 
@@ -51,7 +57,11 @@ public static class AudioService
             using var dev = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
             return dev.ID;
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("audio.default-microphone", "Failed to resolve the default microphone.", ex);
+            return null;
+        }
     }
 
     /// <summary>Get the default desktop audio device ID, or null.</summary>
@@ -63,6 +73,10 @@ public static class AudioService
             using var dev = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
             return dev.ID;
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("audio.default-desktop-device", "Failed to resolve the default desktop audio device.", ex);
+            return null;
+        }
     }
 }

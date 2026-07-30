@@ -16,7 +16,7 @@ public sealed class ProviderSection : HeaderedContentControl
     public static readonly DependencyProperty HeaderExtrasProperty =
         DependencyProperty.Register(
             nameof(HeaderExtras),
-            typeof(object),
+            typeof(UIElement),
             typeof(ProviderSection),
             new PropertyMetadata(null));
 
@@ -26,9 +26,9 @@ public sealed class ProviderSection : HeaderedContentControl
         set => SetValue(IconSourceProperty, value);
     }
 
-    public object? HeaderExtras
+    public UIElement? HeaderExtras
     {
-        get => GetValue(HeaderExtrasProperty);
+        get => (UIElement?)GetValue(HeaderExtrasProperty);
         set => SetValue(HeaderExtrasProperty, value);
     }
 }

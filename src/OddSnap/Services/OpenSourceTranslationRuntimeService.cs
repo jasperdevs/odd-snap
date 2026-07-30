@@ -14,7 +14,8 @@ public static class OpenSourceTranslationRuntimeService
         "sentencepiece==0.2.1",
         "langid==1.1.6",
         "huggingface_hub==1.10.2",
-        "numpy==2.4.4"
+        "numpy==2.4.4",
+        "torch==2.11.0"
     ];
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
     private static readonly string RootDir = Path.Combine(
@@ -143,19 +144,11 @@ public static class OpenSourceTranslationRuntimeService
     }
 
     private static Task<ProcessRunResult> RunPythonAsync(IEnumerable<string> arguments, CancellationToken cancellationToken, string? standardInput = null)
-        => ProcessRunner.RunAsync(
-            "py",
+        => PythonRuntimeEnvironment.RunUtf8LauncherAsync(
             arguments,
             cancellationToken,
-            standardInput,
-            configure: psi =>
-            {
-                psi.EnvironmentVariables["PYTHONUTF8"] = "1";
-                psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
-                psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
-            },
-            startFailureMessage: "Could not start Python launcher.",
-            onStartFailure: message => AppDiagnostics.LogWarning("translation.local.python-start", message));
+            "translation.local.python-start",
+            standardInput);
 
     private static string GetPythonFailureMessage(ProcessRunResult result, string fallback)
     {

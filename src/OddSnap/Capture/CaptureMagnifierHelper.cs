@@ -213,63 +213,17 @@ internal sealed class CaptureMagnifierHelper : IDisposable
             avoidRect.IsEmpty ? Point.Empty : new Point(cursor.X - formW / 2, avoidRect.Top - offset - formH)
         };
 
-        if (TryResolveCandidate(preferredIndex, candidates, clientSize, formW, formH, margin, avoidRect, out var preferred))
-        {
-            if (!avoidRect.IsEmpty)
-                _placementIndex = preferredIndex;
-            return (preferred.X, preferred.Y);
-        }
-
-        for (int i = 0; i < candidates.Length; i++)
-        {
-            if (i == preferredIndex)
-                continue;
-
-            if (TryResolveCandidate(i, candidates, clientSize, formW, formH, margin, avoidRect, out var resolved))
-            {
-                if (!avoidRect.IsEmpty)
-                    _placementIndex = i;
-                return (resolved.X, resolved.Y);
-            }
-        }
-
-        var fallback = ClampPosition(candidates[0], clientSize, formW, formH, margin);
+        var (position, index) = OverlayPlacement.Resolve(
+            candidates,
+            clientSize,
+            new Size(formW, formH),
+            margin,
+            avoidRect,
+            preferredIndex);
         if (!avoidRect.IsEmpty)
-            _placementIndex = 0;
-        return (fallback.X, fallback.Y);
+            _placementIndex = index;
+        return (position.X, position.Y);
     }
-
-    private static bool TryResolveCandidate(
-        int index,
-        IReadOnlyList<Point> candidates,
-        Size clientSize,
-        int formW,
-        int formH,
-        int margin,
-        Rectangle avoidRect,
-        out Point resolved)
-    {
-        resolved = Point.Empty;
-        if ((uint)index >= (uint)candidates.Count)
-            return false;
-
-        var candidate = candidates[index];
-        if (candidate == Point.Empty)
-            return false;
-
-        var clamped = ClampPosition(candidate, clientSize, formW, formH, margin);
-        var rect = new Rectangle(clamped.X, clamped.Y, formW, formH);
-        if (!avoidRect.IsEmpty && rect.IntersectsWith(avoidRect))
-            return false;
-
-        resolved = clamped;
-        return true;
-    }
-
-    private static Point ClampPosition(Point point, Size clientSize, int formW, int formH, int margin)
-        => new(
-            Math.Clamp(point.X, margin, Math.Max(margin, clientSize.Width - formW - margin)),
-            Math.Clamp(point.Y, margin, Math.Max(margin, clientSize.Height - formH - margin)));
 
     public void Dispose()
     {

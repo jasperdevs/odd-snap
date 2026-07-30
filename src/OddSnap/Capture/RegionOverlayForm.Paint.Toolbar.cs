@@ -102,12 +102,6 @@ public sealed partial class RegionOverlayForm
         g.PixelOffsetMode = PixelOffsetMode.Default;
     }
 
-    private static Color ScaleAlpha(Color color, float factor)
-    {
-        factor = Math.Clamp(factor, 0f, 1f);
-        return Color.FromArgb((int)Math.Round(color.A * factor), color.R, color.G, color.B);
-    }
-
     /// <summary>
     /// Called by the separate ToolbarForm to paint toolbar, tooltips, and popups.
     /// Graphics is already translated so overlay coordinates map correctly.
@@ -147,33 +141,12 @@ public sealed partial class RegionOverlayForm
         g.SmoothingMode = SmoothingMode.Default;
     }
 
-    // Fixed button glyphs (not in ToolDef)
-    private static readonly Dictionary<string, char> FixedGlyphs = new()
-    {
-        ["gear"]  = '\0',
-        ["close"] = '\0',
-        ["more"]  = '\0',
-    };
-
     private static readonly StringFormat _iconFmt = new(StringFormat.GenericTypographic)
     {
         Alignment = StringAlignment.Center,
         LineAlignment = StringAlignment.Center,
         FormatFlags = StringFormatFlags.NoClip
     };
-
-    // Cached lookup for icon id -> glyph char (avoids LINQ FirstOrDefault per paint)
-    private static Dictionary<string, char>? _iconGlyphCache;
-    private static Dictionary<string, char> GetIconGlyphMap()
-    {
-        if (_iconGlyphCache != null) return _iconGlyphCache;
-        _iconGlyphCache = new Dictionary<string, char>(ToolDef.AllTools.Length + FixedGlyphs.Count);
-        foreach (var t in ToolDef.AllTools)
-            _iconGlyphCache[t.Id] = t.Icon;
-        foreach (var kv in FixedGlyphs)
-            _iconGlyphCache[kv.Key] = kv.Value;
-        return _iconGlyphCache;
-    }
 
     private static void DrawIcon(Graphics g, string icon, Rectangle b, Color c, bool active = false)
     {

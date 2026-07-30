@@ -262,8 +262,6 @@ public static class ToolListBuilder
         }
     }
 
-    private sealed record HotkeyConflict(string ToolId, string Label, bool IsAiRedirect);
-
     private static void WireHotkeyBox(TextBox box, string toolId, SettingsService svc, FrameworkElement owner, Action? hotkeyChanged)
     {
         var (mod0, key0) = svc.Settings.GetToolHotkey(toolId);
@@ -335,7 +333,7 @@ public static class ToolListBuilder
             }
 
             var previous = svc.Settings.GetToolHotkey(toolId);
-            var conflict = FindHotkeyConflict(svc.Settings, toolId, mod, vk);
+            var conflict = HotkeyConflictResolver.Find(svc.Settings, toolId, mod, vk);
             (uint Modifiers, uint Key)? clearedConflict = null;
             if (conflict != null)
             {
@@ -353,7 +351,7 @@ public static class ToolListBuilder
                     return;
                 }
 
-                clearedConflict = ClearHotkeyConflict(svc.Settings, conflict);
+                clearedConflict = HotkeyConflictResolver.Clear(svc.Settings, conflict);
             }
 
             try
@@ -369,7 +367,7 @@ public static class ToolListBuilder
                 AppDiagnostics.LogError("settings.tool-hotkey", ex);
                 svc.Settings.SetToolHotkey(toolId, previous.mod, previous.key);
                 if (conflict != null)
-                    RestoreHotkeyConflict(svc.Settings, conflict, clearedConflict);
+                    HotkeyConflictResolver.Restore(svc.Settings, conflict, clearedConflict);
 
                 try
                 {
@@ -437,61 +435,4 @@ public static class ToolListBuilder
     private static bool IsOverlayOnlyTool(string toolId) =>
         ToolDef.AllTools.Any(t => t.Group == 1 && string.Equals(t.Id, toolId, StringComparison.OrdinalIgnoreCase));
 
-    private static HotkeyConflict? FindHotkeyConflict(AppSettings settings, string currentToolId, uint mod, uint key)
-    {
-        foreach (var tool in ToolDef.AllTools)
-        {
-            if (string.Equals(tool.Id, currentToolId, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var (existingMod, existingKey) = settings.GetToolHotkey(tool.Id);
-            if (existingMod == mod && existingKey == key)
-                return new HotkeyConflict(tool.Id, tool.Label, IsAiRedirect: false);
-        }
-
-        foreach (var (id, label, _) in ExtraTools)
-        {
-            if (string.Equals(id, currentToolId, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var (existingMod, existingKey) = settings.GetToolHotkey(id);
-            if (existingMod == mod && existingKey == key)
-                return new HotkeyConflict(id, label, IsAiRedirect: false);
-        }
-
-        if (settings.AiRedirectHotkeyModifiers == mod && settings.AiRedirectHotkeyKey == key)
-            return new HotkeyConflict("", "AI Redirect", IsAiRedirect: true);
-
-        return null;
-    }
-
-    private static (uint Modifiers, uint Key) ClearHotkeyConflict(AppSettings settings, HotkeyConflict conflict)
-    {
-        if (conflict.IsAiRedirect)
-        {
-            var previous = (settings.AiRedirectHotkeyModifiers, settings.AiRedirectHotkeyKey);
-            settings.AiRedirectHotkeyModifiers = 0;
-            settings.AiRedirectHotkeyKey = 0;
-            return previous;
-        }
-
-        var old = settings.GetToolHotkey(conflict.ToolId);
-        settings.SetToolHotkey(conflict.ToolId, 0, 0);
-        return old;
-    }
-
-    private static void RestoreHotkeyConflict(AppSettings settings, HotkeyConflict conflict, (uint Modifiers, uint Key)? previous)
-    {
-        if (previous is null)
-            return;
-
-        if (conflict.IsAiRedirect)
-        {
-            settings.AiRedirectHotkeyModifiers = previous.Value.Modifiers;
-            settings.AiRedirectHotkeyKey = previous.Value.Key;
-            return;
-        }
-
-        settings.SetToolHotkey(conflict.ToolId, previous.Value.Modifiers, previous.Value.Key);
-    }
 }

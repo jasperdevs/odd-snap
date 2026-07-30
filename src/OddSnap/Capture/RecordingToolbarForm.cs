@@ -66,40 +66,7 @@ internal sealed class RecordingToolbarForm : Form
         _owner.PaintRecordingToolbarTo(g, new Rectangle(Point.Empty, sz), _hoveredButton);
         g.Flush(FlushIntention.Sync);
 
-        var screenPt = new User32.POINT { X = Left, Y = Top };
-        var size = new User32.SIZE { cx = sz.Width, cy = sz.Height };
-        var srcPt = new User32.POINT { X = 0, Y = 0 };
-        var blend = new User32.BLENDFUNCTION
-        {
-            BlendOp = 0,
-            BlendFlags = 0,
-            SourceConstantAlpha = 255,
-            AlphaFormat = 1
-        };
-
-        IntPtr hdcScreen = User32.GetDC(IntPtr.Zero);
-        IntPtr hdcMem = IntPtr.Zero;
-        IntPtr hBmp = IntPtr.Zero;
-        IntPtr hOld = IntPtr.Zero;
-
-        try
-        {
-            hdcMem = User32.CreateCompatibleDC(hdcScreen);
-            hBmp = _surface.GetHbitmap(Color.FromArgb(0));
-            hOld = User32.SelectObject(hdcMem, hBmp);
-            User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPt, ref size,
-                hdcMem, ref srcPt, 0, ref blend, 2);
-        }
-        finally
-        {
-            if (hdcMem != IntPtr.Zero && hOld != IntPtr.Zero)
-                User32.SelectObject(hdcMem, hOld);
-            if (hBmp != IntPtr.Zero)
-                User32.DeleteObject(hBmp);
-            if (hdcMem != IntPtr.Zero)
-                User32.DeleteDC(hdcMem);
-            User32.ReleaseDC(IntPtr.Zero, hdcScreen);
-        }
+        LayeredWindowSurface.Update(Handle, _surface, new Rectangle(Left, Top, sz.Width, sz.Height));
     }
 
     protected override void OnMouseMove(MouseEventArgs e)

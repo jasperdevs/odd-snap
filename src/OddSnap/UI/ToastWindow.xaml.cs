@@ -1,6 +1,5 @@
 using Bitmap = System.Drawing.Bitmap;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Input;
@@ -9,6 +8,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using OddSnap.Capture;
 using OddSnap.Helpers;
+using OddSnap.Native;
 using OddSnap.Services;
 using Color = System.Windows.Media.Color;
 
@@ -904,7 +904,7 @@ public partial class ToastWindow : Window
             return;
 
         _officeMenuMouseWasDown = true;
-        if (!GetCursorPos(out var cursor))
+        if (!User32.GetCursorPos(out var cursor))
             return;
 
         if (IsScreenPointOver(menu, cursor) || IsScreenPointOver(OfficeBtn, cursor))
@@ -914,10 +914,10 @@ public partial class ToastWindow : Window
     }
 
     private static bool IsMouseDown()
-        => (GetAsyncKeyState(0x01) & 0x8000) != 0 ||
-           (GetAsyncKeyState(0x02) & 0x8000) != 0;
+        => (User32.GetAsyncKeyState(0x01) & 0x8000) != 0 ||
+           (User32.GetAsyncKeyState(0x02) & 0x8000) != 0;
 
-    private static bool IsScreenPointOver(FrameworkElement element, NativePoint point)
+    private static bool IsScreenPointOver(FrameworkElement element, User32.POINT point)
     {
         if (!element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
             return false;
@@ -1683,7 +1683,7 @@ public partial class ToastWindow : Window
 
     private bool IsCursorOverToast()
     {
-        if (!GetCursorPos(out var cursor))
+        if (!User32.GetCursorPos(out var cursor))
             return IsMouseOver;
 
         return IsScreenPointOver(OuterShell, cursor);
@@ -1987,16 +1987,6 @@ public partial class ToastWindow : Window
         EndCompositedToastAnimation();
     }
 
-    private void PulseRefreshAnimation()
-    {
-        DragScale.CenterX = ActualWidth / 2;
-        DragScale.CenterY = ActualHeight / 2;
-        DragScale.ScaleX = 0.985;
-        DragScale.ScaleY = 0.985;
-        DragScale.BeginAnimation(ScaleTransform.ScaleXProperty, Motion.To(1, 140, Motion.SmoothOut));
-        DragScale.BeginAnimation(ScaleTransform.ScaleYProperty, Motion.To(1, 140, Motion.SmoothOut));
-    }
-
     private void ApplyPlacement(bool animateEntry, bool subtleEntry)
     {
         var wa = PopupWindowHelper.GetCurrentWorkArea();
@@ -2294,14 +2284,6 @@ public partial class ToastWindow : Window
                 "toast.request-dismiss-post");
     }
 
-    private static double Lerp(double from, double to, double t) => from + ((to - from) * t);
-
-    private static double EaseInOutQuad(double t)
-        => t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2;
-
-    private static double EaseInOutCubic(double t)
-        => t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2;
-
     private bool TryForceClose(bool force = false)
     {
         RunOnClosedCleanup("toast.force-close.stop-timer", () => _timer.Stop());
@@ -2378,16 +2360,4 @@ public partial class ToastWindow : Window
         _ => (56, 0)
     };
 
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int virtualKey);
-
-    [DllImport("user32.dll")]
-    private static extern bool GetCursorPos(out NativePoint point);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativePoint
-    {
-        public int X;
-        public int Y;
-    }
 }

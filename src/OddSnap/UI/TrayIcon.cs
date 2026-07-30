@@ -249,8 +249,9 @@ public sealed class TrayIcon : IDisposable
             if (value is int systemUsesLightTheme)
                 return systemUsesLightTheme == 0;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("tray.theme", "Failed to read the Windows system theme; using the OddSnap app theme.", ex);
         }
 
         return Theme.IsDark;
@@ -265,8 +266,9 @@ public sealed class TrayIcon : IDisposable
             var icon = CreateOwnedIcon(mono);
             return recording ? OverlayRecordingDot(icon) : icon;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("tray.icon", "Failed to render the OddSnap tray icon; using the fallback icon.", ex);
             return CreateFallbackIcon(recording, tint);
         }
     }

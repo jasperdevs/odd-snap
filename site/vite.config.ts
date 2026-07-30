@@ -19,12 +19,7 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
           if (id.includes("framer-motion")) return "motion";
-          if (
-            id.includes("lucide-react") ||
-            id.includes("@tabler/icons") ||
-            id.includes("@phosphor-icons") ||
-            id.includes("@hugeicons")
-          ) {
+          if (id.includes("lucide-react")) {
             return "icons";
           }
           if (id.includes("react") || id.includes("react-dom") || id.includes("react-router")) {

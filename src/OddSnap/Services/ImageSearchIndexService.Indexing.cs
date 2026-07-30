@@ -671,71 +671,6 @@ public sealed partial class ImageSearchIndexService
         // carrying forward stale legacy failures and missing-file rows.
     }
 
-    private bool TryImportLegacyRecordsFromDatabase_NoLock()
-    {
-        if (!File.Exists(LegacyDbPath))
-            return false;
-
-        try
-        {
-            using var connection = new SqliteConnection($"Data Source={LegacyDbPath};Pooling=True;Cache=Shared");
-            connection.Open();
-            var availableColumns = GetAvailableColumns_NoLock(connection, "image_search_records");
-            var hasExtendedColumns = availableColumns.Contains("fileLengthBytes", StringComparer.OrdinalIgnoreCase);
-            using var command = connection.CreateCommand();
-            command.CommandText = hasExtendedColumns
-                ? """
-                    SELECT filePath, ocrText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks,
-                           fileLengthBytes, lastWriteTimeUtcTicks, ocrLanguageTag, ocrEngineId,
-                           ocrCompleted, lastError
-                    FROM image_search_records;
-                    """
-                : """
-                    SELECT filePath, ocrText, indexedAt, ocrState, ocrRetryCount, nextOcrRetryUtcTicks
-                    FROM image_search_records;
-                    """;
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                var indexedAtText = reader.IsDBNull(2) ? null : reader.GetString(2);
-                var record = new ImageSearchIndexRecord
-                {
-                    FilePath = reader.GetString(0),
-                    OcrText = reader.IsDBNull(1) ? "" : reader.GetString(1),
-                    IndexedAt = DateTime.TryParse(indexedAtText, out var indexedAt) ? indexedAt : DateTime.UtcNow,
-                    OcrState = (ImageSearchOcrState)reader.GetInt32(3),
-                    OcrRetryCount = reader.GetInt32(4),
-                    NextOcrRetryUtcTicks = reader.GetInt64(5)
-                };
-
-                if (hasExtendedColumns)
-                {
-                    record.FileLengthBytes = reader.IsDBNull(6) ? 0 : reader.GetInt64(6);
-                    record.LastWriteTimeUtcTicks = reader.IsDBNull(7) ? 0 : reader.GetInt64(7);
-                    record.OcrLanguageTag = reader.IsDBNull(8) ? "" : reader.GetString(8);
-                    record.OcrEngineId = reader.IsDBNull(9) ? "" : reader.GetString(9);
-                    record.OcrCompleted = !reader.IsDBNull(10) && reader.GetInt64(10) != 0;
-                    record.LastError = reader.IsDBNull(11) ? "" : reader.GetString(11);
-                }
-                else
-                {
-                    record.OcrCompleted = record.OcrState == ImageSearchOcrState.Indexed;
-                }
-
-                if (!File.Exists(record.FilePath))
-                    continue;
-
-                _records[record.FilePath] = CreateResidentRecord(record);
-            }
-
-            return _records.Count > 0;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static HashSet<string> GetAvailableColumns_NoLock(SqliteConnection connection, string tableName)
     {
         using var pragma = connection.CreateCommand();
@@ -772,8 +707,9 @@ public sealed partial class ImageSearchIndexService
                 if (File.Exists(path))
                     File.Delete(path);
             }
-            catch
+            catch (Exception ex)
             {
+                AppDiagnostics.LogWarning("image-search.legacy-cleanup", $"Failed to delete legacy search artifact {path}.", ex);
             }
         }
     }

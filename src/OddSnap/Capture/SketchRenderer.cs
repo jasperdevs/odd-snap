@@ -19,9 +19,6 @@ public static partial class SketchRenderer
     private static readonly Color AnnotStroke = Color.FromArgb(60, 0, 0, 0);
 
     // Cached GDI objects for stroke/shadow rendering — avoid per-frame allocations
-    private static readonly SolidBrush BrushShadow1 = new(AnnotShadow1);
-    private static readonly SolidBrush BrushShadow2 = new(AnnotShadow2);
-    private static readonly SolidBrush BrushStroke = new(AnnotStroke);
     private static readonly Pen ShapeShadowPen1 = new(AnnotShadow1, 3f) { LineJoin = LineJoin.Round };
     private static readonly Pen ShapeShadowPen2 = new(AnnotShadow2, 3f) { LineJoin = LineJoin.Round };
     private static readonly Pen ShapeStrokePen = new(AnnotStroke, 3f) { LineJoin = LineJoin.Round };
@@ -33,9 +30,6 @@ public static partial class SketchRenderer
         (0, -1),           (0, 1),
         (1, -1),  (1, 0),  (1, 1)
     };
-
-    // Reusable point buffer for offset calculations (avoids LINQ .Select().ToArray() per frame)
-    [ThreadStatic] private static Point[]? _offsetBuffer;
 
     private static readonly Dictionary<long, Pen> _roundCapPens = new();
     private static readonly Dictionary<long, Pen> _roundJoinPens = new();
@@ -112,32 +106,6 @@ public static partial class SketchRenderer
             cache[key].Dispose();
             cache.Remove(key);
         }
-    }
-
-    /// <summary>Offset points into a reusable buffer — avoids allocating a new array per shadow/stroke pass.</summary>
-    private static Point[] OffsetPointsInPlace(Point[] src, int ox, int oy)
-    {
-        if (_offsetBuffer == null || _offsetBuffer.Length < src.Length)
-            _offsetBuffer = new Point[src.Length];
-        for (int i = 0; i < src.Length; i++)
-            _offsetBuffer[i] = new Point(src[i].X + ox, src[i].Y + oy);
-        return _offsetBuffer;
-    }
-
-    private static void DrawPenWithStrokeShadow(Graphics g, Pen mainPen, PointF from, PointF to)
-    {
-        // Shadow: two offset passes (matching text shadow)
-        using var s1 = new Pen(AnnotShadow1, mainPen.Width) { StartCap = mainPen.StartCap, EndCap = mainPen.EndCap };
-        using var s2 = new Pen(AnnotShadow2, mainPen.Width) { StartCap = mainPen.StartCap, EndCap = mainPen.EndCap };
-        g.DrawLine(s1, from.X + 2, from.Y + 2, to.X + 2, to.Y + 2);
-        g.DrawLine(s2, from.X + 3, from.Y + 3, to.X + 3, to.Y + 3);
-
-        // Stroke: 8-direction offset (matching text stroke)
-        using var strokePen = new Pen(AnnotStroke, mainPen.Width) { StartCap = mainPen.StartCap, EndCap = mainPen.EndCap };
-        for (int ox = -1; ox <= 1; ox++)
-            for (int oy = -1; oy <= 1; oy++)
-                if (ox != 0 || oy != 0)
-                    g.DrawLine(strokePen, from.X + ox, from.Y + oy, to.X + ox, to.Y + oy);
     }
 
     /// <summary>Draw a straight line (no arrowhead).</summary>
@@ -271,33 +239,6 @@ public static partial class SketchRenderer
 
     private static float GetArrowheadSize(float shaftLen)
         => Math.Min(Math.Clamp(12f + shaftLen / 15f, 12f, 28f), shaftLen * 0.4f);
-
-    private static void DrawRoughStrokeLine(Graphics g, PointF from, PointF to, Color color, int seed, float width, float roughness)
-    {
-        using var mainPen = new Pen(color, width)
-        {
-            StartCap = LineCap.Round,
-            EndCap = LineCap.Round,
-            LineJoin = LineJoin.Round
-        };
-        DrawSketchyLine(g, mainPen, from, to, seed, roughness);
-
-        using var echoPen = new Pen(Color.FromArgb(120, color.R, color.G, color.B), Math.Max(1.5f, width * 0.72f))
-        {
-            StartCap = LineCap.Round,
-            EndCap = LineCap.Round,
-            LineJoin = LineJoin.Round
-        };
-        DrawSketchyLine(g, echoPen, from, to, seed + 911, roughness * 0.55f);
-    }
-
-    private static int RoughOffset(int seed, int max)
-    {
-        if (max <= 0)
-            return 0;
-        var rng = new Random(seed);
-        return rng.Next(-max, max + 1);
-    }
 
     private static PointF[] SmoothCurvePoints(List<Point> points, float minDistance)
     {

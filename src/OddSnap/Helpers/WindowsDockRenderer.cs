@@ -1,6 +1,5 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using OddSnap.Capture;
 
 namespace OddSnap.Helpers;
 
@@ -16,6 +15,12 @@ public static class WindowsDockRenderer
     private static int _surfaceBgKey;
     private static Pen? _dividerPen;
     private static int _dividerPenKey;
+    private static SolidBrush? _ambientShadowBrush;
+    private static int _ambientShadowKey;
+    private static SolidBrush? _keyShadowBrush;
+    private static int _keyShadowKey;
+    private static SolidBrush? _buttonBrush;
+    private static int _buttonKey;
 
     private static SolidBrush GetSurfaceBgBrush()
     {
@@ -40,6 +45,19 @@ public static class WindowsDockRenderer
             _dividerPenKey = key;
         }
         return _dividerPen;
+    }
+
+    private static SolidBrush GetBrush(ref SolidBrush? brush, ref int key, Color color)
+    {
+        int nextKey = color.ToArgb();
+        if (brush is null || key != nextKey)
+        {
+            brush?.Dispose();
+            brush = new SolidBrush(color);
+            key = nextKey;
+        }
+
+        return brush;
     }
 
     public static GraphicsPath RoundedRect(RectangleF rect, float radius)
@@ -69,14 +87,20 @@ public static class WindowsDockRenderer
         var ambient = rect;
         ambient.Inflate(6f, 6f);
         ambient.Offset(0, 1.5f);
-        var ambientBrush = SketchRenderer.GetToolColorBrush(Color.FromArgb(UiChrome.IsDark ? 10 : 8, 0, 0, 0));
+        var ambientBrush = GetBrush(
+            ref _ambientShadowBrush,
+            ref _ambientShadowKey,
+            Color.FromArgb(UiChrome.IsDark ? 10 : 8, 0, 0, 0));
         using (var path = RoundedRect(ambient, radius + 8f))
             g.FillPath(ambientBrush, path);
 
         var key = rect;
         key.Inflate(2f, 2f);
         key.Offset(0, 3f);
-        var keyBrush = SketchRenderer.GetToolColorBrush(Color.FromArgb(UiChrome.IsDark ? 14 : 10, 0, 0, 0));
+        var keyBrush = GetBrush(
+            ref _keyShadowBrush,
+            ref _keyShadowKey,
+            Color.FromArgb(UiChrome.IsDark ? 14 : 10, 0, 0, 0));
         using (var path = RoundedRect(key, radius + 3f))
             g.FillPath(keyBrush, path);
     }
@@ -92,7 +116,11 @@ public static class WindowsDockRenderer
         if (radius < 0)
             radius = UiChrome.ScaleFloat(5f);
         using var path = RoundedRect(rect, radius);
-        g.FillPath(SketchRenderer.GetToolColorBrush(Color.FromArgb(alpha, 255, 255, 255)), path);
+        var buttonBrush = GetBrush(
+            ref _buttonBrush,
+            ref _buttonKey,
+            Color.FromArgb(alpha, 255, 255, 255));
+        g.FillPath(buttonBrush, path);
     }
 
     public static void PaintDivider(Graphics g, Point a, Point b)

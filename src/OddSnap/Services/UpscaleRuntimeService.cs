@@ -22,15 +22,12 @@ public static class UpscaleRuntimeService
         DefaultRequestHeaders = { { "User-Agent", "OddSnap/1.0" } }
     };
 
-    private sealed record ProbeState(bool? Ready, string Status, DateTime CheckedUtc);
-
     private static readonly string RootDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OddSnap", "upscale");
 
     private static readonly string ModelCacheDir = Path.Combine(RootDir, "models");
     private static readonly string RuntimeDir = Path.Combine(RootDir, "runtime");
-    private static readonly object ProbeGate = new();
-    private static readonly Dictionary<UpscaleExecutionProvider, ProbeState> ProbeCache = new();
+    private static readonly RuntimeProbeCache<UpscaleExecutionProvider> ProbeCache = new(ProbeCacheTtl);
 
     public static string RootDirectory => RootDir;
     public static string ModelCacheDirectory => ModelCacheDir;
@@ -104,7 +101,7 @@ public static class UpscaleRuntimeService
                 return false;
             }
 
-            ClearProbeCache(provider);
+            ProbeCache.Clear(provider);
             return true;
         }
         catch (Exception ex)
@@ -126,7 +123,7 @@ public static class UpscaleRuntimeService
         if (launcherArg is null)
         {
             var message = await PythonRuntimeEnvironment.BuildMissingOnnxRuntimeMessageAsync(cancellationToken).ConfigureAwait(false);
-            UpdateProbeCache(provider, false, message);
+            ProbeCache.Update(provider, false, message);
             throw new InvalidOperationException(message);
         }
 
@@ -145,7 +142,7 @@ public static class UpscaleRuntimeService
         var pythonPath = GetRuntimePythonPath(provider);
         if (!File.Exists(pythonPath) || !IsRuntimeMarkerCurrent(provider))
         {
-            UpdateProbeCache(provider, false, "Not installed");
+            ProbeCache.Update(provider, false, "Not installed");
             return false;
         }
 
@@ -156,18 +153,18 @@ public static class UpscaleRuntimeService
         var result = await RunRuntimePythonAsync(provider, new[] { "-c", checkCommand }, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
-            UpdateProbeCache(provider, false, "Not installed");
+            ProbeCache.Update(provider, false, "Not installed");
             return false;
         }
 
         if (provider == UpscaleExecutionProvider.Gpu)
         {
             var cudaAvailable = result.StdOut.Contains("True", StringComparison.OrdinalIgnoreCase);
-            UpdateProbeCache(provider, true, cudaAvailable ? "Installed (CUDA available)" : "Installed (CPU fallback)");
+            ProbeCache.Update(provider, true, cudaAvailable ? "Installed (CUDA available)" : "Installed (CPU fallback)");
             return true;
         }
 
-        UpdateProbeCache(provider, true, "Installed");
+        ProbeCache.Update(provider, true, "Installed");
         return true;
     }
 
@@ -176,35 +173,17 @@ public static class UpscaleRuntimeService
         var pythonPath = GetRuntimePythonPath(provider);
         if (File.Exists(pythonPath) && IsRuntimeMarkerCurrent(provider))
         {
-            lock (ProbeGate)
-            {
-                if (ProbeCache.TryGetValue(provider, out var installedState) &&
-                    installedState.Ready == true &&
-                    DateTime.UtcNow - installedState.CheckedUtc <= ProbeCacheTtl)
-                {
-                    isReady = true;
-                    status = installedState.Status;
-                    return true;
-                }
-            }
+            if (ProbeCache.TryGet(provider, requireReady: true, out isReady, out status))
+                return true;
 
-            UpdateProbeCache(provider, true, "Installed");
+            ProbeCache.Update(provider, true, "Installed");
             isReady = true;
             status = "Installed";
             return true;
         }
 
-        lock (ProbeGate)
-        {
-            if (ProbeCache.TryGetValue(provider, out var state) &&
-                state.Ready.HasValue &&
-                DateTime.UtcNow - state.CheckedUtc <= ProbeCacheTtl)
-            {
-                isReady = state.Ready.Value;
-                status = state.Status;
-                return true;
-            }
-        }
+        if (ProbeCache.TryGet(provider, requireReady: false, out isReady, out status))
+            return true;
 
         isReady = false;
         status = "Checking runtime...";
@@ -384,7 +363,7 @@ public static class UpscaleRuntimeService
             throw new InvalidOperationException(ProcessRunner.GetFailureMessage(runtimeInstall, "Couldn't install the upscale runtime."));
 
         File.WriteAllText(GetRuntimeMarkerPath(provider), RuntimeLayoutVersion.ToString());
-        ClearProbeCache(provider);
+        ProbeCache.Clear(provider);
     }
 
     private static async Task<ProcessRunResult> InstallRuntimePackagesAsync(UpscaleExecutionProvider provider, IProgress<string>? progress, CancellationToken cancellationToken)
@@ -520,17 +499,5 @@ output = np.transpose(output, (1, 2, 0))
 output = (output * 255.0).round().astype(np.uint8)
 Image.fromarray(output).save(output_path)
 """;
-
-    private static void UpdateProbeCache(UpscaleExecutionProvider provider, bool ready, string status)
-    {
-        lock (ProbeGate)
-            ProbeCache[provider] = new ProbeState(ready, status, DateTime.UtcNow);
-    }
-
-    private static void ClearProbeCache(UpscaleExecutionProvider provider)
-    {
-        lock (ProbeGate)
-            ProbeCache.Remove(provider);
-    }
 
 }

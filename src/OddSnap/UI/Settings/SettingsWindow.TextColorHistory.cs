@@ -27,6 +27,36 @@ public partial class SettingsWindow
         return brush;
     }
 
+    private static void WireHistoryCardChrome(Border card)
+    {
+        card.MouseEnter += (_, _) =>
+        {
+            card.Background = HistoryCardHoverBrush;
+            card.BorderBrush = HistoryCardFocusBrush;
+        };
+        card.MouseLeave += (_, _) =>
+        {
+            if (!card.IsKeyboardFocusWithin)
+            {
+                card.Background = HistoryCardIdleBrush;
+                card.BorderBrush = Brushes.Transparent;
+            }
+        };
+        card.GotKeyboardFocus += (_, _) =>
+        {
+            card.Background = HistoryCardHoverBrush;
+            card.BorderBrush = HistoryCardFocusBrush;
+        };
+        card.LostKeyboardFocus += (_, _) =>
+        {
+            if (card.IsMouseOver)
+                return;
+
+            card.Background = HistoryCardIdleBrush;
+            card.BorderBrush = Brushes.Transparent;
+        };
+    }
+
     private string _ocrSearchQuery = "";
     private List<OcrHistoryEntry> _filteredOcrEntries = new();
     private int _ocrRenderCount;
@@ -231,33 +261,7 @@ public partial class SettingsWindow
         };
         AutomationProperties.SetName(card, "Text history item");
         AutomationProperties.SetHelpText(card, "Press Enter or Space to copy this text item. In select mode, press Enter or Space to select it.");
-
-        card.MouseEnter += (_, _) =>
-        {
-            card.Background = HistoryCardHoverBrush;
-            card.BorderBrush = HistoryCardFocusBrush;
-        };
-        card.MouseLeave += (_, _) =>
-        {
-            if (!card.IsKeyboardFocusWithin)
-            {
-                card.Background = HistoryCardIdleBrush;
-                card.BorderBrush = Brushes.Transparent;
-            }
-        };
-        card.GotKeyboardFocus += (_, _) =>
-        {
-            card.Background = HistoryCardHoverBrush;
-            card.BorderBrush = HistoryCardFocusBrush;
-        };
-        card.LostKeyboardFocus += (_, _) =>
-        {
-            if (card.IsMouseOver)
-                return;
-
-            card.Background = HistoryCardIdleBrush;
-            card.BorderBrush = Brushes.Transparent;
-        };
+        WireHistoryCardChrome(card);
 
         var capturedText = entry.Text ?? "";
         bool isLong = capturedText.Length > 220 || HasMoreThanLineBreaks(capturedText, 3);
@@ -476,33 +480,7 @@ public partial class SettingsWindow
         };
         AutomationProperties.SetName(card, $"Color history item {displayHex}");
         AutomationProperties.SetHelpText(card, "Press Enter or Space to copy this color. In select mode, press Enter or Space to select it.");
-
-        card.MouseEnter += (_, _) =>
-        {
-            card.Background = HistoryCardHoverBrush;
-            card.BorderBrush = HistoryCardFocusBrush;
-        };
-        card.MouseLeave += (_, _) =>
-        {
-            if (!card.IsKeyboardFocusWithin)
-            {
-                card.Background = HistoryCardIdleBrush;
-                card.BorderBrush = Brushes.Transparent;
-            }
-        };
-        card.GotKeyboardFocus += (_, _) =>
-        {
-            card.Background = HistoryCardHoverBrush;
-            card.BorderBrush = HistoryCardFocusBrush;
-        };
-        card.LostKeyboardFocus += (_, _) =>
-        {
-            if (card.IsMouseOver)
-                return;
-
-            card.Background = HistoryCardIdleBrush;
-            card.BorderBrush = Brushes.Transparent;
-        };
+        WireHistoryCardChrome(card);
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -665,13 +643,6 @@ public partial class SettingsWindow
         });
 
         lastRenderedDate = date;
-    }
-
-    private static bool ColorMatchesQuery(ColorHistoryEntry entry, string query)
-    {
-        var searchable = BuildColorSearchText(entry);
-        var terms = query.Split(new[] { ' ', '\t', ',', '/', '-', '_' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return terms.All(term => searchable.Contains(term, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool ColorMatchesCachedTerms(ColorHistoryEntry entry, IReadOnlyList<string> terms)

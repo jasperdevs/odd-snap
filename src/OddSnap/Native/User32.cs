@@ -91,6 +91,9 @@ internal static partial class User32
     public static partial short GetKeyState(int nVirtKey);
 
     [LibraryImport("user32.dll")]
+    public static partial short GetAsyncKeyState(int vKey);
+
+    [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 

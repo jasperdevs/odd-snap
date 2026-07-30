@@ -150,33 +150,38 @@ public sealed partial class HistoryService : IDisposable
         }
     }
 
-    public string GetDiskFingerprint(string saveDirectory)
+    public string GetDiskFingerprint()
     {
         var hash = new HashCode();
 
         AddDirectorySignature(hash, HistoryDir);
         AddDirectorySignature(hash, StickerDir);
-        AddDirectoryTreeSignature(hash, saveDirectory);
-        AddDirectoryTreeSignature(hash, Path.Combine(saveDirectory, "Videos"));
-
         AddFileSignature(hash, DatabasePath);
 
         int entryCount;
         int ocrCount;
         int colorCount;
         int codeCount;
+        string[] trackedPaths;
         lock (_gate)
         {
             entryCount = _entries.Count;
             ocrCount = _ocrEntries.Count;
             colorCount = _colorEntries.Count;
             codeCount = _codeEntries.Count;
+            trackedPaths = _entries
+                .Select(entry => entry.FilePath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         hash.Add(entryCount);
         hash.Add(ocrCount);
         hash.Add(colorCount);
         hash.Add(codeCount);
+        foreach (var path in trackedPaths)
+            AddFileSignature(hash, path);
 
         return hash.ToHashCode().ToString("X8");
     }
@@ -215,8 +220,9 @@ public sealed partial class HistoryService : IDisposable
                 if (Directory.Exists(dir))
                     Directory.Delete(dir, recursive: true);
             }
-            catch
+            catch (Exception ex)
             {
+                AppDiagnostics.LogWarning("history.cleanup-legacy-thumbnails", $"Failed to remove legacy thumbnail directory {dir}.", ex);
             }
         }
     }

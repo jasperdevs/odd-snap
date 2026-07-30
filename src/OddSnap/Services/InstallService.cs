@@ -27,8 +27,9 @@ public static class InstallService
             var installLoc = key?.GetValue("InstallLocation") as string;
             return string.IsNullOrWhiteSpace(installLoc) ? null : installLoc;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("install.location", "Failed to read the registered OddSnap install location.", ex);
             return null;
         }
     }
@@ -73,7 +74,11 @@ public static class InstallService
             var currentDir = appDir.TrimEnd('\\', '/');
             return string.Equals(currentDir, installLoc.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("install.detect", "Failed to determine whether OddSnap is running from its installed location.", ex);
+            return false;
+        }
     }
 
     /// <summary>Check if we should show the installer.</summary>

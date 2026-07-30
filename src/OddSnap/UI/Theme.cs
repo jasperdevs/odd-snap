@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using OddSnap.Services;
 using Color = System.Windows.Media.Color;
 
 namespace OddSnap.UI;
@@ -153,7 +154,11 @@ public static class Theme
             var val = key?.GetValue("AppsUseLightTheme");
             return val is int i && i == 0;
         }
-        catch { return true; }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("theme.detect", "Failed to read the Windows app theme; using dark mode.", ex);
+            return true;
+        }
     }
 
     private static Color C(byte r, byte g, byte b) => Color.FromRgb(r, g, b);

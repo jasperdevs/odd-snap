@@ -17,8 +17,6 @@ public static class RembgRuntimeService
     private const string OnnxRuntimeGpuPackage = "onnxruntime-gpu==1.25.1";
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
 
-    private sealed record ProbeState(bool? Ready, string Status, DateTime CheckedUtc);
-
     private static readonly string RootDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OddSnap", "rembg");
 
@@ -26,8 +24,7 @@ public static class RembgRuntimeService
     private static readonly string RuntimeDir = Path.Combine(RootDir, "runtime");
     private static readonly string LegacyModelCacheDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".u2net");
-    private static readonly object ProbeGate = new();
-    private static readonly Dictionary<StickerExecutionProvider, ProbeState> ProbeCache = new();
+    private static readonly RuntimeProbeCache<StickerExecutionProvider> ProbeCache = new(ProbeCacheTtl);
 
     public static string RootDirectory => RootDir;
     public static string ModelCacheDirectory => ModelCacheDir;
@@ -107,7 +104,7 @@ public static class RembgRuntimeService
                 return false;
             }
 
-            ClearProbeCache(provider);
+            ProbeCache.Clear(provider);
             TryDeleteDirectoryIfEmpty(RuntimeDir);
             return true;
         }
@@ -130,7 +127,7 @@ public static class RembgRuntimeService
         if (launcherArg is null)
         {
             var message = await PythonRuntimeEnvironment.BuildMissingOnnxRuntimeMessageAsync(cancellationToken).ConfigureAwait(false);
-            UpdateProbeCache(provider, false, message);
+            ProbeCache.Update(provider, false, message);
             throw new InvalidOperationException(message);
         }
 
@@ -151,7 +148,7 @@ public static class RembgRuntimeService
         var pythonPath = GetRuntimePythonPath(provider);
         if (!File.Exists(pythonPath) || !IsRuntimeMarkerCurrent(provider))
         {
-            UpdateProbeCache(provider, false, "Not installed");
+            ProbeCache.Update(provider, false, "Not installed");
             return false;
         }
 
@@ -163,18 +160,18 @@ public static class RembgRuntimeService
 
         if (result.ExitCode != 0)
         {
-            UpdateProbeCache(provider, false, "Not installed");
+            ProbeCache.Update(provider, false, "Not installed");
             return false;
         }
 
         if (provider == StickerExecutionProvider.Gpu)
         {
             var cudaAvailable = result.StdOut.Contains("True", StringComparison.OrdinalIgnoreCase);
-            UpdateProbeCache(provider, true, cudaAvailable ? "Installed (CUDA available)" : "Installed (CPU fallback)");
+            ProbeCache.Update(provider, true, cudaAvailable ? "Installed (CUDA available)" : "Installed (CPU fallback)");
             return true;
         }
 
-        UpdateProbeCache(provider, true, "Installed");
+        ProbeCache.Update(provider, true, "Installed");
         return true;
     }
 
@@ -183,35 +180,17 @@ public static class RembgRuntimeService
         var pythonPath = GetRuntimePythonPath(provider);
         if (File.Exists(pythonPath) && IsRuntimeMarkerCurrent(provider))
         {
-            lock (ProbeGate)
-            {
-                if (ProbeCache.TryGetValue(provider, out var installedState) &&
-                    installedState.Ready == true &&
-                    DateTime.UtcNow - installedState.CheckedUtc <= ProbeCacheTtl)
-                {
-                    isReady = true;
-                    status = installedState.Status;
-                    return true;
-                }
-            }
+            if (ProbeCache.TryGet(provider, requireReady: true, out isReady, out status))
+                return true;
 
-            UpdateProbeCache(provider, true, "Installed");
+            ProbeCache.Update(provider, true, "Installed");
             isReady = true;
             status = "Installed";
             return true;
         }
 
-        lock (ProbeGate)
-        {
-            if (ProbeCache.TryGetValue(provider, out var state) &&
-                state.Ready.HasValue &&
-                DateTime.UtcNow - state.CheckedUtc <= ProbeCacheTtl)
-            {
-                isReady = state.Ready.Value;
-                status = state.Status;
-                return true;
-            }
-        }
+        if (ProbeCache.TryGet(provider, requireReady: false, out isReady, out status))
+            return true;
 
         isReady = false;
         status = "Checking runtime...";
@@ -370,7 +349,7 @@ public static class RembgRuntimeService
             throw new InvalidOperationException(ProcessRunner.GetFailureMessage(runtimeInstall, "Couldn't install the rembg runtime."));
 
         File.WriteAllText(GetRuntimeMarkerPath(provider), RuntimeLayoutVersion.ToString());
-        ClearProbeCache(provider);
+        ProbeCache.Clear(provider);
     }
 
     private static async Task<ProcessRunResult> InstallRuntimePackagesAsync(StickerExecutionProvider provider, IProgress<string>? progress, CancellationToken cancellationToken)
@@ -482,18 +461,6 @@ output_data = remove(input_data, session=session)
 with open(output_path, "wb") as f:
     f.write(output_data)
 """;
-
-    private static void UpdateProbeCache(StickerExecutionProvider provider, bool ready, string status)
-    {
-        lock (ProbeGate)
-            ProbeCache[provider] = new ProbeState(ready, status, DateTime.UtcNow);
-    }
-
-    private static void ClearProbeCache(StickerExecutionProvider provider)
-    {
-        lock (ProbeGate)
-            ProbeCache.Remove(provider);
-    }
 
     private static void TryDeleteDirectoryIfEmpty(string path)
     {

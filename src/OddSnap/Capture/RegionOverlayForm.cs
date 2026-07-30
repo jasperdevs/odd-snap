@@ -62,7 +62,6 @@ public sealed partial class RegionOverlayForm : Form
     private Point _prevCursorPos; // crosshair ghosting fix
     private Rectangle _lastSelectionRect;
     private Rectangle _lastAutoDetectRect;
-    private LiveSelectionAdornerForm? _selectionAdorner;
     private CaptureEscapeKeyHook? _escapeHook;
     private readonly System.Windows.Forms.Timer _animTimer;
     private readonly System.Windows.Forms.Timer _autoDetectTimer;
@@ -84,7 +83,6 @@ public sealed partial class RegionOverlayForm : Form
     private bool _selectionMoveQueued;
     private long _lastSelectionMoveFrameMs;
 
-    private const int TopBarHeight = 110;
     private const long MaxCommittedAnnotationCachePixels = 12_000_000;
 
     // Color picker state
@@ -106,7 +104,7 @@ public sealed partial class RegionOverlayForm : Form
     private const int Grid = 11, Cell = 10, Mag = Grid * Cell;
     private const int InfoH = 0, PPad = 0;
     private const int PW = Mag, PH = Mag;
-    private const int MagOff = 8, MagMargin = 4;
+    private const int MagOff = 8;
 
     // Typed undo stack: all annotations in creation order
     private readonly List<Annotation> _undoStack = new();
@@ -163,8 +161,6 @@ public sealed partial class RegionOverlayForm : Form
     // Color picker popup state
     private bool _colorPickerOpen;
     private Rectangle _colorPickerRect;
-    private PickerMagnifierForm? _captureMagnifierForm;
-
     private static RegionOverlayForm? _currentOverlay;
 
     // Select tool state
@@ -362,10 +358,7 @@ public sealed partial class RegionOverlayForm : Form
     private const int ColorPickerPadding = 4;
     private const int GlobalCenterSnapThreshold = 8;
 
-    // (typed _undoStack is defined above with annotation state)
-
     // Blank cursor for color picker (we draw our own crosshair)
-    private static readonly Cursor _blankCursor = CreateBlankCursor();
 
     // Events
     public event Action<Rectangle>? RegionSelected;
@@ -687,12 +680,6 @@ public sealed partial class RegionOverlayForm : Form
              + buttonSpacing * Math.Max(0, buttonCount - 1)
              + pad * 2
              + separatorCount * GroupGap;
-    }
-
-    private static Cursor CreateBlankCursor()
-    {
-        using var bmp = new Bitmap(1, 1, PixelFormat.Format32bppArgb);
-        return new Cursor(bmp.GetHicon());
     }
 
     private static Rectangle NormRect(Point a, Point b) =>

@@ -21,9 +21,8 @@ public partial class App
 
     private void HideSettingsForCapture()
     {
-        // Keep app windows capturable. Hiding Settings here made attempts to
-        // capture OddSnap's own UI disappear before the screenshot started, and
-        // could also change the active window before active-window capture.
+        // Capture visibility is managed by OddSnapUiCaptureVisibility. Hiding the
+        // settings window here would also change the active-window capture target.
     }
 
     private void RestoreSettingsAfterCapture()

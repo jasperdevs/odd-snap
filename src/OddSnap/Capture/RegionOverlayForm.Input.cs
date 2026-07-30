@@ -172,21 +172,7 @@ public sealed partial class RegionOverlayForm
             if (hitIdx >= 0)
             {
                 var ta = GetTextAnnotations()[hitIdx];
-                var oldTextRect = InflateForRepaint(Rectangle.Round(MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic, ta.Background)));
-                RemoveAnnotation(ta);
-                _isTyping = true;
-                _textPos = ta.Pos;
-                _textBuffer = ta.Text;
-                _textFontSize = ta.FontSize;
-                _toolColor = ta.Color;
-                _textBold = ta.Bold;
-                _textItalic = ta.Italic;
-                _textStroke = ta.Stroke;
-                _textShadow = ta.Shadow;
-                _textBackground = ta.Background;
-                _textFontFamily = ta.FontFamily;
-                InvalidateActiveTextLayout();
-                ShowTextBox();
+                BeginEditingTextAnnotation(ta);
                 _textDragging = true;
                 _lastTextDragLocation = Point.Empty;
                 _lastTextDragFrameUtc = default;
@@ -271,7 +257,6 @@ public sealed partial class RegionOverlayForm
                 _selectionRect = Rectangle.Empty;
                 _hasSelection = false;
                 ResetCaptureMagnifierDragPlacement();
-                CloseSelectionAdorner();
                 if (previousSelectionVisible || previousAutoDetectVisible)
                     Invalidate(Rectangle.Union(
                         InflateForRepaint(previousSelectionRect),

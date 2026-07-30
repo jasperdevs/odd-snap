@@ -233,8 +233,9 @@ internal static class SettingsMediaCache
 
             return bmp;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("settings-media.logo", $"Failed to load settings media resource {relativePath}.", ex);
             return null;
         }
     }

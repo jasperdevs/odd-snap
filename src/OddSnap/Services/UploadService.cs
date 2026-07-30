@@ -251,7 +251,6 @@ public static partial class UploadService
         UploadDestination.FileIo => FileIoLogoPath,
         UploadDestination.Uguu => UguuLogoPath,
         UploadDestination.TmpFiles => TmpFilesLogoPath,
-        UploadDestination.TransferSh => TransferLogoPath,
         UploadDestination.Gofile => GofileLogoPath,
         UploadDestination.ImgPile => ImgPileLogoPath,
         UploadDestination.Dropbox => DropboxLogoPath,
@@ -335,7 +334,6 @@ public static partial class UploadService
             UploadDestination.Gyazo => 25L * 1024 * 1024,
             UploadDestination.FileIo => 100L * 1024 * 1024,
             UploadDestination.Uguu => 128L * 1024 * 1024,
-            UploadDestination.TransferSh => 10L * 1024 * 1024 * 1024,
             UploadDestination.Dropbox => 150L * 1024 * 1024,
             UploadDestination.GoogleDrive => 5L * 1024 * 1024 * 1024,
             UploadDestination.OneDrive => 250L * 1024 * 1024,
@@ -360,6 +358,7 @@ public static partial class UploadService
         return dest switch
         {
             UploadDestination.None => "Choose an upload destination in Settings -> Uploads.",
+            UploadDestination.TransferSh => "transfer.sh is no longer supported. Choose Temp Hosts or another upload destination.",
             UploadDestination.Imgur when string.IsNullOrWhiteSpace(settings.ImgurClientId) => MissingUploadSetting("Imgur client ID"),
             UploadDestination.ImgBB when string.IsNullOrWhiteSpace(settings.ImgBBApiKey) => MissingUploadSetting("ImgBB API key"),
             UploadDestination.ImgPile when string.IsNullOrWhiteSpace(settings.ImgPileApiToken) => MissingUploadSetting("imgpile API token"),
@@ -550,7 +549,6 @@ public static partial class UploadService
                 UploadDestination.Gyazo => await UploadGyazo(filePath, settings, cancellationToken),
                 UploadDestination.FileIo => await UploadFileIo(filePath, cancellationToken),
                 UploadDestination.Uguu => await UploadUguu(filePath, cancellationToken),
-                UploadDestination.TransferSh => await UploadTransferSh(filePath, cancellationToken),
                 UploadDestination.TmpFiles => await UploadTmpFiles(filePath, cancellationToken),
                 UploadDestination.Gofile => await UploadGofile(filePath, cancellationToken),
                 UploadDestination.ImgPile => await UploadImgPile(filePath, settings, cancellationToken),

@@ -16,22 +16,8 @@ public sealed partial class RegionOverlayForm
         {
             CloseCaptureMagnifier();
             var ta = GetTextAnnotations()[hitIdx];
-            var oldTextRect = InflateForRepaint(Rectangle.Round(MeasureTextRect(ta.Pos, ta.Text, ta.FontSize, ta.FontFamily, ta.Bold, ta.Italic, ta.Background)));
-            RemoveAnnotation(ta);
             _mode = CaptureMode.Text;
-            _isTyping = true;
-            _textPos = ta.Pos;
-            _textBuffer = ta.Text;
-            _textFontSize = ta.FontSize;
-            _toolColor = ta.Color;
-            _textBold = ta.Bold;
-            _textItalic = ta.Italic;
-            _textStroke = ta.Stroke;
-            _textShadow = ta.Shadow;
-            _textBackground = ta.Background;
-            _textFontFamily = ta.FontFamily;
-            InvalidateActiveTextLayout();
-            ShowTextBox();
+            BeginEditingTextAnnotation(ta);
             Invalidate();
         }
     }
@@ -696,7 +682,6 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Sticker when _isSelecting:
             case CaptureMode.Upscale when _isSelecting:
                 _isSelecting = false;
-                CloseSelectionAdorner();
                 CloseCaptureMagnifier();
                 bool isCenter = _mode == CaptureMode.Center;
                 bool isOcr = _mode == CaptureMode.Ocr;

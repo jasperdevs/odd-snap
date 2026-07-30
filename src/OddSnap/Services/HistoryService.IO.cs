@@ -136,118 +136,11 @@ public sealed partial class HistoryService
             };
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("history.migrate-file", $"Failed to migrate legacy history file {sourcePath}.", ex);
             return false;
         }
-    }
-
-    /// <summary>
-    /// Scans one or more directories for media files not tracked in the index
-    /// and adds them so the history is complete. Call after Load().
-    /// </summary>
-    public void RecoverFromDirectories(params string[] dirs)
-    {
-        List<HistoryEntry> snapshotEntries;
-        lock (_gate)
-            snapshotEntries = _entries.ToList();
-
-        var removedPaths = snapshotEntries
-            .Where(entry => !File.Exists(entry.FilePath))
-            .Select(entry => entry.FilePath)
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var discoveredEntries = FindRecoverableEntries(snapshotEntries, dirs);
-
-        bool changed = false;
-        lock (_gate)
-        {
-            var removed = _entries.RemoveAll(e => removedPaths.Contains(e.FilePath) && !File.Exists(e.FilePath));
-            if (removed > 0)
-                changed = true;
-
-            var tracked = new HashSet<string>(_entries.Select(e => e.FilePath), StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in discoveredEntries)
-            {
-                if (tracked.Contains(entry.FilePath) || !File.Exists(entry.FilePath))
-                    continue;
-
-                _entries.Add(entry);
-                tracked.Add(entry.FilePath);
-                changed = true;
-            }
-
-            if (changed)
-            {
-                _entries = _entries.OrderByDescending(e => e.CapturedAt).ToList();
-                RebuildEntryLookup_NoLock();
-                InvalidateFilteredCache();
-                MarkEntriesRewrite_NoLock();
-                ScheduleFlush_NoLock();
-            }
-        }
-
-        if (changed)
-            NotifyChanged();
-    }
-
-    private static List<HistoryEntry> FindRecoverableEntries(IReadOnlyList<HistoryEntry> currentEntries, params string[] dirs)
-    {
-        var tracked = new HashSet<string>(
-            currentEntries
-                .Where(entry => File.Exists(entry.FilePath))
-                .Select(entry => entry.FilePath),
-            StringComparer.OrdinalIgnoreCase);
-        var discovered = new List<HistoryEntry>();
-
-        foreach (var dir in dirs)
-        {
-            if (!Directory.Exists(dir))
-                continue;
-
-            try
-            {
-                foreach (var file in Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories))
-                {
-                    if (file.StartsWith(StickerDir, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (file.StartsWith(ThumbnailDir, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (file.StartsWith(ImageThumbnailDir, StringComparison.OrdinalIgnoreCase))
-                        continue;
-                    if (!HistoryEntryUtilities.IsSupportedHistoryFile(file))
-                        continue;
-                    if (!tracked.Add(file))
-                        continue;
-
-                    try
-                    {
-                        var fi = new FileInfo(file);
-                        var kind = HistoryEntryUtilities.GetKindForPath(file, stickerDirs: [StickerDir]);
-                        discovered.Add(new HistoryEntry
-                        {
-                            FileName = fi.Name,
-                            FilePath = file,
-                            CapturedAt = fi.CreationTime,
-                            Width = 0,
-                            Height = 0,
-                            FileSizeBytes = fi.Length,
-                            Kind = kind
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        AppDiagnostics.LogWarning("history.recover.file", $"Failed to recover history file {Path.GetFileName(file)}: {ex.Message}", ex);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                AppDiagnostics.LogWarning("history.recover.enumerate", $"Failed to scan history recovery directory {dir}: {ex.Message}", ex);
-            }
-        }
-
-        return discovered;
     }
 
     private static void AddDirectorySignature(HashCode hash, string path)
@@ -259,25 +152,6 @@ public sealed partial class HistoryService
         hash.Add(Directory.GetLastWriteTimeUtc(path).Ticks);
     }
 
-    private static void AddDirectoryTreeSignature(HashCode hash, string path)
-    {
-        AddDirectorySignature(hash, path);
-        if (!Directory.Exists(path))
-            return;
-
-        try
-        {
-            foreach (var dir in Directory.EnumerateDirectories(path, "*", SearchOption.TopDirectoryOnly)
-                         .OrderBy(dir => dir, StringComparer.OrdinalIgnoreCase))
-            {
-                AddDirectorySignature(hash, dir);
-            }
-        }
-        catch
-        {
-        }
-    }
-
     private static void AddFileSignature(HashCode hash, string path)
     {
         hash.Add(File.Exists(path));
@@ -287,6 +161,33 @@ public sealed partial class HistoryService
         var info = new FileInfo(path);
         hash.Add(info.Length);
         hash.Add(info.LastWriteTimeUtc.Ticks);
+    }
+
+    public void PruneMissingFiles()
+    {
+        bool changed;
+        lock (_gate)
+        {
+            changed = _entries.RemoveAll(entry =>
+            {
+                if (File.Exists(entry.FilePath))
+                    return false;
+
+                _entriesByPath.Remove(entry.FilePath);
+                TryDeleteManagedThumbnail_NoLock(entry.FilePath);
+                return true;
+            }) > 0;
+
+            if (changed)
+            {
+                InvalidateFilteredCache();
+                MarkEntriesRewrite_NoLock();
+                ScheduleFlush_NoLock();
+            }
+        }
+
+        if (changed)
+            NotifyChanged();
     }
 
     public void PruneByRetention(HistoryRetentionPeriod retention)
@@ -473,8 +374,9 @@ public sealed partial class HistoryService
             if (File.Exists(thumbPath))
                 File.Delete(thumbPath);
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("history.thumbnail-delete", $"Failed to delete the managed thumbnail for {filePath}.", ex);
         }
 
         try
@@ -486,8 +388,9 @@ public sealed partial class HistoryService
             foreach (var thumbPath in Directory.EnumerateFiles(ImageThumbnailDir, fileKey + "-*.png", SearchOption.TopDirectoryOnly))
                 File.Delete(thumbPath);
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning("history.thumbnail-delete", $"Failed to delete managed image thumbnails for {filePath}.", ex);
         }
     }
 

@@ -2,7 +2,7 @@ namespace OddSnap.Helpers;
 
 public static class FileNameTemplate
 {
-    public const string DefaultTemplate = "{year}-{month}-{day}-{hour}-{min}-{sec}-{rand}";
+    public const string DefaultTemplate = Models.AppSettings.DefaultFileNameTemplate;
     public const string LegacyDefaultTemplate = "oddsnap_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}";
 
     public static string Format(string template, int width = 0, int height = 0)

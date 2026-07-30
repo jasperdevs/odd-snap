@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
+import { Outlet, Link, useLocation } from "react-router";
 import { useStarCount } from "../hooks/useStarCount";
 
 const navLinks = [

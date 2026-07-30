@@ -206,30 +206,6 @@ public sealed partial class RegionOverlayForm
         return new Rectangle(x, y, width, height);
     }
 
-    private PointF GetTooltipOrigin(Rectangle anchor, SizeF size, float gap = -1f)
-    {
-        if (gap < 0)
-            gap = Helpers.UiChrome.ScaleFloat(6f);
-        float x;
-        float y;
-
-        if (IsVerticalDock)
-        {
-            x = IsRightDock ? anchor.X - size.Width - gap : anchor.Right + gap;
-            y = anchor.Y + (anchor.Height / 2f) - (size.Height / 2f);
-            y = Math.Clamp(y, 4f, Math.Max(4f, Height - size.Height - 4f));
-        }
-        else
-        {
-            x = anchor.X + (anchor.Width / 2f) - (size.Width / 2f);
-            y = IsBottomDock ? anchor.Y - size.Height - gap : anchor.Bottom + gap;
-            x = Math.Clamp(x, 4f, Math.Max(4f, Width - size.Width - 4f));
-            y = Math.Clamp(y, 4f, Math.Max(4f, Height - size.Height - 4f));
-        }
-
-        return new PointF(x, y);
-    }
-
     private bool ShouldShowCaptureMagnifierAt(Point p)
         => ShowCaptureMagnifier
            && ToolDef.IsCaptureTool(_mode)
@@ -237,58 +213,6 @@ public sealed partial class RegionOverlayForm
 
     private Point GetReadoutCursorPoint()
         => _selectionEnd != Point.Empty ? _selectionEnd : _lastCursorPos;
-
-    private Rectangle GetSelectionOverlayBounds(Rectangle rect, bool isOcr, bool isScan)
-    {
-        if (rect.Width <= 0 || rect.Height <= 0)
-            return Rectangle.Empty;
-
-        var dirty = rect;
-        dirty.Inflate(8, 8);
-
-        var readoutBounds = SelectionSizeReadout.GetBounds(
-            GetReadoutCursorPoint(),
-            rect,
-            _readoutFont,
-            ClientRectangle);
-        if (!readoutBounds.IsEmpty)
-            dirty = Rectangle.Union(dirty, InflateForRepaint(readoutBounds, 8));
-
-        return dirty;
-    }
-
-    private Region GetSelectionOverlayRegion(Rectangle rect, bool isOcr, bool isScan)
-    {
-        var region = new Region();
-        region.MakeEmpty();
-
-        if (rect.Width <= 0 || rect.Height <= 0)
-            return region;
-
-        const int borderPad = 10;
-        region.Union(new Rectangle(rect.Left - borderPad, rect.Top - borderPad, rect.Width + borderPad * 2, borderPad * 2));
-        region.Union(new Rectangle(rect.Left - borderPad, rect.Bottom - borderPad, rect.Width + borderPad * 2, borderPad * 2));
-        region.Union(new Rectangle(rect.Left - borderPad, rect.Top - borderPad, borderPad * 2, rect.Height + borderPad * 2));
-        region.Union(new Rectangle(rect.Right - borderPad, rect.Top - borderPad, borderPad * 2, rect.Height + borderPad * 2));
-
-        var readoutBounds = SelectionSizeReadout.GetBounds(
-            GetReadoutCursorPoint(),
-            rect,
-            _readoutFont,
-            ClientRectangle);
-        if (!readoutBounds.IsEmpty)
-            region.Union(InflateForRepaint(readoutBounds, 8));
-
-        return region;
-    }
-
-    private void InvalidateSelectionOverlay(Rectangle oldRect, bool oldOcr, bool oldScan, Rectangle newRect, bool newOcr, bool newScan)
-    {
-        using var region = GetSelectionOverlayRegion(oldRect, oldOcr, oldScan);
-        using var next = GetSelectionOverlayRegion(newRect, newOcr, newScan);
-        region.Union(next);
-        Invalidate(region);
-    }
 
     private bool IsSelectionCaptureMode()
         => _mode is CaptureMode.Rectangle or CaptureMode.Center or CaptureMode.Ocr or CaptureMode.Scan or CaptureMode.Sticker or CaptureMode.Upscale;

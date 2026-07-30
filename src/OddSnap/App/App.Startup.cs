@@ -63,6 +63,7 @@ public partial class App
                 "startup.settings-save-failed-post");
         };
         LocalizationService.ApplyCurrentCulture(_settingsService.Settings.InterfaceLanguage);
+        BackgroundRuntimeJobService.NotificationRequested += BackgroundRuntimeJobService_NotificationRequested;
         BackgroundRuntimeJobService.Initialize();
         StartBackgroundPreloads();
 
@@ -110,6 +111,20 @@ public partial class App
 
         if (openSettingsAfterWizard || openSettingsOnStartup)
             ShowSettings();
+    }
+
+    private void BackgroundRuntimeJobService_NotificationRequested(BackgroundRuntimeJobNotification notification)
+    {
+        _ = TryPostToAppDispatcher(
+            () =>
+            {
+                if (notification.IsError)
+                    ToastWindow.ShowError(notification.Title, notification.Body);
+                else
+                    ToastWindow.Show(notification.Title, notification.Body);
+            },
+            DispatcherPriority.Background,
+            "runtime-jobs.notification-post");
     }
 
     private void WireUnhandledExceptionLogging()

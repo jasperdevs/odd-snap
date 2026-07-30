@@ -78,14 +78,6 @@ public sealed partial class RegionOverlayForm
         WindowDetector.RegisterIgnoredWindow(_pickerForm.Handle);
     }
 
-    private void EnsureCaptureMagnifierForm()
-    {
-        if (_captureMagnifierForm != null) return;
-        _captureMagnifierForm = new PickerMagnifierForm();
-        var _ = _captureMagnifierForm.Handle;
-        WindowDetector.RegisterIgnoredWindow(_captureMagnifierForm.Handle);
-    }
-
     internal void UpdateColorPicker(Point overlayPoint)
     {
         _pendingPickerPoint = overlayPoint;
@@ -202,7 +194,7 @@ public sealed partial class RegionOverlayForm
         _capturePickerUpdateQueued = false;
     }
 
-    private bool IsCaptureMagnifierOpen => _captureMagnifierVisible || _captureMagnifierForm is not null;
+    private bool IsCaptureMagnifierOpen => _captureMagnifierVisible;
 
     private void CloseCaptureMagnifier()
     {
@@ -210,11 +202,6 @@ public sealed partial class RegionOverlayForm
             InvalidateCaptureMagnifier(_captureMagnifierBounds);
         _captureMagnifierVisible = false;
         _captureMagnifierBounds = Rectangle.Empty;
-        if (_captureMagnifierForm != null)
-            WindowDetector.UnregisterIgnoredWindow(_captureMagnifierForm.Handle);
-        _captureMagnifierForm?.Close();
-        _captureMagnifierForm?.Dispose();
-        _captureMagnifierForm = null;
         _capturePickerUpdateQueued = false;
         _lastRenderedCapturePickerPoint = Point.Empty;
         _lastMagnifierSamplePoint = new Point(-1, -1);
@@ -392,23 +379,27 @@ public sealed partial class RegionOverlayForm
         int formH = PickerMagnifierForm.GetTotalHeight(showInfo);
         int margin = 12;
         int preferredIndex = _captureMagnifierPlacementIndex;
-        var (px, py, index) = ResolveMagnifierPosition(c, ClientSize, formW, formH, margin, MagOff, avoidRect, preferredIndex);
+        var candidates = BuildMagnifierPositionCandidates(c, formW, formH, MagOff, avoidRect);
+        var (position, index) = OverlayPlacement.Resolve(
+            candidates,
+            ClientSize,
+            new Size(formW, formH),
+            margin,
+            avoidRect,
+            preferredIndex);
         _captureMagnifierPlacementIndex = index;
-        return (px, py);
+        return (position.X, position.Y);
     }
 
-    private static (int x, int y, int index) ResolveMagnifierPosition(
+    private static Point[] BuildMagnifierPositionCandidates(
         Point cursor,
-        Size clientSize,
         int formW,
         int formH,
-        int margin,
         int offset,
-        Rectangle avoidRect,
-        int preferredIndex)
+        Rectangle avoidRect)
     {
-        var candidates = new[]
-        {
+        return
+        [
             new Point(cursor.X + offset, cursor.Y + offset),
             new Point(cursor.X - offset - formW, cursor.Y + offset),
             new Point(cursor.X + offset, cursor.Y - offset - formH),
@@ -417,53 +408,6 @@ public sealed partial class RegionOverlayForm
             avoidRect.IsEmpty ? Point.Empty : new Point(avoidRect.Left - offset - formW, cursor.Y - formH / 2),
             avoidRect.IsEmpty ? Point.Empty : new Point(cursor.X - formW / 2, avoidRect.Bottom + offset),
             avoidRect.IsEmpty ? Point.Empty : new Point(cursor.X - formW / 2, avoidRect.Top - offset - formH)
-        };
-
-        if (TryResolveCandidate(preferredIndex, candidates, clientSize, formW, formH, margin, avoidRect, out var preferred))
-            return (preferred.X, preferred.Y, preferredIndex);
-
-        for (int i = 0; i < candidates.Length; i++)
-        {
-            if (i == preferredIndex)
-                continue;
-
-            if (TryResolveCandidate(i, candidates, clientSize, formW, formH, margin, avoidRect, out var resolved))
-                return (resolved.X, resolved.Y, i);
-        }
-
-        var fallback = ClampMagnifier(candidates[0], clientSize, formW, formH, margin);
-        return (fallback.X, fallback.Y, 0);
+        ];
     }
-
-    private static bool TryResolveCandidate(
-        int index,
-        IReadOnlyList<Point> candidates,
-        Size clientSize,
-        int formW,
-        int formH,
-        int margin,
-        Rectangle avoidRect,
-        out Point resolved)
-    {
-        resolved = Point.Empty;
-        if ((uint)index >= (uint)candidates.Count)
-            return false;
-
-        var candidate = candidates[index];
-        if (candidate == Point.Empty)
-            return false;
-
-        var clamped = ClampMagnifier(candidate, clientSize, formW, formH, margin);
-        var rect = new Rectangle(clamped.X, clamped.Y, formW, formH);
-        if (!avoidRect.IsEmpty && rect.IntersectsWith(avoidRect))
-            return false;
-
-        resolved = clamped;
-        return true;
-    }
-
-    private static Point ClampMagnifier(Point point, Size clientSize, int formW, int formH, int margin)
-        => new(
-            Math.Clamp(point.X, margin, Math.Max(margin, clientSize.Width - formW - margin)),
-            Math.Clamp(point.Y, margin, Math.Max(margin, clientSize.Height - formH - margin)));
 }

@@ -245,18 +245,6 @@ public static partial class UploadService
         return new UploadResult { Error = BuildHttpError("imgpile", resp, json, node), IsRateLimit = (int)resp.StatusCode == 429 };
     }
 
-    // ─── transfer.sh ────────────────────────────────────────────────
-
-    private static async Task<UploadResult> UploadTransferSh(string filePath, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        await Task.CompletedTask;
-        return new UploadResult
-        {
-            Error = "The public transfer.sh service is unavailable. Choose Temp Hosts, Catbox, Litterbox, Uguu, or file.io."
-        };
-    }
-
     // ─── tmpfiles.org ───────────────────────────────────────────────
 
     private static async Task<UploadResult> UploadTmpFiles(string filePath, CancellationToken cancellationToken)

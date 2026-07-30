@@ -139,33 +139,7 @@ public partial class SettingsWindow
             ToolTip = "Copy this QR/barcode text",
             DataContext = entry
         };
-
-        card.MouseEnter += (_, _) =>
-        {
-            card.Background = HistoryCardHoverBrush;
-            card.BorderBrush = HistoryCardFocusBrush;
-        };
-        card.MouseLeave += (_, _) =>
-        {
-            if (!card.IsKeyboardFocusWithin)
-            {
-                card.Background = HistoryCardIdleBrush;
-                card.BorderBrush = Brushes.Transparent;
-            }
-        };
-        card.GotKeyboardFocus += (_, _) =>
-        {
-            card.Background = HistoryCardHoverBrush;
-            card.BorderBrush = HistoryCardFocusBrush;
-        };
-        card.LostKeyboardFocus += (_, _) =>
-        {
-            if (card.IsMouseOver)
-                return;
-
-            card.Background = HistoryCardIdleBrush;
-            card.BorderBrush = Brushes.Transparent;
-        };
+        WireHistoryCardChrome(card);
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

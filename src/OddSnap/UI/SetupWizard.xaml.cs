@@ -29,8 +29,6 @@ public partial class SetupWizard : Window
         ("_record",        "Record",             ToolGlyphs.RecordGlyph),
     };
 
-    private sealed record HotkeyConflict(string ToolId, string Label, bool IsAiRedirect);
-
     public SetupWizard(SettingsService settingsService)
     {
         _settingsService = settingsService;
@@ -153,7 +151,7 @@ public partial class SetupWizard : Window
             }
 
             var previous = _settingsService.Settings.GetToolHotkey(toolId);
-            var conflict = FindHotkeyConflict(_settingsService.Settings, toolId, mod, vk);
+            var conflict = HotkeyConflictResolver.Find(_settingsService.Settings, toolId, mod, vk);
             (uint Modifiers, uint Key)? clearedConflict = null;
             if (conflict != null)
             {
@@ -171,7 +169,7 @@ public partial class SetupWizard : Window
                     return;
                 }
 
-                clearedConflict = ClearHotkeyConflict(_settingsService.Settings, conflict);
+                clearedConflict = HotkeyConflictResolver.Clear(_settingsService.Settings, conflict);
             }
 
             try
@@ -185,7 +183,7 @@ public partial class SetupWizard : Window
                 AppDiagnostics.LogError("setup.tool-hotkey", ex);
                 _settingsService.Settings.SetToolHotkey(toolId, previous.mod, previous.key);
                 if (conflict != null)
-                    RestoreHotkeyConflict(_settingsService.Settings, conflict, clearedConflict);
+                    HotkeyConflictResolver.Restore(_settingsService.Settings, conflict, clearedConflict);
 
                 try
                 {
@@ -247,68 +245,6 @@ public partial class SetupWizard : Window
 
     private static bool IsUnsafeModifierlessHotkey(uint mod, uint vk) =>
         mod == 0 && vk != Native.User32.VK_SNAPSHOT;
-
-    private static HotkeyConflict? FindHotkeyConflict(AppSettings settings, string currentToolId, uint mod, uint key)
-    {
-        foreach (var tool in ToolDef.AllTools)
-        {
-            if (string.Equals(tool.Id, currentToolId, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var (existingMod, existingKey) = settings.GetToolHotkey(tool.Id);
-            if (existingKey != 0 && existingMod == mod && existingKey == key)
-                return new HotkeyConflict(tool.Id, tool.Label, IsAiRedirect: false);
-        }
-
-        foreach (var (id, label, _) in ToolListBuilder.ExtraTools)
-        {
-            if (string.Equals(id, currentToolId, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var (existingMod, existingKey) = settings.GetToolHotkey(id);
-            if (existingKey != 0 && existingMod == mod && existingKey == key)
-                return new HotkeyConflict(id, label, IsAiRedirect: false);
-        }
-
-        if (settings.AiRedirectHotkeyKey != 0 &&
-            settings.AiRedirectHotkeyModifiers == mod &&
-            settings.AiRedirectHotkeyKey == key)
-        {
-            return new HotkeyConflict("", "AI Redirect", IsAiRedirect: true);
-        }
-
-        return null;
-    }
-
-    private static (uint Modifiers, uint Key) ClearHotkeyConflict(AppSettings settings, HotkeyConflict conflict)
-    {
-        if (conflict.IsAiRedirect)
-        {
-            var previous = (settings.AiRedirectHotkeyModifiers, settings.AiRedirectHotkeyKey);
-            settings.AiRedirectHotkeyModifiers = 0;
-            settings.AiRedirectHotkeyKey = 0;
-            return previous;
-        }
-
-        var old = settings.GetToolHotkey(conflict.ToolId);
-        settings.SetToolHotkey(conflict.ToolId, 0, 0);
-        return old;
-    }
-
-    private static void RestoreHotkeyConflict(AppSettings settings, HotkeyConflict conflict, (uint Modifiers, uint Key)? previous)
-    {
-        if (previous is null)
-            return;
-
-        if (conflict.IsAiRedirect)
-        {
-            settings.AiRedirectHotkeyModifiers = previous.Value.Modifiers;
-            settings.AiRedirectHotkeyKey = previous.Value.Key;
-            return;
-        }
-
-        settings.SetToolHotkey(conflict.ToolId, previous.Value.Modifiers, previous.Value.Key);
-    }
 
     private void LoadDefaults()
     {

@@ -45,7 +45,6 @@ public partial class SettingsWindow
     private int _stickerRenderCount;
     private bool _imageSearchRowAutoHidden;
     private bool _suppressHistorySearchBoxTextEvents;
-    private const int HistoryPageSize = 60;
     private const int HistoryInitialPageSize = 18;
     private const int ImageHistoryPageSize = HistoryInitialPageSize;
     private const int HistoryAppendPageSize = 18;
@@ -104,20 +103,6 @@ public partial class SettingsWindow
 
         _ = LoadHistoryAsync();
     }
-
-    private sealed record PreparedHistoryItemData(
-        HistoryEntry Entry,
-        string ThumbPath,
-        string Dimensions,
-        string TimeAgo,
-        string FileNameSearchText,
-        string NormalizedFileNameSearchText,
-        string SearchText,
-        string NormalizedSearchText,
-        string ImageSearchStatusText,
-        string ImageSearchDiagnosticsText,
-        string ImageSearchMatchText,
-        bool IsSelected);
 
     private bool TryRefreshLoadedImageHistoryIncrementally()
     {

@@ -30,7 +30,6 @@ public partial class App : Application
     private DispatcherTimer? _captureDelayTimer;
     private int _activeUploadCount;
     private int _isCapturing;
-    private bool _historyRecovered;
     private bool _historyChangedHooked;
     private bool _historyMaintenanceScheduled;
     private int _historyIndexRefreshScheduled;

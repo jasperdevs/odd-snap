@@ -106,6 +106,15 @@ public class UploadServiceTests
     }
 
     [Fact]
+    public void GetConfigurationError_RetiredTransferSh_ExplainsReplacement()
+    {
+        var error = UploadService.GetConfigurationError(UploadDestination.TransferSh, new UploadSettings());
+        Assert.NotNull(error);
+        Assert.Contains("no longer supported", error);
+        Assert.Contains("Temp Hosts", error);
+    }
+
+    [Fact]
     public void GetConfigurationError_ImgurWithoutClientId_ReportsMissingSetting()
     {
         var error = UploadService.GetConfigurationError(UploadDestination.Imgur, new UploadSettings());

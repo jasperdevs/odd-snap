@@ -220,39 +220,7 @@ internal sealed class LiveSelectionAdornerForm : Form
         if (_surface is null)
             return;
 
-        var screenPoint = new Native.User32.POINT { X = screenBounds.X, Y = screenBounds.Y };
-        var size = new Native.User32.SIZE { cx = screenBounds.Width, cy = screenBounds.Height };
-        var sourcePoint = new Native.User32.POINT { X = 0, Y = 0 };
-        var blend = new Native.User32.BLENDFUNCTION
-        {
-            BlendOp = 0,
-            BlendFlags = 0,
-            SourceConstantAlpha = 255,
-            AlphaFormat = 1
-        };
-
-        IntPtr hdcScreen = Native.User32.GetDC(IntPtr.Zero);
-        IntPtr hdcMem = IntPtr.Zero;
-        IntPtr hBmp = IntPtr.Zero;
-        IntPtr hOld = IntPtr.Zero;
-        try
-        {
-            hdcMem = Native.User32.CreateCompatibleDC(hdcScreen);
-            hBmp = _surface.GetHbitmap(Color.FromArgb(0));
-            hOld = Native.User32.SelectObject(hdcMem, hBmp);
-            Native.User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPoint, ref size,
-                hdcMem, ref sourcePoint, 0, ref blend, 2);
-        }
-        finally
-        {
-            if (hdcMem != IntPtr.Zero && hOld != IntPtr.Zero)
-                Native.User32.SelectObject(hdcMem, hOld);
-            if (hBmp != IntPtr.Zero)
-                Native.User32.DeleteObject(hBmp);
-            if (hdcMem != IntPtr.Zero)
-                Native.User32.DeleteDC(hdcMem);
-            Native.User32.ReleaseDC(IntPtr.Zero, hdcScreen);
-        }
+        LayeredWindowSurface.Update(Handle, _surface, screenBounds);
 
         _renderStopwatch.Restart();
     }

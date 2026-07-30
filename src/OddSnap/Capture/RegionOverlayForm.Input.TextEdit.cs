@@ -102,6 +102,24 @@ public sealed partial class RegionOverlayForm
     private List<TextAnnotation> GetTextAnnotations() =>
         _undoStack.OfType<TextAnnotation>().ToList();
 
+    private void BeginEditingTextAnnotation(TextAnnotation annotation)
+    {
+        RemoveAnnotation(annotation);
+        _isTyping = true;
+        _textPos = annotation.Pos;
+        _textBuffer = annotation.Text;
+        _textFontSize = annotation.FontSize;
+        _toolColor = annotation.Color;
+        _textBold = annotation.Bold;
+        _textItalic = annotation.Italic;
+        _textStroke = annotation.Stroke;
+        _textShadow = annotation.Shadow;
+        _textBackground = annotation.Background;
+        _textFontFamily = annotation.FontFamily;
+        InvalidateActiveTextLayout();
+        ShowTextBox();
+    }
+
     private int HitTestText(Point p)
     {
         var texts = GetTextAnnotations();

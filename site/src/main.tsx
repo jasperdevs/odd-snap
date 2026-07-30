@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router";
 import "@fontsource-variable/geist/index.css";
 import "./index.css";
 import Layout from "./components/Layout";

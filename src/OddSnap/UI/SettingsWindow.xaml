@@ -3606,22 +3606,6 @@
                         </StackPanel>
                     </controls:ProviderSection>
 
-                    <!-- transfer.sh info -->
-                    <controls:ProviderSection x:Name="TransferSettings" Header="TRANSFER.SH" IconSource="pack://application:,,,/Assets/transfer_sq.png" Visibility="Collapsed">
-                        <StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <Border Style="{StaticResource InlineTagChip}">
-                                        <TextBlock Text="Any file" FontSize="9" Opacity="0.6"/>
-                                    </Border>
-                                    <Border Style="{StaticResource InlineTagChipDanger}">
-                                        <TextBlock Text="Expires 14d" FontSize="9" Foreground="#EF4444"/>
-                                    </Border>
-                                    <TextBlock Text="  10GB max · Free" FontSize="10" Opacity="0.3" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <TextBlock Text="Temporary host. No setup required." Style="{StaticResource SettingsHelperText}"/>
-                        </StackPanel>
-                    </controls:ProviderSection>
-
                     <controls:ProviderSection x:Name="DropboxSettings" Header="DROPBOX" IconSource="pack://application:,,,/Assets/dropbox_sq.png" Visibility="Collapsed">
                         <StackPanel>
                                 <TextBlock Text="Access token" FontSize="12" Opacity="0.6" Margin="0,0,0,4"/>

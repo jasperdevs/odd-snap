@@ -103,7 +103,6 @@ public partial class SettingsWindow
         UguuSettings.Visibility = dest == Services.UploadDestination.Uguu ? Visibility.Visible : Visibility.Collapsed;
         TmpFilesSettings.Visibility = dest == Services.UploadDestination.TmpFiles ? Visibility.Visible : Visibility.Collapsed;
         GofileSettings.Visibility = dest == Services.UploadDestination.Gofile ? Visibility.Visible : Visibility.Collapsed;
-        TransferSettings.Visibility = dest == Services.UploadDestination.TransferSh ? Visibility.Visible : Visibility.Collapsed;
         DropboxSettings.Visibility = dest == Services.UploadDestination.Dropbox ? Visibility.Visible : Visibility.Collapsed;
         GoogleDriveSettings.Visibility = dest == Services.UploadDestination.GoogleDrive ? Visibility.Visible : Visibility.Collapsed;
         OneDriveSettings.Visibility = dest == Services.UploadDestination.OneDrive ? Visibility.Visible : Visibility.Collapsed;
@@ -1425,6 +1424,8 @@ public partial class SettingsWindow
         {
             if (source.Tag is not string tag || !int.TryParse(tag, out var raw))
                 continue;
+            if (source.Content is not SettingsComboOption sourceOption)
+                continue;
 
             var destination = (Services.UploadDestination)raw;
             if (destination is Services.UploadDestination.None or Services.UploadDestination.AiChat or Services.UploadDestination.TransferSh)
@@ -1432,7 +1433,7 @@ public partial class SettingsWindow
 
             var item = new ComboBoxItem
             {
-                Content = CloneUploadDestinationContent(source.Content),
+                Content = BuildUploadDestinationItem(destination, sourceOption.Text),
                 ContentTemplate = GetSettingsComboItemTemplate(),
                 Tag = source.Tag,
                 HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
@@ -1555,7 +1556,7 @@ public partial class SettingsWindow
             _ => $"Choose {text}."
         };
 
-    private object BuildProviderComboItem(string text, string? asset)
+    private SettingsComboOption BuildProviderComboItem(string text, string? asset)
     {
         var source = LoadAssetIcon(asset);
         return new SettingsComboOption(
@@ -1566,7 +1567,7 @@ public partial class SettingsWindow
             asset);
     }
 
-    private object BuildFallbackComboItem(string text, string iconId) =>
+    private SettingsComboOption BuildFallbackComboItem(string text, string iconId) =>
         new SettingsComboOption(text, RenderFallbackIcon(iconId), false, null, null);
 
     private static string GetProviderFallbackIcon(string text)
@@ -1593,14 +1594,7 @@ public partial class SettingsWindow
         }
     }
 
-    private object CloneUploadDestinationContent(object content)
-    {
-        if (content is SettingsComboOption { Destination: { } destination } option)
-            return BuildUploadDestinationItem(destination, option.Text);
-        return content;
-    }
-
-    private object BuildUploadDestinationItem(Services.UploadDestination destination, string text)
+    private SettingsComboOption BuildUploadDestinationItem(Services.UploadDestination destination, string text)
     {
         var (source, isBrand) = GetUploadDestinationIcon(destination);
         return new SettingsComboOption(text, source, isBrand, destination, null);

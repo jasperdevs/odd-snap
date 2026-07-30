@@ -20,11 +20,6 @@ public sealed partial class RegionOverlayForm
         return _filteredEmojis;
     }
 
-    private void InvalidateEmojiCache()
-    {
-        _filteredEmojis = null;
-    }
-
     private static Rectangle InflateForRepaint(Rectangle rect, int pad = 8)
     {
         if (rect.Width <= 0 || rect.Height <= 0)
@@ -177,7 +172,6 @@ public sealed partial class RegionOverlayForm
         SetSnapGuides(false, false);
         CloseMagWindow();
         CloseCaptureMagnifier();
-        CloseSelectionAdorner();
         ClearCrosshairGuides();
 
         if (hadSelectPreview)
@@ -383,12 +377,6 @@ public sealed partial class RegionOverlayForm
     {
         var snappedBounds = Rectangle.Round(MeasureTextRect(desiredTextPos, _textBuffer, _textFontSize, _textFontFamily, _textBold, _textItalic, _textBackground));
         return SnapPointToGlobalCenter(snappedBounds, desiredTextPos);
-    }
-
-    private Point SnapAnnotationDeltaToGlobalCenter(Rectangle originalBounds, Point desiredDelta)
-    {
-        var movedBounds = OffsetRect(originalBounds, desiredDelta.X, desiredDelta.Y);
-        return SnapPointToGlobalCenter(movedBounds, desiredDelta);
     }
 
     private Rectangle GetColorPickerBounds()

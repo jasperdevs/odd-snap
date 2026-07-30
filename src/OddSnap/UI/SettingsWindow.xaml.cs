@@ -106,7 +106,6 @@ public partial class SettingsWindow : Window
     private bool _openSourceTranslationRuntimeActionInProgress;
     private bool _argosTranslationRuntimeActionInProgress;
     private bool _suppressStartWithWindowsChange;
-    private string? _lastHistoryFingerprintSaveDirectory;
 
     public event Action? HotkeyChanged;
     public event Action? UninstallRequested;
@@ -539,19 +538,11 @@ public partial class SettingsWindow : Window
             return;
 
         _historyFingerprintPollInProgress = true;
-        var saveDirectory = _settingsService.Settings.SaveDirectory;
-
         try
         {
-            var fingerprint = await Task.Run(() => _historyService.GetDiskFingerprint(saveDirectory));
+            var fingerprint = await Task.Run(_historyService.GetDiskFingerprint);
             if (!IsLoaded || _isClosed || HistoryTab.IsChecked != true || _deferHistoryMonitor || _historyLoadInProgress)
                 return;
-
-            if (!string.Equals(saveDirectory, _settingsService.Settings.SaveDirectory, StringComparison.OrdinalIgnoreCase))
-            {
-                PrimeHistoryFingerprint();
-                return;
-            }
 
             if (fingerprint == _lastHistoryFingerprint)
                 return;
@@ -570,7 +561,7 @@ public partial class SettingsWindow : Window
 
     private void RefreshHistoryFromDisk()
     {
-        _historyService.RecoverFromDirectories(_settingsService.Settings.SaveDirectory);
+        _historyService.PruneMissingFiles();
         _historyService.PruneByRetention(_settingsService.Settings.HistoryRetention);
     }
 
@@ -579,10 +570,9 @@ public partial class SettingsWindow : Window
         if (_isClosed)
             return;
 
-        var saveDirectory = _settingsService.Settings.SaveDirectory;
         var version = Interlocked.Increment(ref _historyFingerprintPrimeVersion);
 
-        _ = Task.Run(() => _historyService.GetDiskFingerprint(saveDirectory))
+        _ = Task.Run(_historyService.GetDiskFingerprint)
             .ContinueWith(task =>
             {
                 if (task.IsFaulted)
@@ -598,11 +588,7 @@ public partial class SettingsWindow : Window
                     if (_isClosed || version != Volatile.Read(ref _historyFingerprintPrimeVersion))
                         return;
 
-                    if (!string.Equals(saveDirectory, _settingsService.Settings.SaveDirectory, StringComparison.OrdinalIgnoreCase))
-                        return;
-
                     _lastHistoryFingerprint = task.Result;
-                    _lastHistoryFingerprintSaveDirectory = saveDirectory;
                 }, DispatcherPriority.Background, "settings.history-fingerprint-post");
             }, TaskScheduler.Default);
     }
@@ -615,8 +601,7 @@ public partial class SettingsWindow : Window
         if (_allHistoryItems.Count == 0)
             return false;
 
-        if (string.IsNullOrWhiteSpace(_lastHistoryFingerprint) ||
-            !string.Equals(_settingsService.Settings.SaveDirectory, _lastHistoryFingerprintSaveDirectory, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(_lastHistoryFingerprint))
         {
             PrimeHistoryFingerprint();
             return false;
@@ -644,7 +629,6 @@ public partial class SettingsWindow : Window
         {
             _historyMonitorTimer.Stop();
             _lastHistoryFingerprint = null;
-            _lastHistoryFingerprintSaveDirectory = null;
         }
     }
 

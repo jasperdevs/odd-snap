@@ -12,8 +12,6 @@ public static partial class SketchRenderer
         (1, 1, 42),
         (0, 0, 58),
     };
-    private static readonly Color ShadowColor = Color.FromArgb(60, 0, 0, 0);
-
     // Pre-cached brushes for the four fixed SoftShadowSteps alphas — avoids re-alloc per call.
     private static readonly SolidBrush[] SoftShadowBrushes =
     {

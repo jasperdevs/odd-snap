@@ -34,7 +34,7 @@ public static class ScreenCapture
     public static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensLowLatency(bool includeCursor = false)
     {
         var bounds = GetVirtualScreenBounds();
-        return CaptureWindowExclusion.RunWithoutIntersectingWindows(bounds, () => CaptureAllScreensLegacy(includeCursor, bounds));
+        return CaptureWindowExclusion.RunWithoutIntersectingWindows(bounds, () => CaptureAllScreensGdi(includeCursor, bounds));
     }
 
     public static void WarmLowLatencyCapture()
@@ -48,13 +48,13 @@ public static class ScreenCapture
             bounds.Top,
             Math.Min(32, bounds.Width),
             Math.Min(32, bounds.Height));
-        using var _ = CaptureRegionLegacy(warmRegion, includeCursor: false);
+        using var _ = CaptureRegionGdi(warmRegion, includeCursor: false);
     }
 
     private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensCore(bool includeCursor, Rectangle bounds)
     {
-        if (HdrCaptureCompatibleMode)
-            return CaptureAllScreensLegacy(includeCursor, bounds);
+        if (HdrCaptureCompatibleMode || DxgiScreenCapture.UsesAdvancedColor(bounds))
+            return CaptureAllScreensGdi(includeCursor, bounds);
 
         try
         {
@@ -74,7 +74,7 @@ public static class ScreenCapture
             DxgiScreenCapture.ResetCache();
         }
 
-        return CaptureAllScreensLegacy(includeCursor, bounds);
+        return CaptureAllScreensGdi(includeCursor, bounds);
     }
 
     /// <summary>Captures only the monitor that currently contains the cursor.</summary>
@@ -96,7 +96,7 @@ public static class ScreenCapture
         catch { screen = Screen.PrimaryScreen ?? Screen.AllScreens[0]; }
 
         var bounds = screen.Bounds;
-        var bmp = CaptureWindowExclusion.RunWithoutIntersectingWindows(bounds, () => CaptureRegionLegacy(bounds, includeCursor));
+        var bmp = CaptureWindowExclusion.RunWithoutIntersectingWindows(bounds, () => CaptureRegionGdi(bounds, includeCursor));
         return (bmp, bounds);
     }
 
@@ -105,8 +105,8 @@ public static class ScreenCapture
 
     private static Bitmap CaptureRegionCore(Rectangle region, bool includeCursor)
     {
-        if (HdrCaptureCompatibleMode)
-            return CaptureRegionLegacy(region, includeCursor);
+        if (HdrCaptureCompatibleMode || DxgiScreenCapture.UsesAdvancedColor(region))
+            return CaptureRegionGdi(region, includeCursor);
 
         try
         {
@@ -126,7 +126,7 @@ public static class ScreenCapture
             DxgiScreenCapture.ResetCache();
         }
 
-        return CaptureRegionLegacy(region, includeCursor);
+        return CaptureRegionGdi(region, includeCursor);
     }
 
     /// <summary>
@@ -134,12 +134,12 @@ public static class ScreenCapture
     /// recreates device/duplication resources per call, which is too expensive for recording.
     /// </summary>
     public static Bitmap CaptureRegionForRecording(Rectangle region, bool includeCursor = false)
-        => CaptureRegionLegacy(region, includeCursor, RecordingBitBltRasterOperation);
+        => CaptureRegionGdi(region, includeCursor, RecordingBitBltRasterOperation);
 
     internal static RecordingFrameCapturer CreateRecordingFrameCapturer(Rectangle region, bool includeCursor = false)
         => new(region, includeCursor);
 
-    private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensLegacy(bool includeCursor, Rectangle bounds)
+    private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensGdi(bool includeCursor, Rectangle bounds)
     {
         int left = bounds.Left;
         int top = bounds.Top;
@@ -179,10 +179,10 @@ public static class ScreenCapture
     }
 
     /// <summary>Captures a specific screen region directly via BitBlt. Used by GIF recorder.</summary>
-    private static Bitmap CaptureRegionLegacy(Rectangle region, bool includeCursor)
-        => CaptureRegionLegacy(region, includeCursor, DefaultBitBltRasterOperation);
+    private static Bitmap CaptureRegionGdi(Rectangle region, bool includeCursor)
+        => CaptureRegionGdi(region, includeCursor, DefaultBitBltRasterOperation);
 
-    private static Bitmap CaptureRegionLegacy(Rectangle region, bool includeCursor, int rasterOperation)
+    private static Bitmap CaptureRegionGdi(Rectangle region, bool includeCursor, int rasterOperation)
     {
         var bmp = new Bitmap(region.Width, region.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         try

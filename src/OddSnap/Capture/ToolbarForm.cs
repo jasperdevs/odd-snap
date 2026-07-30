@@ -91,43 +91,10 @@ public sealed class ToolbarForm : Form
         g.ResetTransform();
         g.Flush(System.Drawing.Drawing2D.FlushIntention.Sync);
 
-        var screenPt = new Native.User32.POINT { X = Left, Y = Top };
-        var size = new Native.User32.SIZE { cx = sz.Width, cy = sz.Height };
-        var srcPt = new Native.User32.POINT { X = 0, Y = 0 };
-        var blend = new Native.User32.BLENDFUNCTION
-        {
-            BlendOp = 0, // AC_SRC_OVER
-            BlendFlags = 0,
-            SourceConstantAlpha = 255,
-            AlphaFormat = 1  // AC_SRC_ALPHA
-        };
-
-        IntPtr hdcScreen = Native.User32.GetDC(IntPtr.Zero);
-        IntPtr hdcMem = IntPtr.Zero;
-        IntPtr hBmp = IntPtr.Zero;
-        IntPtr hOld = IntPtr.Zero;
-
-        try
-        {
-            hdcMem = Native.User32.CreateCompatibleDC(hdcScreen);
-            hBmp = _surface!.GetHbitmap(Color.FromArgb(0));
-            hOld = Native.User32.SelectObject(hdcMem, hBmp);
-            Native.User32.UpdateLayeredWindow(Handle, hdcScreen, ref screenPt, ref size,
-                hdcMem, ref srcPt, 0, ref blend, 2 /* ULW_ALPHA */);
-            _lastRenderVersion = renderVersion;
-            _lastRenderSize = sz;
-            _lastRenderLocation = location;
-        }
-        finally
-        {
-            if (hdcMem != IntPtr.Zero && hOld != IntPtr.Zero)
-                Native.User32.SelectObject(hdcMem, hOld);
-            if (hBmp != IntPtr.Zero)
-                Native.User32.DeleteObject(hBmp);
-            if (hdcMem != IntPtr.Zero)
-                Native.User32.DeleteDC(hdcMem);
-            Native.User32.ReleaseDC(IntPtr.Zero, hdcScreen);
-        }
+        LayeredWindowSurface.Update(Handle, _surface!, new Rectangle(Left, Top, sz.Width, sz.Height));
+        _lastRenderVersion = renderVersion;
+        _lastRenderSize = sz;
+        _lastRenderLocation = location;
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

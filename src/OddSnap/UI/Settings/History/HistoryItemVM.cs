@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using OddSnap.Services;
 
-namespace OddSnap.Models;
+namespace OddSnap.UI;
 
 internal sealed class HistoryItemVM : INotifyPropertyChanged
 {

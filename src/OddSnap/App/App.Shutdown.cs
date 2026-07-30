@@ -13,6 +13,7 @@ public partial class App
         CancelCaptureDelay();
         _idleTrimTimer?.Stop();
         try { SingleInstanceActivationService.Stop(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.single-instance-activation", ex); }
+        BackgroundRuntimeJobService.NotificationRequested -= BackgroundRuntimeJobService_NotificationRequested;
         try { BackgroundRuntimeJobService.CancelAllRunningJobs(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.cancel-runtime-jobs", ex); }
         try { SoundService.Shutdown(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.sound-service", ex); }
         _hotkeyService?.Dispose();

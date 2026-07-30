@@ -18,7 +18,6 @@ namespace OddSnap.UI;
 
 public partial class SettingsWindow
 {
-    private const string VideoThumbnailSeekOffset = "0.40";
     private const int VideoThumbnailDiagnosticMaxLength = 220;
     private const int VideoThumbnailFfmpegTimeoutMs = 12_000;
     private const int MaxFailedVideoThumbnailEntries = 256;
@@ -490,25 +489,6 @@ public partial class SettingsWindow
                 ex);
             return "";
         }
-    }
-
-    private static async Task EnsureVideoThumbThenRefreshAsync(HistoryItemVM vm)
-    {
-        if (string.IsNullOrWhiteSpace(vm.Entry.FilePath) || string.IsNullOrWhiteSpace(vm.ThumbPath))
-            return;
-
-        var thumb = await EnsureVideoThumbnailAsync(vm.Entry.FilePath, vm.ThumbPath);
-        if (!File.Exists(thumb) || string.Equals(thumb, vm.Entry.FilePath, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        var source = LoadThumbSource(thumb);
-        if (source is null)
-            return;
-
-        vm.ThumbnailSource = source;
-        vm.ThumbnailLoaded = true;
-        StoreThumbInCache(vm.Entry.FilePath, source);
-        ApplyThumbnailToBoundImage(vm, source, animate: true);
     }
 
     private void DeleteMediaItems(IEnumerable<HistoryItemVM> items)

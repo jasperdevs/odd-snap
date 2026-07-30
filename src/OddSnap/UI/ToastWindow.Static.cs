@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
@@ -71,10 +72,25 @@ public partial class ToastWindow
             return;
 
         ReplaceCurrentToast();
-        var toast = new ToastWindow(spec);
-        _current = toast;
-        toast.PrepareForShow();
-        toast.Show();
+        ToastWindow? toast = null;
+        try
+        {
+            toast = new ToastWindow(spec);
+            _current = toast;
+            toast.PrepareForShow();
+            toast.Show();
+        }
+        catch (COMException ex)
+        {
+            if (ReferenceEquals(_current, toast))
+                _current = null;
+
+            AppDiagnostics.LogWarning(
+                "toast.show.composition-unavailable",
+                $"Windows could not create the toast window (0x{ex.HResult:X8}); the toast was skipped.",
+                ex);
+            try { toast?.Close(); } catch (Exception closeEx) { AppDiagnostics.LogWarning("toast.show.cleanup", closeEx.Message, closeEx); }
+        }
     }
 
     public static void ShowSticker(Bitmap sticker)

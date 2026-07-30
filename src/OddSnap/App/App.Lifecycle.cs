@@ -273,9 +273,7 @@ public partial class App
 
         HistoryService historyService;
         ImageSearchIndexService? imageSearchIndexService;
-        string saveDirectory;
         HistoryRetentionPeriod retention;
-        bool shouldRecover;
         bool shouldIndex;
         string? ocrLanguageTag;
 
@@ -287,9 +285,7 @@ public partial class App
             _historyMaintenanceScheduled = true;
             historyService = _historyService;
             imageSearchIndexService = _imageSearchIndexService;
-            saveDirectory = _settingsService.Settings.SaveDirectory;
             retention = _settingsService.Settings.HistoryRetention;
-            shouldRecover = !_historyRecovered;
             shouldIndex = _settingsService.Settings.AutoIndexImages;
             ocrLanguageTag = _settingsService.Settings.OcrLanguageTag;
         }
@@ -298,13 +294,7 @@ public partial class App
         {
             try
             {
-                if (shouldRecover)
-                {
-                    historyService.RecoverFromDirectories(saveDirectory);
-                    lock (_historyGate)
-                        _historyRecovered = true;
-                }
-
+                historyService.PruneMissingFiles();
                 historyService.PruneByRetention(retention);
 
                 if (shouldIndex && imageSearchIndexService is not null)

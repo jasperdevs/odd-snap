@@ -570,34 +570,6 @@ public sealed partial class RegionOverlayForm
         }
     }
 
-    private void EnsureSelectionAdorner()
-    {
-        if (_selectionAdorner is { IsDisposed: false })
-            return;
-
-        _selectionAdorner = new LiveSelectionAdornerForm(_virtualBounds, "");
-        var _ = _selectionAdorner.Handle;
-        WindowDetector.RegisterIgnoredWindow(_selectionAdorner.Handle);
-        _selectionAdorner.Show(this);
-    }
-
-    private void UpdateSelectionAdorner()
-    {
-        EnsureSelectionAdorner();
-        _selectionAdorner?.SetSelection(_selectionRect, GetReadoutCursorPoint());
-    }
-
-    private void CloseSelectionAdorner()
-    {
-        if (_selectionAdorner == null)
-            return;
-
-        try { WindowDetector.UnregisterIgnoredWindow(_selectionAdorner.Handle); } catch { }
-        try { _selectionAdorner.Close(); } catch { }
-        try { _selectionAdorner.Dispose(); } catch { }
-        _selectionAdorner = null;
-    }
-
     private void Cancel()
     {
         if (_cancelRequested)
@@ -613,7 +585,6 @@ public sealed partial class RegionOverlayForm
         try { HideFontSearchBox(); } catch { }
         try { CloseMagWindow(); } catch { }
         try { CloseCaptureMagnifier(); } catch { }
-        try { CloseSelectionAdorner(); } catch { }
         try { ClearCrosshairGuides(); } catch { }
         try { ResetSelectionDragMoveQueue(); } catch { }
         SelectionCancelled?.Invoke();
@@ -633,7 +604,6 @@ public sealed partial class RegionOverlayForm
             _escapeHook?.Dispose();
             _escapeHook = null;
             ClearCrosshairGuides();
-            CloseSelectionAdorner();
             WindowDetector.UnregisterIgnoredWindow(Handle);
             WindowDetector.ClearSnapshot();
             if (_toolbarForm != null)

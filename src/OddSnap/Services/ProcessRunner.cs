@@ -20,15 +20,7 @@ internal static class ProcessRunner
         string? startFailureMessage = null,
         Action<string>? onStartFailure = null)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = standardInput is not null,
-            CreateNoWindow = true
-        };
+        var psi = CreateStartInfo(fileName, redirectStandardInput: standardInput is not null);
 
         configure?.Invoke(psi);
         foreach (var arg in arguments)
@@ -72,6 +64,23 @@ internal static class ProcessRunner
         var stdout = await stdoutTask.ConfigureAwait(false);
         var stderr = await stderrTask.ConfigureAwait(false);
         return new ProcessRunResult(process.ExitCode, stdout, stderr);
+    }
+
+    internal static ProcessStartInfo CreateStartInfo(string fileName, bool redirectStandardInput)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = redirectStandardInput,
+            CreateNoWindow = true
+        };
+
+        if (redirectStandardInput)
+            psi.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        return psi;
     }
 
     private static async Task<string> ReadLimitedOutputAsync(StreamReader reader, string streamName, CancellationToken cancellationToken)

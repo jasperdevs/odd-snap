@@ -1,9 +1,6 @@
-namespace OddSnap.Helpers;
+namespace OddSnap.Models;
 
-/// <summary>
-/// Shared icon glyphs for capture tooling UI.
-/// Keep these centralized so the same semantic icon is reused everywhere.
-/// </summary>
+/// <summary>Shared icon glyphs used by capture tool definitions.</summary>
 public static class ToolGlyphs
 {
     public const char StickerGlyph = '\uE301';

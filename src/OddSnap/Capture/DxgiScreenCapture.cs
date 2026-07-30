@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using OddSnap.Native;
+using OddSnap.Services;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -112,6 +113,25 @@ internal static class DxgiScreenCapture
         finally
         {
             Monitor.Exit(deviceBundle.CaptureSyncRoot);
+        }
+    }
+
+    public static bool UsesAdvancedColor(Rectangle region)
+    {
+        try
+        {
+            var deviceBundle = GetOrCreateDeviceBundle();
+            lock (deviceBundle.CaptureSyncRoot)
+            {
+                return deviceBundle.GetOutputs().Any(output =>
+                    Rectangle.Intersect(region, ToRectangle(output.Description.DesktopCoordinates)) is { Width: > 0, Height: > 0 }
+                    && output.UsesAdvancedColor());
+            }
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("capture.hdr-detection", ex.Message, ex);
+            return false;
         }
     }
 
@@ -365,6 +385,19 @@ internal static class DxgiScreenCapture
 
             _duplication = Output.DuplicateOutput(device);
             return _duplication;
+        }
+
+        public bool UsesAdvancedColor()
+        {
+            try
+            {
+                using var output6 = Output.QueryInterface<IDXGIOutput6>();
+                return output6.Description1.ColorSpace != (ColorSpaceType)0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public void Dispose()

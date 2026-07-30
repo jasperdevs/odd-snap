@@ -43,7 +43,6 @@ public sealed partial class ScrollingCaptureForm : Form
     // Capture
     private Rectangle _screenRegion;
     private const int CaptureIntervalMs = 100;
-    private const int MatchStripHeight = 48;
     private const int MinimumAutoNewContentPixels = 24;
     private const double DuplicateThreshold = 0.985;
     private int _initialCaptureFailures;
@@ -690,10 +689,6 @@ public sealed partial class ScrollingCaptureForm : Form
         base.Dispose(disposing);
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // Floating control bar that appears near the selected region
-    // ═══════════════════════════════════════════════════════════════════
-
     /// <summary>
     /// Floating control bar that uses the shared dock chrome.
     /// </summary>
@@ -968,16 +963,5 @@ public sealed partial class ScrollingCaptureForm : Form
             return new Region(path);
         }
 
-        private static GraphicsPath CreateRoundedPath(RectangleF r, float radius)
-        {
-            var path = new GraphicsPath();
-            float d = radius * 2;
-            path.AddArc(r.X, r.Y, d, d, 180, 90);
-            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
-        }
     }
 }

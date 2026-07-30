@@ -1,9 +1,6 @@
 using System.IO;
 using System.Text.Json;
-using System.Windows;
-using System.Windows.Threading;
 using OddSnap.AppModel.Jobs;
-using OddSnap.UI;
 
 namespace OddSnap.Services;
 
@@ -26,6 +23,11 @@ public sealed record BackgroundRuntimeJobOptions(
     public string? SuccessStatus { get; init; }
     public Func<Exception, string>? FormatError { get; init; }
 }
+
+public sealed record BackgroundRuntimeJobNotification(
+    string Title,
+    string Body,
+    bool IsError);
 
 public static class BackgroundRuntimeJobService
 {
@@ -64,6 +66,7 @@ public static class BackgroundRuntimeJobService
     private static bool _persistFailureToastShown;
 
     public static event Action<string>? Changed;
+    public static event Action<BackgroundRuntimeJobNotification>? NotificationRequested;
 
     public static void Initialize()
     {
@@ -217,7 +220,7 @@ public static class BackgroundRuntimeJobService
             AppDiagnostics.LogInfo("runtime-jobs.complete", $"{options.Key}: {options.SuccessStatus ?? "Ready"}");
         else
             AppDiagnostics.LogWarning("runtime-jobs.complete", $"{options.Key}: {errorMessage ?? "Unknown error"}");
-        DispatchToast(options, success, errorMessage);
+        DispatchNotification(options, success, errorMessage);
     }
 
     private static void CompleteCancelled(BackgroundRuntimeJobOptions options)
@@ -243,41 +246,15 @@ public static class BackgroundRuntimeJobService
         AppDiagnostics.LogInfo("runtime-jobs.cancelled", $"{options.Key}: {message}");
     }
 
-    private static void DispatchToast(BackgroundRuntimeJobOptions options, bool success, string? errorMessage)
+    private static void DispatchNotification(BackgroundRuntimeJobOptions options, bool success, string? errorMessage)
     {
-        _ = TryPostToUiDispatcher(() =>
-        {
-            if (success)
-            {
-                ToastWindow.Show(options.SuccessTitle, options.SuccessBody);
-            }
-            else
-            {
-                ToastWindow.ShowError(options.FailureTitle, BuildRuntimeJobFailureToastBody(options, errorMessage));
-            }
-        }, "runtime-jobs.toast-post");
-    }
-
-    private static bool TryPostToUiDispatcher(Action action, string diagnosticKey)
-    {
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null ||
-            dispatcher.HasShutdownStarted ||
-            dispatcher.HasShutdownFinished)
-        {
-            return false;
-        }
-
-        try
-        {
-            _ = dispatcher.BeginInvoke(action, DispatcherPriority.Background);
-            return true;
-        }
-        catch (InvalidOperationException ex)
-        {
-            AppDiagnostics.LogWarning(diagnosticKey, ex.Message, ex);
-            return false;
-        }
+        var notification = success
+            ? new BackgroundRuntimeJobNotification(options.SuccessTitle, options.SuccessBody, IsError: false)
+            : new BackgroundRuntimeJobNotification(
+                options.FailureTitle,
+                BuildRuntimeJobFailureToastBody(options, errorMessage),
+                IsError: true);
+        _ = TryDispatchNotification(notification, "runtime-jobs.notification");
     }
 
     private static string BuildRuntimeJobFailureToastBody(BackgroundRuntimeJobOptions options, string? errorMessage)
@@ -459,14 +436,34 @@ public static class BackgroundRuntimeJobService
         if (_persistFailureToastShown)
             return;
 
-        if (TryPostToUiDispatcher(() =>
-        {
-            ToastWindow.ShowError(
+        if (TryDispatchNotification(
+            new BackgroundRuntimeJobNotification(
                 "Runtime status not saved",
-                "Runtime setup can continue, but its status may not survive restart. Check Settings and retry if needed.");
-        }, "runtime-jobs.persist-warning-post"))
+                "Runtime setup can continue, but its status may not survive restart. Check Settings and retry if needed.",
+                IsError: true),
+            "runtime-jobs.persist-warning-notification"))
         {
             _persistFailureToastShown = true;
+        }
+    }
+
+    private static bool TryDispatchNotification(
+        BackgroundRuntimeJobNotification notification,
+        string diagnosticKey)
+    {
+        var handler = NotificationRequested;
+        if (handler is null)
+            return false;
+
+        try
+        {
+            handler(notification);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(diagnosticKey, ex.Message, ex);
+            return false;
         }
     }
 

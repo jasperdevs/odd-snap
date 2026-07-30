@@ -431,22 +431,4 @@ public sealed class GifRecorder : IDisposable
         }
     }
 
-    private sealed class LimitedTextBuffer(int maxChars)
-    {
-        private readonly int _maxChars = Math.Max(256, maxChars);
-        private readonly System.Text.StringBuilder _sb = new();
-
-        public void AppendLine(string line)
-        {
-            if (string.IsNullOrEmpty(line)) return;
-            if (_sb.Length > 0) _sb.AppendLine();
-            _sb.Append(line);
-
-            if (_sb.Length <= _maxChars) return;
-            int remove = _sb.Length - _maxChars;
-            _sb.Remove(0, remove);
-        }
-
-        public override string ToString() => _sb.ToString();
-    }
 }

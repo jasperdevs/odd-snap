@@ -70,7 +70,11 @@ public sealed class SettingsService : IDisposable
             CacheSettings(resolvedPath, loaded);
             return CloneSettings(loaded);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("settings.load-static", $"Failed to load settings from {resolvedPath}.", ex);
+            return null;
+        }
     }
 
     public static bool TryDeserialize(string json, out AppSettings settings)

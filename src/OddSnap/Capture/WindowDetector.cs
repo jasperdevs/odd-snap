@@ -328,15 +328,6 @@ public static class WindowDetector
         return IgnoredWindowClasses.Any(ignored => string.Equals(ignored, className, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsSnappableWindow(IntPtr hwnd)
-    {
-        int style = User32.GetWindowLongA(hwnd, User32.GWL_STYLE);
-        int exStyle = User32.GetWindowLongA(hwnd, User32.GWL_EXSTYLE);
-        string className = GetClassName(hwnd);
-        string title = GetWindowTitle(hwnd);
-        return IsSnappableWindowCandidate(style, exStyle, className, title);
-    }
-
     internal static Rectangle ChoosePreferredBounds(Rectangle dwmRect, Rectangle rawRect)
     {
         if (rawRect.Width <= 2 || rawRect.Height <= 2)

@@ -52,7 +52,7 @@ const faq = [
   { q: "does oddsnap work offline?", a: "yes. all capture, annotation, ocr, and recording features work fully offline. only uploads and google translate require internet." },
   { q: "what windows versions are supported?", a: "windows 10 (version 1903+) and windows 11. both x64 and arm64 are supported." },
   { q: "how does ocr work?", a: "oddsnap uses the windows built-in ocr engine. no downloads or setup needed. it supports all languages installed in your windows language settings." },
-  { q: "can i upload screenshots automatically?", a: "yes. oddsnap supports auto-upload to 19 destinations: imgur, imgbb, catbox, litterbox, gyazo, file.io, uguu, tmpfiles, transfer.sh, dropbox, google drive, onedrive, azure blob, github, immich, ftp, sftp, webdav, s3-compatible storage (aws, cloudflare r2, backblaze b2), and custom http endpoints." },
+  { q: "can i upload screenshots automatically?", a: "yes. oddsnap supports auto-upload to 19 destinations: imgur, imgbb, catbox, litterbox, gyazo, file.io, uguu, tmpfiles, dropbox, google drive, onedrive, azure blob, github, immich, ftp, sftp, webdav, s3-compatible storage (aws, cloudflare r2, backblaze b2), and custom http endpoints." },
   { q: "where are screenshots saved?", a: "by default in your pictures/oddsnap folder. you can change this in settings along with the file format and naming pattern." },
   { q: "what recording formats are supported?", a: "gif, mp4, webm, and mkv. you can record with microphone audio, desktop audio, or both. frame rate and quality are configurable." },
   { q: "what translation services are supported?", a: "oddsnap supports argos translate (fully offline, no api key needed) and google translate (requires internet). both support 35+ languages." },
