@@ -272,5 +272,3 @@ const InputCopy = forwardRef<HTMLDivElement, InputCopyProps>(
 InputCopy.displayName = "InputCopy";
 
 export { InputCopy };
-export type { InputCopyProps };
-export default InputCopy;

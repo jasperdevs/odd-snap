@@ -1,4 +1,11 @@
-import { useState, useMemo, useRef, useLayoutEffect, type RefObject } from "react";
+import {
+  useState,
+  useMemo,
+  useRef,
+  useLayoutEffect,
+  type DependencyList,
+  type RefObject,
+} from "react";
 import { useReleases } from "../hooks/useReleases";
 import type { Release, ReleaseAsset } from "../hooks/useReleases";
 import { Button } from "@/components/ui/button";
@@ -191,7 +198,10 @@ function GitHubIcon() {
   );
 }
 
-function useMeasuredHeight(ref: RefObject<HTMLElement | null>, deps: unknown[]) {
+function useMeasuredHeight(
+  ref: RefObject<HTMLElement | null>,
+  deps: DependencyList
+) {
   const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;

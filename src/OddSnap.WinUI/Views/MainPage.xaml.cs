@@ -2,7 +2,6 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using OddSnap.AppModel.Jobs;
 using OddSnap.AppModel.Settings;
 
 namespace OddSnap.WinUI.Views;
@@ -11,12 +10,7 @@ public sealed partial class MainPage : Page
 {
     private readonly IReadOnlyList<PageEntry> _pages =
     [
-        .. SettingsSchemaCatalog.Pages.Select(page => new PageEntry(page.Key, page.Title, page.Description, page)),
-        new PageEntry(
-            "jobs",
-            "Jobs",
-            "Shared job contracts that the WinUI shell will consume once runtime, upload, and indexing work is bridged over.",
-            null)
+        .. SettingsSchemaCatalog.Pages.Select(page => new PageEntry(page.Title, page.Description, page))
     ];
 
     public MainPage()
@@ -49,14 +43,8 @@ public sealed partial class MainPage : Page
             Foreground = new SolidColorBrush(Colors.Gray)
         });
 
-        if (entry.SettingsPage is not null)
-        {
-            foreach (var section in entry.SettingsPage.Sections)
-                ContentHost.Children.Add(BuildSection(section));
-            return;
-        }
-
-        ContentHost.Children.Add(BuildJobsPanel());
+        foreach (var section in entry.SettingsPage.Sections)
+            ContentHost.Children.Add(BuildSection(section));
     }
 
     private static UIElement BuildSection(SettingsSectionDefinition section)
@@ -135,10 +123,10 @@ public sealed partial class MainPage : Page
     {
         FrameworkElement control = item.ValueKind switch
         {
-            SettingsValueKind.Toggle => BuildToggleSwitch(item),
+            SettingsValueKind.Toggle => BuildToggleSwitch(),
             SettingsValueKind.Choice => BuildChoiceComboBox(item),
             SettingsValueKind.Text or SettingsValueKind.Folder => BuildTextBox(item),
-            SettingsValueKind.Number or SettingsValueKind.Duration => BuildNumberBox(item),
+            SettingsValueKind.Number or SettingsValueKind.Duration => BuildNumberBox(),
             SettingsValueKind.Action => BuildActionButton(item),
             _ => new TextBlock { Text = item.ValueKind.ToString() }
         };
@@ -149,7 +137,7 @@ public sealed partial class MainPage : Page
         return control;
     }
 
-    private static ToggleSwitch BuildToggleSwitch(SettingDefinition item) => new()
+    private static ToggleSwitch BuildToggleSwitch() => new()
     {
         MinWidth = 96,
         OffContent = "Off",
@@ -181,7 +169,7 @@ public sealed partial class MainPage : Page
         PlaceholderText = item.BindingPath ?? item.Label
     };
 
-    private static NumberBox BuildNumberBox(SettingDefinition item) => new()
+    private static NumberBox BuildNumberBox() => new()
     {
         MinWidth = 140,
         SmallChange = 1,
@@ -194,59 +182,5 @@ public sealed partial class MainPage : Page
         MinWidth = 132
     };
 
-    private static UIElement BuildJobsPanel()
-    {
-        var examples = new[]
-        {
-            new AppJobSnapshot("runtime:translation-open-source-local", "Open-source translation runtime", AppJobArea.Runtime, false, "Ready", true, null),
-            new AppJobSnapshot("runtime:sticker-rembg:Cpu", "Sticker runtime (CPU)", AppJobArea.Runtime, false, "Ready", true, null),
-            new AppJobSnapshot("runtime:upscale-onnx:Gpu", "Upscale runtime (GPU)", AppJobArea.Runtime, false, "Ready", true, null),
-        };
-
-        var stack = new StackPanel { Spacing = 10 };
-        stack.Children.Add(new TextBlock
-        {
-            Text = "Current migration target",
-            FontSize = 20,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        });
-        stack.Children.Add(new TextBlock
-        {
-            Text = "The existing WPF app already persists runtime jobs. The next migration step is to feed those snapshots into this WinUI shell through a shared application layer.",
-            Style = (Style)Application.Current.Resources["BodyTextStyle"],
-            Foreground = new SolidColorBrush(Colors.Gray)
-        });
-
-        foreach (var job in examples)
-        {
-            stack.Children.Add(new Border
-            {
-                Padding = new Thickness(14),
-                CornerRadius = new CornerRadius(10),
-                BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(30, 255, 255, 255)),
-                BorderThickness = new Thickness(1),
-                Child = new StackPanel
-                {
-                    Spacing = 4,
-                    Children =
-                    {
-                        new TextBlock { Text = job.Label, FontWeight = Microsoft.UI.Text.FontWeights.Medium },
-                        new TextBlock { Text = job.Key, Foreground = new SolidColorBrush(Colors.Gray), FontSize = 12 },
-                        new TextBlock { Text = $"Area: {job.Area}  Status: {job.Status}", Foreground = new SolidColorBrush(Colors.Gray), FontSize = 12 }
-                    }
-                }
-            });
-        }
-
-        return new Border
-        {
-            Padding = new Thickness(18),
-            CornerRadius = new CornerRadius(12),
-            BorderBrush = new SolidColorBrush(ColorHelper.FromArgb(40, 255, 255, 255)),
-            BorderThickness = new Thickness(1),
-            Child = stack
-        };
-    }
-
-    private sealed record PageEntry(string Key, string Title, string Description, SettingsPageDefinition? SettingsPage);
+    private sealed record PageEntry(string Title, string Description, SettingsPageDefinition SettingsPage);
 }

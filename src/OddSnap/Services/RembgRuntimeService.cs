@@ -43,11 +43,8 @@ public static class RembgRuntimeService
 
     public static bool IsModelCached(LocalStickerEngine engine) => ResolveExistingModelPath(engine) is not null;
 
-    public static bool HasAnyCachedModels()
-    {
-        try { return Enum.GetValues<LocalStickerEngine>().Any(IsModelCached); }
-        catch { return false; }
-    }
+    public static bool HasAnyCachedModels() =>
+        Enum.GetValues<LocalStickerEngine>().Any(IsModelCached);
 
     public static bool RemoveCachedModel(LocalStickerEngine engine)
     {
@@ -73,23 +70,13 @@ public static class RembgRuntimeService
 
     public static bool RemoveAllCachedModels()
     {
-        try
-        {
-            foreach (var engine in Enum.GetValues<LocalStickerEngine>())
-                RemoveCachedModel(engine);
+        bool removedAll = true;
+        foreach (var engine in Enum.GetValues<LocalStickerEngine>())
+            removedAll = RemoveCachedModel(engine) && removedAll;
 
-            TryDeleteDirectoryIfEmpty(ModelCacheDir);
-            TryDeleteDirectoryIfEmpty(LegacyModelCacheDir);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            AppDiagnostics.LogWarning(
-                "stickers.runtime.model-cleanup",
-                $"Failed to remove cached sticker models: {ex.Message}",
-                ex);
-            return false;
-        }
+        TryDeleteDirectoryIfEmpty(ModelCacheDir);
+        TryDeleteDirectoryIfEmpty(LegacyModelCacheDir);
+        return removedAll;
     }
 
     public static bool RemoveRuntime(StickerExecutionProvider provider)
@@ -422,8 +409,12 @@ public static class RembgRuntimeService
         {
             return File.Exists(path) && new FileInfo(path).Length >= MinModelFileBytes;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "stickers.runtime.model-check",
+                $"Failed to inspect sticker model {Path.GetFileName(path)}.",
+                ex);
             return false;
         }
     }

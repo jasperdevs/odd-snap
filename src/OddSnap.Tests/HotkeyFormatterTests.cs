@@ -76,6 +76,19 @@ public class HotkeyFormatterTests
 
     // ── GetActiveModifiers with injected key-state ──────────────────
 
+    [Theory]
+    [InlineData(0u, 0u, false)]
+    [InlineData(0u, 0x2Cu, false)]
+    [InlineData(ModControl, 0x41u, false)]
+    [InlineData(0u, 0x41u, true)]
+    public void IsUnsafeModifierlessGlobalHotkey_UsesSharedRegistrationPolicy(
+        uint modifiers,
+        uint key,
+        bool expected)
+    {
+        Assert.Equal(expected, HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(modifiers, key));
+    }
+
     private static readonly Func<int, short> NothingPressed = _ => 0;
 
     private static Func<int, short> Pressed(params int[] vks) =>

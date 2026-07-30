@@ -232,14 +232,14 @@ public static class UninstallService
         foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(sourceDir, file);
-            var destPath = Path.Combine(destinationDir, relative);
+            var destPath = HistoryMigrationPathResolver.ResolveAvailablePath(Path.Combine(destinationDir, relative));
             var destFolder = Path.GetDirectoryName(destPath);
             if (!string.IsNullOrEmpty(destFolder))
                 Directory.CreateDirectory(destFolder);
 
             try
             {
-                File.Copy(file, destPath, overwrite: true);
+                File.Copy(file, destPath);
             }
             catch (Exception ex)
             {

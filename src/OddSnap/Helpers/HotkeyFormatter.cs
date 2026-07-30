@@ -32,7 +32,7 @@ public static class HotkeyFormatter
     {
         uint mod = GetActiveModifiers();
 
-        var k = e.Key == Key.System ? e.SystemKey : e.Key;
+        var k = NormalizeKey(e);
         // Skip modifier-only keys
         if (k is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
             or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
@@ -42,7 +42,20 @@ public static class HotkeyFormatter
         return (mod, vk);
     }
 
+    public static Key NormalizeKey(System.Windows.Input.KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.ImeProcessed)
+            key = e.ImeProcessedKey;
+        if (key == Key.DeadCharProcessed)
+            key = e.DeadCharProcessedKey;
+        return key;
+    }
+
     public static uint GetActiveModifiers() => GetActiveModifiers(Keyboard.Modifiers);
+
+    public static bool IsUnsafeModifierlessGlobalHotkey(uint modifiers, uint key) =>
+        key != 0 && modifiers == 0 && key != Native.User32.VK_SNAPSHOT;
 
     public static uint GetActiveModifiers(ModifierKeys modifiers, Func<int, short>? getKeyState = null)
     {

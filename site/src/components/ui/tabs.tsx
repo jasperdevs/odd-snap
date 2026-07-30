@@ -153,8 +153,8 @@ const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
 
     // Derive value order from children synchronously
     const values = Children.toArray(children)
-      .filter(isValidElement)
-      .map((child) => (child.props as { value?: string }).value)
+      .filter((child) => isValidElement<TabItemProps>(child))
+      .map((child) => child.props.value)
       .filter((v): v is string => typeof v === "string");
     const valueOrderKey = values.join(",");
     const setValueOrder = valueOrderCtx?.setValueOrder;
@@ -230,8 +230,8 @@ const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
 
     // Auto-assign _index to children
     const indexedChildren = Children.map(children, (child, i) => {
-      if (isValidElement(child)) {
-        return cloneElement(child, { _index: i } as Record<string, unknown>);
+      if (isValidElement<TabItemProps>(child)) {
+        return cloneElement(child, { _index: i });
       }
       return child;
     });
@@ -247,31 +247,31 @@ const TabsList = forwardRef<HTMLDivElement, TabsListProps>(
       >
         <TabsPrimitive.List
           ref={(node) => {
-            (
-              containerRef as React.MutableRefObject<HTMLDivElement | null>
-            ).current = node;
+            containerRef.current = node;
             if (typeof ref === "function") ref(node);
-            else if (ref)
-              (
-                ref as React.MutableRefObject<HTMLDivElement | null>
-              ).current = node;
+            else if (ref) ref.current = node;
           }}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onFocus={(e) => {
-            const trigger = (e.target as HTMLElement).closest('[role="tab"]');
+            if (!(e.target instanceof HTMLElement)) return;
+            const trigger = e.target.closest('[role="tab"]');
             if (!trigger) return;
             const indexAttr = trigger.getAttribute("data-proximity-index");
             if (indexAttr != null) {
               const idx = Number(indexAttr);
               setHoveredIndex(idx);
               setFocusedIndex(
-                (e.target as HTMLElement).matches(":focus-visible") ? idx : null
+                e.target.matches(":focus-visible") ? idx : null
               );
             }
           }}
           onBlur={(e) => {
-            if (containerRef.current?.contains(e.relatedTarget as Node)) return;
+            if (
+              e.relatedTarget instanceof Node &&
+              containerRef.current?.contains(e.relatedTarget)
+            )
+              return;
             setFocusedIndex(null);
             if (isMouseInside.current) return;
             setHoveredIndex(null);
@@ -414,14 +414,9 @@ const TabItem = forwardRef<HTMLButtonElement, TabItemProps>(
       <TabsPrimitive.Trigger
         onClick={() => setOptimisticIdx(_index)}
         ref={(node) => {
-          (
-            internalRef as React.MutableRefObject<HTMLButtonElement | null>
-          ).current = node;
+          internalRef.current = node;
           if (typeof ref === "function") ref(node);
-          else if (ref)
-            (
-              ref as React.MutableRefObject<HTMLButtonElement | null>
-            ).current = node;
+          else if (ref) ref.current = node;
         }}
         value={value}
         data-proximity-index={_index}
@@ -495,4 +490,3 @@ TabPanel.displayName = "TabPanel";
 /* ─────────────────────── Exports ─────────────────────── */
 
 export { Tabs, TabsList, TabItem, TabPanel };
-export type { TabsProps, TabsListProps, TabItemProps, TabPanelProps };

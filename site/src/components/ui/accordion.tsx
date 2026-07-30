@@ -8,6 +8,7 @@ import {
   createContext,
   useContext,
   forwardRef,
+  type ComponentPropsWithoutRef,
   type ReactNode,
   type HTMLAttributes,
 } from "react";
@@ -33,25 +34,25 @@ interface AccordionGroupContextValue {
   registerItem: (index: number, element: HTMLElement | null) => void;
   registerFullItem: (index: number, element: HTMLElement | null) => void;
   activeIndex: number | null;
-  grouped: true;
   remeasure: () => void;
   openValues: Set<string>;
-  openItemRects: Map<number, ItemRect>;
-  toggleValue: (value: string) => void;
 }
 
 const AccordionGroupContext =
   createContext<AccordionGroupContextValue | null>(null);
 
 function useAccordionGroup() {
-  return useContext(AccordionGroupContext);
+  const ctx = useContext(AccordionGroupContext);
+  if (!ctx)
+    throw new Error(
+      "AccordionItem/AccordionTrigger/AccordionContent must be used within an AccordionGroup"
+    );
+  return ctx;
 }
 
 interface AccordionItemContextValue {
   index?: number;
-  value: string;
   isOpen: boolean;
-  onToggle: () => void;
 }
 
 const AccordionItemContext =
@@ -87,14 +88,41 @@ type AccordionGroupProps = HTMLAttributes<HTMLDivElement> & {
   children: ReactNode;
 } & (AccordionGroupSingleProps | AccordionGroupMultipleProps);
 
+function getAccordionHtmlProps(
+  props: AccordionGroupProps
+): HTMLAttributes<HTMLDivElement> {
+  if (props.type === "multiple") {
+    const {
+      children: _children,
+      className: _className,
+      type: _type,
+      value: _value,
+      defaultValue: _defaultValue,
+      onValueChange: _onValueChange,
+      ...htmlProps
+    } = props;
+    return htmlProps;
+  }
+
+  const {
+    children: _children,
+    className: _className,
+    type: _type,
+    value: _value,
+    defaultValue: _defaultValue,
+    onValueChange: _onValueChange,
+    collapsible: _collapsible,
+    ...htmlProps
+  } = props;
+  return htmlProps;
+}
+
 const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
   (props, ref) => {
-    const {
-      children,
-      type = "single",
-      className,
-      ...rest
-    } = props;
+    const { children, className } = props;
+    const multipleProps = props.type === "multiple" ? props : null;
+    const singleProps = props.type === "multiple" ? null : props;
+    const type = multipleProps ? "multiple" : "single";
 
     const containerRef = useRef<HTMLDivElement>(null);
     const fullItemElementsRef = useRef<Map<number, HTMLElement>>(new Map());
@@ -141,41 +169,26 @@ const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
 
     // Track open values for context
     const [internalSingleValue, setInternalSingleValue] = useState<string>(
-      () => {
-        if (type === "single") {
-          const sp = props as AccordionGroupSingleProps;
-          return sp.defaultValue ?? "";
-        }
-        return "";
-      }
+      () => singleProps?.defaultValue ?? ""
     );
     const [internalMultipleValue, setInternalMultipleValue] = useState<
       string[]
-    >(() => {
-      if (type === "multiple") {
-        const mp = props as AccordionGroupMultipleProps;
-        return mp.defaultValue ?? [];
-      }
-      return [];
-    });
-    const singleOnValueChange = (props as AccordionGroupSingleProps).onValueChange;
-    const multipleOnValueChange = (props as AccordionGroupMultipleProps).onValueChange;
-    const controlledMultipleValue = (props as AccordionGroupMultipleProps).value;
+    >(() => multipleProps?.defaultValue ?? []);
+    const singleOnValueChange = singleProps?.onValueChange;
+    const multipleOnValueChange = multipleProps?.onValueChange;
+    const singleValue = singleProps?.value ?? internalSingleValue;
 
     const openValues = new Set<string>(
-      type === "multiple"
-        ? (props as AccordionGroupMultipleProps).value ?? internalMultipleValue
-        : (() => {
-            const v =
-              (props as AccordionGroupSingleProps).value ?? internalSingleValue;
-            return v ? [v] : [];
-          })()
+      multipleProps
+        ? multipleProps.value ?? internalMultipleValue
+        : singleValue
+          ? [singleValue]
+          : []
     );
 
     const handleSingleValueChange = useCallback(
       (value: string) => {
-        const sp = props as AccordionGroupSingleProps;
-        if (sp.onValueChange) sp.onValueChange(value);
+        if (singleOnValueChange) singleOnValueChange(value);
         else setInternalSingleValue(value);
       },
       [singleOnValueChange]
@@ -183,31 +196,10 @@ const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
 
     const handleMultipleValueChange = useCallback(
       (value: string[]) => {
-        const mp = props as AccordionGroupMultipleProps;
-        if (mp.onValueChange) mp.onValueChange(value);
+        if (multipleOnValueChange) multipleOnValueChange(value);
         else setInternalMultipleValue(value);
       },
       [multipleOnValueChange]
-    );
-
-    const toggleValue = useCallback(
-      (val: string) => {
-        if (type === "multiple") {
-          const current =
-            (props as AccordionGroupMultipleProps).value ??
-            internalMultipleValue;
-          handleMultipleValueChange(current.filter((v) => v !== val));
-        } else {
-          handleSingleValueChange("");
-        }
-      },
-      [
-        type,
-        handleSingleValueChange,
-        handleMultipleValueChange,
-        internalMultipleValue,
-        controlledMultipleValue,
-      ]
     );
 
     useEffect(() => {
@@ -233,32 +225,20 @@ const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
       activeIndex !== null && !openItemRects.has(activeIndex);
     const shape = useShape();
 
-    // Strip non-HTML props before spreading
-    const {
-      value: _value,
-      defaultValue: _defaultValue,
-      onValueChange: _onValueChange,
-      collapsible: _collapsible,
-      type: _type,
-      ...htmlProps
-    } = rest as Record<string, unknown>;
+    const htmlProps = getAccordionHtmlProps(props);
 
     // Build Radix root props
     const radixProps =
       type === "multiple"
         ? {
             type: "multiple" as const,
-            value:
-              (props as AccordionGroupMultipleProps).value ??
-              internalMultipleValue,
+            value: multipleProps?.value ?? internalMultipleValue,
             onValueChange: handleMultipleValueChange,
           }
         : {
             type: "single" as const,
-            collapsible:
-              (props as AccordionGroupSingleProps).collapsible ?? true,
-            value:
-              (props as AccordionGroupSingleProps).value ?? internalSingleValue,
+            collapsible: singleProps?.collapsible ?? true,
+            value: singleProps?.value ?? internalSingleValue,
             onValueChange: handleSingleValueChange,
           };
 
@@ -268,40 +248,33 @@ const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
           registerItem,
           registerFullItem,
           activeIndex,
-          grouped: true,
           remeasure: () => {
             measureItems();
             measureFullItems();
           },
           openValues,
-          openItemRects,
-          toggleValue,
         }}
       >
         <AccordionPrimitive.Root {...radixProps} asChild>
           <div
             ref={(node) => {
-              (
-                containerRef as React.MutableRefObject<HTMLDivElement | null>
-              ).current = node;
+              containerRef.current = node;
               if (typeof ref === "function") ref(node);
-              else if (ref)
-                (
-                  ref as React.MutableRefObject<HTMLDivElement | null>
-                ).current = node;
+              else if (ref) ref.current = node;
             }}
             onMouseEnter={handlers.onMouseEnter}
             onMouseMove={handlers.onMouseMove}
             onMouseLeave={handlers.onMouseLeave}
             onFocus={(e) => {
-              const indexAttr = (e.target as HTMLElement)
+              if (!(e.target instanceof HTMLElement)) return;
+              const indexAttr = e.target
                 .closest("[data-proximity-index]")
                 ?.getAttribute("data-proximity-index");
               if (indexAttr != null) {
                 const idx = Number(indexAttr);
                 setActiveIndex(idx);
                 setFocusedIndex(
-                  (e.target as HTMLElement).matches(":focus-visible")
+                  e.target.matches(":focus-visible")
                     ? idx
                     : null
                 );
@@ -309,7 +282,8 @@ const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
             }}
             onBlur={(e) => {
               if (
-                containerRef.current?.contains(e.relatedTarget as Node)
+                e.relatedTarget instanceof Node &&
+                containerRef.current?.contains(e.relatedTarget)
               )
                 return;
               setFocusedIndex(null);
@@ -319,7 +293,7 @@ const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
               "relative flex flex-col gap-0.5 w-72 max-w-full select-none",
               className
             )}
-            {...(htmlProps as HTMLAttributes<HTMLDivElement>)}
+            {...htmlProps}
           >
             {/* Expanded item backgrounds */}
             <AnimatePresence>
@@ -404,164 +378,23 @@ const AccordionGroup = forwardRef<HTMLDivElement, AccordionGroupProps>(
 
 AccordionGroup.displayName = "AccordionGroup";
 
-// ─── Accordion (Standalone) ──────────────────────────────────────────────────
-
-interface AccordionProps extends HTMLAttributes<HTMLDivElement> {
-  children: ReactNode;
-  type?: "single" | "multiple";
-  collapsible?: boolean;
-  defaultValue?: string | string[];
-  value?: string | string[];
-  onValueChange?: ((value: string) => void) | ((value: string[]) => void);
-}
-
-const Accordion = forwardRef<HTMLDivElement, AccordionProps>(
-  (
-    {
-      children,
-      type = "single",
-      collapsible = true,
-      defaultValue,
-      value,
-      onValueChange,
-      className,
-      ...props
-    },
-    ref
-  ) => {
-    // Track open values for AccordionItemContext
-    const [internalSingleValue, setInternalSingleValue] = useState<string>(
-      () => {
-        if (type === "single") {
-          return (defaultValue as string) ?? "";
-        }
-        return "";
-      }
-    );
-    const [internalMultipleValue, setInternalMultipleValue] = useState<
-      string[]
-    >(() => {
-      if (type === "multiple") {
-        return (defaultValue as string[]) ?? [];
-      }
-      return [];
-    });
-
-    const openValues = new Set<string>(
-      type === "multiple"
-        ? (value as string[] | undefined) ?? internalMultipleValue
-        : (() => {
-            const v = (value as string | undefined) ?? internalSingleValue;
-            return v ? [v] : [];
-          })()
-    );
-
-    const handleSingleChange = useCallback(
-      (v: string) => {
-        if (onValueChange) (onValueChange as (v: string) => void)(v);
-        else setInternalSingleValue(v);
-      },
-      [onValueChange]
-    );
-
-    const handleMultipleChange = useCallback(
-      (v: string[]) => {
-        if (onValueChange) (onValueChange as (v: string[]) => void)(v);
-        else setInternalMultipleValue(v);
-      },
-      [onValueChange]
-    );
-
-    const standaloneToggle = useCallback(
-      (val: string) => {
-        if (type === "multiple") {
-          const current =
-            (value as string[] | undefined) ?? internalMultipleValue;
-          handleMultipleChange(current.filter((v) => v !== val));
-        } else {
-          handleSingleChange("");
-        }
-      },
-      [type, value, internalMultipleValue, handleSingleChange, handleMultipleChange]
-    );
-
-    const radixProps =
-      type === "multiple"
-        ? {
-            type: "multiple" as const,
-            value: (value as string[] | undefined) ?? internalMultipleValue,
-            defaultValue: defaultValue as string[] | undefined,
-            onValueChange: handleMultipleChange,
-          }
-        : {
-            type: "single" as const,
-            collapsible,
-            value: (value as string | undefined) ?? internalSingleValue,
-            defaultValue: defaultValue as string | undefined,
-            onValueChange: handleSingleChange,
-          };
-
-    return (
-      <AccordionPrimitive.Root {...radixProps} asChild>
-        <div
-          ref={ref}
-          className={cn(
-            "w-72 max-w-full flex flex-col gap-0.5",
-            className
-          )}
-          {...props}
-        >
-          <StandaloneOpenContext.Provider value={openValues}>
-            <StandaloneToggleContext.Provider value={standaloneToggle}>
-              {children}
-            </StandaloneToggleContext.Provider>
-          </StandaloneOpenContext.Provider>
-        </div>
-      </AccordionPrimitive.Root>
-    );
-  }
-);
-
-Accordion.displayName = "Accordion";
-
-// Standalone contexts to provide open values and toggle without AccordionGroup
-const StandaloneOpenContext = createContext<Set<string>>(new Set());
-const StandaloneToggleContext = createContext<(value: string) => void>(
-  () => {}
-);
-
 // ─── AccordionItem ───────────────────────────────────────────────────────────
 
-interface AccordionItemProps extends HTMLAttributes<HTMLDivElement> {
-  value: string;
+type AccordionItemProps = ComponentPropsWithoutRef<
+  typeof AccordionPrimitive.Item
+> & {
   index?: number;
-  disabled?: boolean;
-  children: ReactNode;
-}
+};
 
 const AccordionItem = forwardRef<HTMLDivElement, AccordionItemProps>(
   ({ value, index, disabled, children, className, ...props }, ref) => {
     const internalRef = useRef<HTMLDivElement>(null);
     const groupCtx = useAccordionGroup();
-    const standaloneOpen = useContext(StandaloneOpenContext);
-    const standaloneToggle = useContext(StandaloneToggleContext);
-    const shape = useShape();
-
-    const isOpen = groupCtx?.grouped
-      ? groupCtx.openValues.has(value)
-      : standaloneOpen.has(value);
-
-    const onToggle = useCallback(() => {
-      if (groupCtx?.grouped) {
-        groupCtx.toggleValue(value);
-      } else {
-        standaloneToggle(value);
-      }
-    }, [groupCtx, standaloneToggle, value]);
+    const isOpen = groupCtx.openValues.has(value);
 
     // Register full item element for proximity hover (covers trigger + content)
     useEffect(() => {
-      if (groupCtx?.grouped && index !== undefined) {
+      if (index !== undefined) {
         groupCtx.registerItem(index, internalRef.current);
         return () => groupCtx.registerItem(index, null);
       }
@@ -569,7 +402,7 @@ const AccordionItem = forwardRef<HTMLDivElement, AccordionItemProps>(
 
     // Register full item element for expanded background measurement
     useEffect(() => {
-      if (groupCtx?.grouped && index !== undefined) {
+      if (index !== undefined) {
         if (isOpen) {
           groupCtx.registerFullItem(index, internalRef.current);
         } else {
@@ -580,17 +413,12 @@ const AccordionItem = forwardRef<HTMLDivElement, AccordionItemProps>(
     }, [index, groupCtx, isOpen]);
 
     return (
-      <AccordionItemContext.Provider value={{ index, value, isOpen, onToggle }}>
+      <AccordionItemContext.Provider value={{ index, isOpen }}>
         <AccordionPrimitive.Item
           ref={(node) => {
-            (
-              internalRef as React.MutableRefObject<HTMLDivElement | null>
-            ).current = node;
+            internalRef.current = node;
             if (typeof ref === "function") ref(node);
-            else if (ref)
-              (
-                ref as React.MutableRefObject<HTMLDivElement | null>
-              ).current = node;
+            else if (ref) ref.current = node;
           }}
           value={value}
           disabled={disabled}
@@ -598,20 +426,6 @@ const AccordionItem = forwardRef<HTMLDivElement, AccordionItemProps>(
           className={cn("relative", className)}
           {...props}
         >
-          {/* Standalone expanded background */}
-          {!groupCtx?.grouped && (
-            <AnimatePresence>
-              {isOpen && (
-                <motion.div
-                  className={`absolute inset-0 ${shape.bg} bg-accent/20 dark:bg-accent/12 pointer-events-none`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0, transition: { duration: 0.06 } }}
-                  transition={{ duration: 0.08 }}
-                />
-              )}
-            </AnimatePresence>
-          )}
           {children}
         </AccordionPrimitive.Item>
       </AccordionItemContext.Provider>
@@ -623,10 +437,9 @@ AccordionItem.displayName = "AccordionItem";
 
 // ─── AccordionTrigger ────────────────────────────────────────────────────────
 
-interface AccordionTriggerProps
-  extends HTMLAttributes<HTMLButtonElement> {
-  children: ReactNode;
-}
+type AccordionTriggerProps = ComponentPropsWithoutRef<
+  typeof AccordionPrimitive.Trigger
+>;
 
 const AccordionTrigger = forwardRef<HTMLButtonElement, AccordionTriggerProps>(
   ({ children, className, ...props }, ref) => {
@@ -634,11 +447,7 @@ const AccordionTrigger = forwardRef<HTMLButtonElement, AccordionTriggerProps>(
     const groupCtx = useAccordionGroup();
     const { index, isOpen } = useAccordionItemContext();
     const shape = useShape();
-    const [isHovered, setIsHovered] = useState(false);
-
-    const isActive = groupCtx?.grouped
-      ? groupCtx.activeIndex === index
-      : isHovered;
+    const isActive = groupCtx.activeIndex === index;
 
     const triggerContent = (
       <AccordionPrimitive.Header asChild>
@@ -647,11 +456,9 @@ const AccordionTrigger = forwardRef<HTMLButtonElement, AccordionTriggerProps>(
             ref={ref}
             className={cn(
               `relative z-10 flex items-center gap-2.5 ${shape.item} px-3 py-2 w-full cursor-pointer outline-none`,
-              !groupCtx?.grouped &&
-                "focus-visible:ring-1 focus-visible:ring-[#6B97FF] focus-visible:ring-offset-0",
               className
             )}
-            {...(props as React.ComponentProps<typeof AccordionPrimitive.Trigger>)}
+            {...props}
           >
             {/* Label with dual-layer text */}
             <span className="inline-grid text-[13px] flex-1 text-left">
@@ -700,32 +507,7 @@ const AccordionTrigger = forwardRef<HTMLButtonElement, AccordionTriggerProps>(
       </AccordionPrimitive.Header>
     );
 
-    // In grouped mode, return trigger directly (item registration handled by AccordionItem)
-    if (groupCtx?.grouped) {
-      return triggerContent;
-    }
-
-    // Standalone mode: local hover with animated BG
-    return (
-      <div
-        className="relative"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <AnimatePresence>
-          {isHovered && (
-            <motion.div
-              className={`absolute inset-0 ${shape.bg} bg-accent/40 dark:bg-accent/25 pointer-events-none`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.06 } }}
-              transition={{ duration: 0.08 }}
-            />
-          )}
-        </AnimatePresence>
-        {triggerContent}
-      </div>
-    );
+    return triggerContent;
   }
 );
 
@@ -733,9 +515,9 @@ AccordionTrigger.displayName = "AccordionTrigger";
 
 // ─── AccordionContent ────────────────────────────────────────────────────────
 
-interface AccordionContentProps extends HTMLAttributes<HTMLDivElement> {
-  children: ReactNode;
-}
+type AccordionContentProps = ComponentPropsWithoutRef<
+  typeof AccordionPrimitive.Content
+>;
 
 const AccordionContent = forwardRef<HTMLDivElement, AccordionContentProps>(
   ({ children, className, ...props }, ref) => {
@@ -754,10 +536,10 @@ const AccordionContent = forwardRef<HTMLDivElement, AccordionContentProps>(
               exit={{ height: 0 }}
               transition={springs.moderate}
               onUpdate={() => {
-                groupCtx?.remeasure();
+                groupCtx.remeasure();
               }}
               onAnimationComplete={() => {
-                groupCtx?.remeasure();
+                groupCtx.remeasure();
               }}
             >
               <div className="px-3 pb-3 pt-1 text-[13px] text-muted-foreground">
@@ -776,10 +558,8 @@ AccordionContent.displayName = "AccordionContent";
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
 export {
-  Accordion,
   AccordionGroup,
   AccordionItem,
   AccordionTrigger,
   AccordionContent,
 };
-export default Accordion;

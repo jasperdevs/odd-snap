@@ -109,6 +109,12 @@ public enum ImageSearchSourceOptions
 public sealed class AppSettings
 {
     public const string DefaultFileNameTemplate = "{year}-{month}-{day}-{hour}-{min}-{sec}-{rand}";
+    public const double DefaultUiScale = 1.0;
+    public const double MinUiScale = 0.8;
+    public const double MaxUiScale = 1.4;
+
+    public static double NormalizeUiScale(double scale)
+        => Math.Clamp(double.IsFinite(scale) ? scale : DefaultUiScale, MinUiScale, MaxUiScale);
 
     public sealed class ToastButtonLayoutSettings
     {
@@ -193,7 +199,7 @@ public sealed class AppSettings
     public bool SaveHistory { get; set; } = true;
     public bool MuteSounds { get; set; }
     public bool DisableAnimations { get; set; }
-    public double UiScale { get; set; } = 1.0;
+    public double UiScale { get; set; } = DefaultUiScale;
     public string InterfaceLanguage { get; set; } = "auto";
     public bool ShowCrosshairGuides { get; set; } // off by default
     public bool ShowCursor { get; set; }

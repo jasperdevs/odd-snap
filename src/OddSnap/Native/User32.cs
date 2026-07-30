@@ -294,9 +294,13 @@ internal static partial class User32
     public const uint WDA_NONE = 0x00;
     public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
 
-    [LibraryImport("user32.dll")]
+    [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetWindowDisplayAffinity(IntPtr hWnd, out uint dwAffinity);
 
     [LibraryImport("user32.dll")]
     public static partial int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, [MarshalAs(UnmanagedType.Bool)] bool bRedraw);

@@ -2003,13 +2003,6 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- Toolbar -->
-            <!-- Toolbar panel removed — merged into Hotkeys panel above -->
-
-            <!-- About panel placeholder - content is below -->
-
-            <!-- General panel content gets populated from the XAML below -->
-            <!-- We need to close and reopen for the General section -->
             <ScrollViewer x:Name="SettingsPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="26,58,26,22">
                 <StackPanel>
                     <TextBlock Text="Language" Style="{StaticResource SectionLabel}"/>

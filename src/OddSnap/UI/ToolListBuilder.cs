@@ -322,7 +322,7 @@ public static class ToolListBuilder
             uint mod = HotkeyFormatter.GetActiveModifiers();
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(rawKey);
             if (vk == 0) return;
-            if (!IsOverlayOnlyTool(toolId) && IsUnsafeModifierlessHotkey(mod, vk))
+            if (!IsOverlayOnlyTool(toolId) && HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(mod, vk))
             {
                 ToastWindow.ShowError(
                     "Hotkey needs a modifier",
@@ -388,13 +388,13 @@ public static class ToolListBuilder
         {
             if (!isRecording) return;
             e.Handled = true;
-            var key = NormalizeHotkeyKey(e);
+            var key = HotkeyFormatter.NormalizeKey(e);
             AcceptKey(key);
         };
         box.PreviewKeyUp += (_, e) =>
         {
             if (!isRecording) return;
-            var key = NormalizeHotkeyKey(e);
+            var key = HotkeyFormatter.NormalizeKey(e);
             if (key is Key.Snapshot or Key.Pause or Key.Cancel)
             {
                 e.Handled = true;
@@ -413,22 +413,9 @@ public static class ToolListBuilder
             $"The previous hotkey was restored after the failed {action}.{conflictCopy} Check Settings -> Tools and try again.\n{ex.Message}");
     }
 
-    private static Key NormalizeHotkeyKey(System.Windows.Input.KeyEventArgs e)
-    {
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key == Key.ImeProcessed)
-            key = e.ImeProcessedKey;
-        if (key == Key.DeadCharProcessed)
-            key = e.DeadCharProcessedKey;
-        return key;
-    }
-
     private static bool IsModifierOnly(Key key) =>
         key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
             or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin;
-
-    private static bool IsUnsafeModifierlessHotkey(uint mod, uint vk) =>
-        mod == 0 && vk != Native.User32.VK_SNAPSHOT;
 
     // Annotation tools are overlay-local quick keys (defaults are bare 1..9); they are never
     // registered system-wide, so a modifierless key is safe for them.

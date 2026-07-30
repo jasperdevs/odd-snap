@@ -118,4 +118,3 @@ function Tooltip({
 }
 
 export { Tooltip };
-export type { TooltipProps, TooltipSide };

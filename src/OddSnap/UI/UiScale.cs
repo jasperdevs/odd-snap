@@ -2,14 +2,15 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using OddSnap.Models;
 
 namespace OddSnap.UI;
 
 public static class UiScale
 {
-    public const double Default = 1.0;
-    public const double Min = 0.8;
-    public const double Max = 1.4;
+    public const double Default = AppSettings.DefaultUiScale;
+    public const double Min = AppSettings.MinUiScale;
+    public const double Max = AppSettings.MaxUiScale;
 
     private static readonly ConditionalWeakTable<Window, WindowScaleState> WindowStates = new();
 
@@ -18,7 +19,7 @@ public static class UiScale
     public static event Action<double>? Changed;
 
     public static double Normalize(double scale)
-        => Math.Clamp(double.IsFinite(scale) ? scale : Default, Min, Max);
+        => AppSettings.NormalizeUiScale(scale);
 
     public static void Set(double scale)
     {

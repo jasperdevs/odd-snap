@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
+using OddSnap.Helpers;
 using OddSnap.Services;
 
 namespace OddSnap.Capture;

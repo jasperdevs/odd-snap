@@ -44,8 +44,6 @@ public sealed partial class RegionOverlayForm
 
     private bool IsVerticalDock => CaptureDockSide is CaptureDockSide.Left or CaptureDockSide.Right;
     private bool IsBottomDock => CaptureDockSide == CaptureDockSide.Bottom;
-    private bool IsTopDock => CaptureDockSide == CaptureDockSide.Top;
-    private bool IsLeftDock => CaptureDockSide == CaptureDockSide.Left;
     private bool IsRightDock => CaptureDockSide == CaptureDockSide.Right;
 
     public void SetEnabledTools(List<string>? enabledIds)

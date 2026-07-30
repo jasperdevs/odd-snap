@@ -45,7 +45,10 @@ internal static class OddSnapUiCaptureVisibility
     public static void Track(Window window)
     {
         if (!TrackedWindows.TryAdd(window, new TrackingMarker()))
+        {
+            ApplyCurrentSetting(window);
             return;
+        }
 
         window.SourceInitialized += (_, _) => ApplyCurrentSetting(window);
         window.Closed += (_, _) => StopTracking(window);

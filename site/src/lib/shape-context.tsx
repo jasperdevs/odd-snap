@@ -21,5 +21,3 @@ const pillShape: ShapeClasses = {
 export function useShape(): ShapeClasses {
   return pillShape;
 }
-
-export type { ShapeClasses };

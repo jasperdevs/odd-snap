@@ -4,14 +4,6 @@ using OddSnap.AppModel.Jobs;
 
 namespace OddSnap.Services;
 
-public sealed record BackgroundRuntimeJobSnapshot(
-    string Key,
-    string Label,
-    bool IsRunning,
-    string Status,
-    bool? LastSucceeded,
-    string? LastError);
-
 public sealed record BackgroundRuntimeJobOptions(
     string Key,
     string Label,
@@ -127,7 +119,7 @@ public static class BackgroundRuntimeJobService
         return true;
     }
 
-    public static bool TryGetSnapshot(string key, out BackgroundRuntimeJobSnapshot snapshot)
+    public static bool TryGetSnapshot(string key, out AppJobSnapshot snapshot)
     {
         lock (Gate)
         {
@@ -138,7 +130,7 @@ public static class BackgroundRuntimeJobService
                 return false;
             }
 
-            snapshot = ToSnapshot(state);
+            snapshot = ToAppJobSnapshot(state);
             return true;
         }
     }
@@ -482,9 +474,6 @@ public static class BackgroundRuntimeJobService
                 ex);
         }
     }
-
-    private static BackgroundRuntimeJobSnapshot ToSnapshot(JobState state)
-        => new(state.Key, state.Label, state.IsRunning, state.Status, state.LastSucceeded, state.LastError);
 
     private static AppJobSnapshot ToAppJobSnapshot(JobState state)
         => new(state.Key, state.Label, AppJobArea.Runtime, state.IsRunning, state.Status, state.LastSucceeded, state.LastError);

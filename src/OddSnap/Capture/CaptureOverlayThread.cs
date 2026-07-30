@@ -78,13 +78,13 @@ internal static class CaptureOverlayThread
             {
                 ready = new ManualResetEventSlim(false);
                 _ready = ready;
-                _thread = new Thread(ThreadMain)
+                _thread = new Thread(() => ThreadMain(ready))
                 {
                     IsBackground = true,
                     Name = "OddSnap capture overlay"
                 };
                 _thread.SetApartmentState(ApartmentState.STA);
-                _thread.Start(ready);
+                _thread.Start();
             }
         }
 
@@ -106,9 +106,8 @@ internal static class CaptureOverlayThread
         throw new InvalidOperationException("Capture overlay thread did not initialize.");
     }
 
-    private static void ThreadMain(object? state)
+    private static void ThreadMain(ManualResetEventSlim ready)
     {
-        var ready = (ManualResetEventSlim)state!;
         using var invoker = new Control();
         _ = invoker.Handle;
 

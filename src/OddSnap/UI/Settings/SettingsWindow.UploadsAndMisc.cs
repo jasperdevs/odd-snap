@@ -578,12 +578,12 @@ public partial class SettingsWindow
 
     private void AiRedirectPanelHotkeyBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        HandleAiRedirectHotkeyKeyInput(e, e.Key == Key.System ? e.SystemKey : e.Key);
+        HandleAiRedirectHotkeyKeyInput(e, HotkeyFormatter.NormalizeKey(e));
     }
 
     private void AiRedirectPanelHotkeyBox_PreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        var key = HotkeyFormatter.NormalizeKey(e);
         if (key is Key.Snapshot or Key.Pause or Key.Cancel)
             HandleAiRedirectHotkeyKeyInput(e, key);
     }
@@ -632,7 +632,7 @@ public partial class SettingsWindow
 
         uint modifiers = HotkeyFormatter.GetActiveModifiers();
         uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
-        if (vk == 0 || IsUnsafeModifierlessHotkey(modifiers, vk))
+        if (vk == 0 || HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(modifiers, vk))
             return;
 
         var previousModifiers = _settingsService.Settings.AiRedirectHotkeyModifiers;
@@ -703,9 +703,6 @@ public partial class SettingsWindow
     private static bool IsModifierOnly(Key key) =>
         key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
             or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape;
-
-    private static bool IsUnsafeModifierlessHotkey(uint modifiers, uint key) =>
-        modifiers == 0 && key != Native.User32.VK_SNAPSHOT;
 
     private string? FindAiRedirectConflict(uint modifiers, uint key)
     {

@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { ChevronRight, Copy } from "lucide-react";
 
-export interface IconComponentProps {
+interface IconComponentProps {
   size?: number;
   strokeWidth?: number;
   className?: string;

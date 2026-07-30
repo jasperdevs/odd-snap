@@ -330,29 +330,13 @@ public static class InstallService
         {
             return Path.GetFullPath(candidate);
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "install.target-directory",
+                $"Invalid install target '{candidate}'; using the default install directory.",
+                ex);
             return Path.GetFullPath(DefaultInstallPath);
-        }
-    }
-
-    private static void CopyDirectory(string source, string target)
-    {
-        Directory.CreateDirectory(target);
-        foreach (var file in Directory.EnumerateFiles(source))
-        {
-            var destFile = Path.Combine(target, Path.GetFileName(file));
-            try { File.Copy(file, destFile, true); }
-            catch { } // skip locked files
-        }
-        foreach (var dir in Directory.EnumerateDirectories(source))
-        {
-            var dirName = Path.GetFileName(dir);
-            if (dirName.Equals("runtimes", StringComparison.OrdinalIgnoreCase)
-                || dirName.Equals("ref", StringComparison.OrdinalIgnoreCase))
-            {
-                CopyDirectory(dir, Path.Combine(target, dirName));
-            }
         }
     }
 

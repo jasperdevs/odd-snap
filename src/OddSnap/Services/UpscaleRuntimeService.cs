@@ -49,7 +49,14 @@ public static class UpscaleRuntimeService
     public static bool HasAnyCachedModels()
     {
         try { return Directory.Exists(ModelCacheDir) && Directory.EnumerateFiles(ModelCacheDir, "*.onnx").Any(IsUsableModelFile); }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "upscale.runtime.model-check",
+                "Failed to enumerate cached upscale models.",
+                ex);
+            return false;
+        }
     }
 
     public static bool RemoveCachedModel(LocalUpscaleEngine engine)
@@ -243,8 +250,12 @@ public static class UpscaleRuntimeService
         {
             return File.Exists(path) && new FileInfo(path).Length >= MinModelFileBytes;
         }
-        catch
+        catch (Exception ex)
         {
+            AppDiagnostics.LogWarning(
+                "upscale.runtime.model-check",
+                $"Failed to inspect upscale model {Path.GetFileName(path)}.",
+                ex);
             return false;
         }
     }

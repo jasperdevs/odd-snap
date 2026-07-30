@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using OddSnap.AppModel.Jobs;
 using OddSnap.Helpers;
 using OddSnap.Models;
 using OddSnap.Services;
@@ -146,7 +147,7 @@ public partial class SettingsWindow
         var hasRuntimeFailure = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerRuntimeJobKey(executionProvider), out runtimeJob) &&
                                 runtimeJob is { LastSucceeded: false } &&
                                 !(hasRuntimeStatus && runtimeReady);
-        BackgroundRuntimeJobSnapshot? modelFailureJob = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerModelJobKey(engine), out var stickerModelJob)
+        AppJobSnapshot? modelFailureJob = BackgroundRuntimeJobService.TryGetSnapshot(GetStickerModelJobKey(engine), out var stickerModelJob)
             ? stickerModelJob
             : null;
         var hasModelFailure = !downloaded && modelFailureJob is { LastSucceeded: false };
@@ -347,7 +348,7 @@ public partial class SettingsWindow
         var hasRuntimeFailure = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleRuntimeJobKey(executionProvider), out runtimeJob) &&
                                 runtimeJob is { LastSucceeded: false } &&
                                 !(hasRuntimeStatus && runtimeReady);
-        BackgroundRuntimeJobSnapshot? modelFailureJob = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleModelJobKey(engine), out var upscaleModelJob)
+        AppJobSnapshot? modelFailureJob = BackgroundRuntimeJobService.TryGetSnapshot(GetUpscaleModelJobKey(engine), out var upscaleModelJob)
             ? upscaleModelJob
             : null;
         var hasModelFailure = !downloaded && modelFailureJob is { LastSucceeded: false };

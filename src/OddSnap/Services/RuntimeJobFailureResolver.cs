@@ -1,14 +1,16 @@
+using OddSnap.AppModel.Jobs;
+
 namespace OddSnap.Services;
 
 internal static class RuntimeJobFailureResolver
 {
-    public static string? GetFailureMessage(params BackgroundRuntimeJobSnapshot?[] snapshots)
+    public static string? GetFailureMessage(params AppJobSnapshot?[] snapshots)
     {
         var snapshot = GetFirstFailedSnapshotWithError(snapshots);
         return snapshot?.LastError?.Trim();
     }
 
-    public static string? GetFailureDiagnosticMessage(params BackgroundRuntimeJobSnapshot?[] snapshots)
+    public static string? GetFailureDiagnosticMessage(params AppJobSnapshot?[] snapshots)
     {
         var snapshot = GetFirstFailedSnapshotWithError(snapshots);
         if (snapshot is null)
@@ -22,7 +24,7 @@ internal static class RuntimeJobFailureResolver
             snapshot.LastError!.Trim());
     }
 
-    private static BackgroundRuntimeJobSnapshot? GetFirstFailedSnapshotWithError(params BackgroundRuntimeJobSnapshot?[] snapshots)
+    private static AppJobSnapshot? GetFirstFailedSnapshotWithError(params AppJobSnapshot?[] snapshots)
     {
         foreach (var snapshot in snapshots)
         {

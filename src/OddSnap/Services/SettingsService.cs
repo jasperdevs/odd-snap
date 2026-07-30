@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using OddSnap.Helpers;
 using OddSnap.Models;
 
 namespace OddSnap.Services;
@@ -258,7 +259,14 @@ public sealed class SettingsService : IDisposable
 
     private void NotifySaveFailed(string message)
     {
-        try { SaveFailed?.Invoke(message); } catch { }
+        try
+        {
+            SaveFailed?.Invoke(message);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("settings.save-failed-handler", "A settings save failure handler threw an exception.", ex);
+        }
     }
 
     private void TryMigrateLegacyPortableSettings()
@@ -345,7 +353,7 @@ public sealed class SettingsService : IDisposable
             settings.FileNameTemplate = Helpers.FileNameTemplate.DefaultTemplate;
 
         settings.ImageSearchSources &= ImageSearchSourceOptions.All;
-        settings.UiScale = OddSnap.UI.UiScale.Normalize(settings.UiScale);
+        settings.UiScale = AppSettings.NormalizeUiScale(settings.UiScale);
         settings.InterfaceLanguage = LocalizationService.NormalizeLanguageSetting(settings.InterfaceLanguage);
         NormalizeEnums(settings);
         NormalizeCaptureRuntimeSettings(settings);
@@ -384,6 +392,8 @@ public sealed class SettingsService : IDisposable
             settings.ImageUploadDestination = UploadDestination.TempHosts;
         if (settings.ImageUploadSettings.AiChatUploadDestination == UploadDestination.TransferSh)
             settings.ImageUploadSettings.AiChatUploadDestination = UploadDestination.TempHosts;
+        if (settings.ImageUploadSettings.AiChatProvider == AiChatProvider.ClaudeOpus)
+            settings.ImageUploadSettings.AiChatProvider = AiChatProvider.Claude;
 
         NormalizeUnsafeModifierlessHotkeys(settings);
         NormalizeToastButtonLayout(settings.ToastButtons);
@@ -470,36 +480,33 @@ public sealed class SettingsService : IDisposable
 
     private static void NormalizeUnsafeModifierlessHotkeys(AppSettings settings)
     {
-        if (IsUnsafeModifierlessHotkey(settings.HotkeyModifiers, settings.HotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.HotkeyModifiers, settings.HotkeyKey))
             settings.HotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.OcrHotkeyModifiers, settings.OcrHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.OcrHotkeyModifiers, settings.OcrHotkeyKey))
             settings.OcrHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.PickerHotkeyModifiers, settings.PickerHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.PickerHotkeyModifiers, settings.PickerHotkeyKey))
             settings.PickerHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.ScanHotkeyModifiers, settings.ScanHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.ScanHotkeyModifiers, settings.ScanHotkeyKey))
             settings.ScanHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.StickerHotkeyModifiers, settings.StickerHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.StickerHotkeyModifiers, settings.StickerHotkeyKey))
             settings.StickerHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.UpscaleHotkeyModifiers, settings.UpscaleHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.UpscaleHotkeyModifiers, settings.UpscaleHotkeyKey))
             settings.UpscaleHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.CenterHotkeyModifiers, settings.CenterHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.CenterHotkeyModifiers, settings.CenterHotkeyKey))
             settings.CenterHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.FullscreenHotkeyModifiers, settings.FullscreenHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.FullscreenHotkeyModifiers, settings.FullscreenHotkeyKey))
             settings.FullscreenHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.ActiveWindowHotkeyModifiers, settings.ActiveWindowHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.ActiveWindowHotkeyModifiers, settings.ActiveWindowHotkeyKey))
             settings.ActiveWindowHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.RulerHotkeyModifiers, settings.RulerHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.RulerHotkeyModifiers, settings.RulerHotkeyKey))
             settings.RulerHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.ScrollCaptureHotkeyModifiers, settings.ScrollCaptureHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.ScrollCaptureHotkeyModifiers, settings.ScrollCaptureHotkeyKey))
             settings.ScrollCaptureHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.GifHotkeyModifiers, settings.GifHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.GifHotkeyModifiers, settings.GifHotkeyKey))
             settings.GifHotkeyKey = 0;
-        if (IsUnsafeModifierlessHotkey(settings.AiRedirectHotkeyModifiers, settings.AiRedirectHotkeyKey))
+        if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.AiRedirectHotkeyModifiers, settings.AiRedirectHotkeyKey))
             settings.AiRedirectHotkeyKey = 0;
     }
-
-    private static bool IsUnsafeModifierlessHotkey(uint modifiers, uint key) =>
-        modifiers == 0 && key != 0 && key != Native.User32.VK_SNAPSHOT;
 
     private static string NormalizeTranslationTargetSetting(string? languageCode)
     {

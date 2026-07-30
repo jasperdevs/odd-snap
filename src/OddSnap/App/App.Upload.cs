@@ -79,77 +79,8 @@ public partial class App
             var settings = _settingsService.Settings.ImageUploadSettings;
             if (UploadService.IsAiChatDestination(dest))
             {
-                SoundService.PlayUploadStartSound();
-                Bitmap? previewBitmap = null;
-                try
-                {
-                    var providerName = UploadService.GetAiChatProviderName(settings.AiChatProvider);
-                    if (settings.AiChatProvider == AiChatProvider.GoogleLens)
-                    {
-                        var lensUpload = await TryUploadForGoogleLensAsync(filePath, settings);
-                        if (!lensUpload.Success || string.IsNullOrWhiteSpace(lensUpload.Url))
-                        {
-                            var errMsg = CleanErrorMessage(lensUpload.Error);
-                            var saved = Path.GetFileName(filePath);
-                            SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
-                            ToastWindow.ShowError("Google Lens upload failed", $"Saved to {saved}\n{errMsg}", filePath);
-                            return;
-                        }
-
-                        var lensUrl = UploadService.BuildGoogleLensUrl(lensUpload.Url);
-                        SaveUploadSuccess(filePath, historyEntry, lensUpload.Url, lensUpload.ProviderName);
-                        if (!OpenExternalUrl(lensUrl))
-                            return;
-
-                        SoundService.PlayUploadDoneSound();
-                        ToastWindow.Show(ToastSpec.Standard("Google Lens Ready", $"Opened from {lensUpload.ProviderName}.", filePath) with { SuppressSound = true });
-
-                        return;
-                    }
-
-                    var startUrl = UploadService.BuildAiChatStartUrl(settings.AiChatProvider);
-                    if (string.IsNullOrWhiteSpace(startUrl))
-                    {
-                        var errMsg = "Choose an AI Redirect provider in Settings -> Uploads.";
-                        var saved = Path.GetFileName(filePath);
-                        SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
-                        ToastWindow.ShowError("AI Redirect not configured", $"Saved to {saved}\n{errMsg}", filePath);
-                        return;
-                    }
-
-                    if (!OpenExternalUrl(startUrl))
-                        return;
-
-                    SoundService.PlayUploadDoneSound();
-                    previewBitmap = await TryLoadPreviewBitmapAsync(filePath);
-                    if (previewBitmap is not null)
-                    {
-                        var copySucceeded = TryCopyAiRedirectImageToClipboard(previewBitmap, filePath);
-                        ToastWindow.Show(ToastSpec.ImagePreview(
-                            previewBitmap,
-                            "AI Redirect Ready",
-                            copySucceeded
-                                ? $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V."
-                                : $"Opened {providerName}. Clipboard copy failed; drag the image from this pinned toast.",
-                            filePath,
-                            autoPin: true,
-                            transparentShell: false,
-                            showOverlayButtons: true,
-                            clickActionUrl: startUrl,
-                            clickActionLabel: providerName) with
-                        { SuppressSound = true });
-                        previewBitmap = null;
-                    }
-                    else
-                    {
-                        ToastWindow.Show(ToastSpec.Standard("AI Redirect Ready", $"Opened {providerName}. Use Ctrl+V in the chat box.", filePath) with { SuppressSound = true });
-                    }
-                    return;
-                }
-                finally
-                {
-                    previewBitmap?.Dispose();
-                }
+                await RunAiRedirectCoreAsync(filePath, historyEntry, settings);
+                return;
             }
 
             // Validate destination setup before attempting upload.
@@ -283,75 +214,7 @@ public partial class App
         try
         {
             var settings = _settingsService!.Settings.ImageUploadSettings;
-            SoundService.PlayUploadStartSound();
-            Bitmap? previewBitmap = null;
-            try
-            {
-                var providerName = UploadService.GetAiChatProviderName(settings.AiChatProvider);
-                if (settings.AiChatProvider == AiChatProvider.GoogleLens)
-                {
-                    var lensUpload = await TryUploadForGoogleLensAsync(filePath, settings);
-                    if (!lensUpload.Success || string.IsNullOrWhiteSpace(lensUpload.Url))
-                    {
-                        var errMsg = CleanErrorMessage(lensUpload.Error);
-                        var saved = Path.GetFileName(filePath);
-                        SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
-                        ToastWindow.ShowError("Google Lens upload failed", $"Saved to {saved}\n{errMsg}", filePath);
-                        return;
-                    }
-
-                    var lensUrl = UploadService.BuildGoogleLensUrl(lensUpload.Url);
-                    SaveUploadSuccess(filePath, historyEntry, lensUpload.Url, lensUpload.ProviderName);
-                    if (!OpenExternalUrl(lensUrl))
-                        return;
-
-                    SoundService.PlayUploadDoneSound();
-                    ToastWindow.Show(ToastSpec.Standard("Google Lens Ready", $"Opened from {lensUpload.ProviderName}.", filePath) with { SuppressSound = true });
-                    return;
-                }
-
-                var startUrl = UploadService.BuildAiChatStartUrl(settings.AiChatProvider);
-                if (string.IsNullOrWhiteSpace(startUrl))
-                {
-                    var errMsg = "Choose an AI Redirect provider in Settings -> Uploads.";
-                    var saved = Path.GetFileName(filePath);
-                    SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
-                    ToastWindow.ShowError("AI Redirect not configured", $"Saved to {saved}\n{errMsg}", filePath);
-                    return;
-                }
-
-                if (!OpenExternalUrl(startUrl))
-                    return;
-
-                SoundService.PlayUploadDoneSound();
-                previewBitmap = await TryLoadPreviewBitmapAsync(filePath);
-                if (previewBitmap is not null)
-                {
-                    var copySucceeded = TryCopyAiRedirectImageToClipboard(previewBitmap, filePath);
-                    ToastWindow.Show(ToastSpec.ImagePreview(
-                        previewBitmap,
-                        "AI Redirect Ready",
-                        copySucceeded
-                            ? $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V."
-                            : $"Opened {providerName}. Clipboard copy failed; drag the image from this pinned toast.",
-                        filePath,
-                        autoPin: true,
-                        transparentShell: false,
-                        showOverlayButtons: true,
-                        clickActionUrl: startUrl,
-                        clickActionLabel: providerName) with
-                    { SuppressSound = true });
-                    previewBitmap = null;
-                }
-                else
-                {
-                    ToastWindow.Show(ToastSpec.Standard("AI Redirect Ready", $"Opened {providerName}. Use Ctrl+V in the chat box.", filePath) with { SuppressSound = true });
-                }
-            }
-            finally
-            {
-                previewBitmap?.Dispose();
-            }
+            await RunAiRedirectCoreAsync(filePath, historyEntry, settings);
         }
         catch (Exception ex)
         {
@@ -364,6 +227,82 @@ public partial class App
         finally
         {
             ScheduleIdleMemoryTrim();
+        }
+    }
+
+    private async Task RunAiRedirectCoreAsync(
+        string filePath,
+        Services.HistoryEntry? historyEntry,
+        UploadSettings settings)
+    {
+        SoundService.PlayUploadStartSound();
+        Bitmap? previewBitmap = null;
+        try
+        {
+            var providerName = UploadService.GetAiChatProviderName(settings.AiChatProvider);
+            if (settings.AiChatProvider == AiChatProvider.GoogleLens)
+            {
+                var lensUpload = await TryUploadForGoogleLensAsync(filePath, settings);
+                if (!lensUpload.Success || string.IsNullOrWhiteSpace(lensUpload.Url))
+                {
+                    var errMsg = CleanErrorMessage(lensUpload.Error);
+                    var saved = Path.GetFileName(filePath);
+                    SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
+                    ToastWindow.ShowError("Google Lens upload failed", $"Saved to {saved}\n{errMsg}", filePath);
+                    return;
+                }
+
+                var lensUrl = UploadService.BuildGoogleLensUrl(lensUpload.Url);
+                SaveUploadSuccess(filePath, historyEntry, lensUpload.Url, lensUpload.ProviderName);
+                if (!OpenExternalUrl(lensUrl))
+                    return;
+
+                SoundService.PlayUploadDoneSound();
+                ToastWindow.Show(ToastSpec.Standard("Google Lens Ready", $"Opened from {lensUpload.ProviderName}.", filePath) with { SuppressSound = true });
+                return;
+            }
+
+            var startUrl = UploadService.BuildAiChatStartUrl(settings.AiChatProvider);
+            if (string.IsNullOrWhiteSpace(startUrl))
+            {
+                var errMsg = "Choose an AI Redirect provider in Settings -> Uploads.";
+                var saved = Path.GetFileName(filePath);
+                SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
+                ToastWindow.ShowError("AI Redirect not configured", $"Saved to {saved}\n{errMsg}", filePath);
+                return;
+            }
+
+            if (!OpenExternalUrl(startUrl))
+                return;
+
+            SoundService.PlayUploadDoneSound();
+            previewBitmap = await TryLoadPreviewBitmapAsync(filePath);
+            if (previewBitmap is not null)
+            {
+                var copySucceeded = TryCopyAiRedirectImageToClipboard(previewBitmap, filePath);
+                ToastWindow.Show(ToastSpec.ImagePreview(
+                    previewBitmap,
+                    "AI Redirect Ready",
+                    copySucceeded
+                        ? $"Opened {providerName}. This toast is pinned so you can drag the image in or press Ctrl+V."
+                        : $"Opened {providerName}. Clipboard copy failed; drag the image from this pinned toast.",
+                    filePath,
+                    autoPin: true,
+                    transparentShell: false,
+                    showOverlayButtons: true,
+                    clickActionUrl: startUrl,
+                    clickActionLabel: providerName) with
+                { SuppressSound = true });
+                previewBitmap = null;
+            }
+            else
+            {
+                ToastWindow.Show(ToastSpec.Standard("AI Redirect Ready", $"Opened {providerName}. Use Ctrl+V in the chat box.", filePath) with { SuppressSound = true });
+            }
+        }
+        finally
+        {
+            previewBitmap?.Dispose();
         }
     }
 

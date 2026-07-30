@@ -278,8 +278,6 @@ public sealed partial class ImageSearchIndexService : IDisposable
     public event Action? Changed;
     public event Action<string>? StatusChanged;
 
-    public ImageSearchIndexService() { }
-
     public int Version { get { lock (_gate) return _version; } }
     public string StatusText { get { lock (_gate) return _statusText; } }
 
@@ -515,8 +513,19 @@ public sealed partial class ImageSearchIndexService : IDisposable
 
     private static bool WaitForSyncLoopToSettle(Task task, TimeSpan timeout)
     {
-        try { return task.Wait(timeout); }
-        catch { return true; }
+        try
+        {
+            return task.Wait(timeout);
+        }
+        catch (AggregateException ex)
+        {
+            var flattened = ex.Flatten();
+            if (flattened.InnerExceptions.All(inner => inner is OperationCanceledException))
+                return true;
+
+            AppDiagnostics.LogError("image-search.dispose-sync-loop", flattened);
+            return true;
+        }
     }
 
     private void DisposeSyncResources()

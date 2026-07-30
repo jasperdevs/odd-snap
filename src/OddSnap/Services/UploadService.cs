@@ -16,42 +16,42 @@ namespace OddSnap.Services;
 
 public enum UploadDestination
 {
-    None,
-    Imgur,
-    ImgBB,
-    Catbox,
-    Litterbox,
-    Gyazo,
-    FileIo,
-    Uguu,
-    TransferSh,
-    Dropbox,
-    GoogleDrive,
-    OneDrive,
-    AzureBlob,
-    GitHub,
-    Immich,
-    Ftp,
-    Sftp,
-    WebDav,
-    S3Compatible,
-    CustomHttp,
-    AiChat,
-    TempHosts,
-    TmpFiles,
-    Gofile,
-    ImgPile
+    None = 0,
+    Imgur = 1,
+    ImgBB = 2,
+    Catbox = 3,
+    Litterbox = 4,
+    Gyazo = 5,
+    FileIo = 6,
+    Uguu = 7,
+    TransferSh = 8,
+    Dropbox = 9,
+    GoogleDrive = 10,
+    OneDrive = 11,
+    AzureBlob = 12,
+    GitHub = 13,
+    Immich = 14,
+    Ftp = 15,
+    Sftp = 16,
+    WebDav = 17,
+    S3Compatible = 18,
+    CustomHttp = 19,
+    AiChat = 20,
+    TempHosts = 21,
+    TmpFiles = 22,
+    Gofile = 23,
+    ImgPile = 24
 }
 
 public enum AiChatProvider
 {
     None = -1,
-    ChatGpt,
-    Claude,
+    ChatGpt = 0,
+    Claude = 1,
     // Legacy saved value; normalized to Claude in current UI/runtime behavior.
-    ClaudeOpus,
-    Gemini,
-    GoogleLens
+    ClaudeOpus = 2,
+    Gemini = 3,
+    GoogleLens = 4
 }
 
 public sealed class UploadResult

@@ -94,8 +94,9 @@ public static class SoundService
                         using var player = new SoundPlayer(ms);
                         player.PlaySync();
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        AppDiagnostics.LogWarning("sound.playback", "Failed to play a queued OddSnap sound.", ex);
                     }
                 }
             })

@@ -679,7 +679,7 @@ public partial class SettingsWindow
                 }
             };
 
-            var stderr = new ThumbnailProcessOutputBuffer(VideoThumbnailDiagnosticMaxLength * 2);
+            var stderr = new LimitedTextBuffer(VideoThumbnailDiagnosticMaxLength * 2);
             proc.ErrorDataReceived += (_, e) =>
             {
                 if (!string.IsNullOrWhiteSpace(e.Data))
@@ -752,26 +752,6 @@ public partial class SettingsWindow
         return normalized.Length <= VideoThumbnailDiagnosticMaxLength
             ? normalized
             : normalized[..VideoThumbnailDiagnosticMaxLength] + "...";
-    }
-
-    private sealed class ThumbnailProcessOutputBuffer(int maxChars)
-    {
-        private readonly int _maxChars = Math.Max(256, maxChars);
-        private readonly System.Text.StringBuilder _buffer = new();
-
-        public void AppendLine(string line)
-        {
-            if (_buffer.Length > 0)
-                _buffer.AppendLine();
-
-            _buffer.Append(line);
-            if (_buffer.Length <= _maxChars)
-                return;
-
-            _buffer.Remove(0, _buffer.Length - _maxChars);
-        }
-
-        public override string ToString() => _buffer.ToString();
     }
 
     private static bool IsUsableVideoThumbnail(string thumbPath) =>

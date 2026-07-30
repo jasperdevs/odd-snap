@@ -58,38 +58,6 @@ public sealed partial class HistoryService
             }
         }
 
-        if (_ocrEntries.Count == 0 && File.Exists(LegacyOcrIndexPath))
-        {
-            try
-            {
-                _ocrEntries = JsonSerializer.Deserialize<List<OcrHistoryEntry>>(
-                    File.ReadAllText(LegacyOcrIndexPath), JsonOpts) ?? new();
-                _ocrDirty = true;
-                ScheduleFlush_NoLock();
-                changed = true;
-            }
-            catch (Exception ex)
-            {
-                AppDiagnostics.LogError("history.migrate.legacy-ocr-index", ex);
-            }
-        }
-
-        if (_colorEntries.Count == 0 && File.Exists(LegacyColorIndexPath))
-        {
-            try
-            {
-                _colorEntries = JsonSerializer.Deserialize<List<ColorHistoryEntry>>(
-                    File.ReadAllText(LegacyColorIndexPath), JsonOpts) ?? new();
-                _colorDirty = true;
-                ScheduleFlush_NoLock();
-                changed = true;
-            }
-            catch (Exception ex)
-            {
-                AppDiagnostics.LogError("history.migrate.legacy-color-index", ex);
-            }
-        }
-
         if (changed)
         {
             _entries = _entries.OrderByDescending(e => e.CapturedAt).ToList();
@@ -113,11 +81,14 @@ public sealed partial class HistoryService
             var targetDir = legacyKind == HistoryKind.Sticker || sourcePath.StartsWith(LegacyStickerDir, StringComparison.OrdinalIgnoreCase)
                 ? StickerDir
                 : HistoryDir;
-            var targetPath = Path.Combine(targetDir, fileName);
+            var requestedTargetPath = Path.Combine(targetDir, fileName);
+            var targetPath = sourcePath.Equals(requestedTargetPath, StringComparison.OrdinalIgnoreCase)
+                ? requestedTargetPath
+                : HistoryMigrationPathResolver.ResolveAvailablePath(requestedTargetPath);
 
             Directory.CreateDirectory(targetDir);
             if (!sourcePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
-                File.Move(sourcePath, targetPath, overwrite: true);
+                File.Move(sourcePath, targetPath);
 
             var fi = new FileInfo(targetPath);
             migrated = new HistoryEntry
@@ -417,9 +388,11 @@ public sealed partial class HistoryService
         InvalidateFilteredCache();
     }
 
-    private void ImportLegacyJsonIndexes_NoLock()
+    private (IReadOnlyList<string> OcrPaths, IReadOnlyList<string> ColorPaths) ImportLegacyJsonIndexes_NoLock()
     {
         bool changed = false;
+        List<string> importedOcrPaths = [];
+        List<string> importedColorPaths = [];
 
         if (_entries.Count == 0)
         {
@@ -462,7 +435,10 @@ public sealed partial class HistoryService
                     _ocrDirty = _ocrEntries.Count > 0;
                     changed |= _ocrDirty;
                     if (_ocrDirty)
+                    {
+                        importedOcrPaths.AddRange(new[] { MigrationOcrIndexPath, LegacyOcrIndexPath }.Where(File.Exists));
                         break;
+                    }
                 }
                 catch
                 {
@@ -484,7 +460,10 @@ public sealed partial class HistoryService
                     _colorDirty = _colorEntries.Count > 0;
                     changed |= _colorDirty;
                     if (_colorDirty)
+                    {
+                        importedColorPaths.AddRange(new[] { MigrationColorIndexPath, LegacyColorIndexPath }.Where(File.Exists));
                         break;
+                    }
                 }
                 catch
                 {
@@ -495,6 +474,27 @@ public sealed partial class HistoryService
 
         if (changed)
             ScheduleFlush_NoLock();
+
+        return (importedOcrPaths, importedColorPaths);
+    }
+
+    internal static void RetireLegacyJsonIndexes(IEnumerable<string> paths, string historyKind)
+    {
+        foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (File.Exists(path))
+                    File.Move(path, path + ".migrated", overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "history.migrate.retire-index",
+                    $"The migrated legacy {historyKind} index could not be retired: {path}.",
+                    ex);
+            }
+        }
     }
 
 }

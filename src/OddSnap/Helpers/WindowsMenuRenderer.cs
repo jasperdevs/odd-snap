@@ -212,6 +212,7 @@ public static class WindowsMenuRenderer
 
         protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
         {
+            // Suppress the renderer's default image-margin background.
         }
 
         protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)

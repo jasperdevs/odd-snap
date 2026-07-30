@@ -279,10 +279,7 @@ public sealed partial class ImageSearchIndexService
     private void LoadIndex_NoLock()
     {
         _records.Clear();
-        if (TryLoadRecordsFromDatabase_NoLock())
-            return;
-
-        TryImportLegacyRecords_NoLock();
+        LoadRecordsFromDatabase_NoLock();
     }
 
     private void PruneMissingEntries_NoLock()
@@ -600,7 +597,7 @@ public sealed partial class ImageSearchIndexService
         return connection;
     }
 
-    private bool TryLoadRecordsFromDatabase_NoLock()
+    private void LoadRecordsFromDatabase_NoLock()
     {
         using var connection = OpenConnection();
         using var existsCommand = connection.CreateCommand();
@@ -611,7 +608,7 @@ public sealed partial class ImageSearchIndexService
             """;
         var tableCount = Convert.ToInt32(existsCommand.ExecuteScalar() ?? 0);
         if (tableCount == 0)
-            return false;
+            return;
 
         var availableColumns = GetAvailableColumns_NoLock(connection, "image_search_records");
         var hasExtendedColumns = availableColumns.Contains("fileLengthBytes", StringComparer.OrdinalIgnoreCase);
@@ -661,14 +658,6 @@ public sealed partial class ImageSearchIndexService
             _records[record.FilePath] = CreateResidentRecord(record);
         }
 
-        return _records.Count > 0;
-    }
-
-    private void TryImportLegacyRecords_NoLock()
-    {
-        // History entries are migrated separately by HistoryService.
-        // OCR/search state is intentionally rebuilt from live files to avoid
-        // carrying forward stale legacy failures and missing-file rows.
     }
 
     private static HashSet<string> GetAvailableColumns_NoLock(SqliteConnection connection, string tableName)

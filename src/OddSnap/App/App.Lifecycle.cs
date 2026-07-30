@@ -220,9 +220,9 @@ public partial class App
                 DispatcherPriority.Background,
                 "lifecycle.update-available-post");
         }
-        catch
+        catch (Exception ex)
         {
-            AppDiagnostics.LogWarning("lifecycle.check-for-updates", "Update check failed.");
+            AppDiagnostics.LogWarning("lifecycle.check-for-updates", "Update check failed.", ex);
         }
     }
 

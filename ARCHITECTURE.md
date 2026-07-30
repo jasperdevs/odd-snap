@@ -87,9 +87,9 @@ Hard rules for new/modified UI:
 ## 4. Staged Windows 11 native migration
 
 The WinUI 3 shell (`src/OddSnap.WinUI`) is a schema-driven prototype: it
-renders `OddSnap.AppModel.SettingsSchemaCatalog` generically and shows
-placeholder job snapshots. A big-bang migration is off the table — the WPF
-app is stable and ships. The staged path:
+renders `OddSnap.AppModel.SettingsSchemaCatalog` generically but is not bound
+to live application state. The WPF app remains the production shell. The
+staged path:
 
 - **Stage 0 — stop the rot (done):** build the whole solution (including
   WinUI + AppModel + tests) in CI so the prototype can no longer silently

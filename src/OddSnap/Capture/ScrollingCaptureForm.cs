@@ -473,29 +473,34 @@ public sealed partial class ScrollingCaptureForm : Form
         if (_state == State.Done) return;
         _captureCts.Cancel();
 
-        try
-        {
-            StopAutomaticTimer();
-            ClearPendingAutoFrame();
-        }
-        catch { }
-
-        try
-        {
-            _controlBar?.SetStatus("Capture failed");
-        }
-        catch { }
-
-        try { _controlBar?.Close(); } catch { }
-        try { _controlBar?.Dispose(); } catch { }
+        RunFailureCleanup("stop-timer", StopAutomaticTimer);
+        RunFailureCleanup("clear-pending-frame", ClearPendingAutoFrame);
+        RunFailureCleanup("set-control-status", () => _controlBar?.SetStatus("Capture failed"));
+        RunFailureCleanup("close-control-bar", () => _controlBar?.Close());
+        RunFailureCleanup("dispose-control-bar", () => _controlBar?.Dispose());
         _controlBar = null;
 
         ReleaseCaptureBitmaps();
 
-        try { CaptureFailed?.Invoke(message); } catch { }
-        try { CaptureCancelled?.Invoke(); } catch { }
+        RunFailureCleanup("notify-failed", () => CaptureFailed?.Invoke(message));
+        RunFailureCleanup("notify-cancelled", () => CaptureCancelled?.Invoke());
         _state = State.Done;
-        try { Close(); } catch { }
+        RunFailureCleanup("close-overlay", Close);
+    }
+
+    private static void RunFailureCleanup(string operation, Action cleanup)
+    {
+        try
+        {
+            cleanup();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                $"scrolling-capture.failure-cleanup.{operation}",
+                $"Failed to {operation.Replace('-', ' ')} after a scrolling capture error.",
+                ex);
+        }
     }
 
     private void Cancel()

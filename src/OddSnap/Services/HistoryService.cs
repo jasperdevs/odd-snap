@@ -196,12 +196,17 @@ public sealed partial class HistoryService : IDisposable
             Directory.CreateDirectory(ImageThumbnailDir);
             EnsureDatabase_NoLock();
             LoadFromDatabase_NoLock();
-            ImportLegacyJsonIndexes_NoLock();
+            var legacyJsonImports = ImportLegacyJsonIndexes_NoLock();
 
             MigrateLegacyStorage();
             CleanupLegacyThumbnailDirectories_NoLock();
             PruneByRetention(HistoryRetentionPeriod.Never);
             FlushPendingWrites_NoLock();
+
+            if (!_ocrDirty)
+                RetireLegacyJsonIndexes(legacyJsonImports.OcrPaths, "OCR");
+            if (!_colorDirty)
+                RetireLegacyJsonIndexes(legacyJsonImports.ColorPaths, "color");
         }
     }
 

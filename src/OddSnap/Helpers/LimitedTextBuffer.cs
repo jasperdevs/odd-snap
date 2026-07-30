@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace OddSnap.Capture;
+namespace OddSnap.Helpers;
 
 internal sealed class LimitedTextBuffer(int maxChars)
 {

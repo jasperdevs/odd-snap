@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using OddSnap.AppModel.Jobs;
 using OddSnap.Services;
 using ComboBox = System.Windows.Controls.ComboBox;
 using ComboBoxItem = System.Windows.Controls.ComboBoxItem;
@@ -567,7 +568,7 @@ public partial class SettingsWindow
             ? "Status refresh failed. Check Settings -> OCR and try again."
             : "Status refresh failed. Check Settings -> OCR and try again; details were logged.";
 
-    private static string FormatRuntimeReadinessStatus(bool isInstalled, string installedStatus, BackgroundRuntimeJobSnapshot? lastJob, string runtimeName)
+    private static string FormatRuntimeReadinessStatus(bool isInstalled, string installedStatus, AppJobSnapshot? lastJob, string runtimeName)
     {
         if (isInstalled)
             return installedStatus;

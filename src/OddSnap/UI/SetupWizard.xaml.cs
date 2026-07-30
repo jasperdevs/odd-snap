@@ -140,7 +140,7 @@ public partial class SetupWizard : Window
             uint mod = HotkeyFormatter.GetActiveModifiers();
             uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
             if (vk == 0) return;
-            if (IsUnsafeModifierlessHotkey(mod, vk))
+            if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(mod, vk))
             {
                 ToastWindow.ShowError(
                     "Hotkey needs a modifier",
@@ -208,13 +208,13 @@ public partial class SetupWizard : Window
         {
             if (!recording) return;
             e.Handled = true;
-            HandleKey(NormalizeHotkeyKey(e));
+            HandleKey(HotkeyFormatter.NormalizeKey(e));
         };
         // PrintScreen and some special keys only arrive on KeyUp
         box.PreviewKeyUp += (_, e) =>
         {
             if (!recording) return;
-            var key = NormalizeHotkeyKey(e);
+            var key = HotkeyFormatter.NormalizeKey(e);
             if (key is Key.Snapshot or Key.Pause or Key.Cancel)
             {
                 e.Handled = true;
@@ -232,19 +232,6 @@ public partial class SetupWizard : Window
             "Hotkey failed",
             $"The previous hotkey was restored.{conflictCopy} Try this setup step again, or change it later in Settings -> Tools.\n{ex.Message}");
     }
-
-    private static Key NormalizeHotkeyKey(System.Windows.Input.KeyEventArgs e)
-    {
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key == Key.ImeProcessed)
-            key = e.ImeProcessedKey;
-        if (key == Key.DeadCharProcessed)
-            key = e.DeadCharProcessedKey;
-        return key;
-    }
-
-    private static bool IsUnsafeModifierlessHotkey(uint mod, uint vk) =>
-        mod == 0 && vk != Native.User32.VK_SNAPSHOT;
 
     private void LoadDefaults()
     {

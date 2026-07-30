@@ -1,5 +1,6 @@
 using System.Windows.Forms;
 using OddSnap.Native;
+using OddSnap.Services;
 
 namespace OddSnap.Capture;
 
@@ -26,11 +27,19 @@ internal static class CaptureWindowExclusion
 
         try
         {
-            User32.SetWindowDisplayAffinity(handle, User32.WDA_EXCLUDEFROMCAPTURE);
+            if (!User32.SetWindowDisplayAffinity(handle, User32.WDA_EXCLUDEFROMCAPTURE))
+            {
+                AppDiagnostics.LogWarning(
+                    "capture-window-exclusion.apply",
+                    $"Windows rejected capture exclusion for window 0x{handle.ToInt64():X} (error {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}).");
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort only. Older Windows builds or unusual window styles can reject this.
+            AppDiagnostics.LogWarning(
+                "capture-window-exclusion.apply",
+                $"Failed to apply capture exclusion to window 0x{handle.ToInt64():X}.",
+                ex);
         }
 
         Register(handle);
@@ -51,13 +60,27 @@ internal static class CaptureWindowExclusion
             return;
         }
 
+        if (!User32.IsWindow(handle))
+        {
+            Unregister(handle);
+            return;
+        }
+
         try
         {
-            User32.SetWindowDisplayAffinity(handle, User32.WDA_NONE);
+            if (!User32.SetWindowDisplayAffinity(handle, User32.WDA_NONE))
+            {
+                AppDiagnostics.LogWarning(
+                    "capture-window-exclusion.remove",
+                    $"Windows rejected removal of capture exclusion for window 0x{handle.ToInt64():X} (error {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}).");
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort only. The window may already be closing or the OS may reject affinity.
+            AppDiagnostics.LogWarning(
+                "capture-window-exclusion.remove",
+                $"Failed to remove capture exclusion from window 0x{handle.ToInt64():X}.",
+                ex);
         }
 
         Unregister(handle);
@@ -167,9 +190,15 @@ internal static class CaptureWindowExclusion
             {
                 bounds = window.BoundsProvider();
             }
-            catch
+            catch (Exception ex)
             {
-                bounds = Rectangle.Empty;
+                AppDiagnostics.LogWarning(
+                    "capture-window-exclusion.bounds",
+                    $"Logical bounds lookup failed for window 0x{handle.ToInt64():X}; using native window bounds.",
+                    ex);
+                if (!User32.GetWindowRect(handle, out var rect))
+                    return false;
+                bounds = rect.ToRectangle();
             }
         }
         else

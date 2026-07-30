@@ -391,13 +391,11 @@ public partial class SettingsWindow
             tokens.Add(url);
             tokens.Add("link");
             tokens.Add("url");
-            try
+            if (Uri.TryCreate(url, UriKind.Absolute, out var parsed))
             {
-                var parsed = new Uri(url);
                 tokens.Add(parsed.Host);
                 tokens.Add(parsed.Scheme);
             }
-            catch { }
         }
 
         switch (entry.Format?.ToUpperInvariant())

@@ -35,9 +35,6 @@ public static class OcrService
         public double Height => Math.Max(0, Bottom - Top);
     }
 
-    /// <summary>Windows OCR is always ready — no downloads needed.</summary>
-    public static bool IsReady() => true;
-
     public static void ClearEngines()
     {
         lock (EngineCacheGate)
