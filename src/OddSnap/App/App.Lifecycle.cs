@@ -171,6 +171,7 @@ public partial class App
     private void ApplyRuntimeSettings()
     {
         ScreenCapture.HdrCaptureCompatibleMode = _settingsService!.Settings.HdrCaptureCompatibleMode;
+        OddSnapUiCaptureVisibility.SetShowInScreenshots(_settingsService.Settings.ShowOddSnapUiInScreenshots);
         _trayIcon?.UpdateSettings(_settingsService.Settings);
         RegisterHotkeys();
     }

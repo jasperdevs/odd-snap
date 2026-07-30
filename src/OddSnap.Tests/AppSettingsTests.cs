@@ -17,6 +17,12 @@ public class AppSettingsTests
         Assert.Equal(0xC0u, s.HotkeyKey);
     }
 
+    [Fact]
+    public void Defaults_OddSnapUiRemainsVisibleInScreenshotsForCompatibility()
+    {
+        Assert.True(new AppSettings().ShowOddSnapUiInScreenshots);
+    }
+
     [Theory]
     [InlineData("rect", ModAlt, 0xC0u)]
     [InlineData("ocr", ModAlt | ModShift, 0xC0u)]

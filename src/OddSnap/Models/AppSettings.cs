@@ -197,6 +197,7 @@ public sealed class AppSettings
     public string InterfaceLanguage { get; set; } = "auto";
     public bool ShowCrosshairGuides { get; set; } // off by default
     public bool ShowCursor { get; set; }
+    public bool ShowOddSnapUiInScreenshots { get; set; } = true;
     public bool HdrCaptureCompatibleMode { get; set; }
     public bool ShowCaptureMagnifier { get; set; } = true;
     public bool OverlayCaptureAllMonitors { get; set; } = true;

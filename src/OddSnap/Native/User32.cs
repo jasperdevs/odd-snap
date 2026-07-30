@@ -288,6 +288,7 @@ internal static partial class User32
         int crKey, ref BLENDFUNCTION pblend, int dwFlags);
 
     // Exclude window from screen capture (Windows 10 2004+)
+    public const uint WDA_NONE = 0x00;
     public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
 
     [LibraryImport("user32.dll")]

@@ -25,6 +25,8 @@ public static class OddSnapWindowChrome
 
     public static void ApplyRoundedCorners(Window window, double radius)
     {
+        OddSnapUiCaptureVisibility.Track(window);
+
         void ApplyCurrentRegion()
         {
             var hwnd = new WindowInteropHelper(window).Handle;

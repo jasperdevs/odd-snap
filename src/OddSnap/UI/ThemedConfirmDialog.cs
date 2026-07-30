@@ -41,6 +41,7 @@ internal sealed class ThemedConfirmDialog : Window
 
         var content = BuildContent(title, message, primaryText, secondaryText, danger);
         Content = content;
+        OddSnapUiCaptureVisibility.Track(this);
         UiScale.ApplyToWindow(this, content, scaleWindowBounds: false);
 
         PreviewKeyDown += (_, e) =>

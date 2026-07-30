@@ -36,6 +36,33 @@ internal static class CaptureWindowExclusion
         Register(handle);
     }
 
+    /// <summary>
+    /// Enables or removes capture exclusion for a top-level window. Removing exclusion also drops
+    /// the window from the fallback hide list used by OddSnap's own screenshot paths.
+    /// </summary>
+    public static void SetExcluded(IntPtr handle, bool excluded)
+    {
+        if (handle == IntPtr.Zero)
+            return;
+
+        if (excluded)
+        {
+            Apply(handle);
+            return;
+        }
+
+        try
+        {
+            User32.SetWindowDisplayAffinity(handle, User32.WDA_NONE);
+        }
+        catch
+        {
+            // Best-effort only. The window may already be closing or the OS may reject affinity.
+        }
+
+        Unregister(handle);
+    }
+
     public static void SetLogicalBounds(IntPtr handle, Func<Rectangle>? boundsProvider)
     {
         if (handle == IntPtr.Zero)

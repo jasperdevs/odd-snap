@@ -29,8 +29,15 @@ public class SettingsServiceTests
         Assert.Equal(CaptureImageFormat.Png, s.CaptureImageFormat);
         Assert.Equal(FileNameTemplate.DefaultTemplate, s.FileNameTemplate);
         Assert.True(s.SaveToFile);
+        Assert.True(s.ShowOddSnapUiInScreenshots);
         Assert.NotNull(s.ImageUploadSettings);
         Assert.NotNull(s.ToastButtons);
+    }
+
+    [Fact]
+    public void TryDeserialize_ShowOddSnapUiInScreenshots_PreservesExplicitChoice()
+    {
+        Assert.False(Deserialize("{\"ShowOddSnapUiInScreenshots\": false}").ShowOddSnapUiInScreenshots);
     }
 
     [Theory]
@@ -298,6 +305,7 @@ public class SettingsServiceTests
             {
                 service.Settings.JpegQuality = 42;
                 service.Settings.ToastPosition = ToastPosition.TopLeft;
+                service.Settings.ShowOddSnapUiInScreenshots = false;
                 service.Settings.ImageUploadSettings.ImgurClientId = "secret123";
                 service.Save();
                 service.FlushPendingWrites();
@@ -311,6 +319,7 @@ public class SettingsServiceTests
             reloaded.Load();
             Assert.Equal(42, reloaded.Settings.JpegQuality);
             Assert.Equal(ToastPosition.TopLeft, reloaded.Settings.ToastPosition);
+            Assert.False(reloaded.Settings.ShowOddSnapUiInScreenshots);
             Assert.Equal("secret123", reloaded.Settings.ImageUploadSettings.ImgurClientId);
             reloaded.Dispose();
         }

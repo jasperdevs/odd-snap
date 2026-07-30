@@ -955,7 +955,8 @@ public partial class SettingsWindow : Window
         Action<T> setValue,
         Action<T> restoreUi,
         Action? applyCurrentUi = null,
-        bool notifyHotkeyChanged = false)
+        bool notifyHotkeyChanged = false,
+        Action<T>? applyRuntime = null)
     {
         try
         {
@@ -975,6 +976,7 @@ public partial class SettingsWindow : Window
 
             _settingsService.Save();
             SetCaptureSavePreferenceStatus(string.Empty);
+            applyRuntime?.Invoke(current);
             if (notifyHotkeyChanged)
                 HotkeyChanged?.Invoke();
         }
@@ -1001,6 +1003,7 @@ public partial class SettingsWindow : Window
                 _suppressCaptureSavePreferenceChange = false;
             }
 
+            applyRuntime?.Invoke(previous);
             ShowCaptureSavePreferenceFailed(label, ex);
         }
     }

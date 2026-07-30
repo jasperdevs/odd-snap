@@ -258,6 +258,7 @@ public partial class SettingsWindow
         {
             LoadSettings();
             PopulateToolToggles();
+            OddSnapUiCaptureVisibility.SetShowInScreenshots(_settingsService.Settings.ShowOddSnapUiInScreenshots);
         }
         catch (Exception restoreEx)
         {
@@ -351,6 +352,22 @@ public partial class SettingsWindow
                 if (RecordShowCursorCheck.IsChecked != selected)
                     RecordShowCursorCheck.IsChecked = selected;
             });
+    }
+
+    private void ShowOddSnapUiInScreenshotsCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressCaptureSavePreferenceChange) return;
+
+        var previous = _settingsService.Settings.ShowOddSnapUiInScreenshots;
+        var selected = ShowOddSnapUiInScreenshotsCheck.IsChecked == true;
+        UpdateCaptureSavePreference(
+            "settings.show-oddsnap-ui-in-screenshots",
+            "Show OddSnap UI in screenshots",
+            previous,
+            selected,
+            value => _settingsService.Settings.ShowOddSnapUiInScreenshots = value,
+            value => ShowOddSnapUiInScreenshotsCheck.IsChecked = value,
+            applyRuntime: OddSnapUiCaptureVisibility.SetShowInScreenshots);
     }
 
     private void AnnotationStrokeShadowCheck_Changed(object sender, RoutedEventArgs e)

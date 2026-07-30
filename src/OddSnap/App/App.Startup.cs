@@ -77,6 +77,7 @@ public partial class App
         UiScale.Set(_settingsService.Settings.UiScale);
         Theme.Refresh();
         Theme.ApplyTo(Resources);
+        OddSnapUiCaptureVisibility.SetShowInScreenshots(_settingsService.Settings.ShowOddSnapUiInScreenshots);
         Helpers.UiChrome.DetectRefreshRate();
         ToastWindow.SetPosition(_settingsService.Settings.ToastPosition);
         ToastWindow.SetDuration(_settingsService.Settings.ToastDurationSeconds);
