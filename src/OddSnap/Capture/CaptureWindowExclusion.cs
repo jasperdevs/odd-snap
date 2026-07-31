@@ -7,7 +7,10 @@ namespace OddSnap.Capture;
 internal static class CaptureWindowExclusion
 {
     private readonly record struct HiddenWindow(IntPtr Handle, bool WasTopmost);
-    private sealed record RegisteredWindow(IntPtr Handle, Func<Rectangle>? BoundsProvider);
+    private sealed record RegisteredWindow(
+        IntPtr Handle,
+        Func<Rectangle>? BoundsProvider,
+        bool RequiresFallbackHide);
 
     private static readonly object Sync = new();
     private static readonly List<RegisteredWindow> RegisteredWindows = new();
@@ -25,9 +28,11 @@ internal static class CaptureWindowExclusion
         if (handle == IntPtr.Zero)
             return;
 
+        bool affinityApplied = false;
         try
         {
-            if (!User32.SetWindowDisplayAffinity(handle, User32.WDA_EXCLUDEFROMCAPTURE))
+            affinityApplied = User32.SetWindowDisplayAffinity(handle, User32.WDA_EXCLUDEFROMCAPTURE);
+            if (!affinityApplied)
             {
                 AppDiagnostics.LogWarning(
                     "capture-window-exclusion.apply",
@@ -42,7 +47,7 @@ internal static class CaptureWindowExclusion
                 ex);
         }
 
-        Register(handle);
+        Register(handle, RequiresPhysicalHideFallback(affinityApplied));
     }
 
     /// <summary>
@@ -95,7 +100,10 @@ internal static class CaptureWindowExclusion
         {
             PruneDeadHandles();
             int index = RegisteredWindows.FindIndex(window => window.Handle == handle);
-            var registered = new RegisteredWindow(handle, boundsProvider);
+            bool requiresFallbackHide = index >= 0
+                ? RegisteredWindows[index].RequiresFallbackHide
+                : true;
+            var registered = new RegisteredWindow(handle, boundsProvider, requiresFallbackHide);
             if (index >= 0)
                 RegisteredWindows[index] = registered;
             else
@@ -140,13 +148,23 @@ internal static class CaptureWindowExclusion
         }
     }
 
-    private static void Register(IntPtr handle)
+    internal static bool RequiresPhysicalHideFallback(bool affinityApplied) => !affinityApplied;
+
+    private static void Register(IntPtr handle, bool requiresFallbackHide)
     {
         lock (Sync)
         {
             PruneDeadHandles();
-            if (!RegisteredWindows.Any(window => window.Handle == handle))
-                RegisteredWindows.Add(new RegisteredWindow(handle, null));
+            int index = RegisteredWindows.FindIndex(window => window.Handle == handle);
+            if (index >= 0)
+            {
+                var existing = RegisteredWindows[index];
+                RegisteredWindows[index] = existing with { RequiresFallbackHide = requiresFallbackHide };
+            }
+            else
+            {
+                RegisteredWindows.Add(new RegisteredWindow(handle, null, requiresFallbackHide));
+            }
         }
     }
 
@@ -179,6 +197,9 @@ internal static class CaptureWindowExclusion
 
     private static bool ShouldHide(RegisteredWindow window, Rectangle captureRegion)
     {
+        if (!window.RequiresFallbackHide)
+            return false;
+
         var handle = window.Handle;
         if (handle == IntPtr.Zero || !User32.IsWindow(handle) || !User32.IsWindowVisible(handle))
             return false;
