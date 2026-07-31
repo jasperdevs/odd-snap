@@ -341,14 +341,24 @@ public partial class SettingsWindow
 
     private async Task RunHistoryUploadFromMenuAsync(HistoryItemVM vm, MenuItem uploadItem)
     {
-        UpdateHistoryUploadMenuItem(uploadItem, vm, isUploadInProgress: true);
-        await RunHistoryUploadActionAsync(
-            () => RetryHistoryUploadAsync(vm),
-            () => UpdateHistoryUploadMenuItem(uploadItem, vm));
+        try
+        {
+            UpdateHistoryUploadMenuItem(uploadItem, vm, isUploadInProgress: true);
+            await RunHistoryUploadActionAsync(
+                () => RetryHistoryUploadAsync(vm),
+                () => UpdateHistoryUploadMenuItem(uploadItem, vm));
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("history.upload.menu", ex);
+        }
     }
 
     internal static async Task RunHistoryUploadActionAsync(Func<Task> uploadAction, Action refreshMenuItem)
     {
+        ArgumentNullException.ThrowIfNull(uploadAction);
+        ArgumentNullException.ThrowIfNull(refreshMenuItem);
+
         try
         {
             await uploadAction();

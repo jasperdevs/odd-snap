@@ -17,28 +17,25 @@ internal static class OddSnapUiCaptureVisibility
     }
 
     private static readonly ConditionalWeakTable<Window, TrackingMarker> TrackedWindows = new();
+    private static bool _showInScreenshots = true;
 
-    public static bool ShowInScreenshots { get; private set; } = true;
+    public static bool ShowInScreenshots => Volatile.Read(ref _showInScreenshots);
 
     public static void SetShowInScreenshots(bool show)
     {
-        ShowInScreenshots = show;
-
         var app = Application.Current;
-        if (app is null)
-            return;
-
-        if (!app.Dispatcher.CheckAccess())
+        if (app is not null && !app.Dispatcher.CheckAccess())
         {
             app.Dispatcher.Invoke(() => SetShowInScreenshots(show));
             return;
         }
 
+        Volatile.Write(ref _showInScreenshots, show);
+        if (app is null)
+            return;
+
         foreach (Window window in app.Windows)
-        {
             Track(window);
-            ApplyCurrentSetting(window);
-        }
     }
 
     /// <summary>Tracks a top-level OddSnap window and applies the current capture preference.</summary>
@@ -59,8 +56,10 @@ internal static class OddSnapUiCaptureVisibility
     {
         var handle = new WindowInteropHelper(window).Handle;
         if (handle != IntPtr.Zero)
-            CaptureWindowExclusion.SetExcluded(handle, excluded: !ShowInScreenshots);
+            CaptureWindowExclusion.SetExcluded(handle, excluded: ShouldExclude(ShowInScreenshots));
     }
+
+    internal static bool ShouldExclude(bool showInScreenshots) => !showInScreenshots;
 
     private static void StopTracking(Window window)
     {

@@ -64,15 +64,18 @@ public sealed class ReportedIssueRegressionTests : IDisposable
     public void Issue64_CompositionFailureIsContainedAndCleanedUp()
     {
         var cleanupCalled = false;
+        var reportCalled = false;
 
         var shown = ToastWindow.TryShowWithCompositionFallback(
             () => throw new COMException(
                 "Desktop composition is disabled.",
                 unchecked((int)0x80263001)),
-            () => cleanupCalled = true);
+            () => cleanupCalled = true,
+            _ => reportCalled = true);
 
         Assert.False(shown);
         Assert.True(cleanupCalled);
+        Assert.True(reportCalled);
     }
 
     [Fact]

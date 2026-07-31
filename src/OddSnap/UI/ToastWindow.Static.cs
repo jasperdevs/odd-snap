@@ -89,7 +89,10 @@ public partial class ToastWindow
             });
     }
 
-    internal static bool TryShowWithCompositionFallback(Action show, Action cleanup)
+    internal static bool TryShowWithCompositionFallback(
+        Action show,
+        Action cleanup,
+        Action<COMException>? reportFailure = null)
     {
         ArgumentNullException.ThrowIfNull(show);
         ArgumentNullException.ThrowIfNull(cleanup);
@@ -101,10 +104,7 @@ public partial class ToastWindow
         }
         catch (COMException ex)
         {
-            AppDiagnostics.LogWarning(
-                "toast.show.composition-unavailable",
-                $"Windows could not create the toast window (0x{ex.HResult:X8}); the toast was skipped.",
-                ex);
+            (reportFailure ?? ReportCompositionFailure)(ex);
             try
             {
                 cleanup();
@@ -115,6 +115,14 @@ public partial class ToastWindow
             }
             return false;
         }
+    }
+
+    private static void ReportCompositionFailure(COMException exception)
+    {
+        AppDiagnostics.LogWarning(
+            "toast.show.composition-unavailable",
+            $"Windows could not create the toast window (0x{exception.HResult:X8}); the toast was skipped.",
+            exception);
     }
 
     public static void ShowSticker(Bitmap sticker)
