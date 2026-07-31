@@ -68,15 +68,11 @@ public sealed partial class HistoryService
 
             if (retention == HistoryRetentionPeriod.Never) return;
 
-            _entries.RemoveAll(e =>
+            PruneExpiredEntries(_entries, cutoff, e =>
             {
-                if (e.CapturedAt >= cutoff)
-                    return false;
-
                 _entriesByPath.Remove(e.FilePath);
                 TryDeleteHistoryFile_NoLock(e.FilePath, "retention cleanup");
                 TryDeleteManagedThumbnail_NoLock(e.FilePath);
-                return true;
             });
             InvalidateFilteredCache();
             _ocrEntries.RemoveAll(e => e.CapturedAt < cutoff);
@@ -89,6 +85,23 @@ public sealed partial class HistoryService
             ScheduleFlush_NoLock();
         }
         NotifyChanged();
+    }
+
+    internal static int PruneExpiredEntries(
+        List<HistoryEntry> entries,
+        DateTime cutoff,
+        Action<HistoryEntry> onExpired)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        ArgumentNullException.ThrowIfNull(onExpired);
+
+        var expired = entries
+            .Where(entry => entry.CapturedAt < cutoff)
+            .ToArray();
+        foreach (var entry in expired)
+            onExpired(entry);
+
+        return entries.RemoveAll(entry => entry.CapturedAt < cutoff);
     }
 
     public void SaveIndex()

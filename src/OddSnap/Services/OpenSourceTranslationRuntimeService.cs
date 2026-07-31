@@ -16,6 +16,8 @@ public static class OpenSourceTranslationRuntimeService
         "numpy==2.4.4",
         "torch==2.11.0"
     ];
+    internal static IReadOnlyList<string> RequiredRuntimePackages => RuntimePackages;
+
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
     private static readonly string RootDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OddSnap", "translate-local");

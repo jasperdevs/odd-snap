@@ -35,6 +35,10 @@ public partial class SettingsWindow : Window
         ("{rand}", "Random"),
     ];
     private static readonly SemaphoreSlim ThumbDecodeGate = new(2);
+    private readonly System.Windows.Threading.DispatcherTimer _historyResizeTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(90)
+    };
     private readonly System.Windows.Threading.DispatcherTimer _historyMonitorTimer = new()
     {
         Interval = TimeSpan.FromSeconds(2.5)
@@ -145,10 +149,22 @@ public partial class SettingsWindow : Window
             UpdateLocalEngineUi();
             UpdateUpscaleLocalEngineUi();
         };
+        _historyResizeTimer.Tick += (_, _) =>
+        {
+            _historyResizeTimer.Stop();
+            if (_isClosed || !IsLoaded)
+                return;
+
+            if (HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
+                UpdateVirtualizedHistoryViewport();
+        };
         SizeChanged += (_, _) =>
         {
-            if (IsLoaded && HistoryTab.IsChecked == true && HistoryCategoryCombo.SelectedIndex == 0)
-                UpdateVirtualizedHistoryViewport();
+            if (!IsLoaded || HistoryTab.IsChecked != true || HistoryCategoryCombo.SelectedIndex != 0)
+                return;
+
+            _historyResizeTimer.Stop();
+            _historyResizeTimer.Start();
         };
         Closed += (_, _) =>
         {
@@ -164,6 +180,7 @@ public partial class SettingsWindow : Window
             CancelImageSearchWork();
             _imageIndexRefreshTimer.Stop();
             _historyRefreshTimer.Stop();
+            _historyResizeTimer.Stop();
             _imageSearchDebounceTimer.Stop();
             _ocrSearchDebounceTimer.Stop();
             _ocrSearchDebounceTimer.Tick -= FlushOcrSearchDebounce;

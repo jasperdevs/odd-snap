@@ -53,7 +53,8 @@ public static class ScreenCapture
 
     private static (Bitmap Bitmap, Rectangle Bounds) CaptureAllScreensCore(bool includeCursor, Rectangle bounds)
     {
-        if (HdrCaptureCompatibleMode || DxgiScreenCapture.UsesAdvancedColor(bounds))
+        var advancedColor = !HdrCaptureCompatibleMode && DxgiScreenCapture.UsesAdvancedColor(bounds);
+        if (RequiresGdiCapture(HdrCaptureCompatibleMode, advancedColor))
             return CaptureAllScreensGdi(includeCursor, bounds);
 
         try
@@ -105,7 +106,8 @@ public static class ScreenCapture
 
     private static Bitmap CaptureRegionCore(Rectangle region, bool includeCursor)
     {
-        if (HdrCaptureCompatibleMode || DxgiScreenCapture.UsesAdvancedColor(region))
+        var advancedColor = !HdrCaptureCompatibleMode && DxgiScreenCapture.UsesAdvancedColor(region);
+        if (RequiresGdiCapture(HdrCaptureCompatibleMode, advancedColor))
             return CaptureRegionGdi(region, includeCursor);
 
         try
@@ -128,6 +130,9 @@ public static class ScreenCapture
 
         return CaptureRegionGdi(region, includeCursor);
     }
+
+    internal static bool RequiresGdiCapture(bool compatibilityMode, bool advancedColor) =>
+        compatibilityMode || advancedColor;
 
     /// <summary>
     /// Uses BitBlt directly for sustained frame capture workloads. The current DXGI path

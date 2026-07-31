@@ -120,15 +120,7 @@ public partial class SettingsWindow
             uploadItem = CreateCardActionMenuItem(GetHistoryUploadMenuLabel(vm.Entry, uploadInProgress), () =>
             {
                 suppressOpenAction = true;
-                if (uploadItem is not null)
-                {
-                    uploadItem.Header = "Uploading...";
-                    uploadItem.ToolTip = "This history item upload is already running.";
-                    AutomationProperties.SetName(uploadItem, "Uploading history item");
-                    AutomationProperties.SetHelpText(uploadItem, "This history item upload is already running.");
-                    uploadItem.IsEnabled = false;
-                }
-                _ = RetryHistoryUploadAsync(vm);
+                _ = RunHistoryUploadFromMenuAsync(vm, uploadItem!);
             }, uploadHelpText);
             uploadItem.IsEnabled = !uploadInProgress;
             if (uploadInProgress)
@@ -222,12 +214,23 @@ public partial class SettingsWindow
         AutomationProperties.SetName(card, $"{kindLabel} history item");
         AutomationProperties.SetHelpText(card, "Press Enter or Space to open this history item. Press Ctrl+C to copy it or its upload link. In select mode, press Enter or Space to select it.");
 
-        card.SizeChanged += (s, _) =>
+        var cardClip = new System.Windows.Media.RectangleGeometry
+        {
+            RadiusX = 8,
+            RadiusY = 8
+        };
+        card.Clip = cardClip;
+        card.SizeChanged += (s, e) =>
         {
             var b = (Border)s!;
-            imageRow.Height = new GridLength(GetHistoryCardImageHeight(b.ActualWidth));
-            b.Clip = new System.Windows.Media.RectangleGeometry(
-                new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight), 8, 8);
+            if (e.WidthChanged)
+            {
+                var imageHeight = GetHistoryCardImageHeight(b.ActualWidth);
+                if (Math.Abs(imageRow.Height.Value - imageHeight) > 0.5)
+                    imageRow.Height = new GridLength(imageHeight);
+            }
+
+            cardClip.Rect = new System.Windows.Rect(0, 0, b.ActualWidth, b.ActualHeight);
         };
 
         card.MouseEnter += (s, _) =>
@@ -334,6 +337,39 @@ public partial class SettingsWindow
         UpdateCardSelection(vm);
 
         return new MediaCardShell(card, imgContainer, info, actionMenuBtn, img, selectionBadge);
+    }
+
+    private async Task RunHistoryUploadFromMenuAsync(HistoryItemVM vm, MenuItem uploadItem)
+    {
+        UpdateHistoryUploadMenuItem(uploadItem, vm, isUploadInProgress: true);
+        await RunHistoryUploadActionAsync(
+            () => RetryHistoryUploadAsync(vm),
+            () => UpdateHistoryUploadMenuItem(uploadItem, vm));
+    }
+
+    internal static async Task RunHistoryUploadActionAsync(Func<Task> uploadAction, Action refreshMenuItem)
+    {
+        try
+        {
+            await uploadAction();
+        }
+        finally
+        {
+            refreshMenuItem();
+        }
+    }
+
+    private void UpdateHistoryUploadMenuItem(MenuItem uploadItem, HistoryItemVM vm, bool? isUploadInProgress = null)
+    {
+        var inProgress = isUploadInProgress ?? IsHistoryUploadInProgress(vm.Entry.FilePath);
+        var label = GetHistoryUploadMenuLabel(vm.Entry, inProgress);
+        var helpText = GetHistoryUploadMenuHelpText(vm.Entry, inProgress);
+
+        uploadItem.Header = label;
+        uploadItem.ToolTip = helpText;
+        uploadItem.IsEnabled = !inProgress;
+        AutomationProperties.SetName(uploadItem, label);
+        AutomationProperties.SetHelpText(uploadItem, helpText);
     }
 
     private static string GetHistoryUploadMenuLabel(HistoryEntry entry, bool isUploadInProgress)

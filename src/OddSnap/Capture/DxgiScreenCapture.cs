@@ -135,6 +135,9 @@ internal static class DxgiScreenCapture
         }
     }
 
+    internal static bool IsAdvancedColorSpace(ColorSpaceType colorSpace) =>
+        colorSpace != (ColorSpaceType)0;
+
     public static void ResetCache()
     {
         lock (CacheLock)
@@ -392,7 +395,7 @@ internal static class DxgiScreenCapture
             try
             {
                 using var output6 = Output.QueryInterface<IDXGIOutput6>();
-                return output6.Description1.ColorSpace != (ColorSpaceType)0;
+                return IsAdvancedColorSpace(output6.Description1.ColorSpace);
             }
             catch
             {

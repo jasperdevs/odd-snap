@@ -59,37 +59,63 @@ public partial class ToastWindow : Window
     private readonly DispatcherTimer _officeMenuDismissTimer;
     private bool _officeMenuMouseWasDown;
 
+    private const int PreviewMaxWidth = 332;
+    private const int PreviewMaxHeight = 220;
+    private const int PreviewMinWidth = 140;
+    private const int PreviewMinHeight = 56;
+    private const int PreviewButtonSafeWidth = 152;
+    private const int PreviewButtonSafeHeight = 100;
+    private const double PreviewMaxUpscale = 2.0;
+
     internal static (int Width, int Height, bool Framed) ComputeImageOnlyPreviewLayout(int sourceWidth, int sourceHeight)
     {
         int safeWidth = Math.Max(1, sourceWidth);
         int safeHeight = Math.Max(1, sourceHeight);
         double aspect = safeWidth / (double)safeHeight;
-        bool framed = Math.Min(safeWidth, safeHeight) < 72 || aspect > 2.5 || aspect < 0.85;
 
-        if (framed)
+        double width = PreviewMaxWidth;
+        double height = width / aspect;
+        if (height > PreviewMaxHeight)
         {
-            if (aspect < 0.85)
-                return (188, 220, true);
-
-            return (280, 176, true);
+            height = PreviewMaxHeight;
+            width = height * aspect;
         }
 
-        const int targetHeight = 188;
-        double width = targetHeight * aspect;
-        double height = targetHeight;
-
-        if (width > 332)
+        if (width > safeWidth * PreviewMaxUpscale)
         {
-            width = 332;
+            width = safeWidth * PreviewMaxUpscale;
             height = width / aspect;
         }
-        else if (width < 188)
+
+        if (width < PreviewMinWidth && PreviewMinWidth / aspect <= PreviewMaxHeight)
         {
-            width = 188;
-            height = Math.Min(targetHeight, width / aspect);
+            width = PreviewMinWidth;
+            height = width / aspect;
         }
 
-        return ((int)Math.Round(width), (int)Math.Round(height), false);
+        if (height < PreviewMinHeight && PreviewMinHeight * aspect <= PreviewMaxWidth)
+        {
+            height = PreviewMinHeight;
+            width = height * aspect;
+        }
+
+        width = Math.Clamp(width, 1, PreviewMaxWidth);
+        height = Math.Clamp(height, 1, PreviewMaxHeight);
+
+        bool framed = false;
+        if (width < PreviewButtonSafeWidth)
+        {
+            width = PreviewButtonSafeWidth;
+            framed = true;
+        }
+
+        if (height < PreviewButtonSafeHeight)
+        {
+            height = PreviewButtonSafeHeight;
+            framed = true;
+        }
+
+        return ((int)Math.Round(width), (int)Math.Round(height), framed);
     }
 
     private ToastWindow(ToastSpec spec)
@@ -2121,6 +2147,9 @@ public partial class ToastWindow : Window
         _isFading = false;
         _closeAfterOpacityAnimation = false;
         StopDismissAnimationTimer();
+        BeginAnimation(OpacityProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
         Opacity = 1;
         Root.Opacity = 1;
         OuterShell.Opacity = 1;
@@ -2162,51 +2191,28 @@ public partial class ToastWindow : Window
         StopDismissAnimationTimer();
         BeginAnimation(LeftProperty, null);
         BeginAnimation(TopProperty, null);
+        BeginAnimation(OpacityProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
         Opacity = 1;
         Root.Opacity = 1;
         OuterShell.Opacity = 1;
+        SlideTransform.X = 0;
+        SlideTransform.Y = 0;
         var dismissToken = _dismissAnimationToken;
         IEasingFunction ease = slide
             ? Motion.SmoothOut
             : Motion.SmoothInOut;
 
         BeginCompositedToastAnimation();
-        if (slide)
-        {
-            var wa = PopupWindowHelper.GetCurrentWorkArea();
-            var (exitLeft, exitTop, animateLeft) = PopupWindowHelper.GetDismissPlacement(
-                _position, ActualWidth, ActualHeight, wa, Edge);
-            if (animateLeft)
-            {
-                BeginAnimation(LeftProperty, new DoubleAnimation
-                {
-                    To = exitLeft,
-                    Duration = duration,
-                    EasingFunction = ease
-                });
-            }
-            else
-            {
-                BeginAnimation(TopProperty, new DoubleAnimation
-                {
-                    To = exitTop,
-                    Duration = duration,
-                    EasingFunction = ease
-                });
-            }
-
-            StartDismissCloseTimer(duration, dismissToken);
-            return;
-        }
-
-        var opacityAnimation = new DoubleAnimation
+        var fadeAnimation = new DoubleAnimation
         {
             To = 0,
             Duration = duration,
             EasingFunction = ease,
             FillBehavior = FillBehavior.HoldEnd
         };
-        opacityAnimation.Completed += (_, _) =>
+        fadeAnimation.Completed += (_, _) =>
         {
             if (dismissToken != _dismissAnimationToken)
                 return;
@@ -2217,7 +2223,45 @@ public partial class ToastWindow : Window
                     DispatcherPriority.Background,
                     "toast.dismiss-close-post");
         };
-        BeginAnimation(OpacityProperty, opacityAnimation);
+        if (slide)
+        {
+            var (travelX, travelY) = ComputeDismissTravel(ActualWidth, ActualHeight, offsetX, offsetY);
+            if (travelX != 0)
+            {
+                SlideTransform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation
+                {
+                    To = travelX,
+                    Duration = duration,
+                    EasingFunction = ease,
+                    FillBehavior = FillBehavior.HoldEnd
+                });
+            }
+
+            if (travelY != 0)
+            {
+                SlideTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation
+                {
+                    To = travelY,
+                    Duration = duration,
+                    EasingFunction = ease,
+                    FillBehavior = FillBehavior.HoldEnd
+                });
+            }
+        }
+
+        BeginAnimation(OpacityProperty, fadeAnimation);
+        StartDismissCloseTimer(duration, dismissToken);
+    }
+
+    internal static (double X, double Y) ComputeDismissTravel(
+        double actualWidth,
+        double actualHeight,
+        double offsetX,
+        double offsetY)
+    {
+        var travelX = offsetX == 0 ? 0 : Math.Sign(offsetX) * (Math.Max(0, actualWidth) + 24);
+        var travelY = offsetY == 0 ? 0 : Math.Sign(offsetY) * (Math.Max(0, actualHeight) + 24);
+        return (travelX, travelY);
     }
 
     private void StartDismissCloseTimer(TimeSpan duration, int dismissToken)

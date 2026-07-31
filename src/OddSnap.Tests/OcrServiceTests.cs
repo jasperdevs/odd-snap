@@ -7,7 +7,7 @@ namespace OddSnap.Tests;
 public sealed class OcrServiceTests
 {
     [Fact]
-    public void NormalizeLanguageSpacing_RemovesArtificialJapaneseCharacterSpaces()
+    public void Issue66_NormalizeLanguageSpacing_RemovesArtificialJapaneseCharacterSpaces()
     {
         var result = OcrService.NormalizeLanguageSpacing(
             "グ ラ ブ ル リ リ ン ク Visual Studio",
@@ -17,7 +17,7 @@ public sealed class OcrServiceTests
     }
 
     [Fact]
-    public void NormalizeLanguageSpacing_RemovesArtificialChineseCharacterSpaces()
+    public void Issue66_NormalizeLanguageSpacing_RemovesArtificialChineseCharacterSpaces()
     {
         var result = OcrService.NormalizeLanguageSpacing("你 好 ， 世 界", "zh-Hans");
 
@@ -25,7 +25,7 @@ public sealed class OcrServiceTests
     }
 
     [Fact]
-    public void NormalizeLanguageSpacing_PreservesKoreanWordSpacing()
+    public void Issue66_NormalizeLanguageSpacing_PreservesKoreanWordSpacing()
     {
         const string text = "한국어 단어 간격";
 
@@ -33,7 +33,7 @@ public sealed class OcrServiceTests
     }
 
     [Fact]
-    public void OrderRightToLeftWords_UsesGeometryAndPreservesEmbeddedLatinRun()
+    public void Issue69_OrderRightToLeftWords_UsesGeometryAndPreservesEmbeddedLatinRun()
     {
         OcrService.OcrWordLayout[] words =
         [
@@ -51,7 +51,7 @@ public sealed class OcrServiceTests
     }
 
     [Fact]
-    public void OrderRightToLeftWords_KeepsNeutralWordsInsideLatinRun()
+    public void Issue69_OrderRightToLeftWords_KeepsNeutralWordsInsideLatinRun()
     {
         OcrService.OcrWordLayout[] words =
         [
@@ -65,17 +65,31 @@ public sealed class OcrServiceTests
         Assert.Equal("من Visual 2026", result);
     }
 
+    [Fact]
+    public void Issue69_OrderRightToLeftWords_OrdersHebrewByGeometry()
+    {
+        OcrService.OcrWordLayout[] words =
+        [
+            new("עולם", 40),
+            new("שלום", 140)
+        ];
+
+        var result = OcrService.OrderRightToLeftWords(words);
+
+        Assert.Equal("שלום עולם", result);
+    }
+
     [Theory]
     [InlineData("ja-JP")]
     [InlineData("zh-Hans")]
     [InlineData("ko-KR")]
-    public void ShouldUpscaleEastAsian_UpscalesSmallFullWorkloadCaptures(string languageTag)
+    public void Issue66_ShouldUpscaleEastAsian_UpscalesSmallFullWorkloadCaptures(string languageTag)
     {
         Assert.True(OcrService.ShouldUpscaleEastAsian(551, 105, OcrWorkload.Full, languageTag));
     }
 
     [Fact]
-    public void ShouldUpscaleEastAsian_DoesNotUpscaleFastOrLargeCaptures()
+    public void Issue66_ShouldUpscaleEastAsian_DoesNotUpscaleFastOrLargeCaptures()
     {
         Assert.False(OcrService.ShouldUpscaleEastAsian(551, 105, OcrWorkload.Fast, "ja-JP"));
         Assert.False(OcrService.ShouldUpscaleEastAsian(4000, 2000, OcrWorkload.Full, "ja-JP"));
@@ -86,7 +100,7 @@ public sealed class OcrServiceTests
 public sealed class ProcessRunnerTests
 {
     [Fact]
-    public void CreateStartInfo_UsesBomlessUtf8ForRedirectedInput()
+    public void Issue67_CreateStartInfo_UsesBomlessUtf8ForRedirectedInput()
     {
         var startInfo = ProcessRunner.CreateStartInfo("python", redirectStandardInput: true);
 
