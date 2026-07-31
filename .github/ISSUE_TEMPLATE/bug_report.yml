@@ -39,12 +39,16 @@ body:
     id: version
     attributes:
       label: OddSnap version
-      placeholder: v0.5.1
+      description: Copy the version shown in OddSnap's About page.
+    validations:
+      required: true
   - type: input
     id: windows
     attributes:
       label: Windows version
-      placeholder: Windows 11 23H2
+      description: Include the edition, feature update, and OS build shown by winver.
+    validations:
+      required: true
   - type: textarea
     id: logs
     attributes:

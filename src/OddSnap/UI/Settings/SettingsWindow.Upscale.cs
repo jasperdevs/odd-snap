@@ -311,7 +311,7 @@ public partial class SettingsWindow
                 "Upscale model download failed"),
             async (progress, cancellationToken) =>
             {
-                var modelProgress = new Progress<LocalUpscaleEngineDownloadProgress>(p => progress.Report(p.StatusMessage));
+                var modelProgress = new Progress<RuntimeModelDownloadProgress>(p => progress.Report(p.StatusMessage));
                 var result = await LocalUpscaleEngineService.DownloadModelAsync(engine, executionProvider, modelProgress, cancellationToken);
                 if (!result.Success || string.IsNullOrWhiteSpace(result.ModelPath))
                     throw new InvalidOperationException(result.Message);

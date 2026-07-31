@@ -3,7 +3,6 @@ import {
   useMemo,
   useRef,
   useLayoutEffect,
-  type DependencyList,
   type RefObject,
 } from "react";
 import { useReleases } from "../hooks/useReleases";
@@ -200,7 +199,7 @@ function GitHubIcon() {
 
 function useMeasuredHeight(
   ref: RefObject<HTMLElement | null>,
-  deps: DependencyList
+  contentKey?: string
 ) {
   const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
@@ -211,8 +210,7 @@ function useMeasuredHeight(
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [ref, contentKey]);
   return height;
 }
 
@@ -251,8 +249,8 @@ function ReleaseCard({
   const [changelogExpanded, setChangelogExpanded] = useState(false);
   const extrasRef = useRef<HTMLDivElement>(null);
   const changelogRef = useRef<HTMLDivElement>(null);
-  const extrasHeight = useMeasuredHeight(extrasRef, []);
-  const changelogHeight = useMeasuredHeight(changelogRef, [release.body]);
+  const extrasHeight = useMeasuredHeight(extrasRef);
+  const changelogHeight = useMeasuredHeight(changelogRef, release.body);
 
   const exeAssets = release.assets.filter(isExe);
   const zipAssets = release.assets.filter(isZip);

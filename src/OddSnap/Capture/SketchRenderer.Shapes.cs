@@ -93,61 +93,6 @@ public static partial class SketchRenderer
         g.SmoothingMode = SmoothingMode.Default;
     }
 
-    // ─── Variable-width stroke outline (perfect-freehand style) ────
-
-    public static PointF[] GetStrokeOutline(List<PointF> input, float size,
-        float thinning, float smoothing, float streamline)
-    {
-        if (input.Count < 2) return Array.Empty<PointF>();
-
-        // 1. Streamline input
-        var pts = new List<(PointF point, float pressure)>();
-        PointF prev = input[0];
-        float t = 1f - streamline;
-
-        for (int i = 0; i < input.Count; i++)
-        {
-            var curr = input[i];
-            prev = new PointF(prev.X + (curr.X - prev.X) * t, prev.Y + (curr.Y - prev.Y) * t);
-
-            float dist = i > 0 ? Distance(pts[^1].point, prev) : 0;
-            // Simulate pressure from velocity (fast = thin)
-            float pressure = Math.Clamp(1f - dist / (size * 1.5f), 0.2f, 1f);
-            pressure = MathF.Sin(pressure * MathF.PI / 2f); // easeOutSine
-            pts.Add((prev, pressure));
-        }
-
-        // 2. Generate left/right outline points
-        var left = new List<PointF>(pts.Count + 8);
-        var right = new List<PointF>(pts.Count + 8);
-
-        for (int i = 1; i < pts.Count; i++)
-        {
-            float width = size * (1f - thinning * (1f - pts[i].pressure));
-            float radius = Math.Max(0.5f, width / 2f);
-
-            float dx = pts[i].point.X - pts[i - 1].point.X;
-            float dy = pts[i].point.Y - pts[i - 1].point.Y;
-            float len = MathF.Max(0.001f, MathF.Sqrt(dx * dx + dy * dy));
-
-            float px = -dy / len * radius;
-            float py = dx / len * radius;
-
-            left.Add(new PointF(pts[i].point.X + px, pts[i].point.Y + py));
-            right.Add(new PointF(pts[i].point.X - px, pts[i].point.Y - py));
-        }
-
-        AddRoundCap(left, right, pts[^1].point, pts.Count > 1 ? pts[^2].point : pts[^1].point, size / 2f, atEnd: true);
-        AddRoundCap(left, right, pts[0].point, pts.Count > 1 ? pts[1].point : pts[0].point, size / 2f, atEnd: false);
-
-        // 3. Combine: left forward + right reversed
-        right.Reverse();
-        var outline = new List<PointF>(left.Count + right.Count);
-        outline.AddRange(left);
-        outline.AddRange(right);
-        return outline.ToArray();
-    }
-
     private static List<PointF> SmoothStrokePoints(List<Point> input, float minDistance)
     {
         var compact = new List<PointF>(input.Count);
@@ -184,30 +129,6 @@ public static partial class SketchRenderer
         return smoothed;
     }
 
-    private static void AddRoundCap(List<PointF> left, List<PointF> right, PointF center, PointF neighbor, float radius, bool atEnd)
-    {
-        float dx = center.X - neighbor.X;
-        float dy = center.Y - neighbor.Y;
-        float len = MathF.Sqrt(dx * dx + dy * dy);
-        if (len < 0.001f)
-            return;
-
-        float angle = MathF.Atan2(dy, dx);
-        float start = atEnd ? angle - MathF.PI / 2f : angle + MathF.PI / 2f;
-        float sweep = atEnd ? MathF.PI : -MathF.PI;
-        const int steps = 6;
-
-        for (int i = 1; i < steps; i++)
-        {
-            float t = start + sweep * i / steps;
-            var p = new PointF(center.X + MathF.Cos(t) * radius, center.Y + MathF.Sin(t) * radius);
-            if (atEnd)
-                left.Add(p);
-            else
-                right.Add(p);
-        }
-    }
-
     private static GraphicsPath BuildSmoothStrokePath(List<PointF> points)
     {
         var path = new GraphicsPath();
@@ -242,21 +163,4 @@ public static partial class SketchRenderer
         finally { g.Restore(state); }
     }
 
-    /// <summary>Convert outline points to a smooth GraphicsPath using quadratic bezier approximation.</summary>
-    public static GraphicsPath OutlineToPath(PointF[] pts)
-    {
-        var path = new GraphicsPath(FillMode.Winding);
-        if (pts.Length < 3) return path;
-
-        path.StartFigure();
-        path.AddLine(pts[0], Midpoint(pts[0], pts[1]));
-        for (int i = 1; i < pts.Length - 1; i++)
-        {
-            var mid = Midpoint(pts[i], pts[i + 1]);
-            // Approximate quadratic bezier with cubic
-            path.AddBezier(Midpoint(pts[i - 1], pts[i]), pts[i], pts[i], mid);
-        }
-        path.CloseFigure();
-        return path;
-    }
 }

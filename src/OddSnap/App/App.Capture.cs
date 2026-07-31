@@ -89,6 +89,14 @@ public partial class App
                         "capture.recording-shown-post");
                 };
 
+                form.EncodingStarted += () =>
+                {
+                    _ = TryPostToAppDispatcher(
+                        () => ToastWindow.Show("Recording", "Encoding, please wait..."),
+                        DispatcherPriority.Background,
+                        "capture.recording-encoding-started-post");
+                };
+
                 form.RecordingCompleted += (path, firstFrame) =>
                 {
                     if (!TryPostToAppDispatcher(() =>

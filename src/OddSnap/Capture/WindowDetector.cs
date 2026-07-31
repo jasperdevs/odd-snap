@@ -47,9 +47,6 @@ public static class WindowDetector
         return GetTopLevelWindowRectAtPoint(screenPoint, virtualBounds);
     }
 
-    public static Rectangle GetWindowRectAtPoint(Point screenPoint, Rectangle virtualBounds)
-        => GetDetectionRectAtPoint(screenPoint, virtualBounds, WindowDetectionMode.WindowOnly);
-
     public static bool TryGetCapturableWindowBounds(
         IntPtr hwnd,
         Rectangle virtualBounds,

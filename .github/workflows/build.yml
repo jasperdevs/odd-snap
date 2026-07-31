@@ -24,10 +24,19 @@ jobs:
       - name: Restore solution
         run: dotnet restore OddSnap.sln
 
+      - name: Audit NuGet dependencies
+        run: dotnet list OddSnap.sln package --vulnerable --include-transitive
+
+      - name: Verify formatting and analyzers
+        run: |
+          dotnet format whitespace OddSnap.sln --verify-no-changes --no-restore
+          dotnet format style OddSnap.sln --verify-no-changes --severity warn --no-restore
+          dotnet format analyzers OddSnap.sln --verify-no-changes --severity warn --no-restore
+
       # Builds every project in the solution (WPF app, AppModel, WinUI shell,
       # tests) so compile regressions in non-released projects surface in PRs.
       - name: Build solution (Debug)
-        run: dotnet build OddSnap.sln -c Debug --no-restore
+        run: dotnet build OddSnap.sln -c Debug --no-restore -warnaserror
 
       - name: Run tests
         run: dotnet test src/OddSnap.Tests/OddSnap.Tests.csproj -c Debug --no-build --logger "console;verbosity=normal"
@@ -43,13 +52,21 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.22.0'
           cache: npm
           cache-dependency-path: site/package-lock.json
 
       - name: Install dependencies
         working-directory: site
         run: npm ci
+
+      - name: Audit npm dependencies
+        working-directory: site
+        run: npm audit --audit-level=low
+
+      - name: Check unused site code
+        working-directory: site
+        run: npm run lint:unused
 
       # Type-checks and produces the docs/ bundle; the output is discarded here.
       # Deployment still happens by committing a locally built docs/ folder.
@@ -130,19 +147,24 @@ jobs:
           $outDir = Join-Path $PWD "vpk-${{ matrix.rid }}"
           New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 
-          vpk pack `
-            --packId JasperDevs.OddSnap `
-            --packVersion "${{ steps.version.outputs.version }}" `
-            --packDir publish `
-            --mainExe OddSnap.exe `
-            --packTitle OddSnap `
-            --packAuthors jasperdevs `
-            --icon src/OddSnap/Assets/oddsnap.ico `
-            --channel "${{ matrix.rid }}" `
-            --runtime "${{ matrix.rid }}" `
-            --releaseNotes "docs/CHANGELOG.md" `
-            ${{ steps.signing.outputs.sign_params != '' && format('--signParams "{0}"', steps.signing.outputs.sign_params) || '' }} `
-            --outputDir $outDir
+          $packArgs = @(
+            'pack',
+            '--packId', 'JasperDevs.OddSnap',
+            '--packVersion', '${{ steps.version.outputs.version }}',
+            '--packDir', 'publish',
+            '--mainExe', 'OddSnap.exe',
+            '--packTitle', 'OddSnap',
+            '--packAuthors', 'jasperdevs',
+            '--icon', 'src/OddSnap/Assets/oddsnap.ico',
+            '--channel', '${{ matrix.rid }}',
+            '--runtime', '${{ matrix.rid }}',
+            '--releaseNotes', 'docs/CHANGELOG.md'
+          )
+          if (-not [string]::IsNullOrWhiteSpace('${{ steps.signing.outputs.sign_params }}')) {
+            $packArgs += @('--signParams', '${{ steps.signing.outputs.sign_params }}')
+          }
+          $packArgs += @('--outputDir', $outDir)
+          & vpk @packArgs
 
           $rid = "${{ matrix.rid }}"
           $version = "${{ steps.version.outputs.version }}"

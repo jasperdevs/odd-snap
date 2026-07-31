@@ -2,13 +2,6 @@ using System.Drawing;
 
 namespace OddSnap.Services;
 
-public sealed record LocalUpscaleEngineDownloadProgress(long BytesReceived, long? TotalBytes, string StatusMessage)
-{
-    public double Percent => TotalBytes is > 0 ? BytesReceived * 100d / TotalBytes.Value : 0d;
-}
-
-public sealed record LocalUpscaleModelInstallResult(bool Success, string Message, string? ModelPath = null, string? ReferenceUrl = null);
-
 public static class LocalUpscaleEngineService
 {
     private sealed record ModelDef(string Label, string Description, string ProjectUrl, string DownloadUrl, string FileName, int ScaleFactor);
@@ -48,20 +41,20 @@ public static class LocalUpscaleEngineService
     public static string GetModelPath(LocalUpscaleEngine engine) => UpscaleRuntimeService.GetModelPath(engine);
     public static bool RemoveDownloadedModel(LocalUpscaleEngine engine) => UpscaleRuntimeService.RemoveCachedModel(engine);
 
-    public static async Task<LocalUpscaleModelInstallResult> DownloadModelAsync(LocalUpscaleEngine engine, UpscaleExecutionProvider provider, IProgress<LocalUpscaleEngineDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
+    public static async Task<RuntimeModelInstallResult> DownloadModelAsync(LocalUpscaleEngine engine, UpscaleExecutionProvider provider, IProgress<RuntimeModelDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         try
         {
             var def = Models[engine];
-            progress?.Report(new LocalUpscaleEngineDownloadProgress(0, null, $"Preparing {def.Label}..."));
+            progress?.Report(new RuntimeModelDownloadProgress(0, null, $"Preparing {def.Label}..."));
             await UpscaleRuntimeService.EnsureInstalledAsync(provider, null, cancellationToken).ConfigureAwait(false);
             await UpscaleRuntimeService.EnsureModelDownloadedAsync(engine, progress, cancellationToken).ConfigureAwait(false);
-            progress?.Report(new LocalUpscaleEngineDownloadProgress(100, 100, "Model is ready."));
-            return new LocalUpscaleModelInstallResult(true, $"Prepared {def.Label}.", GetModelPath(engine), def.ProjectUrl);
+            progress?.Report(new RuntimeModelDownloadProgress(100, 100, "Model is ready."));
+            return new RuntimeModelInstallResult(true, $"Prepared {def.Label}.", GetModelPath(engine), def.ProjectUrl);
         }
         catch (Exception ex)
         {
-            return new LocalUpscaleModelInstallResult(false, ex.Message, null, GetProjectUrl(engine));
+            return new RuntimeModelInstallResult(false, ex.Message, null, GetProjectUrl(engine));
         }
     }
 

@@ -73,30 +73,30 @@ public static class UiChrome
         }
     }
 
-    public static bool IsDark => OddSnap.UI.Theme.IsDark;
+    public static bool IsDark => Theme.IsDark;
     public static string PreferredFamilyName => "Segoe UI Variable Text";
     public static string FallbackFamilyName => "Segoe UI";
 
     public static FontFamily FontFamily =>
         TryCreateFontFamily(PreferredFamilyName) ?? TryCreateFontFamily(FallbackFamilyName) ?? SystemFonts.DefaultFont.FontFamily;
 
-    // Surface colors are single-sourced from UI.Theme (the WPF token set) and
+    // Surface colors are single-sourced from Presentation.Theme (the WPF token set) and
     // converted to System.Drawing here. Add or tune tokens in Theme, not here.
-    public static System.Drawing.Color SurfaceWindowBackground => Gdi(OddSnap.UI.Theme.SurfaceWindowBackground);
-    public static System.Drawing.Color SurfaceBackground => Gdi(OddSnap.UI.Theme.SurfaceBackground);
-    public static System.Drawing.Color SurfaceElevated => Gdi(OddSnap.UI.Theme.SurfaceElevated);
-    public static System.Drawing.Color SurfaceBorder => Gdi(OddSnap.UI.Theme.SurfaceBorder);
-    public static System.Drawing.Color SurfaceBorderStrong => Gdi(OddSnap.UI.Theme.SurfaceBorderStrong);
-    public static System.Drawing.Color SurfaceBorderSubtle => Gdi(OddSnap.UI.Theme.SurfaceBorderSubtle);
-    public static System.Drawing.Color SurfaceTextPrimary => Gdi(OddSnap.UI.Theme.SurfaceTextPrimary);
-    public static System.Drawing.Color SurfaceTextSecondary => Gdi(OddSnap.UI.Theme.SurfaceTextSecondary);
-    public static System.Drawing.Color SurfaceTextMuted => Gdi(OddSnap.UI.Theme.SurfaceTextMuted);
-    public static System.Drawing.Color SurfaceHover => Gdi(OddSnap.UI.Theme.SurfaceHover);
-    public static System.Drawing.Color SurfacePill => Gdi(OddSnap.UI.Theme.SurfacePill);
-    public static System.Drawing.Color SurfaceTooltip => Gdi(OddSnap.UI.Theme.SurfaceTooltip);
-    public static System.Drawing.Color SurfaceShadow => Gdi(OddSnap.UI.Theme.SurfaceShadow);
-    public static System.Drawing.Color SurfaceDimOverlay => Gdi(OddSnap.UI.Theme.SurfaceDimOverlay);
-    public static System.Drawing.Color SurfaceSelectionOverlay => Gdi(OddSnap.UI.Theme.SurfaceSelectionOverlay);
+    public static System.Drawing.Color SurfaceWindowBackground => Gdi(Theme.SurfaceWindowBackground);
+    public static System.Drawing.Color SurfaceBackground => Gdi(Theme.SurfaceBackground);
+    public static System.Drawing.Color SurfaceElevated => Gdi(Theme.SurfaceElevated);
+    public static System.Drawing.Color SurfaceBorder => Gdi(Theme.SurfaceBorder);
+    public static System.Drawing.Color SurfaceBorderStrong => Gdi(Theme.SurfaceBorderStrong);
+    public static System.Drawing.Color SurfaceBorderSubtle => Gdi(Theme.SurfaceBorderSubtle);
+    public static System.Drawing.Color SurfaceTextPrimary => Gdi(Theme.SurfaceTextPrimary);
+    public static System.Drawing.Color SurfaceTextSecondary => Gdi(Theme.SurfaceTextSecondary);
+    public static System.Drawing.Color SurfaceTextMuted => Gdi(Theme.SurfaceTextMuted);
+    public static System.Drawing.Color SurfaceHover => Gdi(Theme.SurfaceHover);
+    public static System.Drawing.Color SurfacePill => Gdi(Theme.SurfacePill);
+    public static System.Drawing.Color SurfaceTooltip => Gdi(Theme.SurfaceTooltip);
+    public static System.Drawing.Color SurfaceShadow => Gdi(Theme.SurfaceShadow);
+    public static System.Drawing.Color SurfaceDimOverlay => Gdi(Theme.SurfaceDimOverlay);
+    public static System.Drawing.Color SurfaceSelectionOverlay => Gdi(Theme.SurfaceSelectionOverlay);
 
     private static System.Drawing.Color Gdi(System.Windows.Media.Color c)
         => System.Drawing.Color.FromArgb(c.A, c.R, c.G, c.B);

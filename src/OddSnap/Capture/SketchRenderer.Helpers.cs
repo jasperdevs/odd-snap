@@ -12,15 +12,6 @@ public static partial class SketchRenderer
         (1, 1, 42),
         (0, 0, 58),
     };
-    // Pre-cached brushes for the four fixed SoftShadowSteps alphas — avoids re-alloc per call.
-    private static readonly SolidBrush[] SoftShadowBrushes =
-    {
-        new(Color.FromArgb(14, 0, 0, 0)),
-        new(Color.FromArgb(24, 0, 0, 0)),
-        new(Color.FromArgb(42, 0, 0, 0)),
-        new(Color.FromArgb(58, 0, 0, 0)),
-    };
-
     // Shadow pens are black with one of 4 fixed alphas; thickness varies by caller's annotation width.
     // Cache keyed on (alpha, width-quantized) — bounded since thicknesses come from a small set.
     private static readonly Dictionary<long, Pen> _shadowPens = new();
@@ -80,66 +71,6 @@ public static partial class SketchRenderer
             }
         }
     }
-
-    public static void DrawSoftPathShadow(Graphics g, GraphicsPath path, float extraSpread = 0f)
-    {
-        for (int i = 0; i < SoftShadowSteps.Length; i++)
-        {
-            var step = SoftShadowSteps[i];
-            using var m = new System.Drawing.Drawing2D.Matrix();
-            m.Translate(step.dx, step.dy);
-            if (step.dx > 0)
-                m.Scale(1f + extraSpread * 0.02f, 1f + extraSpread * 0.02f);
-            using var shadowPath = (GraphicsPath)path.Clone();
-            shadowPath.Transform(m);
-            g.FillPath(SoftShadowBrushes[i], shadowPath);
-        }
-    }
-
-    public static void DrawSoftEllipseShadow(Graphics g, float x, float y, float w, float h)
-    {
-        for (int i = 0; i < SoftShadowSteps.Length; i++)
-        {
-            var step = SoftShadowSteps[i];
-            g.FillEllipse(SoftShadowBrushes[i], x + step.dx, y + step.dy, w, h);
-        }
-    }
-
-    // ─── Helpers ───────────────────────────────────────────────────
-
-    private static (PointF start, PointF ctrl1, PointF ctrl2, PointF end) WobbleBezier(
-        Random rng, PointF p1, PointF p2, float offset, float bow, float nx, float ny)
-    {
-        float midX = (p1.X + p2.X) / 2f;
-        float midY = (p1.Y + p2.Y) / 2f;
-
-        var start = new PointF(
-            p1.X + Rand(rng, offset * 0.5f),
-            p1.Y + Rand(rng, offset * 0.5f));
-        var end = new PointF(
-            p2.X + Rand(rng, offset * 0.5f),
-            p2.Y + Rand(rng, offset * 0.5f));
-        var ctrl1 = new PointF(
-            midX + nx * bow * Rand(rng, 1.5f) + Rand(rng, offset),
-            midY + ny * bow * Rand(rng, 1.5f) + Rand(rng, offset));
-        var ctrl2 = new PointF(
-            midX + nx * bow * Rand(rng, 1.5f) + Rand(rng, offset),
-            midY + ny * bow * Rand(rng, 1.5f) + Rand(rng, offset));
-
-        return (start, ctrl1, ctrl2, end);
-    }
-
-    private static float Rand(Random rng, float scale) =>
-        ((float)rng.NextDouble() - 0.5f) * 2f * scale;
-
-    public static float Distance(PointF a, PointF b)
-    {
-        float dx = b.X - a.X, dy = b.Y - a.Y;
-        return MathF.Sqrt(dx * dx + dy * dy);
-    }
-
-    private static PointF Midpoint(PointF a, PointF b) =>
-        new((a.X + b.X) / 2f, (a.Y + b.Y) / 2f);
 
     private static PointF RotatePoint(PointF point, PointF center, float angle)
     {

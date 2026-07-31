@@ -8,6 +8,7 @@ namespace OddSnap.Services;
 public static class SoundService
 {
     private const int MaxQueuedSounds = 8;
+    private const int SampleRate = 44_100;
     private static byte[]? _captureWav;
     private static byte[]? _colorWav;
     private static byte[]? _textWav;
@@ -146,18 +147,17 @@ public static class SoundService
     private static byte[] GenerateCaptureWav()
     {
         var (p, c, v) = PackParams;
-        const int sr = 44100;
         const int durationMs = 90;
-        int n = sr * durationMs / 1000;
+        int n = SampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
+        WriteWavHeader(bw, n, SampleRate);
 
         var rng = new Random(42);
         for (int i = 0; i < n; i++)
         {
-            double t = (double)i / sr;
+            double t = (double)i / SampleRate;
 
             // Gentle noise transient — very quiet, just adds a tiny "tick"
             double noise = (rng.NextDouble() * 2 - 1) * Math.Exp(-t * 400) * 0.06;
@@ -182,17 +182,16 @@ public static class SoundService
     private static byte[] GenerateColorWav()
     {
         var (p, c, v) = PackParams;
-        const int sr = 44100;
         const int durationMs = 120;
-        int n = sr * durationMs / 1000;
+        int n = SampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
+        WriteWavHeader(bw, n, SampleRate);
 
         for (int i = 0; i < n; i++)
         {
-            double t = (double)i / sr;
+            double t = (double)i / SampleRate;
 
             // Perfect fifth: gentle, pure
             double f1 = 1050 * p;
@@ -213,17 +212,16 @@ public static class SoundService
     private static byte[] GenerateTextWav()
     {
         var (p, c, v) = PackParams;
-        const int sr = 44100;
         const int durationMs = 90;
-        int n = sr * durationMs / 1000;
+        int n = SampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
+        WriteWavHeader(bw, n, SampleRate);
 
         for (int i = 0; i < n; i++)
         {
-            double t = (double)i / sr;
+            double t = (double)i / SampleRate;
 
             double f1 = 680 * p;
             double f2 = 880 * p;
@@ -241,19 +239,18 @@ public static class SoundService
     private static byte[] GenerateScanWav()
     {
         var (p, c, v) = PackParams;
-        const int sr = 44100;
         const int durationMs = 170;
-        int n = sr * durationMs / 1000;
+        int n = SampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
+        WriteWavHeader(bw, n, SampleRate);
 
         double dur = durationMs / 1000.0;
         double pipLen = dur / 4.5;
         for (int i = 0; i < n; i++)
         {
-            double t = (double)i / sr;
+            double t = (double)i / SampleRate;
             double sample = 0;
             for (int b = 0; b < 3; b++)
             {
@@ -275,60 +272,29 @@ public static class SoundService
     }
 
     // ── Record start: gentle ascending two-note ──────────────────────────
-    private static byte[] GenerateRecordStartWav()
-    {
-        var (p, c, v) = PackParams;
-        const int sr = 44100;
-        const int durationMs = 160;
-        int n = sr * durationMs / 1000;
-
-        using var ms = new MemoryStream();
-        using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
-
-        double dur = durationMs / 1000.0;
-        double pipLen = dur / 3.0;
-        double[] freqs = [480 * p, 600 * p]; // major third up
-        for (int i = 0; i < n; i++)
-        {
-            double t = (double)i / sr;
-            double sample = 0;
-            for (int b = 0; b < 2; b++)
-            {
-                double start = b * pipLen * 1.2;
-                double local = t - start;
-                if (local >= 0 && local < pipLen)
-                {
-                    double env = Math.Sin(Math.PI * local / pipLen);
-                    double tone = Math.Sin(2 * Math.PI * freqs[b] * local) * 0.28;
-                    double h = Math.Sin(2 * Math.PI * freqs[b] * 2 * local) * (0.06 + c * 0.03);
-                    sample += (tone + h) * env;
-                }
-            }
-            sample = SoftClip(sample) * v;
-            bw.Write((short)(Math.Clamp(sample, -1.0, 1.0) * short.MaxValue));
-        }
-        return ms.ToArray();
-    }
+    private static byte[] GenerateRecordStartWav() => GenerateRecordCueWav(starting: true);
 
     // ── Record stop: gentle descending two-note ──────────────────────────
-    private static byte[] GenerateRecordStopWav()
+    private static byte[] GenerateRecordStopWav() => GenerateRecordCueWav(starting: false);
+
+    internal static byte[] GenerateRecordCueWav(bool starting)
     {
         var (p, c, v) = PackParams;
-        const int sr = 44100;
         const int durationMs = 160;
-        int n = sr * durationMs / 1000;
+        int n = SampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
+        WriteWavHeader(bw, n, SampleRate);
 
         double dur = durationMs / 1000.0;
         double pipLen = dur / 3.0;
-        double[] freqs = [600 * p, 480 * p]; // major third down
+        double[] freqs = starting
+            ? [480 * p, 600 * p]
+            : [600 * p, 480 * p];
         for (int i = 0; i < n; i++)
         {
-            double t = (double)i / sr;
+            double t = (double)i / SampleRate;
             double sample = 0;
             for (int b = 0; b < 2; b++)
             {
@@ -352,17 +318,16 @@ public static class SoundService
     private static byte[] GenerateUploadStartWav()
     {
         var (p, c, v) = PackParams;
-        const int sr = 44100;
         const int durationMs = 80;
-        int n = sr * durationMs / 1000;
+        int n = SampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
+        WriteWavHeader(bw, n, SampleRate);
 
         for (int i = 0; i < n; i++)
         {
-            double t = (double)i / sr;
+            double t = (double)i / SampleRate;
             double f = (680 + 100 * Math.Exp(-t * 60)) * p; // gentle upward chirp
             double tone = Math.Sin(2 * Math.PI * f * t) * Env(t, 3, 28) * 0.28;
             double h = Math.Sin(2 * Math.PI * f * 1.5 * t) * Env(t, 3, 40) * (0.08 + c * 0.04);
@@ -377,20 +342,19 @@ public static class SoundService
     private static byte[] GenerateUploadDoneWav()
     {
         var (p, c, v) = PackParams;
-        const int sr = 44100;
         const int durationMs = 140;
-        int n = sr * durationMs / 1000;
+        int n = SampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
+        WriteWavHeader(bw, n, SampleRate);
 
         double dur = durationMs / 1000.0;
         double pipLen = dur / 2.5;
         double[] freqs = [680 * p, 900 * p]; // ascending
         for (int i = 0; i < n; i++)
         {
-            double t = (double)i / sr;
+            double t = (double)i / SampleRate;
             double sample = 0;
             for (int b = 0; b < 2; b++)
             {
@@ -414,20 +378,19 @@ public static class SoundService
     private static byte[] GenerateErrorWav()
     {
         var (p, c, v) = PackParams;
-        const int sr = 44100;
         const int durationMs = 180;
-        int n = sr * durationMs / 1000;
+        int n = SampleRate * durationMs / 1000;
 
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
-        WriteWavHeader(bw, n, sr);
+        WriteWavHeader(bw, n, SampleRate);
 
         double dur = durationMs / 1000.0;
         double pipLen = dur / 2.6;
         double[] freqs = [560 * p, 420 * p]; // descending minor third
         for (int i = 0; i < n; i++)
         {
-            double t = (double)i / sr;
+            double t = (double)i / SampleRate;
             double sample = 0;
             for (int b = 0; b < 2; b++)
             {

@@ -6,7 +6,6 @@ using System.Windows.Forms;
 using OddSnap.Native;
 using OddSnap.Helpers;
 using OddSnap.Services;
-using OddSnap.UI;
 
 namespace OddSnap.Capture;
 
@@ -23,6 +22,7 @@ public sealed partial class RecordingForm : Form
     public event Action<string, Bitmap?>? RecordingCompleted;
     public event Action<Exception>? RecordingFailed;
     public event Action? RecordingCancelled;
+    public event Action? EncodingStarted;
 
     /// <summary>Static reference to the current recording form for external stop control.</summary>
     public static RecordingForm? Current { get; private set; }
@@ -89,7 +89,7 @@ public sealed partial class RecordingForm : Form
                          bool recordDesktop = false, string? desktopDeviceId = null,
                          bool showMagnifier = false)
     {
-        OddSnap.UI.Theme.Refresh();
+        Theme.Refresh();
         _screenshot = screenshot;
         _virtualBounds = virtualBounds;
         _fps = fps;

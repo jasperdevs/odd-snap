@@ -4,7 +4,6 @@ namespace OddSnap.Services;
 
 public static class OpenSourceTranslationRuntimeService
 {
-    private const string PythonLauncherArg = "-3";
     private const string RuntimeVersion = "m2m100-418m-ct2-v2";
     private const long MinModelFileBytes = 1L * 1024 * 1024;
     private static readonly string[] RuntimePackages =
@@ -38,7 +37,7 @@ public static class OpenSourceTranslationRuntimeService
 
         progress?.Report("Installing local translation dependencies...");
         var install = await RunPythonAsync(
-            new[] { PythonLauncherArg, "-m", "pip", "install", "--user", "--disable-pip-version-check" }
+            new[] { PythonRuntimeEnvironment.DefaultLauncherArgument, "-m", "pip", "install", "--user", "--disable-pip-version-check" }
                 .Concat(RuntimePackages),
             cancellationToken).ConfigureAwait(false);
 
@@ -84,7 +83,7 @@ public static class OpenSourceTranslationRuntimeService
 
         var result = await RunPythonAsync(new[]
         {
-            PythonLauncherArg,
+            PythonRuntimeEnvironment.DefaultLauncherArgument,
             "-c",
             "import ctranslate2, transformers, sentencepiece, langid; print('ok')"
         }, cancellationToken).ConfigureAwait(false);
@@ -125,7 +124,7 @@ public static class OpenSourceTranslationRuntimeService
 
         var result = await RunPythonAsync(new[]
         {
-            PythonLauncherArg,
+            PythonRuntimeEnvironment.DefaultLauncherArgument,
             "-c",
             BuildTranslateScript(),
             fromCode,
@@ -214,7 +213,7 @@ public static class OpenSourceTranslationRuntimeService
     {
         return await RunPythonAsync(new[]
         {
-            PythonLauncherArg,
+            PythonRuntimeEnvironment.DefaultLauncherArgument,
             "-c",
             BuildInstallScript(),
             ModelDir,

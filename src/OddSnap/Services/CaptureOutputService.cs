@@ -51,13 +51,13 @@ public static class CaptureOutputService
         switch (format)
         {
             case CaptureImageFormat.Jpeg:
-            {
-                var encoder = ImageCodecInfo.GetImageEncoders().First(e => e.MimeType == "image/jpeg");
-                using var parameters = new EncoderParameters(1);
-                parameters.Param[0] = new EncoderParameter(Encoder.Quality, (long)Math.Clamp(jpegQuality, 1, 100));
-                SaveWithAtomicWrite(bitmap, filePath, (bmp, path) => bmp.Save(path, encoder, parameters));
-                break;
-            }
+                {
+                    var encoder = ImageCodecInfo.GetImageEncoders().First(e => e.MimeType == "image/jpeg");
+                    using var parameters = new EncoderParameters(1);
+                    parameters.Param[0] = new EncoderParameter(Encoder.Quality, (long)Math.Clamp(jpegQuality, 1, 100));
+                    SaveWithAtomicWrite(bitmap, filePath, (bmp, path) => bmp.Save(path, encoder, parameters));
+                    break;
+                }
             case CaptureImageFormat.Bmp:
                 SaveWithAtomicWrite(bitmap, filePath, (bmp, path) => bmp.Save(path, ImageFormat.Bmp));
                 break;

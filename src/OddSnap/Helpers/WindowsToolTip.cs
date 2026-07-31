@@ -44,7 +44,7 @@ public sealed class WindowsToolTip : Form
             return;
         }
 
-        OddSnap.UI.Theme.Refresh();
+        Theme.Refresh();
         _text = text;
         BackColor = UiChrome.SurfaceTooltip;
         ForeColor = UiChrome.SurfaceTextPrimary;

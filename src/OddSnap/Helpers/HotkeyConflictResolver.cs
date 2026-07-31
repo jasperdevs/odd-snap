@@ -11,17 +11,7 @@ internal static class HotkeyConflictResolver
         if (key == 0)
             return null;
 
-        foreach (var tool in ToolDef.AllTools)
-        {
-            if (string.Equals(tool.Id, currentToolId, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var (existingModifiers, existingKey) = settings.GetToolHotkey(tool.Id);
-            if (existingModifiers == modifiers && existingKey == key)
-                return new HotkeyConflict(tool.Id, tool.Label, IsAiRedirect: false);
-        }
-
-        foreach (var tool in ToolDef.ToolbarActions)
+        foreach (var tool in ToolDef.AllTools.Concat(ToolDef.ToolbarActions))
         {
             if (string.Equals(tool.Id, currentToolId, StringComparison.OrdinalIgnoreCase))
                 continue;

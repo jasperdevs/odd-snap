@@ -21,13 +21,6 @@ public sealed partial class ScrollingCaptureForm
         int IgnoreBottomOffset,
         bool UsedBestGuess);
 
-    /// <summary>
-    /// Finds the vertical overlap between two frames by sliding a horizontal strip
-    /// from the bottom of the previous frame over the top of the current frame.
-    /// </summary>
-    internal static int EstimateNewContentHeight(Bitmap prev, Bitmap curr)
-        => TryEstimateNewContentHeight(prev, curr, out int newContent) ? newContent : curr.Height;
-
     internal static bool TryEstimateNewContentHeight(Bitmap prev, Bitmap curr, out int newContent)
     {
         var match = TryFindScrollingAppend(prev, curr, 0, 0, 0);
@@ -39,12 +32,6 @@ public sealed partial class ScrollingCaptureForm
 
         newContent = match.NewContentHeight;
         return true;
-    }
-
-    internal static int FindOverlap(Bitmap prev, Bitmap curr, int stripHeight)
-    {
-        var match = TryFindScrollingAppend(prev, curr, 0, 0, 0);
-        return match.Success ? curr.Height - match.NewContentHeight : 0;
     }
 
     private static ScrollAppendMatch TryAppendScrollingFrame(Bitmap result, Bitmap currentImage,

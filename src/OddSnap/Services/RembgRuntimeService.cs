@@ -7,14 +7,7 @@ public static class RembgRuntimeService
 {
     private const int RuntimeLayoutVersion = 4;
     private const long MinModelFileBytes = 1L * 1024 * 1024;
-    private const string PipPackage = "pip==26.1";
-    private const string SetuptoolsPackage = "setuptools==82.0.1";
-    private const string WheelPackage = "wheel==0.47.0";
     private const string RembgPackage = "rembg==2.0.75";
-    private const string NumpyPackage = "numpy==2.4.4";
-    private const string PillowPackage = "pillow==12.2.0";
-    private const string OnnxRuntimePackage = "onnxruntime==1.25.1";
-    private const string OnnxRuntimeGpuPackage = "onnxruntime-gpu==1.25.1";
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
 
     private static readonly string RootDir = Path.Combine(
@@ -326,7 +319,10 @@ public static class RembgRuntimeService
         progress?.Report("Installing rembg packages...");
         var toolsInstall = await RunRuntimePythonAsync(provider, new[]
         {
-            "-m", "pip", "install", "--disable-pip-version-check", PipPackage, SetuptoolsPackage, WheelPackage
+            "-m", "pip", "install", "--disable-pip-version-check",
+            PythonRuntimeEnvironment.PipPackage,
+            PythonRuntimeEnvironment.SetuptoolsPackage,
+            PythonRuntimeEnvironment.WheelPackage
         }, cancellationToken).ConfigureAwait(false);
         if (toolsInstall.ExitCode != 0)
             throw new InvalidOperationException(ProcessRunner.GetFailureMessage(toolsInstall, "Couldn't prepare pip inside the isolated runtime."));
@@ -364,9 +360,11 @@ public static class RembgRuntimeService
         yield return "--disable-pip-version-check";
         yield return "--prefer-binary";
         yield return RembgPackage;
-        yield return NumpyPackage;
-        yield return PillowPackage;
-        yield return useGpuPackage ? OnnxRuntimeGpuPackage : OnnxRuntimePackage;
+        yield return PythonRuntimeEnvironment.NumpyPackage;
+        yield return PythonRuntimeEnvironment.PillowPackage;
+        yield return useGpuPackage
+            ? PythonRuntimeEnvironment.OnnxRuntimeGpuPackage
+            : PythonRuntimeEnvironment.OnnxRuntimePackage;
     }
 
     private static bool IsRuntimeMarkerCurrent(StickerExecutionProvider provider)

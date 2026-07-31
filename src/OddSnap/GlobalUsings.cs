@@ -2,3 +2,4 @@
 // Default to WPF types since this is a WPF app.
 global using Application = System.Windows.Application;
 global using MessageBox = System.Windows.MessageBox;
+global using Theme = OddSnap.Presentation.Theme;

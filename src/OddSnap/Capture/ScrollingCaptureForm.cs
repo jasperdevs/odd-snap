@@ -76,7 +76,7 @@ public sealed partial class ScrollingCaptureForm : Form
                                 bool showMagnifier = false,
                                 ScrollingCaptureMode captureMode = ScrollingCaptureMode.Automatic)
     {
-        OddSnap.UI.Theme.Refresh();
+        Theme.Refresh();
         _screenshot = screenshot;
         _virtualBounds = virtualBounds;
         _showCursor = showCursor;

@@ -68,6 +68,8 @@ public sealed class VideoRecorder : IDisposable
     private EventHandler<WaveInEventArgs>? _desktopDataAvailableHandler;
     private string? _micWavPath;
     private string? _desktopWavPath;
+    private int _micWriteFailureLogged;
+    private int _desktopWriteFailureLogged;
     private Bitmap? _firstFramePreview;
 
     public int FrameCount => _frameCount;
@@ -323,7 +325,17 @@ public sealed class VideoRecorder : IDisposable
             writer = new WaveFileWriter(wavPath, capture.WaveFormat);
             dataAvailableHandler = (_, e) =>
             {
-                try { writer?.Write(e.Buffer, 0, e.BytesRecorded); } catch { }
+                try
+                {
+                    writer?.Write(e.Buffer, 0, e.BytesRecorded);
+                }
+                catch (Exception ex)
+                {
+                    LogAudioWriteFailureOnce(
+                        ref _desktopWriteFailureLogged,
+                        "Desktop audio could not be written. The recording may not contain desktop audio.",
+                        ex);
+                }
             };
             capture.DataAvailable += dataAvailableHandler;
             capture.StartRecording();
@@ -376,7 +388,17 @@ public sealed class VideoRecorder : IDisposable
             writer = new WaveFileWriter(wavPath, capture.WaveFormat);
             dataAvailableHandler = (_, e) =>
             {
-                try { writer?.Write(e.Buffer, 0, e.BytesRecorded); } catch { }
+                try
+                {
+                    writer?.Write(e.Buffer, 0, e.BytesRecorded);
+                }
+                catch (Exception ex)
+                {
+                    LogAudioWriteFailureOnce(
+                        ref _micWriteFailureLogged,
+                        "Microphone audio could not be written. The recording may not contain microphone audio.",
+                        ex);
+                }
             };
             capture.DataAvailable += dataAvailableHandler;
             capture.StartRecording();
@@ -420,6 +442,12 @@ public sealed class VideoRecorder : IDisposable
                 return i;
         }
         return 0;
+    }
+
+    private static void LogAudioWriteFailureOnce(ref int failureLogged, string message, Exception exception)
+    {
+        if (Interlocked.Exchange(ref failureLogged, 1) == 0)
+            AppDiagnostics.LogWarning("recording.audio-write", message, exception);
     }
 
     public void Pause()

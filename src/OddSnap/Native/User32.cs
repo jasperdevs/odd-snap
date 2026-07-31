@@ -13,19 +13,13 @@ internal static partial class User32
     public const uint MOD_NOREPEAT = 0x4000;
     public const uint VK_SNAPSHOT = 0x2C;
     public const uint VK_ESCAPE = 0x1B;
-    public const uint VK_SPACE = 0x20;
     public const int VK_SHIFT = 0x10;
     public const int VK_CONTROL = 0x11;
-    public const int VK_V = 0x56;
     public const int VK_MENU = 0x12;
     public const int VK_LWIN = 0x5B;
     public const int VK_RWIN = 0x5C;
-    public const int SW_RESTORE = 9;
     public const int SW_HIDE = 0;
     public const int SW_SHOWNOACTIVATE = 4;
-    public const uint KEYEVENTF_KEYUP = 0x0002;
-    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
-    public const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
     public const int SRCCOPY = 0x00CC0020;
     public const int CAPTUREBLT = 0x40000000;
@@ -54,7 +48,6 @@ internal static partial class User32
     public const uint MONITOR_DEFAULTTONEAREST = 2;
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-    public delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     [LibraryImport("user32.dll")]
@@ -73,9 +66,6 @@ internal static partial class User32
 
     [LibraryImport("user32.dll")]
     public static partial int GetSystemMetrics(int nIndex);
-
-    [LibraryImport("user32.dll")]
-    public static partial int GetLastError();
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
@@ -132,9 +122,6 @@ internal static partial class User32
     public static partial IntPtr GetWindow(IntPtr hWnd, uint uCmd);
 
     [LibraryImport("user32.dll")]
-    public static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-    [LibraryImport("user32.dll")]
     public static partial IntPtr GetForegroundWindow();
 
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
@@ -151,7 +138,6 @@ internal static partial class User32
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_SHOWWINDOW = 0x0040;
     public const uint SWP_NOACTIVATE = 0x0010;
-    public const uint ASFW_ANY = 0xFFFFFFFF;
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -165,25 +151,6 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool SetForegroundWindow(IntPtr hWnd);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool BringWindowToTop(IntPtr hWnd);
-
-    [LibraryImport("user32.dll")]
-    public static partial IntPtr SetActiveWindow(IntPtr hWnd);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool fAttach);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool AllowSetForegroundWindow(uint dwProcessId);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool SetCursorPos(int X, int Y);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -228,26 +195,6 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool DestroyIcon(IntPtr hIcon);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool DestroyWindow(IntPtr hWnd);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool GetClientRect(IntPtr hWnd, out RECT lpRect);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool IsZoomed(IntPtr hWnd);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT
@@ -319,16 +266,4 @@ internal static partial class User32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool DeleteDC(IntPtr hdc);
 
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool ReleaseCapture();
-
-    [LibraryImport("user32.dll")]
-    public static partial IntPtr SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-
-    [LibraryImport("user32.dll")]
-    public static partial void keybd_event(byte bVk, byte bScan, uint dwFlags, nuint dwExtraInfo);
-
-    [LibraryImport("user32.dll")]
-    public static partial void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, nuint dwExtraInfo);
 }

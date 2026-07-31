@@ -390,6 +390,7 @@ public static class InstallService
 
         var entries = Directory.EnumerateFileSystemEntries(sourceDir)
             .Select(Path.GetFileName)
+            .OfType<string>()
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .ToArray();
 
@@ -402,7 +403,7 @@ public static class InstallService
             "ffmpeg.exe"
         };
 
-        return !entries.All(name => allowed.Contains(name!));
+        return !entries.All(allowed.Contains);
     }
 
     private static IEnumerable<string> GetOptionalPayloadEntries()

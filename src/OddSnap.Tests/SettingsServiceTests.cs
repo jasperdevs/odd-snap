@@ -252,6 +252,20 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public void TryDeserialize_ToolLists_CanonicalizeCaseAndWhitespaceConsistently()
+    {
+        var s = Deserialize(
+            "{\"EnabledTools\": [\" RECT \", \"rect\", \" arrow \"]," +
+            "\"ToolbarToolOrderIds\": [\" OCR \", \"ocr\"]," +
+            "\"ToolbarPinnedToolIds\": [\" FREE \", \"free\"]}");
+
+        Assert.Equal(new List<string> { "rect", "arrow" }, s.EnabledTools);
+        Assert.Equal("ocr", s.ToolbarToolOrderIds![0]);
+        Assert.Equal(1, s.ToolbarToolOrderIds.Count(id => id.Equals("ocr", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(new List<string> { "free" }, s.ToolbarPinnedToolIds);
+    }
+
+    [Fact]
     public void TryDeserialize_ToolHotkeys_KeepsOnlyValidEntries()
     {
         var s = Deserialize("{\"ToolHotkeys\": {\"arrow\": [1, 65], \"bogus\": [1, 66], \"text\": [5]}}");

@@ -277,47 +277,6 @@ public static partial class SketchRenderer
         return smoothed;
     }
 
-    /// <summary>Draw a wobbly line between two points (like rough.js).</summary>
-    public static void DrawSketchyLine(Graphics g, Pen pen, PointF p1, PointF p2, int seed, float roughness = 1f)
-    {
-        var rng = new Random(seed);
-        float len = Distance(p1, p2);
-        if (len < 2) { g.DrawLine(pen, p1, p2); return; }
-
-        float offset = roughness * Math.Min(len * 0.15f, 8f);
-        float bow = roughness * Math.Min(len * 0.1f, 6f);
-
-        // Direction perpendicular to line
-        float dx = p2.X - p1.X, dy = p2.Y - p1.Y;
-        float nx = -dy / len, ny = dx / len;
-
-        // First pass
-        var (s1, c1a, c1b, e1) = WobbleBezier(rng, p1, p2, offset, bow, nx, ny);
-        g.DrawBezier(pen, s1, c1a, c1b, e1);
-
-        // Second pass (multi-stroke for hand-drawn feel)
-        if (roughness > 0.3f)
-        {
-            var (s2, c2a, c2b, e2) = WobbleBezier(rng, p1, p2, offset * 0.6f, bow * 0.5f, nx, ny);
-            using var p2Pen = new Pen(Color.FromArgb((int)(pen.Color.A * 0.5f), pen.Color), pen.Width * 0.8f);
-            p2Pen.LineJoin = LineJoin.Round;
-            g.DrawBezier(p2Pen, s2, c2a, c2b, e2);
-        }
-    }
-
-    /// <summary>Draw a sketchy rectangle.</summary>
-    public static void DrawSketchyRect(Graphics g, Pen pen, RectangleF rect, int seed, float roughness = 1f)
-    {
-        var corners = new[] {
-            new PointF(rect.Left, rect.Top),
-            new PointF(rect.Right, rect.Top),
-            new PointF(rect.Right, rect.Bottom),
-            new PointF(rect.Left, rect.Bottom)
-        };
-        for (int i = 0; i < 4; i++)
-            DrawSketchyLine(g, pen, corners[i], corners[(i + 1) % 4], seed + i * 1000, roughness);
-    }
-
     // ─── Point simplification (Ramer-Douglas-Peucker) ─────────────
 
     /// <summary>Reduce jagged input points into a smoother polyline.</summary>

@@ -226,10 +226,12 @@ public partial class SettingsWindow
 
     private void ToastLayoutSlot_Drop(object sender, System.Windows.DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(System.Windows.DataFormats.Text) || sender is not Border border || border.Tag is not string raw)
+        if (!TryGetDraggedToastButton(e, out var draggedButton) ||
+            sender is not Border border ||
+            border.Tag is not string raw)
             return;
 
-        _selectedToastButton = ParseToastButton((string)e.Data.GetData(System.Windows.DataFormats.Text)!);
+        _selectedToastButton = draggedButton;
         MoveSelectedButtonToSlot(ParseToastSlot(raw));
         _dragHoverSlot = null;
         _toastButtonDragActive = false;
@@ -285,10 +287,12 @@ public partial class SettingsWindow
 
     private void ToastLayoutButton_Drop(object sender, System.Windows.DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(System.Windows.DataFormats.Text) || sender is not Border border || border.Tag is not string raw)
+        if (!TryGetDraggedToastButton(e, out var draggedButton) ||
+            sender is not Border border ||
+            border.Tag is not string raw)
             return;
 
-        _selectedToastButton = ParseToastButton((string)e.Data.GetData(System.Windows.DataFormats.Text)!);
+        _selectedToastButton = draggedButton;
         MoveSelectedButtonToButton(ParseToastButton(raw));
     }
 
@@ -318,10 +322,9 @@ public partial class SettingsWindow
 
     private void ToastShelf_Drop(object sender, System.Windows.DragEventArgs e)
     {
-        if (!e.Data.GetDataPresent(System.Windows.DataFormats.Text))
+        if (!TryGetDraggedToastButton(e, out var button))
             return;
 
-        var button = ParseToastButton((string)e.Data.GetData(System.Windows.DataFormats.Text)!);
         _selectedToastButton = button;
         HideSelectedButton();
         ToastHiddenShelf.BorderBrush = Theme.Brush(Theme.BorderSubtle);
@@ -358,6 +361,20 @@ public partial class SettingsWindow
         "Delete" => ToastButtonKind.Delete,
         _ => ToastButtonKind.Close
     };
+
+    private static bool TryGetDraggedToastButton(
+        System.Windows.DragEventArgs e,
+        out ToastButtonKind button)
+    {
+        if (e.Data.GetDataPresent(System.Windows.DataFormats.Text) &&
+            e.Data.GetData(System.Windows.DataFormats.Text) is string raw &&
+            Enum.TryParse(raw, ignoreCase: false, out button) &&
+            Enum.IsDefined(button))
+            return true;
+
+        button = default;
+        return false;
+    }
 
     private static ToastButtonSlot ParseToastSlot(string raw) => raw switch
     {

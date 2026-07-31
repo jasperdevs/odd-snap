@@ -6,6 +6,21 @@ namespace OddSnap.Tests;
 
 public sealed class TypeConsolidationTests
 {
+    [Theory]
+    [InlineData(50L, 200L, 25d)]
+    [InlineData(0L, 200L, 0d)]
+    [InlineData(50L, null, 0d)]
+    [InlineData(50L, 0L, 0d)]
+    public void RuntimeModelDownloadProgress_CalculatesPercent(
+        long bytesReceived,
+        long? totalBytes,
+        double expectedPercent)
+    {
+        var progress = new RuntimeModelDownloadProgress(bytesReceived, totalBytes, "Downloading...");
+
+        Assert.Equal(expectedPercent, progress.Percent);
+    }
+
     [Fact]
     public void RuntimeJobFailureResolver_UsesSharedAppJobSnapshot()
     {

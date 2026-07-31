@@ -11,7 +11,12 @@ import Donate from "./pages/Donate";
 import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
 
-createRoot(document.getElementById("root")!).render(
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error("OddSnap site root element was not found.");
+}
+
+createRoot(rootElement).render(
   <StrictMode>
     <HashRouter>
       <ScrollToTop />

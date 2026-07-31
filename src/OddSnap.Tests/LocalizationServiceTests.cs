@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using OddSnap.Services;
 using Xunit;
 
@@ -134,6 +135,29 @@ public class LocalizationServiceTests
     }
 
     [Fact]
+    public void LocalizationCatalogs_HaveTheSameCompleteNonEmptyKeySet()
+    {
+        var directory = Path.Combine(AppContext.BaseDirectory, "Localization");
+        var englishPath = Path.Combine(directory, "en.json");
+        var english = ReadCatalog(englishPath);
+        var expectedKeys = english.Keys.ToHashSet(StringComparer.Ordinal);
+        var catalogPaths = Directory.GetFiles(directory, "*.json");
+
+        Assert.Equal(LocalizationService.Languages.Count, catalogPaths.Length);
+        foreach (var catalogPath in catalogPaths)
+        {
+            var catalog = ReadCatalog(catalogPath);
+            Assert.True(
+                expectedKeys.SetEquals(catalog.Keys),
+                $"{Path.GetFileName(catalogPath)} does not have the same key set as en.json.");
+            Assert.All(catalog, pair =>
+                Assert.False(
+                    string.IsNullOrWhiteSpace(pair.Value),
+                    $"{Path.GetFileName(catalogPath)} has an empty translation for '{pair.Key}'."));
+        }
+    }
+
+    [Fact]
     public void Translate_EnglishTarget_ReturnsSourceText()
     {
         Assert.Equal("History", LocalizationService.Translate("en", "History"));
@@ -171,4 +195,8 @@ public class LocalizationServiceTests
         Assert.True(LocalizationService.HasInterfaceTranslations("en"));
         Assert.True(LocalizationService.HasInterfaceTranslations("de"));
     }
+
+    private static Dictionary<string, string> ReadCatalog(string path) =>
+        JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))
+        ?? throw new InvalidDataException($"Could not parse localization catalog {path}.");
 }

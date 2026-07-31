@@ -4,7 +4,14 @@ namespace OddSnap.Services;
 
 internal static class PythonRuntimeEnvironment
 {
-    private const string DefaultPythonLauncherArg = "-3";
+    internal const string DefaultLauncherArgument = "-3";
+    internal const string PipPackage = "pip==26.1";
+    internal const string SetuptoolsPackage = "setuptools==82.0.1";
+    internal const string WheelPackage = "wheel==0.47.0";
+    internal const string NumpyPackage = "numpy==2.4.4";
+    internal const string PillowPackage = "pillow==12.2.0";
+    internal const string OnnxRuntimePackage = "onnxruntime==1.25.1";
+    internal const string OnnxRuntimeGpuPackage = "onnxruntime-gpu==1.25.1";
 
     public static Task<ProcessRunResult> RunLauncherAsync(IEnumerable<string> arguments, CancellationToken cancellationToken)
         => ProcessRunner.RunAsync("py", arguments, cancellationToken);
@@ -34,9 +41,9 @@ internal static class PythonRuntimeEnvironment
         if (list.Count > 0)
             return PythonLauncherSelector.SelectOnnxRuntimeLauncherArgument(list);
 
-        var versionProbe = await RunLauncherAsync([DefaultPythonLauncherArg, "--version"], cancellationToken).ConfigureAwait(false);
+        var versionProbe = await RunLauncherAsync([DefaultLauncherArgument, "--version"], cancellationToken).ConfigureAwait(false);
         return versionProbe.ExitCode == 0 && PythonLauncherSelector.IsSupportedOnnxRuntimeVersion(versionProbe.StdOut)
-            ? DefaultPythonLauncherArg
+            ? DefaultLauncherArgument
             : null;
     }
 

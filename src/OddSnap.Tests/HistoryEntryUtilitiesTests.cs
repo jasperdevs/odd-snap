@@ -117,6 +117,17 @@ public class HistoryEntryUtilitiesTests
     }
 
     [Fact]
+    public void GetKindForPath_SiblingWithStickerDirectoryPrefix_IsNotASticker()
+    {
+        var kind = HistoryEntryUtilities.GetKindForPath(
+            @"C:\Stickers-Archive\a.gif",
+            null,
+            @"C:\Stickers");
+
+        Assert.Equal(HistoryKind.Gif, kind);
+    }
+
+    [Fact]
     public void GetKindForPath_EmptyStickerDirIsIgnored()
     {
         Assert.Equal(HistoryKind.Gif, HistoryEntryUtilities.GetKindForPath(@"C:\x\a.gif", null, "", "   "));

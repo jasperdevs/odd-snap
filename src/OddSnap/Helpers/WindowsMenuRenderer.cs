@@ -13,7 +13,7 @@ public static class WindowsMenuRenderer
 
     public static ContextMenuStrip Create(bool showImages = true, int minWidth = DefaultWidth)
     {
-        OddSnap.UI.Theme.Refresh();
+        Theme.Refresh();
         var bg = UiChrome.SurfaceElevated;
         var fg = UiChrome.SurfaceTextPrimary;
         var hover = UiChrome.IsDark ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(18, 0, 0, 0);
@@ -62,8 +62,6 @@ public static class WindowsMenuRenderer
         bool active = false,
         bool danger = false)
     {
-        text = OddSnap.Services.LocalizationService.Translate(text);
-
         var color = danger
             ? Color.FromArgb(239, 68, 68)
             : UiChrome.SurfaceTextPrimary;

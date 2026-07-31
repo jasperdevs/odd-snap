@@ -1,8 +1,8 @@
+using System.Diagnostics;
 using System.Windows.Media;
-using OddSnap.Services;
 using Color = System.Windows.Media.Color;
 
-namespace OddSnap.UI;
+namespace OddSnap.Presentation;
 
 // Centralized theme colors.
 public static class Theme
@@ -156,7 +156,7 @@ public static class Theme
         }
         catch (Exception ex)
         {
-            AppDiagnostics.LogWarning("theme.detect", "Failed to read the Windows app theme; using dark mode.", ex);
+            Trace.TraceWarning("Failed to read the Windows app theme; using dark mode. {0}", ex);
             return true;
         }
     }

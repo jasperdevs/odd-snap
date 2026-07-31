@@ -11,9 +11,6 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll")]
     internal static partial uint SetErrorMode(uint uMode);
 
-    [LibraryImport("kernel32.dll")]
-    internal static partial uint GetCurrentThreadId();
-
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern IntPtr GetModuleHandle(string? lpModuleName);
 }

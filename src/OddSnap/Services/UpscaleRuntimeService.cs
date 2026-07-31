@@ -8,13 +8,6 @@ public static class UpscaleRuntimeService
 {
     private const int RuntimeLayoutVersion = 4;
     private const long MinModelFileBytes = 1L * 1024 * 1024;
-    private const string PipPackage = "pip==26.1";
-    private const string SetuptoolsPackage = "setuptools==82.0.1";
-    private const string WheelPackage = "wheel==0.47.0";
-    private const string OnnxRuntimePackage = "onnxruntime==1.25.1";
-    private const string OnnxRuntimeGpuPackage = "onnxruntime-gpu==1.25.1";
-    private const string NumpyPackage = "numpy==2.4.4";
-    private const string PillowPackage = "pillow==12.2.0";
     private static readonly TimeSpan ProbeCacheTtl = TimeSpan.FromMinutes(10);
     private static readonly HttpClient Http = new()
     {
@@ -197,7 +190,7 @@ public static class UpscaleRuntimeService
         return false;
     }
 
-    public static async Task EnsureModelDownloadedAsync(LocalUpscaleEngine engine, IProgress<LocalUpscaleEngineDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
+    public static async Task EnsureModelDownloadedAsync(LocalUpscaleEngine engine, IProgress<RuntimeModelDownloadProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         var modelPath = GetModelPath(engine);
         if (IsUsableModelFile(modelPath))
@@ -209,7 +202,7 @@ public static class UpscaleRuntimeService
 
         var tempPath = modelPath + ".download";
         var url = GetModelDownloadUrl(engine);
-        progress?.Report(new LocalUpscaleEngineDownloadProgress(0, null, $"Downloading {LocalUpscaleEngineService.GetEngineLabel(engine)}..."));
+        progress?.Report(new RuntimeModelDownloadProgress(0, null, $"Downloading {LocalUpscaleEngineService.GetEngineLabel(engine)}..."));
 
         try
         {
@@ -230,7 +223,7 @@ public static class UpscaleRuntimeService
 
                     await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
                     read += count;
-                    progress?.Report(new LocalUpscaleEngineDownloadProgress(read, total, $"Downloading {LocalUpscaleEngineService.GetEngineLabel(engine)}..."));
+                    progress?.Report(new RuntimeModelDownloadProgress(read, total, $"Downloading {LocalUpscaleEngineService.GetEngineLabel(engine)}..."));
                 }
 
                 await output.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -364,7 +357,10 @@ public static class UpscaleRuntimeService
         progress?.Report("Installing upscale runtime packages...");
         var toolsInstall = await RunRuntimePythonAsync(provider, new[]
         {
-            "-m", "pip", "install", "--disable-pip-version-check", PipPackage, SetuptoolsPackage, WheelPackage
+            "-m", "pip", "install", "--disable-pip-version-check",
+            PythonRuntimeEnvironment.PipPackage,
+            PythonRuntimeEnvironment.SetuptoolsPackage,
+            PythonRuntimeEnvironment.WheelPackage
         }, cancellationToken).ConfigureAwait(false);
         if (toolsInstall.ExitCode != 0)
             throw new InvalidOperationException(ProcessRunner.GetFailureMessage(toolsInstall, "Couldn't prepare pip inside the isolated runtime."));
@@ -401,9 +397,11 @@ public static class UpscaleRuntimeService
         yield return "install";
         yield return "--disable-pip-version-check";
         yield return "--prefer-binary";
-        yield return useGpuPackage ? OnnxRuntimeGpuPackage : OnnxRuntimePackage;
-        yield return NumpyPackage;
-        yield return PillowPackage;
+        yield return useGpuPackage
+            ? PythonRuntimeEnvironment.OnnxRuntimeGpuPackage
+            : PythonRuntimeEnvironment.OnnxRuntimePackage;
+        yield return PythonRuntimeEnvironment.NumpyPackage;
+        yield return PythonRuntimeEnvironment.PillowPackage;
     }
 
     private static bool IsRuntimeMarkerCurrent(UpscaleExecutionProvider provider)

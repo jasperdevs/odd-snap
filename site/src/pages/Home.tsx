@@ -20,7 +20,7 @@ const features = [
   "emoji & ruler",
   "blur & highlight",
   "magnifier",
-  "100+ ocr languages",
+  "installed windows ocr languages",
   "argos offline translate",
   "qr/barcode scanner",
   "tray menu",
@@ -36,31 +36,31 @@ const features = [
 
 const showcase = [
   { title: "annotate", desc: "arrows, text, shapes, blur, highlights, freehand, step numbers, emoji, and ruler with undo/redo.", img: "annotations.webp", w: 1821, h: 1016 },
-  { title: "ocr & translate", desc: "extract text from any region with 100+ ocr languages. translate offline with argos or online with google.", img: "ocr-screenshot.webp", w: 691, h: 480 },
+  { title: "ocr & translate", desc: "extract text using the ocr languages installed in windows. translate locally with argos or online with google.", img: "ocr-screenshot.webp", w: 691, h: 480 },
   { title: "ai redirects", desc: "open chatgpt, claude, gemini, or google lens right after capture. image stays pinned and ready to drop in.", img: "ai-redirects.webp", w: 930, h: 265 },
   { title: "upscale", desc: "upscale any capture locally with swinir x4 or real-esrgan x4plus. compare before and after side by side.", img: "upscale.webp", w: 1177, h: 747 },
   { title: "stickers", desc: "remove backgrounds locally with 5 ai models. add stroke and shadow finishing, save as transparent png.", img: "sticker-showcase.webp", w: 1248, h: 506 },
   { title: "record", desc: "save as gif, mp4, webm, or mkv. microphone and desktop audio at 15/24/30/60 fps.", img: "recording.webp", w: 672, h: 474 },
   { title: "search", desc: "find past screenshots by filename, ocr text, or ai-powered semantic similarity.", img: "search-screenshot.webp", w: 576, h: 555 },
   { title: "color picker", desc: "pick any color on screen with a magnified preview. hex and rgb to clipboard.", img: "color-picker.webp", w: 589, h: 312 },
-  { title: "uploads", desc: "19 destinations: imgur, s3/r2/b2, dropbox, github, onedrive, immich, webdav, and more.", img: "uploads.webp", w: 829, h: 628 },
+  { title: "uploads", desc: "21 destinations: imgur, s3/r2/b2, dropbox, github, onedrive, immich, webdav, and more.", img: "uploads.webp", w: 829, h: 628 },
 ];
 
 const faq = [
   { q: "what is oddsnap?", a: "oddsnap is a free, open-source screenshot and screen recording tool for windows. it replaces tools like sharex with a clean, modern interface." },
   { q: "is oddsnap free?", a: "yes, completely free and open source under the gpl-3.0 license. no ads, no tracking, no premium tiers." },
-  { q: "does oddsnap work offline?", a: "yes. all capture, annotation, ocr, and recording features work fully offline. only uploads and google translate require internet." },
+  { q: "does oddsnap work offline?", a: "core capture, annotation, windows ocr, color picking, and gif recording work offline. video recording needs ffmpeg installed locally. uploads, cloud processing, google translate, ai redirects, updates, and optional model installation use the internet." },
   { q: "what windows versions are supported?", a: "windows 10 (version 1903+) and windows 11. both x64 and arm64 are supported." },
   { q: "how does ocr work?", a: "oddsnap uses the windows built-in ocr engine. no downloads or setup needed. it supports all languages installed in your windows language settings." },
-  { q: "can i upload screenshots automatically?", a: "yes. oddsnap supports auto-upload to 19 destinations: imgur, imgbb, catbox, litterbox, gyazo, file.io, uguu, tmpfiles, dropbox, google drive, onedrive, azure blob, github, immich, ftp, sftp, webdav, s3-compatible storage (aws, cloudflare r2, backblaze b2), and custom http endpoints." },
+  { q: "can i upload screenshots automatically?", a: "yes. oddsnap supports auto-upload to 21 destinations: imgur, imgbb, catbox, litterbox, gyazo, file.io, uguu, tmpfiles, gofile, imgpile, dropbox, google drive, onedrive, azure blob, github, immich, ftp, sftp, webdav, s3-compatible storage (aws, cloudflare r2, backblaze b2), and custom http endpoints." },
   { q: "where are screenshots saved?", a: "by default in your pictures/oddsnap folder. you can change this in settings along with the file format and naming pattern." },
   { q: "what recording formats are supported?", a: "gif, mp4, webm, and mkv. you can record with microphone audio, desktop audio, or both. frame rate and quality are configurable." },
-  { q: "what translation services are supported?", a: "oddsnap supports argos translate (fully offline, no api key needed) and google translate (requires internet). both support 35+ languages." },
+  { q: "what translation services are supported?", a: "oddsnap supports argos translate and an open-source local model after their optional runtimes are installed, plus google translate for online translation. available language pairs depend on the selected provider and installed models." },
   { q: "how is oddsnap different from sharex?", a: "oddsnap has a modern, clean interface with built-in sticker creation, ai redirects, image upscaling, and semantic image search. it focuses on being simple to use while still being powerful." },
-  { q: "can i customize hotkeys?", a: "yes. every action has a configurable global hotkey. you can set hotkeys for screenshot, ocr, color picker, recording, stickers, and more in settings." },
+  { q: "can i customize hotkeys?", a: "yes. capture and utility actions have configurable global hotkeys. you can set hotkeys for screenshots, ocr, the color picker, recording, stickers, and more in settings." },
   { q: "does oddsnap have a portable version?", a: "yes. the downloads page includes both a windows installer (recommended) and a portable zip." },
   { q: "how do i update oddsnap?", a: "installed builds can update through the app. you can also download the latest installer or portable build directly from the downloads page." },
-  { q: "does oddsnap support multiple monitors?", a: "yes. oddsnap fully supports multi-monitor setups for capture, recording, and color picking. you can capture regions across monitors or target a specific screen." },
+  { q: "does oddsnap support multiple monitors?", a: "yes. screenshot selection can span the Windows virtual desktop or be limited to the current monitor, and recording and color-picking tools use monitor-aware coordinates." },
 ];
 
 function detectArch(): "arm64" | "x64" {
@@ -265,7 +265,7 @@ export default function Home() {
 
       <Section title="built for privacy">
         <p className="max-w-[68ch] rounded-[1.15rem] border border-[#DDD5C7] bg-[#FFFDF8]/70 p-5 text-[15px] leading-relaxed text-[#171512]/70 shadow-[0_18px_55px_rgba(72,57,34,0.09)]">
-          oddsnap runs entirely on your machine. no accounts, no telemetry, no cloud dependencies. your screenshots never leave your computer unless you choose to upload them.
+          oddsnap has no account requirement or telemetry, and its core capture and local-processing features run on your machine. content leaves your computer only when you choose an upload, cloud-processing, or third-party redirect feature.
         </p>
       </Section>
 

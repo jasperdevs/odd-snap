@@ -52,14 +52,45 @@ internal static class CaptureOverlayThread
             if (invoker is { IsDisposed: false, IsHandleCreated: true } usableInvoker)
                 usableInvoker.BeginInvoke(new Action(System.Windows.Forms.Application.ExitThread));
         }
-        catch { }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "capture.overlay-thread.stop",
+                "Could not post the shutdown request to the capture overlay thread.",
+                ex);
+        }
 
         if (thread is not null && thread != Thread.CurrentThread)
         {
-            try { thread.Join(1500); } catch { }
+            try
+            {
+                if (!thread.Join(1500))
+                {
+                    AppDiagnostics.LogWarning(
+                        "capture.overlay-thread.stop-timeout",
+                        "The capture overlay thread did not stop within 1.5 seconds.");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "capture.overlay-thread.stop-wait",
+                    "Could not wait for the capture overlay thread to stop.",
+                    ex);
+            }
         }
 
-        try { ready?.Dispose(); } catch { }
+        try
+        {
+            ready?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning(
+                "capture.overlay-thread.dispose-ready",
+                "Could not dispose the capture overlay readiness signal.",
+                ex);
+        }
     }
 
     private static Control EnsureInvoker()
@@ -108,24 +139,31 @@ internal static class CaptureOverlayThread
 
     private static void ThreadMain(ManualResetEventSlim ready)
     {
-        using var invoker = new Control();
-        _ = invoker.Handle;
-
-        bool isCurrentThread;
-        lock (Sync)
-        {
-            isCurrentThread = ReferenceEquals(_ready, ready);
-            if (isCurrentThread)
-                _invoker = invoker;
-        }
-
-        ready.Set();
-        if (!isCurrentThread)
-            return;
-
+        Control? invoker = null;
         try
         {
+            invoker = new Control();
+            _ = invoker.Handle;
+
+            bool isCurrentThread;
+            lock (Sync)
+            {
+                isCurrentThread = ReferenceEquals(_ready, ready);
+                if (isCurrentThread)
+                {
+                    _invoker = invoker;
+                    ready.Set();
+                }
+            }
+
+            if (!isCurrentThread)
+                return;
+
             System.Windows.Forms.Application.Run();
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("capture.overlay-thread.run", ex);
         }
         finally
         {
@@ -134,9 +172,31 @@ internal static class CaptureOverlayThread
                 if (ReferenceEquals(_invoker, invoker))
                     _invoker = null;
                 if (ReferenceEquals(_ready, ready))
+                {
+                    try
+                    {
+                        ready.Set();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Stop may already have disposed a readiness signal it detached.
+                    }
                     _ready = null;
+                }
                 if (ReferenceEquals(_thread, Thread.CurrentThread))
                     _thread = null;
+            }
+
+            try
+            {
+                invoker?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogWarning(
+                    "capture.overlay-thread.dispose-invoker",
+                    "Could not dispose the capture overlay thread invoker.",
+                    ex);
             }
         }
     }

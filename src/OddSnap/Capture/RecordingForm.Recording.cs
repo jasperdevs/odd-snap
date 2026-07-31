@@ -6,7 +6,6 @@ using System.Windows.Forms;
 using OddSnap.Native;
 using OddSnap.Helpers;
 using OddSnap.Services;
-using OddSnap.UI;
 
 namespace OddSnap.Capture;
 
@@ -113,7 +112,7 @@ public sealed partial class RecordingForm
             Bitmap? firstFrame = gifRec?.GetFirstFrame();
             try
             {
-                TryPostEncodingToast();
+                TryNotifyEncodingStarted();
                 gifRec?.StopAndEncode(_savePath);
                 vidRec?.StopAndEncode(_savePath);
                 _desktopAudioSoundSuppression?.Dispose();
@@ -148,19 +147,15 @@ public sealed partial class RecordingForm
         });
     }
 
-    private static void TryPostEncodingToast()
+    private void TryNotifyEncodingStarted()
     {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
-            return;
-
         try
         {
-            _ = dispatcher.BeginInvoke(() => ToastWindow.Show("Recording", "Encoding, please wait..."));
+            EncodingStarted?.Invoke();
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
-            AppDiagnostics.LogWarning("recording.encoding-toast-post", ex.Message, ex);
+            AppDiagnostics.LogWarning("recording.encoding-started-notify", ex.Message, ex);
         }
     }
 

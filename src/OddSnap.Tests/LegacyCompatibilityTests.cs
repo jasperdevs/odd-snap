@@ -69,15 +69,19 @@ public sealed class LegacyCompatibilityTests : IDisposable
     }
 
     [Fact]
-    public void RetireLegacyJsonIndexes_MovesCommittedSourceOutOfImportPath()
+    public void MigrateSettingsFile_CopiesLegacySettingsWithoutOverwritingCurrentSettings()
     {
-        var indexPath = Path.Combine(_tempDirectory, "ocr_index.json");
-        File.WriteAllText(indexPath, "legacy data");
+        var sourcePath = Path.Combine(_tempDirectory, "legacy", "settings.json");
+        var destinationPath = Path.Combine(_tempDirectory, "current", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
+        File.WriteAllText(sourcePath, "legacy settings");
 
-        HistoryService.RetireLegacyJsonIndexes([indexPath], "OCR");
+        Assert.True(SettingsService.TryMigrateSettingsFile(sourcePath, destinationPath));
+        Assert.Equal("legacy settings", File.ReadAllText(destinationPath));
 
-        Assert.False(File.Exists(indexPath));
-        Assert.Equal("legacy data", File.ReadAllText(indexPath + ".migrated"));
+        File.WriteAllText(sourcePath, "changed legacy settings");
+        Assert.False(SettingsService.TryMigrateSettingsFile(sourcePath, destinationPath));
+        Assert.Equal("legacy settings", File.ReadAllText(destinationPath));
     }
 
     public void Dispose()

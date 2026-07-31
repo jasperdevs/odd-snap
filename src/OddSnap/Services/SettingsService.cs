@@ -7,8 +7,10 @@ namespace OddSnap.Services;
 
 public sealed class SettingsService : IDisposable
 {
-    private static readonly string LegacySettingsPath = Path.Combine(
+    private static readonly string RoamingOddSnapSettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OddSnap", "settings.json");
+    private static readonly string LegacyYoinkSettingsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "settings.json");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -274,20 +276,35 @@ public sealed class SettingsService : IDisposable
 
     private static void TryMigrateLegacyPortableSettings(string settingsPath)
     {
-        if (string.Equals(settingsPath, LegacySettingsPath, StringComparison.OrdinalIgnoreCase))
-            return;
+        foreach (var sourcePath in new[] { RoamingOddSnapSettingsPath, LegacyYoinkSettingsPath })
+        {
+            if (TryMigrateSettingsFile(sourcePath, settingsPath))
+                return;
+        }
+    }
+
+    internal static bool TryMigrateSettingsFile(string sourcePath, string destinationPath)
+    {
+        if (string.Equals(sourcePath, destinationPath, StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(sourcePath) ||
+            File.Exists(destinationPath))
+        {
+            return false;
+        }
 
         try
         {
-            if (!File.Exists(LegacySettingsPath))
-                return;
-
-            Directory.CreateDirectory(Path.GetDirectoryName(settingsPath) ?? AppContext.BaseDirectory);
-            File.Copy(LegacySettingsPath, settingsPath, overwrite: false);
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? AppContext.BaseDirectory);
+            File.Copy(sourcePath, destinationPath, overwrite: false);
+            return true;
         }
         catch (Exception ex)
         {
-            AppDiagnostics.LogWarning("settings.migrate-portable", ex.Message, ex);
+            AppDiagnostics.LogWarning(
+                "settings.migrate",
+                $"Failed to migrate settings from {sourcePath} to {destinationPath}: {ex.Message}",
+                ex);
+            return false;
         }
     }
 
@@ -554,17 +571,7 @@ public sealed class SettingsService : IDisposable
             return null;
 
         var known = ToolDef.AllTools.ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
-        var normalized = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var toolId in tools)
-        {
-            if (string.IsNullOrWhiteSpace(toolId) || !known.TryGetValue(toolId.Trim(), out var tool))
-                continue;
-
-            if (seen.Add(tool.Id))
-                normalized.Add(tool.Id);
-        }
+        var normalized = NormalizeKnownToolIds(tools, known);
 
         if (normalized.Count == 0)
             return null;
@@ -580,20 +587,12 @@ public sealed class SettingsService : IDisposable
         if (toolIds is null)
             return null;
 
-        var known = ToolDef.AllToolbarItems().ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
-        var normalized = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var toolbarItems = ToolDef.AllToolbarItems();
+        var known = toolbarItems.ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
+        var normalized = NormalizeKnownToolIds(toolIds, known);
+        var seen = normalized.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var toolId in toolIds)
-        {
-            if (string.IsNullOrWhiteSpace(toolId) || !known.TryGetValue(toolId.Trim(), out var tool))
-                continue;
-
-            if (seen.Add(tool.Id))
-                normalized.Add(tool.Id);
-        }
-
-        foreach (var tool in ToolDef.AllToolbarItems())
+        foreach (var tool in toolbarItems)
         {
             if (seen.Add(tool.Id))
                 normalized.Add(tool.Id);
@@ -608,6 +607,13 @@ public sealed class SettingsService : IDisposable
             return null;
 
         var known = ToolDef.AllToolbarItems().ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
+        return NormalizeKnownToolIds(toolIds, known);
+    }
+
+    private static List<string> NormalizeKnownToolIds(
+        IEnumerable<string> toolIds,
+        IReadOnlyDictionary<string, ToolDef> known)
+    {
         var normalized = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 

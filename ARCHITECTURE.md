@@ -51,7 +51,7 @@ Single source of truth for color/typography/motion:
 
 | Concern | Source of truth | Notes |
 |---|---|---|
-| WPF palette | `UI/Theme.cs` | Semantic tokens only (`BgCard`, `TextSecondary`, …). Never hardcode hex in XAML or code-behind; use `DynamicResource` keys published by `Theme.ApplyTo`. |
+| WPF palette | `Presentation/Theme.cs` | Semantic tokens only (`BgCard`, `TextSecondary`, …). Never hardcode hex in XAML or code-behind; use `DynamicResource` keys published by `Theme.ApplyTo`. |
 | WinForms/GDI palette | `Helpers/UiChrome.cs` | Must mirror `Theme` values; when adding a token add it to both (or derive it — see Stage 1). |
 | Motion | `UI/Motion.cs` | All durations/easings; respects the reduced-motion setting via `Motion.Disabled`. |
 | Window chrome | `UI/OddSnapWindowChrome.cs` | Rounded corners + DWM dark mode + pre-Win11 fallback. Every top-level window goes through it. |

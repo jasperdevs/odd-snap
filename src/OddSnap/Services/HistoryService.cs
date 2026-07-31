@@ -57,20 +57,14 @@ public sealed partial class HistoryService : IDisposable
     public static readonly string ImageThumbnailDir = Path.Combine(HistoryDir, "cache", "thumbs");
     public static readonly string DatabasePath = Path.Combine(HistoryDir, "history.db");
 
-    private static readonly string LegacyHistoryDir = Path.Combine(
+    private static readonly string LegacyOddSnapHistoryDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OddSnap", "history");
 
-    private static readonly string LegacyStickerDir = Path.Combine(LegacyHistoryDir, "stickers");
+    private static readonly string LegacyYoinkAppDataHistoryDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Yoink", "history");
 
-    private static readonly string MigrationIndexPath = Path.Combine(HistoryDir, "index.json");
-    private static readonly string MigrationOcrIndexPath = Path.Combine(HistoryDir, "ocr_index.json");
-    private static readonly string MigrationColorIndexPath = Path.Combine(HistoryDir, "color_index.json");
-
-    private static readonly string LegacyIndexPath = Path.Combine(LegacyHistoryDir, "index.json");
-    private static readonly string LegacyOcrIndexPath = Path.Combine(LegacyHistoryDir, "ocr_index.json");
-    private static readonly string LegacyColorIndexPath = Path.Combine(LegacyHistoryDir, "color_index.json");
-
-    private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+    private static readonly string LegacyYoinkPicturesHistoryDir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Yoink History");
 
     private List<HistoryEntry> _entries = new();
     private Dictionary<string, HistoryEntry> _entriesByPath = new(StringComparer.OrdinalIgnoreCase);
@@ -196,17 +190,64 @@ public sealed partial class HistoryService : IDisposable
             Directory.CreateDirectory(ImageThumbnailDir);
             EnsureDatabase_NoLock();
             LoadFromDatabase_NoLock();
-            var legacyJsonImports = ImportLegacyJsonIndexes_NoLock();
+            LegacyHistoryMigrationPlan migration;
+            try
+            {
+                migration = LegacyHistoryMigrator.Prepare(
+                    _entries,
+                    _ocrEntries,
+                    _colorEntries,
+                    _codeEntries,
+                    HistoryDir,
+                    StickerDir,
+                    [
+                        new LegacyHistorySource(HistoryDir, RelocateMedia: false, ReadDatabase: false),
+                        new LegacyHistorySource(LegacyOddSnapHistoryDir, RelocateMedia: true),
+                        new LegacyHistorySource(LegacyYoinkAppDataHistoryDir, RelocateMedia: true),
+                        new LegacyHistorySource(LegacyYoinkPicturesHistoryDir, RelocateMedia: true)
+                    ]);
+            }
+            catch (Exception ex)
+            {
+                AppDiagnostics.LogError(
+                    "history.migrate.prepare",
+                    ex,
+                    "Legacy history migration was rolled back and will be retried on the next launch.");
+                migration = new LegacyHistoryMigrationPlan(
+                    _entries,
+                    _ocrEntries,
+                    _colorEntries,
+                    _codeEntries,
+                    [],
+                    []);
+            }
 
-            MigrateLegacyStorage();
-            CleanupLegacyThumbnailDirectories_NoLock();
-            PruneByRetention(HistoryRetentionPeriod.Never);
-            FlushPendingWrites_NoLock();
+            try
+            {
+                if (migration.RequiresDestinationCommit)
+                {
+                    _entries = migration.Entries;
+                    _ocrEntries = migration.OcrEntries;
+                    _colorEntries = migration.ColorEntries;
+                    _codeEntries = migration.CodeEntries;
+                    RebuildEntryLookup_NoLock();
+                    InvalidateFilteredCache();
+                    MarkEntriesRewrite_NoLock();
+                    _ocrDirty = true;
+                    _colorDirty = true;
+                    _codeDirty = true;
+                }
 
-            if (!_ocrDirty)
-                RetireLegacyJsonIndexes(legacyJsonImports.OcrPaths, "OCR");
-            if (!_colorDirty)
-                RetireLegacyJsonIndexes(legacyJsonImports.ColorPaths, "color");
+                CleanupLegacyThumbnailDirectories_NoLock();
+                PruneByRetention(HistoryRetentionPeriod.Never);
+                FlushPendingWrites_NoLock();
+                migration.Commit();
+            }
+            catch
+            {
+                migration.Rollback();
+                throw;
+            }
         }
     }
 

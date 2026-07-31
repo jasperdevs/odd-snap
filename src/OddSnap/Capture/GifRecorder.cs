@@ -89,12 +89,12 @@ public sealed class GifRecorder : IDisposable
                 var sw = Stopwatch.StartNew();
                 try
                 {
-                    var frame = frameCapturer.CaptureBitmap();
+                    Bitmap? frame = frameCapturer.CaptureBitmap();
                     if (_frameQueue.TryAdd((frame, index), 100, ct))
                     {
                         Interlocked.Increment(ref _frameCount);
                         index++;
-                        frame = null!;
+                        frame = null;
                     }
                     frame?.Dispose();
                 }
@@ -119,9 +119,9 @@ public sealed class GifRecorder : IDisposable
     {
         try
         {
-            if (_rawFramePath is not null)
+            if (_rawFramePath is { } rawFramePath)
             {
-                WriteRawFrameStream();
+                WriteRawFrameStream(rawFramePath);
                 return;
             }
 
@@ -138,9 +138,9 @@ public sealed class GifRecorder : IDisposable
         catch (ObjectDisposedException) { }
     }
 
-    private void WriteRawFrameStream()
+    private void WriteRawFrameStream(string rawFramePath)
     {
-        using var stream = new BufferedStream(File.Create(_rawFramePath!), 1 << 20);
+        using var stream = new BufferedStream(File.Create(rawFramePath), 1 << 20);
         byte[]? frameBuffer = null;
         foreach (var (frame, _) in _frameQueue.GetConsumingEnumerable())
         {
@@ -152,7 +152,7 @@ public sealed class GifRecorder : IDisposable
         }
     }
 
-    /// <summary>Stops recording and encodes frames to GIF. Uses FFmpeg if available (10-50x faster).</summary>
+    /// <summary>Stops recording and encodes frames to GIF. Uses FFmpeg when available.</summary>
     public string StopAndEncode(string outputPath)
     {
         _cts.Cancel();
@@ -177,7 +177,7 @@ public sealed class GifRecorder : IDisposable
             if (writtenFrameCount == 0)
                 throw new InvalidOperationException("No frames captured.");
 
-            // Try FFmpeg first (much faster GIF encoding with palette optimization).
+            // Try FFmpeg first for palette-optimized encoding.
             // If FFmpeg fails for any reason, fall back to in-process encoding.
             Exception? ffmpegError = null;
             var ffmpeg = _ffmpegPath;
@@ -185,8 +185,8 @@ public sealed class GifRecorder : IDisposable
             {
                 try
                 {
-                    if (_rawFramePath is not null && File.Exists(_rawFramePath))
-                        EncodeFfmpegGifFromRaw(ffmpeg, outputPath, writtenFrameCount);
+                    if (_rawFramePath is { } rawFramePath && File.Exists(rawFramePath))
+                        EncodeFfmpegGifFromRaw(ffmpeg, rawFramePath, outputPath, writtenFrameCount);
                     else
                         EncodeFfmpegGifFromBmpSequence(ffmpeg, outputPath);
                 }
@@ -230,10 +230,9 @@ public sealed class GifRecorder : IDisposable
         }
     }
 
-    private void EncodeFfmpegGifFromRaw(string ffmpegPath, string outputPath, int frameCount)
+    private void EncodeFfmpegGifFromRaw(string ffmpegPath, string rawInput, string outputPath, int frameCount)
     {
         string paletteFile = Path.Combine(_tempDir, "palette.png");
-        string rawInput = _rawFramePath!;
         string inputArgs = $"-f rawvideo -pix_fmt bgra -s {_region.Width}x{_region.Height} -framerate {_fps} -i \"{rawInput}\"";
 
         RunFfmpegChecked(ffmpegPath,

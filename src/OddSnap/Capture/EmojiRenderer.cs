@@ -12,7 +12,7 @@ namespace OddSnap.Capture;
 
 /// <summary>
 /// Renders real color emoji using Direct2D with D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT.
-/// This is the ONLY way to get color emoji on Windows - GDI, GDI+, and WPF all render monochrome.
+/// This avoids the monochrome output produced by the app's GDI, GDI+, and WPF rendering paths.
 /// </summary>
 public sealed class EmojiRenderer : IDisposable
 {
@@ -65,7 +65,8 @@ public sealed class EmojiRenderer : IDisposable
         {
             Type = RenderTargetType.Default,
             PixelFormat = new PixelFormat(Format.B8G8R8A8_UNorm, AlphaMode.Premultiplied),
-            DpiX = 96, DpiY = 96,
+            DpiX = 96,
+            DpiY = 96,
         };
         using var rt = _d2dFactory.CreateWicBitmapRenderTarget(wicBitmap, rtProps);
         using var textFormat = _dwFactory.CreateTextFormat("Segoe UI Emoji", size);

@@ -40,7 +40,7 @@ internal static class HistoryEntryUtilities
         foreach (var stickerDir in stickerDirs)
         {
             if (!string.IsNullOrWhiteSpace(stickerDir) &&
-                path.StartsWith(stickerDir, StringComparison.OrdinalIgnoreCase))
+                IsPathWithinDirectory(path, stickerDir))
             {
                 return HistoryKind.Sticker;
             }
@@ -53,6 +53,25 @@ internal static class HistoryEntryUtilities
             return HistoryKind.Video;
 
         return fallback ?? HistoryKind.Image;
+    }
+
+    internal static bool IsPathWithinDirectory(string path, string directory)
+    {
+        try
+        {
+            var relativePath = Path.GetRelativePath(
+                Path.GetFullPath(directory),
+                Path.GetFullPath(path));
+
+            return !Path.IsPathRooted(relativePath) &&
+                   !relativePath.Equals("..", StringComparison.Ordinal) &&
+                   !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
+                   !relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     private static bool IsVideoPath(string path)

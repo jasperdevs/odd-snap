@@ -27,8 +27,17 @@ jobs:
       - name: Restore solution
         run: dotnet restore OddSnap.sln
 
+      - name: Audit NuGet dependencies
+        run: dotnet list OddSnap.sln package --vulnerable --include-transitive
+
+      - name: Verify formatting and analyzers
+        run: |
+          dotnet format whitespace OddSnap.sln --verify-no-changes --no-restore
+          dotnet format style OddSnap.sln --verify-no-changes --severity warn --no-restore
+          dotnet format analyzers OddSnap.sln --verify-no-changes --severity warn --no-restore
+
       - name: Build solution (Debug)
-        run: dotnet build OddSnap.sln -c Debug --no-restore
+        run: dotnet build OddSnap.sln -c Debug --no-restore -warnaserror
 
       - name: Run tests
         run: dotnet test src/OddSnap.Tests/OddSnap.Tests.csproj -c Debug --no-build --logger "console;verbosity=normal"

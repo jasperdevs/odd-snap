@@ -115,7 +115,8 @@ export default function StarChart() {
 
         for (let d = new Date(firstStarDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
           const key = d.toISOString().slice(0, 10);
-          if (dateMap.has(key)) lastCount = dateMap.get(key)!;
+          const count = dateMap.get(key);
+          if (count !== undefined) lastCount = count;
           points.push({ date: key, stars: lastCount });
         }
       }
@@ -138,7 +139,8 @@ export default function StarChart() {
     const rect = canvas.getBoundingClientRect();
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
-    const ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     ctx.scale(dpr, dpr);
 
     const w = rect.width;

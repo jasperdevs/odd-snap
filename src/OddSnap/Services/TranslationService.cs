@@ -14,7 +14,6 @@ public enum TranslationModel
 
 public static class TranslationService
 {
-    private const string PythonLauncherArg = "-3";
     private const string ArgosTranslateVersion = "1.11.0";
     private const string ArgosTranslatePackage = "argostranslate==" + ArgosTranslateVersion;
     private const long MaxGoogleTranslateResponseBytes = 1L * 1024 * 1024;
@@ -143,7 +142,7 @@ public static class TranslationService
         progress?.Report("Installing Argos Translate...");
         var result = await RunPythonAsync(new[]
         {
-            PythonLauncherArg, "-m", "pip", "install", "--user", "--disable-pip-version-check", ArgosTranslatePackage
+            PythonRuntimeEnvironment.DefaultLauncherArgument, "-m", "pip", "install", "--user", "--disable-pip-version-check", ArgosTranslatePackage
         }, cancellationToken).ConfigureAwait(false);
 
         if (result.ExitCode != 0)
@@ -161,7 +160,7 @@ public static class TranslationService
         progress?.Report("Uninstalling Argos Translate...");
         var result = await RunPythonAsync(new[]
         {
-            PythonLauncherArg, "-m", "pip", "uninstall", "-y", "argostranslate"
+            PythonRuntimeEnvironment.DefaultLauncherArgument, "-m", "pip", "uninstall", "-y", "argostranslate"
         }, cancellationToken).ConfigureAwait(false);
 
         if (result.ExitCode != 0)
@@ -196,7 +195,7 @@ public static class TranslationService
 
         var result = await RunPythonAsync(new[]
         {
-            PythonLauncherArg, "-c",
+            PythonRuntimeEnvironment.DefaultLauncherArgument, "-c",
             $"import argostranslate, importlib.metadata as m; raise SystemExit(0 if m.version('argostranslate') == '{ArgosTranslateVersion}' else 1)"
         }, cancellationToken).ConfigureAwait(false);
 
@@ -272,7 +271,7 @@ public static class TranslationService
         // Argos Translate
         var result = await RunPythonAsync(new[]
         {
-            PythonLauncherArg, "-c", BuildArgosTranslateScript(), fromCode, toCode
+            PythonRuntimeEnvironment.DefaultLauncherArgument, "-c", BuildArgosTranslateScript(), fromCode, toCode
         }, cancellationToken, standardInput: text).ConfigureAwait(false);
 
         if (result.ExitCode != 0)
@@ -381,7 +380,7 @@ public static class TranslationService
 
     private static async Task<bool> IsPythonLauncherAvailableAsync(CancellationToken cancellationToken)
     {
-        var result = await RunPythonAsync(new[] { PythonLauncherArg, "--version" }, cancellationToken).ConfigureAwait(false);
+        var result = await RunPythonAsync([PythonRuntimeEnvironment.DefaultLauncherArgument, "--version"], cancellationToken).ConfigureAwait(false);
         return result.ExitCode == 0;
     }
 
