@@ -2157,6 +2157,38 @@
                                Visibility="Collapsed"
                                Margin="4,8,0,0"/>
 
+                    <TextBlock Text="Tray" Style="{StaticResource SectionLabel}" Margin="4,16,0,9"/>
+                    <Border Style="{StaticResource Card}">
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource SettingIconFrame}">
+                                <TextBlock Text="&#xE7F4;" Style="{StaticResource SettingIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Tray icon left click" Style="{StaticResource SettingTitle}"/>
+                                <TextBlock Text="Choose what happens when you click the OddSnap tray icon." Style="{StaticResource SettingDescription}"/>
+                            </StackPanel>
+                            <ComboBox x:Name="TrayLeftClickActionCombo" Grid.Column="2" MinWidth="170"
+                                      VerticalAlignment="Center"
+                                      AutomationProperties.Name="Tray icon left click action"
+                                      ToolTip="Choose what happens when you click the OddSnap tray icon."
+                                      SelectionChanged="TrayLeftClickActionCombo_SelectionChanged">
+                                <ComboBoxItem Content="Area capture"/>
+                                <ComboBoxItem Content="History"/>
+                                <ComboBoxItem Content="Full screen capture"/>
+                                <ComboBoxItem Content="Record"/>
+                                <ComboBoxItem Content="Scroll capture"/>
+                                <ComboBoxItem Content="Settings"/>
+                                <ComboBoxItem Content="Open menu"/>
+                                <ComboBoxItem Content="Do nothing"/>
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
                     <TextBlock Text="Search" Style="{StaticResource SectionLabel}" Margin="4,16,0,9"/>
                     <Border x:Name="GeneralImageSearchSettingsCard" Style="{StaticResource Card}">
                         <StackPanel>

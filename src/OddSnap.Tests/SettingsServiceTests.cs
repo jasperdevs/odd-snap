@@ -31,6 +31,7 @@ public class SettingsServiceTests
         Assert.True(s.SaveToFile);
         Assert.True(s.ShowOddSnapUiInScreenshots);
         Assert.True(s.CreateStartMenuShortcut);
+        Assert.Equal(TrayIconAction.AreaCapture, s.TrayLeftClickAction);
         Assert.NotNull(s.ImageUploadSettings);
         Assert.NotNull(s.ToastButtons);
     }
@@ -45,6 +46,17 @@ public class SettingsServiceTests
     public void TryDeserialize_CreateStartMenuShortcut_PreservesExplicitChoice()
     {
         Assert.False(Deserialize("{\"CreateStartMenuShortcut\": false}").CreateStartMenuShortcut);
+    }
+
+    [Theory]
+    [InlineData(0, TrayIconAction.AreaCapture)]
+    [InlineData(1, TrayIconAction.History)]
+    [InlineData(6, TrayIconAction.Menu)]
+    [InlineData(7, TrayIconAction.None)]
+    [InlineData(99, TrayIconAction.AreaCapture)]
+    public void TryDeserialize_TrayLeftClickAction_IsNormalized(int value, TrayIconAction expected)
+    {
+        Assert.Equal(expected, Deserialize($"{{\"TrayLeftClickAction\": {value}}}").TrayLeftClickAction);
     }
 
     [Theory]

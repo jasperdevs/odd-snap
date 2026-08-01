@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows.Forms;
 using OddSnap.Native;
 using OddSnap.Helpers;
+using OddSnap.Models;
 using OddSnap.Services;
 
 namespace OddSnap.Capture;
@@ -35,9 +36,13 @@ public sealed partial class RecordingForm : Form
 
     // Selection
     private bool _isDragging;
+    private bool _hasDragged;
     private Point _dragStart;
     private Point _selectionCursor;
     private Rectangle _selection;
+    private Rectangle _autoDetectRect;
+    private Rectangle _clickAutoDetectRect;
+    private readonly WindowDetectionMode _windowDetectionMode;
 
     // Recording
     private GifRecorder? _recorder;
@@ -56,6 +61,7 @@ public sealed partial class RecordingForm : Form
     private readonly CaptureMagnifierHelper? _magHelper;
     private LiveSelectionAdornerForm? _selectionAdorner;
     private CaptureEscapeKeyHook? _escapeHook;
+    private readonly CancellationTokenSource _windowSnapshotCts = new();
     private System.Windows.Forms.Timer? _tickTimer;
     private readonly string _savePath;
 
@@ -87,7 +93,8 @@ public sealed partial class RecordingForm : Form
                          bool showCursor = false,
                          bool recordMic = false, string? micDeviceId = null,
                          bool recordDesktop = false, string? desktopDeviceId = null,
-                         bool showMagnifier = false)
+                         bool showMagnifier = false,
+                         WindowDetectionMode windowDetectionMode = WindowDetectionMode.WindowOnly)
     {
         Theme.Refresh();
         _screenshot = screenshot;
@@ -103,6 +110,9 @@ public sealed partial class RecordingForm : Form
         _recordDesktop = recordDesktop;
         _desktopDeviceId = desktopDeviceId;
         _showMagnifier = showMagnifier;
+        _windowDetectionMode = Enum.IsDefined(windowDetectionMode)
+            ? windowDetectionMode
+            : WindowDetectionMode.WindowOnly;
         if (_showMagnifier && screenshot is not null)
         {
             _magHelper = new CaptureMagnifierHelper();
@@ -146,8 +156,10 @@ public sealed partial class RecordingForm : Form
         User32.SetForegroundWindow(Handle);
         Activate();
         Focus();
+        WindowDetector.RegisterIgnoredWindow(Handle);
         _escapeHook = CaptureEscapeKeyHook.Install(this, CancelFromEscape);
         _selectionAdorner?.Show(this);
+        QueueWindowSnapshot();
     }
 
     // ─── Selection phase ──────────────────────────────────────────────
@@ -194,11 +206,19 @@ public sealed partial class RecordingForm : Form
     {
         if (_state == State.Selecting && e.Button == MouseButtons.Left)
         {
+            _clickAutoDetectRect = _autoDetectRect.Contains(e.Location)
+                ? _autoDetectRect
+                : Rectangle.Empty;
+            var oldAutoDetectRect = _autoDetectRect;
+            _autoDetectRect = Rectangle.Empty;
             _isDragging = true;
+            _hasDragged = false;
             _dragStart = e.Location;
             _selectionCursor = e.Location;
             _selection = Rectangle.Empty;
             UpdateLiveSelectionAdorner();
+            if (!oldAutoDetectRect.IsEmpty)
+                Invalidate(InflateForRepaint(oldAutoDetectRect, 16));
         }
         else if (_state == State.Recording && e.Button == MouseButtons.Left)
         {
@@ -216,9 +236,19 @@ public sealed partial class RecordingForm : Form
                 var oldSelection = _selection;
                 var oldCursor = _selectionCursor;
                 _selection = NormRect(_dragStart, e.Location);
+                if (!_hasDragged)
+                {
+                    int dx = e.Location.X - _dragStart.X;
+                    int dy = e.Location.Y - _dragStart.Y;
+                    _hasDragged = ((long)dx * dx) + ((long)dy * dy) >= 9;
+                }
                 _selectionCursor = e.Location;
                 UpdateLiveSelectionAdorner();
                 InvalidateSelectionChrome(oldSelection, oldCursor, _selection, e.Location);
+            }
+            else
+            {
+                UpdateAutoDetectRect(e.Location);
             }
             _magHelper?.Update(e.Location, this, _virtualBounds, _isDragging ? GetMagnifierAvoidBounds() : Rectangle.Empty);
             return;
@@ -234,7 +264,14 @@ public sealed partial class RecordingForm : Form
         if (_state == State.Selecting && _isDragging && e.Button == MouseButtons.Left)
         {
             _isDragging = false;
-            _selection = NormRect(_dragStart, e.Location);
+            var detectedWindow = _hasDragged
+                ? Rectangle.Empty
+                : ResolveClickWindowRect(e.Location);
+            _selection = ResolveRecordingSelection(
+                _hasDragged,
+                NormRect(_dragStart, e.Location),
+                detectedWindow);
+            _clickAutoDetectRect = Rectangle.Empty;
             _selectionCursor = e.Location;
             UpdateLiveSelectionAdorner();
             if (_selection.Width > 10 && _selection.Height > 10)
@@ -286,10 +323,23 @@ public sealed partial class RecordingForm : Form
                 ClientRectangle,
                 GetRecordingReadoutDetails());
         }
+        else if (!_autoDetectRect.IsEmpty)
+        {
+            SelectionFrameRenderer.DrawRectangle(g, _autoDetectRect);
+            SelectionSizeReadout.Draw(
+                g,
+                PointToClient(Cursor.Position),
+                _autoDetectRect,
+                _hintFont,
+                ClientRectangle,
+                GetRecordingReadoutDetails());
+        }
         else
         {
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            string hint = "Drag to select recording area";
+            string hint = _windowDetectionMode == WindowDetectionMode.Off
+                ? "Drag to select recording area"
+                : "Click a window or drag to select recording area";
             var hintSz = g.MeasureString(hint, _hintFont);
             g.DrawString(hint, _hintFont, _hintBrush,
                 Width / 2f - hintSz.Width / 2f, Height / 2f - hintSz.Height / 2f);
@@ -304,6 +354,84 @@ public sealed partial class RecordingForm : Form
 
         _selectionAdorner.SetSelection(_selection, PointToClient(Cursor.Position), GetRecordingReadoutDetails());
     }
+
+    private void QueueWindowSnapshot()
+    {
+        WindowDetector.ClearSnapshot();
+        if (_windowDetectionMode == WindowDetectionMode.Off)
+            return;
+
+        var cancellationToken = _windowSnapshotCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(40, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                WindowDetector.SnapshotWindows(_virtualBounds);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch
+            {
+                // Live hit testing remains available if snapshot creation fails.
+            }
+        });
+    }
+
+    private void UpdateAutoDetectRect(Point location)
+    {
+        var detected = ResolveWindowRect(location);
+        if (detected == _autoDetectRect)
+            return;
+
+        var previous = _autoDetectRect;
+        _autoDetectRect = detected;
+        var previousDirty = InflateForRepaint(previous, 16);
+        var detectedDirty = InflateForRepaint(detected, 16);
+        var dirty = previousDirty.IsEmpty
+            ? detectedDirty
+            : detectedDirty.IsEmpty
+                ? previousDirty
+                : Rectangle.Union(previousDirty, detectedDirty);
+        if (!dirty.IsEmpty)
+            Invalidate(dirty);
+    }
+
+    private Rectangle ResolveClickWindowRect(Point location)
+    {
+        if (_clickAutoDetectRect.Contains(location))
+            return _clickAutoDetectRect;
+
+        return ResolveWindowRect(location);
+    }
+
+    private Rectangle ResolveWindowRect(Point location)
+    {
+        if (_windowDetectionMode == WindowDetectionMode.Off)
+            return Rectangle.Empty;
+
+        if (WindowDetector.TryGetSnapshotDetectionRectAtPoint(
+                location,
+                _virtualBounds,
+                _windowDetectionMode,
+                out var detected))
+        {
+            return detected;
+        }
+
+        return WindowDetector.GetFastDetectionRectAtPoint(
+            location,
+            _virtualBounds,
+            _windowDetectionMode);
+    }
+
+    internal static Rectangle ResolveRecordingSelection(
+        bool hasDragged,
+        Rectangle draggedSelection,
+        Rectangle detectedWindow) =>
+        hasDragged ? draggedSelection : detectedWindow;
 
     private void PaintRecordingPhase(Graphics g)
     {
@@ -472,7 +600,12 @@ public sealed partial class RecordingForm : Form
         {
             Current = null;
             if (IsHandleCreated)
+            {
                 CaptureWindowExclusion.Unregister(Handle);
+                WindowDetector.UnregisterIgnoredWindow(Handle);
+            }
+            _windowSnapshotCts.Cancel();
+            WindowDetector.ClearSnapshot();
             _escapeHook?.Dispose();
             _escapeHook = null;
             _tickTimer?.Dispose();
@@ -492,6 +625,7 @@ public sealed partial class RecordingForm : Form
             _dotBrush.Dispose(); _ringPen.Dispose(); _timeFont.Dispose();
             _timeBrush.Dispose(); _encFont.Dispose();
             _encTextBrush.Dispose(); _spinBrush.Dispose();
+            _windowSnapshotCts.Dispose();
         }
         base.Dispose(disposing);
     }

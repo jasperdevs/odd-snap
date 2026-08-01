@@ -97,7 +97,7 @@ public partial class App
                 bool recDesktop = fmt != RecordingFormat.GIF && s.RecordDesktopAudio;
                 form = new RecordingForm(selectionScreenshot, bounds, fps, savePath, fmt, maxH,
                     showCursor, recMic, s.MicrophoneDeviceId, recDesktop, s.DesktopAudioDeviceId,
-                    _settingsService!.Settings.ShowCaptureMagnifier);
+                    s.ShowCaptureMagnifier, s.WindowDetection);
                 selectionScreenshot = null;
 
                 form.Shown += (_, _) =>

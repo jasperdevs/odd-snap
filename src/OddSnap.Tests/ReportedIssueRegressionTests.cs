@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using OddSnap.Capture;
@@ -87,6 +88,53 @@ public sealed class ReportedIssueRegressionTests : IDisposable
             ToastWindow.TryShowWithCompositionFallback(
                 () => throw new InvalidOperationException("Unexpected failure."),
                 () => { }));
+    }
+
+    [Theory]
+    [InlineData(TrayIconAction.AreaCapture)]
+    [InlineData(TrayIconAction.History)]
+    [InlineData(TrayIconAction.Record)]
+    [InlineData(TrayIconAction.Menu)]
+    [InlineData(TrayIconAction.None)]
+    public void Issue43_TrayLeftClickUsesConfiguredAction(TrayIconAction action)
+    {
+        var settings = new AppSettings { TrayLeftClickAction = action };
+
+        Assert.Equal(action, TrayIcon.GetLeftClickAction(settings));
+    }
+
+    [Fact]
+    public void Issue43_InvalidTrayLeftClickActionFallsBackToAreaCapture()
+    {
+        var settings = new AppSettings { TrayLeftClickAction = (TrayIconAction)99 };
+
+        Assert.Equal(TrayIconAction.AreaCapture, TrayIcon.GetLeftClickAction(settings));
+    }
+
+    [Fact]
+    public void Issue60_ClickSelectsDetectedWindowForRecording()
+    {
+        var detectedWindow = new Rectangle(25, 40, 800, 600);
+
+        var selection = RecordingForm.ResolveRecordingSelection(
+            hasDragged: false,
+            draggedSelection: Rectangle.Empty,
+            detectedWindow);
+
+        Assert.Equal(detectedWindow, selection);
+    }
+
+    [Fact]
+    public void Issue60_DragSelectionTakesPriorityOverDetectedWindow()
+    {
+        var draggedSelection = new Rectangle(100, 120, 640, 360);
+
+        var selection = RecordingForm.ResolveRecordingSelection(
+            hasDragged: true,
+            draggedSelection,
+            detectedWindow: new Rectangle(0, 0, 1920, 1080));
+
+        Assert.Equal(draggedSelection, selection);
     }
 
     [Theory]

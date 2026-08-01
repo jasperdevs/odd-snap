@@ -141,6 +141,9 @@ public partial class SettingsWindow
         SaveDirPanel.Visibility = s.SaveToFile ? Visibility.Visible : Visibility.Collapsed;
         StartWithWindowsCheck.IsChecked = s.StartWithWindows;
         CreateStartMenuShortcutCheck.IsChecked = s.CreateStartMenuShortcut;
+        TrayLeftClickActionCombo.SelectedIndex = Enum.IsDefined(typeof(TrayIconAction), s.TrayLeftClickAction)
+            ? (int)s.TrayLeftClickAction
+            : 0;
         AutoUpdateCheck.IsChecked = s.AutoCheckForUpdates;
         SaveHistoryCheck.IsChecked = s.SaveHistory;
         HistoryRetentionCombo.SelectedIndex = (int)s.HistoryRetention;

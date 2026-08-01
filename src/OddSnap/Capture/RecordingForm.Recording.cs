@@ -19,6 +19,8 @@ public sealed partial class RecordingForm
     private void StartRecording()
     {
         var startStarted = PerformanceTrace.Timestamp();
+        _windowSnapshotCts.Cancel();
+        WindowDetector.ClearSnapshot();
         _recordingStopRequested = 0;
         _magHelper?.Close();
         _selectionAdorner?.Close();

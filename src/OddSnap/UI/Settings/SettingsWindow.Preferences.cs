@@ -667,6 +667,26 @@ public partial class SettingsWindow
             : Visibility.Visible;
     }
 
+    private void TrayLeftClickActionCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || _suppressGeneralPreferenceChange)
+            return;
+
+        var previous = _settingsService.Settings.TrayLeftClickAction;
+        var selected = (TrayIconAction)Math.Clamp(
+            TrayLeftClickActionCombo.SelectedIndex,
+            0,
+            Enum.GetValues<TrayIconAction>().Length - 1);
+        UpdateGeneralPreference(
+            "settings.tray-left-click-action",
+            "Tray icon action",
+            previous,
+            selected,
+            value => _settingsService.Settings.TrayLeftClickAction = value,
+            value => TrayLeftClickActionCombo.SelectedIndex = (int)value);
+        TraySettingsChanged?.Invoke();
+    }
+
     private void ShowImageSearchBarCheck_Changed(object sender, RoutedEventArgs e)
     {
         if (!IsLoaded || _suppressGeneralPreferenceChange) return;

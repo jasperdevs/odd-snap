@@ -117,6 +117,7 @@ public partial class SettingsWindow : Window
     public event Action? HotkeyChanged;
     public event Action? UninstallRequested;
     public event Action? LocalizationChanged;
+    public event Action? TraySettingsChanged;
 
     public SettingsWindow(SettingsService settingsService, HistoryService historyService, ImageSearchIndexService imageSearchIndexService)
     {

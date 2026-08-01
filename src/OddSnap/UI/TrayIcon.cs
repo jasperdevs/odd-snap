@@ -41,7 +41,7 @@ public sealed class TrayIcon : IDisposable
         _defaultIcon = CreateDefaultIcon();
         _notifyIcon = new NotifyIcon
         {
-            Text = T("OddSnap - Click to capture, right-click for menu"),
+            Text = GetIdleToolTip(),
             Icon = _defaultIcon,
             Visible = true
         };
@@ -84,7 +84,7 @@ public sealed class TrayIcon : IDisposable
         else
         {
             _notifyIcon.Icon = _defaultIcon;
-            _notifyIcon.Text = T("OddSnap - Click to capture, right-click for menu");
+            _notifyIcon.Text = GetIdleToolTip();
         }
     }
 
@@ -92,7 +92,7 @@ public sealed class TrayIcon : IDisposable
     {
         _notifyIcon.Text = _isShowingRecording
             ? T("OddSnap recording - click to stop, right-click for menu")
-            : T("OddSnap - Click to capture, right-click for menu");
+            : GetIdleToolTip();
 
         var oldMenu = _menu;
         _menu = CreateThemedMenu();
@@ -160,7 +160,7 @@ public sealed class TrayIcon : IDisposable
         switch (button)
         {
             case MouseButtons.Left:
-                OnCapture?.Invoke();
+                ExecuteLeftClickAction();
                 break;
             case MouseButtons.Middle:
                 OnHistory?.Invoke();
@@ -170,6 +170,53 @@ public sealed class TrayIcon : IDisposable
                 break;
         }
     }
+
+    private void ExecuteLeftClickAction()
+    {
+        switch (GetLeftClickAction(_settings))
+        {
+            case TrayIconAction.History:
+                OnHistory?.Invoke();
+                break;
+            case TrayIconAction.FullScreenCapture:
+                OnFullScreenCapture?.Invoke();
+                break;
+            case TrayIconAction.Record:
+                OnGifRecord?.Invoke();
+                break;
+            case TrayIconAction.ScrollCapture:
+                OnScrollCapture?.Invoke();
+                break;
+            case TrayIconAction.Settings:
+                OnSettings?.Invoke();
+                break;
+            case TrayIconAction.Menu:
+                ShowMenu();
+                break;
+            case TrayIconAction.None:
+                break;
+            default:
+                OnCapture?.Invoke();
+                break;
+        }
+    }
+
+    internal static TrayIconAction GetLeftClickAction(AppSettings? settings) =>
+        settings is not null && Enum.IsDefined(settings.TrayLeftClickAction)
+            ? settings.TrayLeftClickAction
+            : TrayIconAction.AreaCapture;
+
+    private string GetIdleToolTip() => GetLeftClickAction(_settings) switch
+    {
+        TrayIconAction.History => T("OddSnap - Click for history, right-click for menu"),
+        TrayIconAction.FullScreenCapture => T("OddSnap - Click for full screen capture, right-click for menu"),
+        TrayIconAction.Record => T("OddSnap - Click to record, right-click for menu"),
+        TrayIconAction.ScrollCapture => T("OddSnap - Click for scroll capture, right-click for menu"),
+        TrayIconAction.Settings => T("OddSnap - Click for settings, right-click for menu"),
+        TrayIconAction.Menu => T("OddSnap - Click for menu"),
+        TrayIconAction.None => T("OddSnap - Right-click for menu"),
+        _ => T("OddSnap - Click to capture, right-click for menu")
+    };
 
     private string? HotkeyHint(string toolId)
     {

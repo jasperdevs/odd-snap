@@ -72,6 +72,18 @@ public enum WindowDetectionMode
     WindowOnly
 }
 
+public enum TrayIconAction
+{
+    AreaCapture,
+    History,
+    FullScreenCapture,
+    Record,
+    ScrollCapture,
+    Settings,
+    Menu,
+    None
+}
+
 public enum CaptureDockSide
 {
     Top,
@@ -191,6 +203,7 @@ public sealed class AppSettings
     public bool SaveInMonthlyFolders { get; set; } = true;
     public bool StartWithWindows { get; set; } = true;
     public bool CreateStartMenuShortcut { get; set; } = true;
+    public TrayIconAction TrayLeftClickAction { get; set; } = TrayIconAction.AreaCapture;
     public bool AutoCheckForUpdates { get; set; } = true;
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
     public WindowDetectionMode WindowDetection { get; set; } = WindowDetectionMode.WindowOnly;

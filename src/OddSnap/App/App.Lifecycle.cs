@@ -119,14 +119,17 @@ public partial class App
         Action hotkeyHandler = ApplyRuntimeSettings;
         Action uninstallHandler = BeginUninstall;
         Action localizationHandler = () => _trayIcon?.RefreshLocalization();
+        Action traySettingsHandler = () => _trayIcon?.UpdateSettings(_settingsService?.Settings);
         win.HotkeyChanged += hotkeyHandler;
         win.UninstallRequested += uninstallHandler;
         win.LocalizationChanged += localizationHandler;
+        win.TraySettingsChanged += traySettingsHandler;
         win.Closed += (_, _) =>
         {
             win.HotkeyChanged -= hotkeyHandler;
             win.UninstallRequested -= uninstallHandler;
             win.LocalizationChanged -= localizationHandler;
+            win.TraySettingsChanged -= traySettingsHandler;
             _settingsWindow = null;
             ScheduleIdleMemoryTrim();
         };
