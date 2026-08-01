@@ -40,6 +40,12 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
         new("_record",        "Record",             ToolGlyphs.RecordGlyph, null, 2),
     };
 
+    /// <summary>Capture actions exposed in hotkey settings without adding toolbar chrome.</summary>
+    public static readonly ToolDef[] HotkeyOnlyActions =
+    {
+        new("_lastRegion", "Last captured region", '\uE257', null, 2),
+    };
+
     public static ToolDef[] AllToolbarItems() =>
         AllTools.Where(t => t.Group == 0)
             .Concat(ToolbarActions)

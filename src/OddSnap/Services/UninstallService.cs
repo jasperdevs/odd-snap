@@ -15,9 +15,9 @@ public static class UninstallService
         if (LooksLikeBuildOutputPath(exe))
             return;
 
-        var programsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Microsoft", "Windows", "Start Menu", "Programs");
+        var shortcutPath = GetStartMenuShortcutPath();
+        var programsDir = Path.GetDirectoryName(shortcutPath)!;
         Directory.CreateDirectory(programsDir);
-        var shortcutPath = Path.Combine(programsDir, "OddSnap.lnk");
 
         var shellType = Type.GetTypeFromProgID("WScript.Shell");
         if (shellType is null)
@@ -41,7 +41,7 @@ public static class UninstallService
 
     public static void RemoveStartMenuShortcut()
     {
-        var shortcutPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Microsoft", "Windows", "Start Menu", "Programs", "OddSnap.lnk");
+        var shortcutPath = GetStartMenuShortcutPath();
         try
         {
             if (File.Exists(shortcutPath))
@@ -55,6 +55,23 @@ public static class UninstallService
                 ex);
         }
     }
+
+    public static void SetStartMenuShortcut(bool enabled)
+    {
+        if (enabled)
+        {
+            EnsureStartMenuShortcut();
+            return;
+        }
+
+        var shortcutPath = GetStartMenuShortcutPath();
+        if (File.Exists(shortcutPath))
+            File.Delete(shortcutPath);
+    }
+
+    private static string GetStartMenuShortcutPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "Microsoft", "Windows", "Start Menu", "Programs", "OddSnap.lnk");
 
     public static void RegisterInstalledAppEntry()
     {

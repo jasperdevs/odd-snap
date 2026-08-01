@@ -31,6 +31,7 @@ public static class SettingsSchemaCatalog
                     "App startup and update defaults.",
                     [
                         new SettingDefinition("start_with_windows", "Start with Windows", SettingsValueKind.Toggle, "Launch OddSnap automatically when the user signs in.", "StartWithWindows"),
+                        new SettingDefinition("start_menu_shortcut", "Create Start Menu shortcut", SettingsValueKind.Toggle, "Keep OddSnap in the current user's Start menu.", "CreateStartMenuShortcut"),
                         new SettingDefinition("auto_updates", "Check for updates", SettingsValueKind.Toggle, "Look for new releases on startup.", "AutoCheckForUpdates"),
                         new SettingDefinition("after_capture", "After capture behavior", SettingsValueKind.Choice, "Default post-capture action.", "AfterCapture"),
                     ]),

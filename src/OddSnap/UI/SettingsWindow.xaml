@@ -2928,6 +2928,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -2948,7 +2949,20 @@
                                   VerticalAlignment="Center"
                                   Checked="StartWithWindowsCheck_Changed" Unchecked="StartWithWindowsCheck_Changed"/>
 
-                        <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Margin="0,14,0,0">
+                        <Border Grid.Row="1" Style="{StaticResource SettingIconFrame}" Margin="0,12,0,0">
+                            <TextBlock Text="&#xE8A5;" Style="{StaticResource SettingIconGlyph}"/>
+                        </Border>
+                        <StackPanel Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="0,12,0,0">
+                            <TextBlock Text="Create Start Menu shortcut" Style="{StaticResource SettingTitle}"/>
+                            <TextBlock Text="Keep OddSnap in the current user's Start menu." Style="{StaticResource SettingDescription}"/>
+                        </StackPanel>
+                        <CheckBox x:Name="CreateStartMenuShortcutCheck" Grid.Row="1" Grid.Column="2" Content="" FontSize="13"
+                                  AutomationProperties.Name="Create Start Menu shortcut"
+                                  ToolTip="Keep OddSnap in the current user's Start menu."
+                                  VerticalAlignment="Center" Margin="0,12,0,0"
+                                  Checked="CreateStartMenuShortcutCheck_Changed" Unchecked="CreateStartMenuShortcutCheck_Changed"/>
+
+                        <StackPanel Grid.Row="2" Grid.ColumnSpan="3" Margin="0,14,0,0">
                             <TextBlock x:Name="StartupPreferenceStatusText" Style="{StaticResource SettingsStatusText}"
                                        Visibility="Collapsed"
                                        ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"

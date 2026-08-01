@@ -79,6 +79,9 @@ public class HotkeyFormatterTests
     [Theory]
     [InlineData(0u, 0u, false)]
     [InlineData(0u, 0x2Cu, false)]
+    [InlineData(0u, 0x70u, false)]
+    [InlineData(0u, 0x87u, false)]
+    [InlineData(0u, 0x88u, true)]
     [InlineData(ModControl, 0x41u, false)]
     [InlineData(0u, 0x41u, true)]
     public void IsUnsafeModifierlessGlobalHotkey_UsesSharedRegistrationPolicy(
@@ -87,6 +90,17 @@ public class HotkeyFormatterTests
         bool expected)
     {
         Assert.Equal(expected, HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(modifiers, key));
+    }
+
+    [Theory]
+    [InlineData(0u, 0x70u, true)]
+    [InlineData(0u, 0x87u, true)]
+    [InlineData(ModAlt, 0x70u, false)]
+    [InlineData(0u, 0x6Fu, false)]
+    [InlineData(0u, 0x88u, false)]
+    public void IsModifierlessFunctionKey_RecognizesOnlyBareF1ThroughF24(uint modifiers, uint key, bool expected)
+    {
+        Assert.Equal(expected, HotkeyFormatter.IsModifierlessFunctionKey(modifiers, key));
     }
 
     private static readonly Func<int, short> NothingPressed = _ => 0;

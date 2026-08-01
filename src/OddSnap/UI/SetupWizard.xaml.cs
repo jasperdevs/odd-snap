@@ -144,7 +144,13 @@ public partial class SetupWizard : Window
             {
                 ToastWindow.ShowError(
                     "Hotkey needs a modifier",
-                    "Use Ctrl, Alt, Shift, or Win with this key. Print Screen can be used by itself.");
+                    "Use Ctrl, Alt, Shift, or Win with this key. Print Screen and F1-F24 can be used by themselves.");
+                RestoreHotkeyText();
+                Keyboard.ClearFocus();
+                return;
+            }
+            if (!ModifierlessHotkeyConfirmation.Confirm(this, mod, vk))
+            {
                 RestoreHotkeyText();
                 Keyboard.ClearFocus();
                 return;

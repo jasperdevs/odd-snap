@@ -140,6 +140,7 @@ public partial class SettingsWindow
         SetSaveDirectoryPath(s.SaveDirectory);
         SaveDirPanel.Visibility = s.SaveToFile ? Visibility.Visible : Visibility.Collapsed;
         StartWithWindowsCheck.IsChecked = s.StartWithWindows;
+        CreateStartMenuShortcutCheck.IsChecked = s.CreateStartMenuShortcut;
         AutoUpdateCheck.IsChecked = s.AutoCheckForUpdates;
         SaveHistoryCheck.IsChecked = s.SaveHistory;
         HistoryRetentionCombo.SelectedIndex = (int)s.HistoryRetention;

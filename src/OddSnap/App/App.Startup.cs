@@ -50,10 +50,10 @@ public partial class App
         WireUnhandledExceptionLogging();
 
         try { UninstallService.RegisterInstalledAppEntry(); } catch (Exception ex) { AppDiagnostics.LogError("startup.register-installed-entry", ex); }
-        try { UninstallService.EnsureStartMenuShortcut(); } catch (Exception ex) { AppDiagnostics.LogError("startup.ensure-start-menu-shortcut", ex); }
 
         _settingsService = new SettingsService();
         _settingsService.Load();
+        try { UninstallService.SetStartMenuShortcut(_settingsService.Settings.CreateStartMenuShortcut); } catch (Exception ex) { AppDiagnostics.LogError("startup.sync-start-menu-shortcut", ex); }
         SingleInstanceActivationService.Start(HandleSingleInstanceActivation);
         _settingsService.SaveFailed += message =>
         {

@@ -523,6 +523,12 @@ public sealed class SettingsService : IDisposable
             settings.GifHotkeyKey = 0;
         if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(settings.AiRedirectHotkeyModifiers, settings.AiRedirectHotkeyKey))
             settings.AiRedirectHotkeyKey = 0;
+        foreach (var action in ToolDef.HotkeyOnlyActions)
+        {
+            var (modifiers, key) = settings.GetToolHotkey(action.Id);
+            if (HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(modifiers, key))
+                settings.SetToolHotkey(action.Id, 0, 0);
+        }
     }
 
     private static string NormalizeTranslationTargetSetting(string? languageCode)
@@ -636,7 +642,8 @@ public sealed class SettingsService : IDisposable
 
         var knownIds = ToolDef.AllTools
             .Select(tool => tool.Id)
-            .Concat(new[] { "_fullscreen", "_activeWindow", "_scrollCapture", "_record" })
+            .Concat(ToolDef.ToolbarActions.Select(tool => tool.Id))
+            .Concat(ToolDef.HotkeyOnlyActions.Select(tool => tool.Id))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var normalized = new Dictionary<string, uint[]>(StringComparer.OrdinalIgnoreCase);
 

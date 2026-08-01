@@ -121,12 +121,14 @@ public sealed partial class RegionOverlayForm
             case CaptureMode.Sticker when _hasSelection && !_isSelecting:
             case CaptureMode.Upscale when _hasSelection && !_isSelecting:
                 SelectionFrameRenderer.DrawRectangle(g, _selectionRect);
+                var rectangleCursor = GetReadoutCursorPoint();
                 SelectionSizeReadout.Draw(
                     g,
-                    GetReadoutCursorPoint(),
+                    rectangleCursor,
                     _selectionRect,
                     _readoutFont,
-                    ClientRectangle);
+                    ClientRectangle,
+                    GetSelectionReadoutDetails(rectangleCursor));
                 _lastSelectionRect = _selectionRect;
                 break;
 
@@ -134,12 +136,14 @@ public sealed partial class RegionOverlayForm
                 DrawFreeformSelectionPreview(g, _freeformPoints);
                 if (ShouldFillFreeformPreview(_freeformPoints))
                 {
+                    var freeformCursor = GetReadoutCursorPoint();
                     SelectionSizeReadout.Draw(
                         g,
-                        GetReadoutCursorPoint(),
+                        freeformCursor,
                         GetFreeformBounds(_freeformPoints),
                         _readoutFont,
-                        ClientRectangle);
+                        ClientRectangle,
+                        GetSelectionReadoutDetails(freeformCursor));
                 }
                 break;
         }
@@ -210,7 +214,8 @@ public sealed partial class RegionOverlayForm
                 cursor,
                 bounds,
                 _readoutFont,
-                ClientRectangle);
+                ClientRectangle,
+                GetSelectionReadoutDetails(cursor));
             if (!readoutBounds.IsEmpty)
                 dirty = Rectangle.Union(dirty, InflateForRepaint(readoutBounds, 10));
         }
@@ -237,7 +242,8 @@ public sealed partial class RegionOverlayForm
             cursor,
             selection,
             _readoutFont,
-            ClientRectangle);
+            ClientRectangle,
+            GetSelectionReadoutDetails(cursor));
         if (!readoutBounds.IsEmpty)
             Invalidate(InflateForRepaint(readoutBounds, 10));
     }

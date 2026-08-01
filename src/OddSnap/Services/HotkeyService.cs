@@ -19,6 +19,7 @@ public sealed class HotkeyService : IDisposable
     private const int HOTKEY_SCROLL_CAPTURE = 9011;
     private const int HOTKEY_AI_REDIRECT = 9012;
     private const int HOTKEY_CENTER = 9013;
+    private const int HOTKEY_LAST_REGION = 9014;
     private bool _captureRegistered;
     private bool _ocrRegistered;
     private bool _pickerRegistered;
@@ -32,6 +33,7 @@ public sealed class HotkeyService : IDisposable
     private bool _scrollCaptureRegistered;
     private bool _aiRedirectRegistered;
     private bool _centerRegistered;
+    private bool _lastRegionRegistered;
     private bool _registered;
 
     public event Action? HotkeyPressed;
@@ -47,6 +49,7 @@ public sealed class HotkeyService : IDisposable
     public event Action? ScrollCaptureHotkeyPressed;
     public event Action? AiRedirectHotkeyPressed;
     public event Action? CenterHotkeyPressed;
+    public event Action? LastRegionHotkeyPressed;
 
     private void EnsureMessageHook()
     {
@@ -91,6 +94,7 @@ public sealed class HotkeyService : IDisposable
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCROLL_CAPTURE);
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_AI_REDIRECT);
         User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_CENTER);
+        User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_LAST_REGION);
         _captureRegistered = false;
         _ocrRegistered = false;
         _pickerRegistered = false;
@@ -104,6 +108,7 @@ public sealed class HotkeyService : IDisposable
         _scrollCaptureRegistered = false;
         _aiRedirectRegistered = false;
         _centerRegistered = false;
+        _lastRegionRegistered = false;
     }
 
     public bool Register(uint modifiers, uint key)
@@ -171,6 +176,11 @@ public sealed class HotkeyService : IDisposable
         return RegisterHotkey(ref _centerRegistered, HOTKEY_CENTER, modifiers, key);
     }
 
+    public bool RegisterLastRegion(uint modifiers, uint key)
+    {
+        return RegisterHotkey(ref _lastRegionRegistered, HOTKEY_LAST_REGION, modifiers, key);
+    }
+
     public void Unregister()
     {
         if (_captureRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_CAPTURE); _captureRegistered = false; }
@@ -186,6 +196,7 @@ public sealed class HotkeyService : IDisposable
         if (_scrollCaptureRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_SCROLL_CAPTURE); _scrollCaptureRegistered = false; }
         if (_aiRedirectRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_AI_REDIRECT); _aiRedirectRegistered = false; }
         if (_centerRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_CENTER); _centerRegistered = false; }
+        if (_lastRegionRegistered) { User32.UnregisterHotKey(IntPtr.Zero, HOTKEY_LAST_REGION); _lastRegionRegistered = false; }
         if (_registered)
         {
             ComponentDispatcher.ThreadPreprocessMessage -= OnMsg;
@@ -210,6 +221,7 @@ public sealed class HotkeyService : IDisposable
         else if (id == HOTKEY_SCROLL_CAPTURE) { InvokeHandlersSafely(ScrollCaptureHotkeyPressed, "hotkey.scroll-capture"); handled = true; }
         else if (id == HOTKEY_AI_REDIRECT) { InvokeHandlersSafely(AiRedirectHotkeyPressed, "hotkey.ai-redirect"); handled = true; }
         else if (id == HOTKEY_CENTER) { InvokeHandlersSafely(CenterHotkeyPressed, "hotkey.center"); handled = true; }
+        else if (id == HOTKEY_LAST_REGION) { InvokeHandlersSafely(LastRegionHotkeyPressed, "hotkey.last-region"); handled = true; }
     }
 
     private static void InvokeHandlersSafely(Action? handlers, string context)

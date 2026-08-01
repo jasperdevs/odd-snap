@@ -94,6 +94,12 @@ public sealed partial class RegionOverlayForm
     private (uint Modifiers, uint Key) GetCachedToolHotkey(string toolId)
         => _toolHotkeysById.TryGetValue(toolId, out var hotkey) ? hotkey : (0u, 0u);
 
+    private string[] GetSelectionReadoutDetails(Point cursor) =>
+    [
+        $"X {_virtualBounds.X + cursor.X}",
+        $"Y {_virtualBounds.Y + cursor.Y}",
+    ];
+
     // All system fonts, cached once
     private static string[]? _allSystemFonts;
     private static string[] GetSystemFonts()

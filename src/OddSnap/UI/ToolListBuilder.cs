@@ -19,7 +19,8 @@ namespace OddSnap.UI;
 public static class ToolListBuilder
 {
     public static readonly (string id, string label, char icon)[] ExtraTools =
-        ToolDef.ToolbarActions.Select(tool => (tool.Id, tool.Label, tool.Icon)).ToArray();
+        ToolDef.ToolbarActions.Concat(ToolDef.HotkeyOnlyActions)
+            .Select(tool => (tool.Id, tool.Label, tool.Icon)).ToArray();
 
     private static readonly HashSet<StackPanel> RestoringEnabledToolPanels = new();
 
@@ -326,7 +327,13 @@ public static class ToolListBuilder
             {
                 ToastWindow.ShowError(
                     "Hotkey needs a modifier",
-                    "Use Ctrl, Alt, Shift, or Win with this key. Print Screen can be used by itself.");
+                    "Use Ctrl, Alt, Shift, or Win with this key. Print Screen and F1-F24 can be used by themselves.");
+                RestoreHotkeyText();
+                StopRecording();
+                return;
+            }
+            if (!IsOverlayOnlyTool(toolId) && !ModifierlessHotkeyConfirmation.Confirm(owner, mod, vk))
+            {
                 RestoreHotkeyText();
                 StopRecording();
                 return;

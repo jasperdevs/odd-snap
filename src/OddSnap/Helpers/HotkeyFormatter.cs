@@ -69,8 +69,11 @@ public static class HotkeyFormatter
 
     public static uint GetActiveModifiers() => GetActiveModifiers(Keyboard.Modifiers);
 
+    public static bool IsModifierlessFunctionKey(uint modifiers, uint key) =>
+        modifiers == 0 && key is >= 0x70 and <= 0x87; // F1-F24
+
     public static bool IsUnsafeModifierlessGlobalHotkey(uint modifiers, uint key) =>
-        key != 0 && modifiers == 0 && key != Native.User32.VK_SNAPSHOT;
+        key != 0 && modifiers == 0 && key != Native.User32.VK_SNAPSHOT && !IsModifierlessFunctionKey(modifiers, key);
 
     public static uint GetActiveModifiers(ModifierKeys modifiers, Func<int, short>? getKeyState = null)
     {

@@ -11,7 +11,7 @@ internal static class HotkeyConflictResolver
         if (key == 0)
             return null;
 
-        foreach (var tool in ToolDef.AllTools.Concat(ToolDef.ToolbarActions))
+        foreach (var tool in ToolDef.AllTools.Concat(ToolDef.ToolbarActions).Concat(ToolDef.HotkeyOnlyActions))
         {
             if (string.Equals(tool.Id, currentToolId, StringComparison.OrdinalIgnoreCase))
                 continue;

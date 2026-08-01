@@ -1,4 +1,6 @@
 using OddSnap.Models;
+using OddSnap.Helpers;
+using System.Drawing;
 using Xunit;
 
 namespace OddSnap.Tests;
@@ -23,6 +25,12 @@ public class AppSettingsTests
         Assert.True(new AppSettings().ShowOddSnapUiInScreenshots);
     }
 
+    [Fact]
+    public void Defaults_StartMenuShortcutRemainsEnabledForCompatibility()
+    {
+        Assert.True(new AppSettings().CreateStartMenuShortcut);
+    }
+
     [Theory]
     [InlineData("rect", ModAlt, 0xC0u)]
     [InlineData("ocr", ModAlt | ModShift, 0xC0u)]
@@ -42,6 +50,7 @@ public class AppSettingsTests
     [InlineData("_activeWindow")]
     [InlineData("_scrollCapture")]
     [InlineData("_record")]
+    [InlineData("_lastRegion")]
     public void GetToolHotkey_OptionalTools_DisabledByDefault(string toolId)
     {
         Assert.Equal((0u, 0u), new AppSettings().GetToolHotkey(toolId));
@@ -75,6 +84,37 @@ public class AppSettingsTests
         s.SetToolHotkey("arrow", ModShift, 0x46);
         Assert.NotNull(s.ToolHotkeys);
         Assert.Equal((ModShift, 0x46u), s.GetToolHotkey("arrow"));
+    }
+
+    [Fact]
+    public void LastCaptureRegion_StoresAndClipsToCurrentDesktop()
+    {
+        var settings = new AppSettings();
+        LastCaptureRegion.Store(settings, new Rectangle(-100, 40, 500, 300));
+
+        Assert.Equal(new Rectangle(0, 40, 400, 300),
+            LastCaptureRegion.Resolve(settings, new Rectangle(0, 0, 1920, 1080)));
+    }
+
+    [Fact]
+    public void LastCaptureRegion_RejectsMissingOrDegenerateSelection()
+    {
+        var settings = new AppSettings { LastCaptureRegionWidth = 1, LastCaptureRegionHeight = 200 };
+        Assert.Equal(Rectangle.Empty, LastCaptureRegion.Resolve(settings, new Rectangle(0, 0, 1920, 1080)));
+    }
+
+    [Fact]
+    public void LastCaptureRegion_HandlesExtremePersistedCoordinatesWithoutOverflow()
+    {
+        var settings = new AppSettings
+        {
+            LastCaptureRegionX = int.MaxValue - 10,
+            LastCaptureRegionY = int.MaxValue - 10,
+            LastCaptureRegionWidth = int.MaxValue,
+            LastCaptureRegionHeight = int.MaxValue,
+        };
+
+        Assert.Equal(Rectangle.Empty, LastCaptureRegion.Resolve(settings, new Rectangle(0, 0, 1920, 1080)));
     }
 
     [Fact]

@@ -17,7 +17,7 @@ public partial class App
         var settings = _settingsService!.Settings;
         var ext = CaptureOutputService.GetExtension(settings.CaptureImageFormat);
         if (!TryResolveCaptureOutputPath(
-                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}.{ext}",
+                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height, _captureForegroundProcessName)}.{ext}",
                 settings.CaptureImageFormat,
                 "Capture error",
                 "OddSnap could not prepare the capture save path. Choose another save folder in Settings and try again.",
@@ -103,7 +103,7 @@ public partial class App
     {
         var settings = _settingsService!.Settings;
         if (!TryResolveCaptureOutputPath(
-                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}_sticker.png",
+                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height, _captureForegroundProcessName)}_sticker.png",
                 CaptureImageFormat.Png,
                 "Sticker error",
                 "OddSnap could not prepare the sticker save path. Choose another save folder in Settings and try again.",
@@ -174,7 +174,7 @@ public partial class App
     {
         var settings = _settingsService!.Settings;
         if (!TryResolveCaptureOutputPath(
-                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height)}_upscale.png",
+                () => $"{Helpers.FileNameTemplate.Format(settings.FileNameTemplate, result.Width, result.Height, _captureForegroundProcessName)}_upscale.png",
                 CaptureImageFormat.Png,
                 "Upscale error",
                 "OddSnap could not prepare the upscale save path. Choose another save folder in Settings and try again.",

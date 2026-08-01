@@ -3,7 +3,7 @@ using Xunit;
 
 namespace OddSnap.Tests;
 
-// FormatExample renders with a fixed date (2026-04-05 14:30:52), rand "a3f1", 1920x1080.
+// FormatExample renders with fixed date/process/dimensions for deterministic previews.
 public class FileNameTemplateTests
 {
     [Fact]
@@ -28,6 +28,8 @@ public class FileNameTemplateTests
     [InlineData("{hour}", "14")]
     [InlineData("{min}", "30")]
     [InlineData("{sec}", "52")]
+    [InlineData("{ms}", "627")]
+    [InlineData("{process}", "game")]
     [InlineData("{rand}", "a3f1")]
     [InlineData("{w}x{h}", "1920x1080")]
     [InlineData("{aspect}", "16x9")]
@@ -104,6 +106,18 @@ public class FileNameTemplateTests
         var result = FileNameTemplate.Format(FileNameTemplate.DefaultTemplate, 800, 600);
         Assert.False(string.IsNullOrWhiteSpace(result));
         Assert.All(result, c => Assert.DoesNotContain(c, Path.GetInvalidFileNameChars()));
+    }
+
+    [Fact]
+    public void Format_ProcessToken_IsSanitizedAsPartOfFileName()
+    {
+        Assert.Equal("shot_game_client", FileNameTemplate.Format("shot_{process}", processName: "game:client"));
+    }
+
+    [Fact]
+    public void Format_ProcessToken_UsesStableFallbackWhenUnavailable()
+    {
+        Assert.Equal("shot_unknown", FileNameTemplate.Format("shot_{process}"));
     }
 
     [Fact]

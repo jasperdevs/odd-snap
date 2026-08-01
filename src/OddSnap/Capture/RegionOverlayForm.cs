@@ -91,7 +91,7 @@ public sealed partial class RegionOverlayForm : Form
     private readonly Graphics _magGfx;
     private readonly Font _hexFont = UiChrome.ChromeFont(11f, FontStyle.Bold);
     private readonly Font _rgbFont = UiChrome.ChromeFont(9f);
-    private readonly Font _readoutFont = UiChrome.ChromeFont(9f, FontStyle.Bold);
+    private readonly Font _readoutFont = new(FontFamily.GenericMonospace, 9f, FontStyle.Bold, GraphicsUnit.Point);
     private readonly SolidBrush _mutedBrush = new(Color.FromArgb(140, 255, 255, 255));
     private readonly Pen _crossPen = new(Color.FromArgb(210, 255, 255, 255), 1f);
     private Point _pickerCursorPos;

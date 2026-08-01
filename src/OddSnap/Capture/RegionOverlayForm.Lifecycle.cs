@@ -148,7 +148,8 @@ public sealed partial class RegionOverlayForm
                 warmCursor,
                 warmSelection,
                 _readoutFont,
-                new Rectangle(0, 0, warmSurface.Width, warmSurface.Height));
+                new Rectangle(0, 0, warmSurface.Width, warmSurface.Height),
+                GetSelectionReadoutDetails(warmCursor));
             DrawCrosshairGuides(g);
             DrawCaptureMagnifier(g);
         }

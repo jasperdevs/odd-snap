@@ -27,6 +27,7 @@ public partial class App
         _hotkeyService.ActiveWindowHotkeyPressed += OnActiveWindowHotkeyPressed;
         _hotkeyService.ScrollCaptureHotkeyPressed += OnScrollCaptureHotkeyPressed;
         _hotkeyService.AiRedirectHotkeyPressed += OnAiRedirectHotkeyPressed;
+        _hotkeyService.LastRegionHotkeyPressed += OnLastRegionHotkeyPressed;
 
         var s = _settingsService!.Settings;
         var failed = new List<string>();
@@ -49,6 +50,8 @@ public partial class App
         TryRegister(_hotkeyService.RegisterActiveWindow(s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey), "Active Window", s.ActiveWindowHotkeyModifiers, s.ActiveWindowHotkeyKey);
         TryRegister(_hotkeyService.RegisterScrollCapture(s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey), "Scroll Capture", s.ScrollCaptureHotkeyModifiers, s.ScrollCaptureHotkeyKey);
         TryRegister(_hotkeyService.RegisterAiRedirect(s.AiRedirectHotkeyModifiers, s.AiRedirectHotkeyKey), "AI Redirects", s.AiRedirectHotkeyModifiers, s.AiRedirectHotkeyKey);
+        var (lastRegionModifiers, lastRegionKey) = s.GetToolHotkey("_lastRegion");
+        TryRegister(_hotkeyService.RegisterLastRegion(lastRegionModifiers, lastRegionKey), "Last captured region", lastRegionModifiers, lastRegionKey);
 
         if (failed.Count > 0)
             ToastWindow.ShowError("Hotkey conflict", $"{string.Join(", ", failed)} — already in use by another app");
@@ -161,6 +164,13 @@ public partial class App
         if (Interlocked.CompareExchange(ref _isCapturing, 1, 0) != 0) return;
         HideSettingsForCapture();
         LaunchWithDelay(CaptureActiveWindowNow);
+    }
+
+    private void OnLastRegionHotkeyPressed()
+    {
+        if (Interlocked.CompareExchange(ref _isCapturing, 1, 0) != 0) return;
+        HideSettingsForCapture();
+        LaunchWithDelay(CaptureLastRegionNow);
     }
 
     private void LaunchWithDelay(Action action)

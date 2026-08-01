@@ -26,6 +26,8 @@ public partial class SettingsWindow : Window
         ("{hour}", "Hour"),
         ("{min}", "Minute"),
         ("{sec}", "Second"),
+        ("{ms}", "Milliseconds"),
+        ("{process}", "Foreground app"),
         ("{date}", "Date"),
         ("{time}", "Time"),
         ("{datetime}", "Date time"),
@@ -110,6 +112,7 @@ public partial class SettingsWindow : Window
     private bool _openSourceTranslationRuntimeActionInProgress;
     private bool _argosTranslationRuntimeActionInProgress;
     private bool _suppressStartWithWindowsChange;
+    private bool _suppressStartMenuShortcutChange;
 
     public event Action? HotkeyChanged;
     public event Action? UninstallRequested;
@@ -1219,6 +1222,38 @@ public partial class SettingsWindow : Window
         ToastWindow.ShowError(
             "Startup setting failed",
             $"The previous startup setting was restored. Check Settings -> About and try again.\n{ex.Message}");
+    }
+
+    private void CreateStartMenuShortcutCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressStartMenuShortcutChange) return;
+        bool enabled = CreateStartMenuShortcutCheck.IsChecked == true;
+        bool previous = _settingsService.Settings.CreateStartMenuShortcut;
+
+        try
+        {
+            UninstallService.SetStartMenuShortcut(enabled);
+            _settingsService.Settings.CreateStartMenuShortcut = enabled;
+            _settingsService.Save();
+            SetStartupPreferenceStatus(string.Empty);
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogError("settings.start-menu-shortcut", ex);
+            try { UninstallService.SetStartMenuShortcut(previous); }
+            catch (Exception rollbackEx) { AppDiagnostics.LogError("settings.start-menu-shortcut-rollback", rollbackEx); }
+
+            _settingsService.Settings.CreateStartMenuShortcut = previous;
+            try { _settingsService.Save(); }
+            catch (Exception rollbackEx) { AppDiagnostics.LogError("settings.start-menu-shortcut-save-rollback", rollbackEx); }
+
+            _suppressStartMenuShortcutChange = true;
+            try { CreateStartMenuShortcutCheck.IsChecked = previous; }
+            finally { _suppressStartMenuShortcutChange = false; }
+
+            SetStartupPreferenceStatus("Start Menu shortcut change was not saved. Previous setting restored.");
+            ToastWindow.ShowError("Shortcut setting failed", $"The previous shortcut setting was restored.\n{ex.Message}");
+        }
     }
 
     private void AutoUpdateCheck_Changed(object sender, RoutedEventArgs e)

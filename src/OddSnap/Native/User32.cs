@@ -124,6 +124,9 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     public static partial IntPtr GetForegroundWindow();
 
+    [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
     public static partial int GetWindowTextW(IntPtr hWnd, [Out] char[] lpString, int nMaxCount);
 

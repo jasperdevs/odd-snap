@@ -35,6 +35,7 @@ public partial class App : Application
     private int _historyIndexRefreshScheduled;
     private int _settingsWindowOpening;
     private int _settingsHiddenForCapture;
+    private string? _captureForegroundProcessName;
     private int _idleTrimInProgress;
     private int _isShuttingDown;
     private bool _readyToastShown;

@@ -5,18 +5,18 @@ public static class FileNameTemplate
     public const string DefaultTemplate = Models.AppSettings.DefaultFileNameTemplate;
     public const string LegacyDefaultTemplate = "oddsnap_{year}-{month}-{day}_{hour}-{min}-{sec}_{rand}";
 
-    public static string Format(string template, int width = 0, int height = 0)
+    public static string Format(string template, int width = 0, int height = 0, string? processName = null)
     {
         var now = DateTime.Now;
         var randomToken = Guid.NewGuid().ToString("N").Substring(0, 4);
-        return Render(template, now, randomToken, width, height);
+        return Render(template, now, randomToken, width, height, processName);
     }
 
-    /// <summary>Format a preset with a fixed example date (2026-04-05 14:30:52) for display.</summary>
+    /// <summary>Format a preset with fixed example values for display.</summary>
     public static string FormatExample(string template)
-        => Render(template, new DateTime(2026, 4, 5, 14, 30, 52), "a3f1", 1920, 1080);
+        => Render(template, new DateTime(2026, 4, 5, 14, 30, 52, 627), "a3f1", 1920, 1080, "game");
 
-    private static string Render(string template, DateTime now, string randomToken, int width, int height)
+    private static string Render(string template, DateTime now, string randomToken, int width, int height, string? processName)
     {
         bool blankTemplate = string.IsNullOrWhiteSpace(template);
         template = NormalizeLegacyPlaceholders(template);
@@ -33,6 +33,8 @@ public static class FileNameTemplate
             .Replace("{hour}", now.ToString("HH"))
             .Replace("{min}", now.ToString("mm"))
             .Replace("{sec}", now.ToString("ss"))
+            .Replace("{ms}", now.ToString("fff"))
+            .Replace("{process}", string.IsNullOrWhiteSpace(processName) ? "unknown" : processName.Trim())
             .Replace("{w}", width > 0 ? width.ToString() : "")
             .Replace("{h}", height > 0 ? height.ToString() : "")
             .Replace("{aspect}", FormatAspectRatio(width, height))

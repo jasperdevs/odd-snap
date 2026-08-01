@@ -30,6 +30,7 @@ public class SettingsServiceTests
         Assert.Equal(FileNameTemplate.DefaultTemplate, s.FileNameTemplate);
         Assert.True(s.SaveToFile);
         Assert.True(s.ShowOddSnapUiInScreenshots);
+        Assert.True(s.CreateStartMenuShortcut);
         Assert.NotNull(s.ImageUploadSettings);
         Assert.NotNull(s.ToastButtons);
     }
@@ -38,6 +39,27 @@ public class SettingsServiceTests
     public void TryDeserialize_ShowOddSnapUiInScreenshots_PreservesExplicitChoice()
     {
         Assert.False(Deserialize("{\"ShowOddSnapUiInScreenshots\": false}").ShowOddSnapUiInScreenshots);
+    }
+
+    [Fact]
+    public void TryDeserialize_CreateStartMenuShortcut_PreservesExplicitChoice()
+    {
+        Assert.False(Deserialize("{\"CreateStartMenuShortcut\": false}").CreateStartMenuShortcut);
+    }
+
+    [Theory]
+    [InlineData(0x70u)]
+    [InlineData(0x87u)]
+    public void TryDeserialize_ModifierlessFunctionKeyHotkey_IsPreserved(uint key)
+    {
+        Assert.Equal(key, Deserialize($"{{\"HotkeyModifiers\": 0, \"HotkeyKey\": {key}}}").HotkeyKey);
+    }
+
+    [Fact]
+    public void TryDeserialize_UnsafeModifierlessLastRegionHotkey_IsCleared()
+    {
+        var settings = Deserialize("{\"ToolHotkeys\": {\"_lastRegion\": [0, 65]}}");
+        Assert.Equal((0u, 0u), settings.GetToolHotkey("_lastRegion"));
     }
 
     [Theory]

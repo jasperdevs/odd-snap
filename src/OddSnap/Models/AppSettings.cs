@@ -190,6 +190,7 @@ public sealed class AppSettings
         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "OddSnap");
     public bool SaveInMonthlyFolders { get; set; } = true;
     public bool StartWithWindows { get; set; } = true;
+    public bool CreateStartMenuShortcut { get; set; } = true;
     public bool AutoCheckForUpdates { get; set; } = true;
     public CaptureMode LastCaptureMode { get; set; } = CaptureMode.Rectangle;
     public WindowDetectionMode WindowDetection { get; set; } = WindowDetectionMode.WindowOnly;
@@ -221,6 +222,10 @@ public sealed class AppSettings
     public bool ImageSearchExactMatch { get; set; }
     public bool ShowImageSearchDiagnostics { get; set; }
     public bool AutoIndexImages { get; set; } = true;
+    public int LastCaptureRegionX { get; set; }
+    public int LastCaptureRegionY { get; set; }
+    public int LastCaptureRegionWidth { get; set; }
+    public int LastCaptureRegionHeight { get; set; }
     // Upload settings
     public bool AutoUploadScreenshots { get; set; } = true;
     public bool AutoUploadGifs { get; set; }

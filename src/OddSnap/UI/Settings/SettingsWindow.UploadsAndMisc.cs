@@ -634,6 +634,14 @@ public partial class SettingsWindow
         uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
         if (vk == 0 || HotkeyFormatter.IsUnsafeModifierlessGlobalHotkey(modifiers, vk))
             return;
+        if (!ModifierlessHotkeyConfirmation.Confirm(this, modifiers, vk))
+        {
+            AiRedirectPanelHotkeyBox.Text = HotkeyFormatter.Format(
+                _settingsService.Settings.AiRedirectHotkeyModifiers,
+                _settingsService.Settings.AiRedirectHotkeyKey);
+            Keyboard.ClearFocus();
+            return;
+        }
 
         var previousModifiers = _settingsService.Settings.AiRedirectHotkeyModifiers;
         var previousKey = _settingsService.Settings.AiRedirectHotkeyKey;

@@ -21,8 +21,27 @@ public partial class App
 
     private void HideSettingsForCapture()
     {
+        _captureForegroundProcessName = GetForegroundProcessName();
         // Capture visibility is managed by OddSnapUiCaptureVisibility. Hiding the
         // settings window here would also change the active-window capture target.
+    }
+
+    private static string? GetForegroundProcessName()
+    {
+        try
+        {
+            var window = User32.GetForegroundWindow();
+            if (window == IntPtr.Zero || User32.GetWindowThreadProcessId(window, out var processId) == 0 || processId == 0)
+                return null;
+
+            using var process = System.Diagnostics.Process.GetProcessById(checked((int)processId));
+            return process.ProcessName;
+        }
+        catch (Exception ex)
+        {
+            AppDiagnostics.LogWarning("capture.foreground-process", $"Could not resolve foreground process: {ex.Message}");
+            return null;
+        }
     }
 
     private void RestoreSettingsAfterCapture()
@@ -69,7 +88,7 @@ public partial class App
                     ? Helpers.CaptureSavePath.GetMonthDirectory(saveRoot)
                     : saveRoot;
                 Directory.CreateDirectory(saveDir);
-                string fileName = $"{Helpers.FileNameTemplate.Format(s.FileNameTemplate, 0, 0)}{ext}";
+                string fileName = $"{Helpers.FileNameTemplate.Format(s.FileNameTemplate, 0, 0, _captureForegroundProcessName)}{ext}";
                 string savePath = Helpers.CaptureSavePath.GetAvailablePath(Path.Combine(saveDir, fileName));
                 int maxH = s.RecordingQuality switch { RecordingQuality.P1080 => 1080, RecordingQuality.P720 => 720, RecordingQuality.P480 => 480, _ => 0 };
                 int fps = fmt == RecordingFormat.GIF ? s.GifFps : s.RecordingFps;
@@ -370,6 +389,35 @@ public partial class App
         }
     }
 
+    private void CaptureLastRegionNow()
+    {
+        Bitmap? bmp = null;
+        try
+        {
+            var settings = _settingsService!.Settings;
+            var region = Helpers.LastCaptureRegion.Resolve(settings, ScreenCapture.GetVirtualScreenBounds());
+            if (region.Width <= 1 || region.Height <= 1)
+            {
+                ResetCapturing();
+                ToastWindow.ShowError("No previous region", "Take a region screenshot first, then use this hotkey again.");
+                return;
+            }
+
+            bmp = ScreenCapture.CaptureRegion(region, settings.ShowCursor);
+            HandleCaptureResult(bmp);
+            bmp = null;
+        }
+        catch (Exception ex)
+        {
+            bmp?.Dispose();
+            ResetCapturing();
+            ShowCaptureProcessingFailed(
+                "Capture error",
+                "OddSnap could not recapture the previous region. Select a new region and try again.",
+                ex.Message);
+        }
+    }
+
     private void LaunchOverlay(CaptureMode initialMode, bool useAiRedirect = false)
     {
         Interlocked.Exchange(ref _captureRequestedTimestamp, PerformanceTrace.Timestamp());
@@ -443,6 +491,17 @@ public partial class App
                 using var annotated = overlay.RenderAnnotatedBitmap();
                 var cropped = ScreenCapture.CropRegion(annotated, sel);
                 overlay.Close();
+                try
+                {
+                    Helpers.LastCaptureRegion.Store(
+                        _settingsService.Settings,
+                        new Rectangle(sel.X + bounds.X, sel.Y + bounds.Y, sel.Width, sel.Height));
+                    _settingsService.Save();
+                }
+                catch (Exception ex)
+                {
+                    AppDiagnostics.LogWarning("capture.last-region-save", $"Could not persist the last capture region: {ex.Message}", ex);
+                }
                 HandleCaptureResult(cropped, useAiRedirect);
             };
 

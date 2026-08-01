@@ -263,11 +263,13 @@ public sealed partial class RegionOverlayForm
         if (selectionBounds.IsEmpty)
             return Rectangle.Empty;
 
+        var readoutCursor = GetReadoutCursorPoint();
         var readoutBounds = SelectionSizeReadout.GetBounds(
-            GetReadoutCursorPoint(),
+            readoutCursor,
             selectionBounds,
             _readoutFont,
-            ClientRectangle);
+            ClientRectangle,
+            GetSelectionReadoutDetails(readoutCursor));
         return readoutBounds.IsEmpty
             ? selectionBounds
             : Rectangle.Union(selectionBounds, InflateForRepaint(readoutBounds, 8));
