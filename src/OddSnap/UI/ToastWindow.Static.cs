@@ -14,6 +14,7 @@ namespace OddSnap.UI;
 public partial class ToastWindow
 {
     private const string DefaultImagePreviewTitle = "";
+    private const double StackGap = 8;
 
     public static void SetPosition(OddSnap.Models.ToastPosition position) => _position = position;
     public static void SetDuration(double seconds) => _durationSeconds = Math.Clamp(seconds, 1, 10);
@@ -37,6 +38,8 @@ public partial class ToastWindow
                 DeleteSlot = layout.DeleteSlot
             };
 
+        foreach (var toast in _retainedPinnedToasts.ToArray())
+            toast.RefreshOverlayButtonLayout();
         _current?.RefreshOverlayButtonLayout();
     }
 
@@ -68,7 +71,7 @@ public partial class ToastWindow
                 Services.SoundService.PlayCaptureSound();
         }
 
-        if (_current?.TryUpdateInPlace(spec) == true)
+        if (_current is { _isPinned: false } current && current.TryUpdateInPlace(spec))
             return;
 
         ReplaceCurrentToast();
@@ -196,8 +199,85 @@ public partial class ToastWindow
 
     private static void ReplaceCurrentToast()
     {
-        _current?.TryForceClose(force: true);
+        var current = _current;
+        if (current is null)
+            return;
+
+        if (ToastPinPolicy.CanReplaceCurrent(current._isPinned))
+        {
+            current.TryForceClose(force: true);
+            return;
+        }
+
+        _current = null;
+        if (!current._isClosed && !_retainedPinnedToasts.Contains(current))
+            _retainedPinnedToasts.Add(current);
     }
+
+    private static void PrepareStackPlacement(ToastWindow incoming, double incomingHeight)
+    {
+        RemoveClosedRetainedToasts();
+        var matching = GetMatchingRetainedToasts(incoming._placementWorkArea, incoming._placementPosition);
+        var heights = matching.Select(toast => toast.GetPreparedHeight()).ToArray();
+        int evictionCount = ToastStackLayout.GetOldestEvictionCount(
+            heights,
+            incomingHeight,
+            Math.Max(0, incoming._placementWorkArea.Height - (Edge * 2)),
+            StackGap);
+
+        if (evictionCount > 0)
+        {
+            _isReflowingStack = true;
+            try
+            {
+                foreach (var toast in matching.Take(evictionCount).ToArray())
+                    toast.TryForceClose(force: true);
+            }
+            finally
+            {
+                _isReflowingStack = false;
+            }
+
+            matching = GetMatchingRetainedToasts(incoming._placementWorkArea, incoming._placementPosition);
+        }
+
+        incoming._stackOffset = ToastStackLayout.GetOffset(
+            matching.Select(toast => toast.GetPreparedHeight()),
+            StackGap);
+    }
+
+    private static void OnToastClosed(ToastWindow toast)
+    {
+        bool removed = _retainedPinnedToasts.Remove(toast);
+        if (!removed || _isReflowingStack || toast._placementWorkArea.IsEmpty)
+            return;
+
+        ReflowStack(toast._placementWorkArea, toast._placementPosition);
+    }
+
+    private static void ReflowStack(Rect workArea, OddSnap.Models.ToastPosition position)
+    {
+        RemoveClosedRetainedToasts();
+        double offset = 0;
+        foreach (var toast in GetMatchingRetainedToasts(workArea, position))
+        {
+            toast.ApplyStackPlacement(offset);
+            offset += toast.GetPreparedHeight() + StackGap;
+        }
+
+        if (_current is { _isClosed: false } current && current.MatchesStack(workArea, position))
+            current.ApplyStackPlacement(offset);
+    }
+
+    private static List<ToastWindow> GetMatchingRetainedToasts(
+        Rect workArea,
+        OddSnap.Models.ToastPosition position) =>
+        _retainedPinnedToasts
+            .Where(toast => !toast._isClosed && toast.MatchesStack(workArea, position))
+            .ToList();
+
+    private static void RemoveClosedRetainedToasts() =>
+        _retainedPinnedToasts.RemoveAll(toast => toast._isClosed);
 
     private const double Edge = 8;
 

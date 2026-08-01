@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 using OddSnap.Capture;
+using OddSnap.Models;
 using OddSnap.Services;
 using OddSnap.UI;
 using Vortice.DXGI;
@@ -85,6 +87,34 @@ public sealed class ReportedIssueRegressionTests : IDisposable
             ToastWindow.TryShowWithCompositionFallback(
                 () => throw new InvalidOperationException("Unexpected failure."),
                 () => { }));
+    }
+
+    [Theory]
+    [InlineData(Keys.Escape, ScrollingCaptureMode.Automatic, "Cancel")]
+    [InlineData(Keys.Escape, ScrollingCaptureMode.Manual, "Cancel")]
+    [InlineData(Keys.Enter, ScrollingCaptureMode.Automatic, "Finish")]
+    [InlineData(Keys.Enter, ScrollingCaptureMode.Manual, "Finish")]
+    [InlineData(Keys.Space, ScrollingCaptureMode.Manual, "CaptureFrame")]
+    [InlineData(Keys.Space, ScrollingCaptureMode.Automatic, "None")]
+    public void Issue65_ScrollingCaptureCommandsAreUnambiguous(
+        Keys key,
+        ScrollingCaptureMode mode,
+        string expected)
+    {
+        Assert.Equal(expected, ScrollingCaptureForm.ResolveCaptureCommand(key, mode).ToString());
+    }
+
+    [Theory]
+    [InlineData(ScrollingCaptureMode.Automatic, 0, "Scroll · Enter: finish")]
+    [InlineData(ScrollingCaptureMode.Manual, 0, "Space: frame · Enter: finish")]
+    [InlineData(ScrollingCaptureMode.Automatic, 1, "1 frame · Enter: finish")]
+    [InlineData(ScrollingCaptureMode.Manual, 3, "3 frames · Enter: finish")]
+    public void Issue65_ScrollingCaptureStatusExplainsHowToFinish(
+        ScrollingCaptureMode mode,
+        int frameCount,
+        string expected)
+    {
+        Assert.Equal(expected, ScrollingCaptureForm.FormatCaptureStatus(mode, frameCount));
     }
 
     [Fact]

@@ -37,20 +37,21 @@ internal static class PopupWindowHelper
         double actualHeight,
         Rect workArea,
         double edge = 8,
-        double bottomLift = 0,
+        double stackOffset = 0,
         double offScreenDistance = 10)
     {
-        var bottomEdge = edge + Math.Max(0, bottomLift);
+        var safeStackOffset = Math.Max(0, stackOffset);
+        var stackedEdge = edge + safeStackOffset;
         return position switch
         {
             ToastPosition.Left =>
-                (workArea.Left + edge, workArea.Bottom - actualHeight - bottomEdge, workArea.Left - actualWidth - offScreenDistance, workArea.Bottom - actualHeight - bottomEdge, true),
+                (workArea.Left + edge, workArea.Bottom - actualHeight - stackedEdge, workArea.Left - actualWidth - offScreenDistance, workArea.Bottom - actualHeight - stackedEdge, true),
             ToastPosition.TopLeft =>
-                (workArea.Left + edge, workArea.Top + edge, workArea.Left + edge, workArea.Top - actualHeight - offScreenDistance, false),
+                (workArea.Left + edge, workArea.Top + stackedEdge, workArea.Left + edge, workArea.Top - actualHeight - offScreenDistance, false),
             ToastPosition.TopRight =>
-                (workArea.Right - actualWidth - edge, workArea.Top + edge, workArea.Right - actualWidth - edge, workArea.Top - actualHeight - offScreenDistance, false),
+                (workArea.Right - actualWidth - edge, workArea.Top + stackedEdge, workArea.Right - actualWidth - edge, workArea.Top - actualHeight - offScreenDistance, false),
             _ =>
-                (workArea.Right - actualWidth - edge, workArea.Bottom - actualHeight - bottomEdge, workArea.Right + offScreenDistance, workArea.Bottom - actualHeight - bottomEdge, true),
+                (workArea.Right - actualWidth - edge, workArea.Bottom - actualHeight - stackedEdge, workArea.Right + offScreenDistance, workArea.Bottom - actualHeight - stackedEdge, true),
         };
     }
 
@@ -60,20 +61,21 @@ internal static class PopupWindowHelper
         double actualHeight,
         Rect workArea,
         double edge = 8,
-        double bottomLift = 0,
+        double stackOffset = 0,
         double exitDistance = 20)
     {
-        var bottomEdge = edge + Math.Max(0, bottomLift);
+        var safeStackOffset = Math.Max(0, stackOffset);
+        var stackedEdge = edge + safeStackOffset;
         return position switch
         {
             ToastPosition.Left =>
-                (workArea.Left - actualWidth - exitDistance, workArea.Bottom - actualHeight - bottomEdge, true),
+                (workArea.Left - actualWidth - exitDistance, workArea.Bottom - actualHeight - stackedEdge, true),
             ToastPosition.TopLeft =>
-                (workArea.Left + edge, workArea.Top - actualHeight - exitDistance, false),
+                (workArea.Left + edge, workArea.Top - actualHeight - exitDistance - safeStackOffset, false),
             ToastPosition.TopRight =>
-                (workArea.Right - actualWidth - edge, workArea.Top - actualHeight - exitDistance, false),
+                (workArea.Right - actualWidth - edge, workArea.Top - actualHeight - exitDistance - safeStackOffset, false),
             _ =>
-                (workArea.Right + exitDistance, workArea.Bottom - actualHeight - bottomEdge, true),
+                (workArea.Right + exitDistance, workArea.Bottom - actualHeight - stackedEdge, true),
         };
     }
 

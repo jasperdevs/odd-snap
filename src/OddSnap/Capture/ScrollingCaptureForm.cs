@@ -17,11 +17,13 @@ namespace OddSnap.Capture;
 /// 2. Overlay hides and a floating control bar appears. User clicks Start,
 ///    then scrolls the content. Automatic mode captures useful stable scroll deltas;
 ///    manual mode captures only when the user presses the frame button.
-///    User clicks Stop (or presses Escape) when done.
+///    User clicks Finish (or presses Enter) when done. Escape always cancels.
 /// 3. Captured frames are stitched into a single tall image via overlap detection.
 /// </summary>
 public sealed partial class ScrollingCaptureForm : Form
 {
+    internal enum CaptureCommand { None, Finish, Cancel, CaptureFrame }
+
     public event Action<Bitmap>? CaptureCompleted;
     public event Action? CaptureCancelled;
     public event Action<string>? CaptureFailed;
@@ -124,7 +126,7 @@ public sealed partial class ScrollingCaptureForm : Form
         User32.SetForegroundWindow(Handle);
         Activate();
         Focus();
-        _escapeHook = CaptureEscapeKeyHook.Install(this, HandleEscape);
+        _escapeHook = CaptureEscapeKeyHook.Install(this, Cancel);
         _selectionAdorner?.Show(this);
     }
 
@@ -132,9 +134,8 @@ public sealed partial class ScrollingCaptureForm : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if ((keyData & Keys.KeyCode) == Keys.Escape)
+        if (TryHandleCaptureCommand(keyData))
         {
-            HandleEscape();
             return true;
         }
         return base.ProcessCmdKey(ref msg, keyData);
@@ -142,23 +143,55 @@ public sealed partial class ScrollingCaptureForm : Form
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.KeyCode == Keys.Escape)
+        if (TryHandleCaptureCommand(e.KeyData))
         {
             e.Handled = true;
             e.SuppressKeyPress = true;
-            HandleEscape();
             return;
         }
 
         base.OnKeyDown(e);
     }
 
-    private void HandleEscape()
+    private bool TryHandleCaptureCommand(Keys keyData)
     {
-        if (_state == State.Capturing && _frameCount > 1)
-            StopCapturing();
-        else
-            Cancel();
+        var command = ResolveCaptureCommand(keyData, _captureMode);
+        switch (command)
+        {
+            case CaptureCommand.Cancel:
+                Cancel();
+                return true;
+            case CaptureCommand.Finish when _state == State.Capturing:
+                StopCapturing();
+                return true;
+            case CaptureCommand.CaptureFrame when _state == State.Capturing:
+                CaptureFrame(forceAccept: true);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    internal static CaptureCommand ResolveCaptureCommand(Keys keyData, ScrollingCaptureMode mode)
+    {
+        return (keyData & Keys.KeyCode) switch
+        {
+            Keys.Escape => CaptureCommand.Cancel,
+            Keys.Enter => CaptureCommand.Finish,
+            Keys.Space when mode == ScrollingCaptureMode.Manual => CaptureCommand.CaptureFrame,
+            _ => CaptureCommand.None
+        };
+    }
+
+    internal static string FormatCaptureStatus(ScrollingCaptureMode mode, int frameCount)
+    {
+        if (frameCount <= 0)
+            return mode == ScrollingCaptureMode.Manual
+                ? "Space: frame · Enter: finish"
+                : "Scroll · Enter: finish";
+
+        string label = frameCount == 1 ? "frame" : "frames";
+        return $"{frameCount} {label} · Enter: finish";
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -709,7 +742,7 @@ public sealed partial class ScrollingCaptureForm : Form
         private static int CornerR => WindowsDockRenderer.SurfaceRadius;
 
         private readonly ScrollingCaptureMode _mode;
-        private int _frameCount;
+        private string _baseStatus;
         private string _status;
 
         // Cached GDI objects
@@ -732,7 +765,8 @@ public sealed partial class ScrollingCaptureForm : Form
         public CaptureControlBar(Rectangle captureRegion, ScrollingCaptureMode mode)
         {
             _mode = mode;
-            _status = mode == ScrollingCaptureMode.Automatic ? "Auto: scroll now" : "Manual: click capture";
+            _baseStatus = FormatCaptureStatus(mode, 0);
+            _status = _baseStatus;
 
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
@@ -775,8 +809,8 @@ public sealed partial class ScrollingCaptureForm : Form
                 return;
             }
 
-            _frameCount = count;
-            _status = FormatFrameStatus(count);
+            _baseStatus = FormatCaptureStatus(_mode, count);
+            _status = _baseStatus;
             Invalidate(_statusRect);
         }
 
@@ -791,6 +825,7 @@ public sealed partial class ScrollingCaptureForm : Form
                 return;
             }
 
+            _baseStatus = text;
             _status = text;
             Invalidate(_statusRect);
         }
@@ -839,7 +874,7 @@ public sealed partial class ScrollingCaptureForm : Form
                 DrawIconBtn(g, _manualFrameBtnRect, "record", UiChrome.SurfaceTextPrimary,
                     _hoveredBtn == _manualFrameBtnRect, active: true);
             }
-            DrawIconBtn(g, _actionBtnRect, "stopSquare", UiChrome.SurfaceTextPrimary, _hoveredBtn == _actionBtnRect, active: false);
+            DrawIconBtn(g, _actionBtnRect, "save", UiChrome.SurfaceTextPrimary, _hoveredBtn == _actionBtnRect, active: false);
             DrawIconBtn(g, _cancelBtnRect, "close", UiChrome.SurfaceTextPrimary, _hoveredBtn == _cancelBtnRect, active: false);
         }
 
@@ -866,6 +901,8 @@ public sealed partial class ScrollingCaptureForm : Form
             Cursor = _hoveredBtn != null ? Cursors.Hand : Cursors.Default;
             if (_hoveredBtn != prev)
             {
+                _status = GetHoverStatus(_hoveredBtn);
+                Invalidate(_statusRect);
                 if (prev.HasValue) Invalidate(prev.Value);
                 if (_hoveredBtn.HasValue) Invalidate(_hoveredBtn.Value);
             }
@@ -878,6 +915,8 @@ public sealed partial class ScrollingCaptureForm : Form
             {
                 var prev = _hoveredBtn.Value;
                 _hoveredBtn = null;
+                _status = _baseStatus;
+                Invalidate(_statusRect);
                 Invalidate(prev);
             }
         }
@@ -901,23 +940,20 @@ public sealed partial class ScrollingCaptureForm : Form
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            var key = keyData & Keys.KeyCode;
-            if (key == Keys.Escape)
+            switch (ResolveCaptureCommand(keyData, _mode))
             {
-                if (_frameCount > 1)
+                case CaptureCommand.Finish:
                     StopClicked?.Invoke();
-                else
+                    return true;
+                case CaptureCommand.Cancel:
                     CancelClicked?.Invoke();
-                return true;
+                    return true;
+                case CaptureCommand.CaptureFrame:
+                    ManualFrameClicked?.Invoke();
+                    return true;
+                default:
+                    return base.ProcessCmdKey(ref msg, keyData);
             }
-
-            if (_mode == ScrollingCaptureMode.Manual && (key == Keys.Space || key == Keys.Enter))
-            {
-                ManualFrameClicked?.Invoke();
-                return true;
-            }
-
-            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         protected override CreateParams CreateParams
@@ -948,12 +984,15 @@ public sealed partial class ScrollingCaptureForm : Form
             base.Dispose(disposing);
         }
 
-        private string FormatFrameStatus(int count)
+        private string GetHoverStatus(Rectangle? hoveredButton)
         {
-            string label = count == 1 ? "frame" : "frames";
-            return _mode == ScrollingCaptureMode.Automatic
-                ? $"Auto: {count} {label}"
-                : $"Manual: {count} {label}";
+            if (hoveredButton == _actionBtnRect)
+                return "Finish and save (Enter)";
+            if (hoveredButton == _cancelBtnRect)
+                return "Cancel (Esc)";
+            if (hoveredButton == _manualFrameBtnRect)
+                return "Capture frame (Space)";
+            return _baseStatus;
         }
 
         private static Region CreateRoundedRegion(int w, int h, int r)

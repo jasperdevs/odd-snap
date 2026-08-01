@@ -39,8 +39,13 @@ public partial class ToastWindow : Window
     private bool _entryStarted;
     private EventHandler? _entryRenderingHandler;
     private bool _isClosed;
+    private Rect _placementWorkArea = Rect.Empty;
+    private OddSnap.Models.ToastPosition _placementPosition;
+    private double _stackOffset;
 
     private static ToastWindow? _current;
+    private static readonly List<ToastWindow> _retainedPinnedToasts = [];
+    private static bool _isReflowingStack;
     private static OddSnap.Models.ToastPosition _position = OddSnap.Models.ToastPosition.Right;
     private static double _durationSeconds = 2.5;
     private static bool _fadeOutEnabled;
@@ -122,6 +127,7 @@ public partial class ToastWindow : Window
     private ToastWindow(ToastSpec spec)
     {
         _spec = spec;
+        _placementPosition = _position;
         InitializeComponent();
         OddSnapWindowChrome.ApplyRoundedCorners(this, 12);
         Opacity = 1;
@@ -224,7 +230,7 @@ public partial class ToastWindow : Window
 
     internal bool TryUpdateInPlace(ToastSpec spec)
     {
-        if (!IsLoaded || _isDragging)
+        if (_isPinned || !IsLoaded || _isDragging)
             return false;
 
         if (!CanUpdateInPlace(_spec, spec))
@@ -1304,7 +1310,7 @@ public partial class ToastWindow : Window
         => !string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath);
 
     private bool IsCurrentToastState(int stateVersion)
-        => _current == this && _toastStateVersion == stateVersion;
+        => !_isClosed && _toastStateVersion == stateVersion;
 
     private void ShowSavedFileMissingError(string? filePath = null)
     {
@@ -1877,9 +1883,11 @@ public partial class ToastWindow : Window
 
         var width = GetPreparedWidth();
         var height = GetPreparedHeight();
-        var wa = PopupWindowHelper.GetCurrentWorkArea();
+        _placementWorkArea = PopupWindowHelper.GetCurrentWorkArea();
+        _placementPosition = _position;
+        PrepareStackPlacement(this, height);
         var (targetLeft, targetTop, _, _, _) = PopupWindowHelper.GetPlacement(
-            _position, width, height, wa, Edge);
+            _placementPosition, width, height, _placementWorkArea, Edge, _stackOffset);
 
         BeginAnimation(OpacityProperty, null);
         BeginAnimation(LeftProperty, null);
@@ -2015,9 +2023,9 @@ public partial class ToastWindow : Window
 
     private void ApplyPlacement(bool animateEntry, bool subtleEntry)
     {
-        var wa = PopupWindowHelper.GetCurrentWorkArea();
+        EnsurePlacementContext();
         var (targetLeft, targetTop, _, _, _) = PopupWindowHelper.GetPlacement(
-            _position, ActualWidth, ActualHeight, wa, Edge);
+            _placementPosition, ActualWidth, ActualHeight, _placementWorkArea, Edge, _stackOffset);
 
         BeginAnimation(LeftProperty, null);
         BeginAnimation(TopProperty, null);
@@ -2051,6 +2059,44 @@ public partial class ToastWindow : Window
             EasingFunction = Motion.Ease(Motion.SmoothOut),
             FillBehavior = FillBehavior.Stop
         });
+    }
+
+    private void EnsurePlacementContext()
+    {
+        if (!_placementWorkArea.IsEmpty)
+            return;
+
+        _placementWorkArea = PopupWindowHelper.GetCurrentWorkArea();
+        _placementPosition = _position;
+    }
+
+    private bool MatchesStack(Rect workArea, OddSnap.Models.ToastPosition position) =>
+        _placementPosition == position && _placementWorkArea == workArea;
+
+    private void ApplyStackPlacement(double offset)
+    {
+        _stackOffset = Math.Max(0, offset);
+        if (_isClosed || !IsLoaded)
+            return;
+
+        EnsurePlacementContext();
+        UpdateLayout();
+        var (targetLeft, targetTop, _, _, _) = PopupWindowHelper.GetPlacement(
+            _placementPosition,
+            GetPreparedWidth(),
+            GetPreparedHeight(),
+            _placementWorkArea,
+            Edge,
+            _stackOffset);
+
+        BeginAnimation(LeftProperty, null);
+        BeginAnimation(TopProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.XProperty, null);
+        SlideTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        Left = targetLeft;
+        Top = targetTop;
+        SlideTransform.X = 0;
+        SlideTransform.Y = 0;
     }
 
     private void DismissAnimated()
@@ -2311,6 +2357,7 @@ public partial class ToastWindow : Window
         RunOnClosedCleanup("toast.closed.stop-dismiss-animation", StopDismissAnimationTimer);
         RunOnClosedCleanup("toast.closed.detach-entry-rendering", () => DetachEntryRenderingHandler());
         if (_current == this) _current = null;
+        OnToastClosed(this);
         RunOnClosedCleanup("toast.closed.delete-drag-temp", () =>
         {
             if (!string.IsNullOrWhiteSpace(_dragTempFilePath))
