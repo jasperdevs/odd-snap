@@ -44,6 +44,21 @@
                            AutomationProperties.HelpText="Screenshot preview."
                            RenderOptions.BitmapScalingMode="HighQuality"/>
 
+                    <Border x:Name="CopyBtn" Width="40" Height="40" CornerRadius="12"
+                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0" Cursor="Hand"
+                            Focusable="True"
+                            MouseLeftButtonDown="CopyClick"
+                            KeyDown="CopyBtn_KeyDown"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            Margin="8,8,0,0" Opacity="0"
+                            ToolTip="Copy image to clipboard"
+                            AutomationProperties.Name="Copy image"
+                            AutomationProperties.HelpText="Copy this preview image to the clipboard.">
+                        <Image x:Name="CopyIcon" Width="18" Height="18" Stretch="Uniform" Opacity="1"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
                     <Border x:Name="CloseBtn" Width="40" Height="40" CornerRadius="12"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0" Cursor="Hand"
                             Focusable="True"

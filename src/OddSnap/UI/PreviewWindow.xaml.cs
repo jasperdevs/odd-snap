@@ -158,6 +158,7 @@ public partial class PreviewWindow : Window
         _fadeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_duration) };
         _fadeTimer.Tick += (_, _) => { _fadeTimer.Stop(); if (!_isHovered && !_isPinned) AnimateDismiss(); };
 
+        HookOverlayHover(CopyBtn, CopyIcon, "copy");
         HookOverlayHover(CloseBtn, CloseIcon, "close");
         HookOverlayHover(PinBtn, PinIcon, "pin");
         HookOverlayHover(SaveBtn, SaveIcon, "download");
@@ -218,6 +219,7 @@ public partial class PreviewWindow : Window
         Theme.Refresh();
         ImageBorder.BorderBrush = Theme.Brush(System.Windows.Media.Color.FromArgb(188, 255, 255, 255));
         PreviewFrame.Background = Theme.Brush(Theme.BgElevated);
+        ApplyOverlayButtonVisual(CopyBtn, CopyIcon, "copy", active: false);
         ApplyOverlayButtonVisual(CloseBtn, CloseIcon, "close", active: false);
         ApplyOverlayButtonVisual(PinBtn, PinIcon, "pin", active: _isPinned);
         ApplyOverlayButtonVisual(SaveBtn, SaveIcon, "download", active: false);
@@ -229,6 +231,10 @@ public partial class PreviewWindow : Window
         RefreshPreviewWindowTooltip();
         var previewName = _isGif ? "GIF preview" : "Screenshot preview";
         SetPreviewElementAccessibility(ThumbnailImage, previewName, BuildPreviewImageHelpText());
+        RefreshPreviewOverlayButtonAccessibility(
+            CopyBtn,
+            _isGif ? "Copy GIF" : "Copy image",
+            _isGif ? "Copy this GIF file to the clipboard." : "Copy this preview image to the clipboard.");
         RefreshPreviewOverlayButtonAccessibility(CloseBtn, "Close preview", "Close this preview.");
         RefreshPreviewOverlayButtonAccessibility(PinBtn,
             _isPinned ? "Unpin preview" : "Pin preview",
@@ -486,6 +492,7 @@ public partial class PreviewWindow : Window
 
     private void AnimateButtons(double to)
     {
+        CopyBtn.BeginAnimation(OpacityProperty, Motion.To(to, 150, Motion.SmoothOut));
         CloseBtn.BeginAnimation(OpacityProperty, Motion.To(to, 150, Motion.SmoothOut));
         PinBtn.BeginAnimation(OpacityProperty, Motion.To(_isPinned ? 1 : to, 150, Motion.SmoothOut));
         SaveBtn.BeginAnimation(OpacityProperty, Motion.To(to, 150, Motion.SmoothOut));

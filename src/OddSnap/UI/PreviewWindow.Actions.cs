@@ -460,6 +460,7 @@ public partial class PreviewWindow
     }
 
     private bool IsPreviewOverlayButtonSource(DependencyObject? source) =>
+        IsChildOf(source, CopyBtn) ||
         IsChildOf(source, CloseBtn) ||
         IsChildOf(source, PinBtn) ||
         IsChildOf(source, SaveBtn);
@@ -471,6 +472,62 @@ public partial class PreviewWindow
     }
 
     // ─── Buttons ───────────────────────────────────────────────────
+
+    private void CopyClick(object sender, MouseButtonEventArgs e)
+    {
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        e.Handled = true;
+        CopyPreviewToClipboard();
+    }
+
+    private void CopyBtn_KeyDown(object sender, WpfKeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
+            return;
+
+        e.Handled = true;
+        CopyPreviewToClipboard();
+    }
+
+    private void CopyPreviewToClipboard()
+    {
+        if (_isFading)
+            return;
+
+        try
+        {
+            if (_isGif)
+            {
+                if (!HasSavedPreviewFileOnDisk())
+                    throw new FileNotFoundException("The saved GIF file is no longer on disk.", _savedFilePath);
+
+                ClipboardService.CopyFilesToClipboard(_savedFilePath!);
+                ToastWindow.Show(ToastSpec.Standard("Copied", "GIF copied to clipboard", _savedFilePath) with { SuppressSound = true });
+                return;
+            }
+
+            if (_screenshot is null)
+                throw new InvalidOperationException("No preview image is available to copy.");
+
+            ClipboardService.CopyToClipboard(_screenshot, _savedFilePath);
+            ToastWindow.Show(ToastSpec.Standard("Copied", "Image copied to clipboard", GetExistingPreviewFilePathOrNull()) with { SuppressSound = true });
+        }
+        catch (Exception ex)
+        {
+            var recovery = _isGif
+                ? "Try saving the GIF or copy it from History."
+                : "Try again, or copy the image from History.";
+            ToastWindow.ShowError(
+                "Copy failed",
+                BuildPreviewFailureBody($"OddSnap could not copy this preview. {recovery}", ex.Message),
+                GetExistingPreviewFilePathOrNull());
+        }
+    }
 
     private void CloseClick(object sender, MouseButtonEventArgs e)
     {
