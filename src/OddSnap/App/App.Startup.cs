@@ -84,6 +84,7 @@ public partial class App
         ToastWindow.SetDuration(_settingsService.Settings.ToastDurationSeconds);
         ToastWindow.SetButtonLayout(_settingsService.Settings.ToastButtons);
         ToastWindow.SetFadeOutBehavior(_settingsService.Settings.ToastFadeOutEnabled, _settingsService.Settings.ToastFadeOutSeconds);
+        ToastWindow.SetClosePreviewAfterCopy(_settingsService.Settings.ClosePreviewAfterCopy);
         ScreenCapture.HdrCaptureCompatibleMode = _settingsService.Settings.HdrCaptureCompatibleMode;
 
         _idleTrimTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(10) };
