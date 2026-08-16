@@ -70,9 +70,9 @@
 <p align="center">
 <a href="https://star-history.com/#jasperdevs/odd-snap&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=jasperdevs/odd-snap&type=Date&theme=dark&v=20260815" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=jasperdevs/odd-snap&type=Date&v=20260815" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=jasperdevs/odd-snap&type=Date&v=20260815" width="600" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=jasperdevs/odd-snap&type=Date&theme=dark&v=20260816" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=jasperdevs/odd-snap&type=Date&v=20260816" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=jasperdevs/odd-snap&type=Date&v=20260816" width="600" />
  </picture>
 </a>
 </p>
