@@ -49,6 +49,7 @@ public class ToastButtonLayoutTests
             CloseSlot = ToastButtonSlot.TopLeft,
             PinSlot = ToastButtonSlot.TopInnerLeft,
             SaveSlot = ToastButtonSlot.TopInnerRight,
+            CopySlot = ToastButtonSlot.BottomInnerLeft,
             OfficeSlot = ToastButtonSlot.TopRight,
             AiRedirectSlot = ToastButtonSlot.BottomLeft,
             DeleteSlot = ToastButtonSlot.BottomRight,
@@ -56,6 +57,7 @@ public class ToastButtonLayoutTests
         Assert.Equal(ToastButtonSlot.TopLeft, ToastButtonLayout.GetSlot(s, ToastButtonKind.Close));
         Assert.Equal(ToastButtonSlot.TopInnerLeft, ToastButtonLayout.GetSlot(s, ToastButtonKind.Pin));
         Assert.Equal(ToastButtonSlot.TopInnerRight, ToastButtonLayout.GetSlot(s, ToastButtonKind.Save));
+        Assert.Equal(ToastButtonSlot.BottomInnerLeft, ToastButtonLayout.GetSlot(s, ToastButtonKind.Copy));
         Assert.Equal(ToastButtonSlot.TopRight, ToastButtonLayout.GetSlot(s, ToastButtonKind.Office));
         Assert.Equal(ToastButtonSlot.BottomLeft, ToastButtonLayout.GetSlot(s, ToastButtonKind.AiRedirect));
         Assert.Equal(ToastButtonSlot.BottomRight, ToastButtonLayout.GetSlot(s, ToastButtonKind.Delete));
@@ -75,13 +77,14 @@ public class ToastButtonLayoutTests
     }
 
     [Fact]
-    public void Defaults_ShowCloseSavePinAndAiRedirect_HideOfficeAndDelete()
+    public void Defaults_ShowCloseSavePinAndAiRedirect_HideCopyOfficeAndDelete()
     {
         var s = new AppSettings.ToastButtonLayoutSettings();
         Assert.True(ToastButtonLayout.IsVisible(s, ToastButtonKind.Close));
         Assert.True(ToastButtonLayout.IsVisible(s, ToastButtonKind.Pin));
         Assert.True(ToastButtonLayout.IsVisible(s, ToastButtonKind.Save));
         Assert.True(ToastButtonLayout.IsVisible(s, ToastButtonKind.AiRedirect));
+        Assert.False(ToastButtonLayout.IsVisible(s, ToastButtonKind.Copy));
         Assert.False(ToastButtonLayout.IsVisible(s, ToastButtonKind.Office));
         Assert.False(ToastButtonLayout.IsVisible(s, ToastButtonKind.Delete));
     }
@@ -89,12 +92,12 @@ public class ToastButtonLayoutTests
     [Fact]
     public void FindButtonAt_ReturnsFirstOccupantOrNull()
     {
-        var s = new AppSettings.ToastButtonLayoutSettings(); // Close=TR, Pin=TL, Save=BR, Office=TIL, AiRedirect=BL, Delete=BL
+        var s = new AppSettings.ToastButtonLayoutSettings(); // Close=TR, Pin=TL, Save=BR, Copy=BIL, Office=TIL, AiRedirect=BL, Delete=BL
         Assert.Equal(ToastButtonKind.Close, ToastButtonLayout.FindButtonAt(s, ToastButtonSlot.TopRight));
         Assert.Equal(ToastButtonKind.Pin, ToastButtonLayout.FindButtonAt(s, ToastButtonSlot.TopLeft));
         Assert.Equal(ToastButtonKind.AiRedirect, ToastButtonLayout.FindButtonAt(s, ToastButtonSlot.BottomLeft));
         Assert.Null(ToastButtonLayout.FindButtonAt(s, ToastButtonSlot.TopInnerRight));
-        Assert.Null(ToastButtonLayout.FindButtonAt(s, ToastButtonSlot.BottomInnerLeft));
+        Assert.Equal(ToastButtonKind.Copy, ToastButtonLayout.FindButtonAt(s, ToastButtonSlot.BottomInnerLeft));
     }
 
     [Fact]
