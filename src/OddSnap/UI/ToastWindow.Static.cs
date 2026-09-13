@@ -30,6 +30,8 @@ public partial class ToastWindow
                 PinSlot = layout.PinSlot,
                 ShowSave = layout.ShowSave,
                 SaveSlot = layout.SaveSlot,
+                ShowCopy = layout.ShowCopy,
+                CopySlot = layout.CopySlot,
                 ShowOffice = layout.ShowOffice,
                 OfficeSlot = layout.OfficeSlot,
                 ShowAiRedirect = layout.ShowAiRedirect,
@@ -48,6 +50,9 @@ public partial class ToastWindow
         _fadeOutEnabled = enabled;
         _fadeOutSeconds = Math.Clamp(seconds, 1, 10);
     }
+
+    public static void SetClosePreviewAfterCopy(bool enabled) => _closePreviewAfterCopy = enabled;
+
     public static double GetDuration() => _durationSeconds;
 
     public static void Show(string title, string body = "", string? filePath = null)

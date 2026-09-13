@@ -91,6 +91,20 @@
                                RenderOptions.BitmapScalingMode="HighQuality"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
+                    <Border x:Name="CopyBtn" Width="40" Height="40" CornerRadius="12"
+                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                            ToolTip="Copy image to clipboard"
+                            AutomationProperties.Name="Copy image"
+                            AutomationProperties.HelpText="Copy this preview image to the clipboard."
+                            Cursor="Hand"
+                            Focusable="True"
+                            KeyDown="CopyBtn_KeyDown"
+                            HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                            Margin="56,0,0,8" Opacity="0" Visibility="Collapsed">
+                        <Image x:Name="CopyIcon" Width="18" Height="18" Stretch="Uniform" Opacity="1"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
                     <Border x:Name="OfficeBtn" Width="40" Height="40" CornerRadius="12"
                             Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
                             ToolTip="Open with or send to Office"
