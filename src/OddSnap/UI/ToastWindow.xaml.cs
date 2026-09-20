@@ -20,6 +20,7 @@ public partial class ToastWindow : Window
     private const double RootCornerRadius = 10;
     private const long MaxSynchronousDragPngPixels = 4_000_000;
     private const int ToastGoogleLensUploadTimeoutSeconds = 25;
+    private const int CopyFeedbackDurationMs = 1400;
     private readonly DispatcherTimer _timer;
     private ToastSpec _spec;
     private bool _isDismissing;
@@ -50,6 +51,7 @@ public partial class ToastWindow : Window
     private static double _durationSeconds = 2.5;
     private static bool _fadeOutEnabled;
     private static double _fadeOutSeconds = 1.0;
+    private static bool _closePreviewAfterCopy;
     private static Models.AppSettings.ToastButtonLayoutSettings _buttonLayout = new();
 
     private bool _isPinned;
@@ -63,6 +65,7 @@ public partial class ToastWindow : Window
     private Thickness _dragBorderThickness;
     private System.Windows.Controls.ContextMenu? _officeMenu;
     private readonly DispatcherTimer _officeMenuDismissTimer;
+    private readonly DispatcherTimer _copyFeedbackTimer;
     private bool _officeMenuMouseWasDown;
 
     private const int PreviewMaxWidth = 332;
@@ -144,6 +147,12 @@ public partial class ToastWindow : Window
         };
         _officeMenuDismissTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
         _officeMenuDismissTimer.Tick += OfficeMenuDismissTimer_Tick;
+        _copyFeedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(CopyFeedbackDurationMs) };
+        _copyFeedbackTimer.Tick += (_, _) =>
+        {
+            _copyFeedbackTimer.Stop();
+            ResetCopyFeedback();
+        };
 
         ConfigureShell();
         ApplySpec(spec);
@@ -343,6 +352,7 @@ public partial class ToastWindow : Window
             CloseBtn.Visibility = Visibility.Collapsed;
             PinBtn.Visibility = Visibility.Collapsed;
             SaveBtn.Visibility = Visibility.Collapsed;
+            CopyBtn.Visibility = Visibility.Collapsed;
         }
 
         if (spec.TransparentShell)
@@ -483,13 +493,15 @@ public partial class ToastWindow : Window
         CloseIcon.Source = FluentIcons.RenderWpf("close", IconWhite, 20);
         PinIcon.Source = FluentIcons.RenderWpf("pin", IconWhite, 20);
         SaveIcon.Source = FluentIcons.RenderWpf("download", IconWhite, 20);
-        OfficeIcon.Source = FluentIcons.RenderWpf("copy", IconWhite, 20);
+        CopyIcon.Source = FluentIcons.RenderWpf("copy", IconWhite, 20);
+        OfficeIcon.Source = FluentIcons.RenderWpf("arrow", IconWhite, 20);
         AiRedirectIcon.Source = ToolIcons.RenderAiRedirectWpf(System.Drawing.Color.FromArgb(230, 255, 255, 255), 20);
         DeleteIcon.Source = FluentIcons.RenderWpf("trash", IconWhite, 20);
         ApplyToastOverlayButtonVisual(CloseBtn, CloseIcon, "close", active: false);
         ApplyToastOverlayButtonVisual(PinBtn, PinIcon, "pin", active: false);
         ApplyToastOverlayButtonVisual(SaveBtn, SaveIcon, "download", active: false);
-        ApplyToastOverlayButtonVisual(OfficeBtn, OfficeIcon, "copy", active: false);
+        ApplyToastOverlayButtonVisual(CopyBtn, CopyIcon, "copy", active: false);
+        ApplyToastOverlayButtonVisual(OfficeBtn, OfficeIcon, "arrow", active: false);
         ApplyAiRedirectOverlayButtonVisual(AiRedirectBtn, AiRedirectIcon, active: false);
         ApplyToastOverlayButtonVisual(DeleteBtn, DeleteIcon, "trash", active: false);
         ApplyTextCloseVisual(active: false);
@@ -497,7 +509,8 @@ public partial class ToastWindow : Window
         HookOverlayHover(CloseBtn, CloseIcon, "close");
         HookOverlayHover(PinBtn, PinIcon, "pin");
         HookOverlayHover(SaveBtn, SaveIcon, "download");
-        HookOverlayHover(OfficeBtn, OfficeIcon, "copy");
+        HookOverlayHover(CopyBtn, CopyIcon, "copy");
+        HookOverlayHover(OfficeBtn, OfficeIcon, "arrow");
         HookAiRedirectHover(AiRedirectBtn, AiRedirectIcon);
         HookOverlayHover(DeleteBtn, DeleteIcon, "trash");
         TextCloseBtn.MouseEnter += (_, _) => ApplyTextCloseVisual(active: true);
@@ -520,12 +533,12 @@ public partial class ToastWindow : Window
     {
         btn.MouseEnter += (_, _) =>
         {
-            if (iconId == "pin" && _isPinned) return;
+            if ((iconId == "pin" && _isPinned) || (ReferenceEquals(btn, CopyBtn) && _copyFeedbackTimer.IsEnabled)) return;
             ApplyToastOverlayButtonVisual(btn, icon, iconId, active: true);
         };
         btn.MouseLeave += (_, _) =>
         {
-            if (iconId == "pin" && _isPinned) return;
+            if ((iconId == "pin" && _isPinned) || (ReferenceEquals(btn, CopyBtn) && _copyFeedbackTimer.IsEnabled)) return;
             ApplyToastOverlayButtonVisual(btn, icon, iconId, active: false);
         };
     }
@@ -548,6 +561,7 @@ public partial class ToastWindow : Window
         CloseBtn.MouseLeftButtonDown -= CloseBtn_MouseLeftButtonDown;
         PinBtn.MouseLeftButtonDown -= PinBtn_MouseLeftButtonDown;
         SaveBtn.MouseLeftButtonDown -= SaveBtn_MouseLeftButtonDown;
+        CopyBtn.MouseLeftButtonDown -= CopyBtn_MouseLeftButtonDown;
         OfficeBtn.MouseLeftButtonDown -= OfficeBtn_MouseLeftButtonDown;
         AiRedirectBtn.MouseLeftButtonDown -= AiRedirectBtn_MouseLeftButtonDown;
         DeleteBtn.MouseLeftButtonDown -= DeleteBtn_MouseLeftButtonDown;
@@ -562,6 +576,7 @@ public partial class ToastWindow : Window
         CloseBtn.MouseLeftButtonDown += CloseBtn_MouseLeftButtonDown;
         PinBtn.MouseLeftButtonDown += PinBtn_MouseLeftButtonDown;
         SaveBtn.MouseLeftButtonDown += SaveBtn_MouseLeftButtonDown;
+        CopyBtn.MouseLeftButtonDown += CopyBtn_MouseLeftButtonDown;
         OfficeBtn.MouseLeftButtonDown += OfficeBtn_MouseLeftButtonDown;
         AiRedirectBtn.MouseLeftButtonDown += AiRedirectBtn_MouseLeftButtonDown;
         DeleteBtn.MouseLeftButtonDown += DeleteBtn_MouseLeftButtonDown;
@@ -572,6 +587,7 @@ public partial class ToastWindow : Window
         ApplyOverlayButton(CloseBtn, Helpers.ToastButtonKind.Close);
         ApplyOverlayButton(PinBtn, Helpers.ToastButtonKind.Pin);
         ApplyOverlayButton(SaveBtn, Helpers.ToastButtonKind.Save);
+        ApplyOverlayButton(CopyBtn, Helpers.ToastButtonKind.Copy);
         ApplyOverlayButton(OfficeBtn, Helpers.ToastButtonKind.Office);
         ApplyOverlayButton(AiRedirectBtn, Helpers.ToastButtonKind.AiRedirect);
         ApplyOverlayButton(DeleteBtn, Helpers.ToastButtonKind.Delete);
@@ -643,6 +659,7 @@ public partial class ToastWindow : Window
             Helpers.ToastButtonKind.Save => _isSavingPreview
                 ? ("Saving preview", "Save is already running.")
                 : ("Save preview", "Save this preview image."),
+            Helpers.ToastButtonKind.Copy => ("Copy image", "Copy this preview image to the clipboard."),
             Helpers.ToastButtonKind.Office => _isRunningOfficeAction
                 ? ("Office action running", "Open with or Office export is already running.")
                 : ("Open with or send to Office", "Open this preview with another app or send it to Office."),
@@ -725,6 +742,68 @@ public partial class ToastWindow : Window
 
         e.Handled = true;
         SavePreview();
+    }
+
+    private void CopyBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!CanActivateMouseControl(sender))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        e.Handled = true;
+        CopyPreviewToClipboard();
+    }
+
+    private void CopyBtn_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!CanActivateKeyboardControl(sender, e))
+            return;
+
+        e.Handled = true;
+        CopyPreviewToClipboard();
+    }
+
+    private void CopyPreviewToClipboard()
+    {
+        if (_previewBitmap is null || _isClosed)
+            return;
+
+        try
+        {
+            ClipboardService.CopyToClipboard(_previewBitmap, _savedFilePath);
+            if (_closePreviewAfterCopy)
+                DismissAnimated();
+            else
+                ShowCopyFeedback(succeeded: true);
+        }
+        catch (Exception)
+        {
+            ShowCopyFeedback(succeeded: false);
+        }
+    }
+
+    private void ShowCopyFeedback(bool succeeded)
+    {
+        _copyFeedbackTimer.Stop();
+
+        var (name, helpText, iconId) = succeeded
+            ? ("Copied", "Image copied to clipboard.", "check")
+            : ("Copy failed", "Could not copy the image. Try again.", "warning");
+        SetToastElementAccessibility(CopyBtn, name, helpText);
+        CopyIcon.Source = FluentIcons.RenderWpf(iconId, IconWhite, 22, active: succeeded);
+        CopyBtn.Background = Theme.Brush(Theme.IsDark ? Color.FromRgb(70, 70, 70) : Color.FromRgb(226, 226, 226));
+        _copyFeedbackTimer.Start();
+    }
+
+    private void ResetCopyFeedback()
+    {
+        if (_isClosed)
+            return;
+
+        RefreshOverlayButtonAccessibility(CopyBtn, Helpers.ToastButtonKind.Copy);
+        ApplyToastOverlayButtonVisual(CopyBtn, CopyIcon, "copy", active: CopyBtn.IsMouseOver);
     }
 
     private static bool IsKeyboardActivateKey(System.Windows.Input.KeyEventArgs e) =>
@@ -1483,6 +1562,7 @@ public partial class ToastWindow : Window
     {
         CloseBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         SaveBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
+        CopyBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         OfficeBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         AiRedirectBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
         DeleteBtn.BeginAnimation(OpacityProperty, Motion.To(targetOpacity, 150, Motion.SmoothOut));
@@ -1734,6 +1814,7 @@ public partial class ToastWindow : Window
 
     private bool IsToastOverlayButtonSource(DependencyObject? source) =>
         IsChildOf(source, CloseBtn) ||
+        IsChildOf(source, CopyBtn) ||
         IsChildOf(source, PinBtn) ||
         IsChildOf(source, SaveBtn) ||
         IsChildOf(source, OfficeBtn) ||
@@ -1984,6 +2065,7 @@ public partial class ToastWindow : Window
         _isRunningOfficeAction = false;
         _restoreAutoDismissAfterOfficeAction = false;
         _officeMenuDismissTimer.Stop();
+        _copyFeedbackTimer.Stop();
         _officeMenuMouseWasDown = false;
         if (_officeMenu?.IsOpen == true)
             _officeMenu.IsOpen = false;
@@ -2349,6 +2431,7 @@ public partial class ToastWindow : Window
         _isClosed = true;
         RunOnClosedCleanup("toast.closed.stop-timer", () => _timer.Stop());
         RunOnClosedCleanup("toast.closed.stop-office-menu-timer", () => _officeMenuDismissTimer.Stop());
+        RunOnClosedCleanup("toast.closed.stop-copy-feedback-timer", () => _copyFeedbackTimer.Stop());
         RunOnClosedCleanup("toast.closed.close-office-menu", () =>
         {
             if (_officeMenu?.IsOpen == true)

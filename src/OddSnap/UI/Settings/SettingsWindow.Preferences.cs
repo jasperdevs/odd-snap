@@ -538,6 +538,22 @@ public partial class SettingsWindow
             value => AutoPinPreviewsCheck.IsChecked = value);
     }
 
+    private void ClosePreviewAfterCopyCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressToastPreferenceChange) return;
+
+        var previous = _settingsService.Settings.ClosePreviewAfterCopy;
+        var enabled = ClosePreviewAfterCopyCheck.IsChecked == true;
+        UpdateToastPreference(
+            "settings.close-preview-after-copy",
+            "Close preview after copying",
+            previous,
+            enabled,
+            value => _settingsService.Settings.ClosePreviewAfterCopy = value,
+            value => ClosePreviewAfterCopyCheck.IsChecked = value,
+            ToastWindow.SetClosePreviewAfterCopy);
+    }
+
     private void UpdateToastPreference<T>(
         string diagnosticKey,
         string label,

@@ -136,6 +136,8 @@ public sealed class AppSettings
         public ToastButtonSlot PinSlot { get; set; } = ToastButtonSlot.TopLeft;
         public bool ShowSave { get; set; } = true;
         public ToastButtonSlot SaveSlot { get; set; } = ToastButtonSlot.BottomRight;
+        public bool ShowCopy { get; set; }
+        public ToastButtonSlot CopySlot { get; set; } = ToastButtonSlot.BottomInnerLeft;
         public bool ShowOffice { get; set; }
         public ToastButtonSlot OfficeSlot { get; set; } = ToastButtonSlot.TopInnerLeft;
         public bool ShowAiRedirect { get; set; } = true;
@@ -254,6 +256,7 @@ public sealed class AppSettings
     public bool ToastFadeOutEnabled { get; set; }
     public double ToastFadeOutSeconds { get; set; } = 1.0;
     public bool AutoPinPreviews { get; set; }
+    public bool ClosePreviewAfterCopy { get; set; }
     public ToastButtonLayoutSettings ToastButtons { get; set; } = new();
     public Dictionary<string, string> OpenWithApps { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public SoundPack SoundPack { get; set; } = SoundPack.Default;
