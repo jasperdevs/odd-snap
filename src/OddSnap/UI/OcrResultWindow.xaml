@@ -24,32 +24,50 @@
         <Style x:Key="OcrThumbStyle" TargetType="{x:Type Thumb}">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type Thumb}">
-                        <Border CornerRadius="3"
-                                Background="#66FFFFFF"
-                                Margin="0,2"/>
+                        <Border x:Name="ThumbBd"
+                                CornerRadius="3"
+                                Background="{DynamicResource ThemeScrollThumbBrush}"
+                                Margin="2,0"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbBd" Property="Background"
+                                        Value="{DynamicResource ThemeScrollThumbHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbBd" Property="Background"
+                                        Value="{DynamicResource ThemeScrollThumbHoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
         <Style x:Key="OcrScrollBarStyle" TargetType="{x:Type ScrollBar}">
-            <Setter Property="Width" Value="10"/>
+            <!-- Slim by default, widens on hover so it is easier to grab.
+                 The dropdown panel reserves extra width (see the Popup border
+                 margin in OcrComboBoxStyle) so the growth does not overlap the
+                 items. -->
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="MinWidth" Value="6"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type ScrollBar}">
-                        <Grid Background="Transparent" Width="{TemplateBinding Width}">
-                            <Track x:Name="PART_Track"
-                                   IsDirectionReversed="True">
+                        <Grid Background="Transparent"
+                              Width="{TemplateBinding Width}">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="ScrollBar.PageUpCommand"
                                                   Background="Transparent"
                                                   BorderThickness="0"
                                                   Focusable="False"
-                                                  IsTabStop="False"/>
+                                                  IsTabStop="False"
+                                                  Opacity="0"/>
                                 </Track.DecreaseRepeatButton>
                                 <Track.Thumb>
                                     <Thumb Style="{StaticResource OcrThumbStyle}"/>
@@ -59,7 +77,8 @@
                                                   Background="Transparent"
                                                   BorderThickness="0"
                                                   Focusable="False"
-                                                  IsTabStop="False"/>
+                                                  IsTabStop="False"
+                                                  Opacity="0"/>
                                 </Track.IncreaseRepeatButton>
                             </Track>
                         </Grid>
@@ -67,11 +86,175 @@
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
-                <Trigger Property="Orientation" Value="Horizontal">
-                    <Setter Property="Height" Value="10"/>
-                    <Setter Property="Width" Value="Auto"/>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Width" Value="10"/>
                 </Trigger>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Height" Value="6"/>
+                    <Setter Property="MinHeight" Value="6"/>
+                    <Setter Property="Width" Value="Auto"/>
+                    <Setter Property="MinWidth" Value="0"/>
+                </Trigger>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="Orientation" Value="Horizontal"/>
+                        <Condition Property="IsMouseOver" Value="True"/>
+                    </MultiTrigger.Conditions>
+                    <Setter Property="Height" Value="10"/>
+                </MultiTrigger>
             </Style.Triggers>
+        </Style>
+
+        <Style x:Key="OcrComboBoxStyle" TargetType="{x:Type ComboBox}">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeInputBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="MaxDropDownHeight" Value="280"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid MinWidth="{TemplateBinding MinWidth}" SnapsToDevicePixels="True">
+                            <ToggleButton x:Name="ToggleSite"
+                                          MinWidth="{TemplateBinding MinWidth}"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <ContentPresenter/>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <Border x:Name="Bd"
+                                        MinWidth="{TemplateBinding MinWidth}"
+                                        MinHeight="{TemplateBinding MinHeight}"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="3"
+                                        Padding="{TemplateBinding Padding}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="18"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ContentPresenter x:Name="ContentSite"
+                                                          Content="{TemplateBinding SelectionBoxItem}"
+                                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                                          IsHitTestVisible="False"
+                                                          Margin="0,0,6,0"
+                                                          RecognizesAccessKey="True"
+                                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                        <TextBox x:Name="PART_EditableTextBox"
+                                                 Margin="0,0,6,0"
+                                                 Padding="0"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Foreground="{TemplateBinding Foreground}"
+                                                 CaretBrush="{TemplateBinding Foreground}"
+                                                 VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                 Visibility="Collapsed"
+                                                 Focusable="True"/>
+                                        <Path Grid.Column="1"
+                                              Width="8"
+                                              Height="4"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Data="M 0 0 L 4 4 L 8 0 Z"
+                                              Fill="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                    </Grid>
+                                </Border>
+                            </ToggleButton>
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade">
+                                <!-- Panel is a little wider than the closed
+                                     ComboBox so the hover-widened scrollbar sits
+                                     inside the panel instead of on top of it. -->
+                                <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Margin="0,4,8,0"
+                                        Background="{DynamicResource ThemeCardBrush}"
+                                        BorderBrush="{DynamicResource ThemeInputBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        SnapsToDevicePixels="True">
+                                    <ScrollViewer Padding="4,4,0,4"
+                                                  CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ScrollViewer.Resources>
+                                            <Style TargetType="{x:Type ScrollBar}"
+                                                   BasedOn="{StaticResource OcrScrollBarStyle}"/>
+                                        </ScrollViewer.Resources>
+                                        <!-- Reserve room on the right so the scrollbar
+                                             can widen on hover without covering text. -->
+                                        <ItemsPresenter Margin="0,0,10,0"
+                                                        KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OcrComboBoxItemStyle" TargetType="{x:Type ComboBoxItem}">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource ThemeScrollThumbBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background"
+                                        Value="{DynamicResource ThemeScrollThumbBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="OcrTextBoxStyle" TargetType="{x:Type TextBox}">
@@ -84,7 +267,15 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type TextBox}">
                         <Grid>
-                            <ScrollViewer x:Name="PART_ContentHost"/>
+                            <!-- Apply the scrollbar style here, not via TextBox.Resources:
+                                 the PART_ContentHost ScrollViewer resolves scrollbars from
+                                 this template scope, so an implicit style declared on the
+                                 TextBox itself is not picked up. -->
+                            <ScrollViewer x:Name="PART_ContentHost">
+                                <ScrollViewer.Resources>
+                                    <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource OcrScrollBarStyle}"/>
+                                </ScrollViewer.Resources>
+                            </ScrollViewer>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -120,11 +311,7 @@
                          Background="Transparent" BorderThickness="0"
                          Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                          CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"
-                         Style="{StaticResource OcrTextBoxStyle}">
-                    <TextBox.Resources>
-                        <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource OcrScrollBarStyle}"/>
-                    </TextBox.Resources>
-                </TextBox>
+                         Style="{StaticResource OcrTextBoxStyle}"/>
             </Border>
 
             <Border Grid.Row="2" Margin="14,8,14,0">
@@ -133,6 +320,8 @@
                         <ComboBox x:Name="FromLanguageCombo" FontSize="11" Padding="6,4" MinWidth="110"
                                   Margin="0,0,6,6"
                                   IsEditable="True" IsTextSearchEnabled="False"
+                                  Style="{StaticResource OcrComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource OcrComboBoxItemStyle}"
                                   PreviewTextInput="FilterCombo_PreviewTextInput" PreviewKeyDown="FilterCombo_PreviewKeyDown"
                                   SelectionChanged="FromLanguageCombo_Changed"/>
                         <TextBlock Text="→" FontSize="14" Margin="0,0,6,6" VerticalAlignment="Center" Opacity="0.35"
@@ -140,11 +329,15 @@
                         <ComboBox x:Name="ToLanguageCombo" FontSize="11" Padding="6,4" MinWidth="110"
                                   Margin="0,0,8,6"
                                   IsEditable="True" IsTextSearchEnabled="False"
+                                  Style="{StaticResource OcrComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource OcrComboBoxItemStyle}"
                                   PreviewTextInput="FilterCombo_PreviewTextInput" PreviewKeyDown="FilterCombo_PreviewKeyDown"
                                   SelectionChanged="ToLanguageCombo_Changed"/>
                         <Border Width="1" Height="18" Background="{DynamicResource ThemeInputBorderBrush}" Margin="0,0,8,6"/>
                         <ComboBox x:Name="ModelCombo" FontSize="10" Padding="5,4" MinWidth="115"
                                   Margin="0,0,8,6"
+                                  Style="{StaticResource OcrComboBoxStyle}"
+                                  ItemContainerStyle="{StaticResource OcrComboBoxItemStyle}"
                                   SelectionChanged="ModelCombo_Changed">
                             <ComboBoxItem Content="Local model" Tag="2"/>
                             <ComboBoxItem Content="Argos (offline)" Tag="0"/>
@@ -182,11 +375,7 @@
                              Background="Transparent" BorderThickness="0"
                              Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                              CaretBrush="{DynamicResource ThemeTextPrimaryBrush}"
-                             Style="{StaticResource OcrTextBoxStyle}">
-                        <TextBox.Resources>
-                            <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource OcrScrollBarStyle}"/>
-                        </TextBox.Resources>
-                    </TextBox>
+                             Style="{StaticResource OcrTextBoxStyle}"/>
                     <Border x:Name="TranslationLoadingOverlay"
                             Background="#0DFFFFFF"
                             CornerRadius="6"

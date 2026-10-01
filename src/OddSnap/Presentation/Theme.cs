@@ -91,6 +91,11 @@ public static class Theme
     public static Color SettingsWindowBorder => IsDark ? CA(255, 255, 255, 30) : CA(0, 0, 0, 22);
     public static Color SettingsSeparator => IsDark ? CA(255, 255, 255, 20) : CA(0, 0, 0, 18);
 
+    // Scrollbar thumb palette. Kept subtle so thin scrollbars do not draw
+    // attention, with a brighter hover/drag state for affordance.
+    public static Color ScrollThumb => IsDark ? CA(255, 255, 255, 70) : CA(0, 0, 0, 60);
+    public static Color ScrollThumbHover => IsDark ? CA(255, 255, 255, 120) : CA(0, 0, 0, 100);
+
     public static SolidColorBrush Brush(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
 
     public static void ApplyTo(System.Windows.ResourceDictionary resources)
