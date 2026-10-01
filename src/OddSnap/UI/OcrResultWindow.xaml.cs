@@ -110,6 +110,8 @@ public partial class OcrResultWindow : Window
         Resources["ThemeAccentBrush"] = Theme.Brush(Theme.Accent);
         Resources["ThemeSeparatorBrush"] = Theme.Brush(Theme.Separator);
         Resources["TranslationShimmerBrush"] = Theme.Brush(Theme.Shimmer);
+        Resources["ThemeScrollThumbBrush"] = Theme.Brush(Theme.ScrollThumb);
+        Resources["ThemeScrollThumbHoverBrush"] = Theme.Brush(Theme.ScrollThumbHover);
         Icon = ThemedLogo.Square(32);
     }
 
