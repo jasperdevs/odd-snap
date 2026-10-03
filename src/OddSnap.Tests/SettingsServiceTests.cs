@@ -34,6 +34,13 @@ public class SettingsServiceTests
         Assert.Equal(TrayIconAction.AreaCapture, s.TrayLeftClickAction);
         Assert.NotNull(s.ImageUploadSettings);
         Assert.NotNull(s.ToastButtons);
+        Assert.False(s.ClosePreviewAfterCopy);
+    }
+
+    [Fact]
+    public void TryDeserialize_ClosePreviewAfterCopy_PreservesExplicitChoice()
+    {
+        Assert.True(Deserialize("{\"ClosePreviewAfterCopy\": true}").ClosePreviewAfterCopy);
     }
 
     [Fact]
@@ -318,23 +325,24 @@ public class SettingsServiceTests
     // ── Toast button slot dedup ─────────────────────────────────────
 
     [Fact]
-    public void TryDeserialize_DefaultToastButtons_DeleteMovedOffAiRedirectSlot()
+    public void TryDeserialize_DefaultToastButtons_UseUniqueSlots()
     {
-        // documents current behavior: default DeleteSlot (BottomLeft) collides with
-        // AiRedirectSlot and is reassigned to BottomInnerRight during normalization
+        // Default DeleteSlot collides with AiRedirectSlot and is reassigned to
+        // BottomInnerRight; Copy retains the available BottomInnerLeft slot.
         var s = Deserialize("{}");
         Assert.Equal(ToastButtonSlot.BottomLeft, s.ToastButtons.AiRedirectSlot);
         Assert.Equal(ToastButtonSlot.BottomInnerRight, s.ToastButtons.DeleteSlot);
+        Assert.Equal(ToastButtonSlot.BottomInnerLeft, s.ToastButtons.CopySlot);
     }
 
     [Fact]
     public void TryDeserialize_ConflictingToastButtonSlots_AreMadeUnique()
     {
-        var s = Deserialize("{\"ToastButtons\": {\"CloseSlot\": 3, \"PinSlot\": 3, \"SaveSlot\": 3, \"OfficeSlot\": 3, \"AiRedirectSlot\": 3, \"DeleteSlot\": 3}}");
+        var s = Deserialize("{\"ToastButtons\": {\"CloseSlot\": 3, \"PinSlot\": 3, \"SaveSlot\": 3, \"CopySlot\": 3, \"OfficeSlot\": 3, \"AiRedirectSlot\": 3, \"DeleteSlot\": 3}}");
         var slots = new[]
         {
             s.ToastButtons.CloseSlot, s.ToastButtons.PinSlot, s.ToastButtons.SaveSlot,
-            s.ToastButtons.OfficeSlot, s.ToastButtons.AiRedirectSlot, s.ToastButtons.DeleteSlot,
+            s.ToastButtons.CopySlot, s.ToastButtons.OfficeSlot, s.ToastButtons.AiRedirectSlot, s.ToastButtons.DeleteSlot,
         };
         Assert.Equal(slots.Length, slots.Distinct().Count());
         Assert.Equal(ToastButtonSlot.TopRight, s.ToastButtons.CloseSlot); // first claim wins
