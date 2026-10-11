@@ -48,6 +48,15 @@ public static class UiScale
             w.MinWidth,
             w.MinHeight));
 
+        // Only resize the window when the scale itself changed. This method is
+        // also called on every activation (to refresh the palette), and
+        // re-applying the recorded design bounds there would undo a resize the
+        // user just made.
+        if (Math.Abs(state.LastAppliedScale - scale) < 0.001)
+            return;
+
+        state.LastAppliedScale = scale;
+
         window.MinWidth = Math.Max(320, state.MinWidth * scale);
         window.MinHeight = Math.Max(240, state.MinHeight * scale);
         if (!double.IsNaN(state.Width) && !double.IsInfinity(state.Width) && state.Width > 0)
@@ -93,5 +102,29 @@ public static class UiScale
         }
     }
 
-    private sealed record WindowScaleState(double Width, double Height, double MinWidth, double MinHeight);
+    /// <summary>
+    /// Remembers the design-time size of a window and the scale it was last
+    /// resized for, so repeated calls do not keep resetting the window size.
+    /// </summary>
+    private sealed class WindowScaleState
+    {
+        public WindowScaleState(double width, double height, double minWidth, double minHeight)
+        {
+            Width = width;
+            Height = height;
+            MinWidth = minWidth;
+            MinHeight = minHeight;
+        }
+
+        public double Width { get; }
+
+        public double Height { get; }
+
+        public double MinWidth { get; }
+
+        public double MinHeight { get; }
+
+        /// <summary>Scale used the last time the bounds were applied; 0 before the first apply.</summary>
+        public double LastAppliedScale { get; set; }
+    }
 }
