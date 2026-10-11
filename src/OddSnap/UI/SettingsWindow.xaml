@@ -232,6 +232,20 @@
                                                           Margin="0,0,6,0"
                                                           RecognizesAccessKey="True"
                                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                        <!-- Editable mode needs a real TextBox here. Without
+                                             it, IsEditable=True ComboBoxes render no text at
+                                             all (the ContentPresenter is hidden by WPF when
+                                             IsEditable is set, and there is nothing to take
+                                             its place). -->
+                                        <TextBox x:Name="PART_EditableTextBox"
+                                                 Margin="0,0,6,0"
+                                                 Padding="0"
+                                                 Background="Transparent"
+                                                 Foreground="{TemplateBinding Foreground}"
+                                                 CaretBrush="{TemplateBinding Foreground}"
+                                                 VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                 Visibility="Collapsed"
+                                                 Focusable="True"/>
                                         <Path Grid.Column="1"
                                               Width="8"
                                               Height="4"
@@ -274,6 +288,10 @@
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
