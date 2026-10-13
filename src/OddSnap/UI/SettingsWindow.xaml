@@ -643,8 +643,13 @@
 
     </Window.Resources>
 
-        <Border Margin="1" CornerRadius="12">
-    <Border x:Name="OuterBorder" CornerRadius="12" ClipToBounds="True"
+    <!--
+        The border must reach the window edge. The old wrapper had Margin="1",
+        which inset the content by 1px and left a crescent of desktop visible
+        at each rounded corner. The radius matches
+        OddSnapWindowChrome.DefaultCornerRadius.
+    -->
+    <Border x:Name="OuterBorder" CornerRadius="7" ClipToBounds="True"
             BorderThickness="1">
     <Grid>
         <Grid.RowDefinitions>
@@ -4490,6 +4495,5 @@
         </Grid>
     </Grid>
     </Grid>
-    </Border>
     </Border>
 </Window>
