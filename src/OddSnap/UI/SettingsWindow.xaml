@@ -2457,6 +2457,25 @@
                                                   AutomationProperties.HelpText="Dismiss screenshot previews with a 5 second fade-out animation."/>
                                 </ComboBox>
                             </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource SettingIconFrame}">
+                                    <TextBlock Text="&#xE711;" Style="{StaticResource SettingIconGlyph}"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Close preview after copying" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Dismiss the screenshot preview after its Copy button succeeds." Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ClosePreviewAfterCopyCheck" Grid.Column="2" Content="" FontSize="13" VerticalAlignment="Center"
+                                      AutomationProperties.Name="Close preview after copying"
+                                      ToolTip="Dismiss the screenshot preview after its Copy button succeeds."
+                                      Checked="ClosePreviewAfterCopyCheck_Changed" Unchecked="ClosePreviewAfterCopyCheck_Changed"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
@@ -2681,6 +2700,23 @@
                                                             Drop="ToastLayoutButton_Drop"
                                                             Tag="Save">
                                                         <Image x:Name="ToastLayoutSaveIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <Border x:Name="ToastLayoutCopyBtn"
+                                                            Width="30" Height="30" CornerRadius="9"
+                                                            Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            ToolTip="Move the copy toast button"
+                                                            AutomationProperties.Name="Copy toast button"
+                                                            AllowDrop="True"
+                                                            MouseLeftButtonDown="ToastLayoutButton_MouseLeftButtonDown"
+                                                            MouseMove="ToastLayoutButton_MouseMove"
+                                                            MouseLeftButtonUp="ToastLayoutButton_MouseLeftButtonUp"
+                                                            DragEnter="ToastLayoutButton_DragEnter"
+                                                            Drop="ToastLayoutButton_Drop"
+                                                            Tag="Copy">
+                                                        <Image x:Name="ToastLayoutCopyIcon" Width="14" Height="14" Stretch="Uniform" Opacity="0.9"
                                                                RenderOptions.BitmapScalingMode="HighQuality"
                                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                     </Border>

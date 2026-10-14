@@ -552,6 +552,7 @@ public sealed class SettingsService : IDisposable
         settings.OfficeSlot = TakeSlot(settings.OfficeSlot, ToastButtonSlot.TopInnerLeft, used);
         settings.AiRedirectSlot = TakeSlot(settings.AiRedirectSlot, ToastButtonSlot.BottomLeft, used);
         settings.DeleteSlot = TakeSlot(settings.DeleteSlot, ToastButtonSlot.BottomInnerRight, used);
+        settings.CopySlot = TakeSlot(settings.CopySlot, ToastButtonSlot.BottomInnerLeft, used);
     }
 
     private static Dictionary<string, string> NormalizeOpenWithApps(Dictionary<string, string>? apps)

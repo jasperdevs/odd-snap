@@ -176,6 +176,7 @@ public partial class SettingsWindow
         AnnotationStrokeShadowCheck.IsChecked = s.AnnotationStrokeShadow;
         CaptureDelayCombo.SelectedIndex = s.CaptureDelaySeconds switch { 3 => 1, 5 => 2, 10 => 3, _ => 0 };
         AutoPinPreviewsCheck.IsChecked = s.AutoPinPreviews;
+        ClosePreviewAfterCopyCheck.IsChecked = s.ClosePreviewAfterCopy;
         SoundPackCombo.SelectedIndex = (int)s.SoundPack;
         RecordingFormatCombo.SelectedIndex = (int)s.RecordingFormat;
         RecordingQualityCombo.SelectedIndex = (int)s.RecordingQuality;
