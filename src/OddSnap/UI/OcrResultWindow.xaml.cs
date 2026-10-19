@@ -41,8 +41,8 @@ public partial class OcrResultWindow : Window
         OcrTextBox.TextChanged += OcrTextBox_TextChanged;
         UpdateCharCount();
 
-        // Use a composite font family so CJK / Arabic / Cyrillic glyphs render correctly
-        var fontFamily = new System.Windows.Media.FontFamily("Segoe UI, Microsoft YaHei UI, Malgun Gothic, Yu Gothic UI, Arial Unicode MS, Segoe UI Symbol");
+        // Language-aware stack so CJK / Arabic / Cyrillic glyphs render correctly.
+        var fontFamily = new System.Windows.Media.FontFamily(LocalizationService.UiFontStack());
         OcrTextBox.FontFamily = fontFamily;
         TranslatedTextBox.FontFamily = fontFamily;
 
