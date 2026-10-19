@@ -174,12 +174,14 @@ public partial class SettingsWindow
             StickerLocalEngineStatusText.Text = downloaded
                 ? $"{LocalStickerEngineService.GetEngineLabel(engine)} is downloaded and ready to use for sticker captures."
                 : $"{LocalStickerEngineService.GetQualityHint(engine)}: {LocalStickerEngineService.GetEngineDescription(engine)}";
-            StickerInstallDriversBtn.Content = runtimeReady ? "Uninstall rembg" : RembgRuntimeService.GetSetupButtonText(executionProvider);
+            StickerInstallDriversBtn.Content = runtimeReady
+            ? LocalizationService.Translate("Uninstall rembg")
+            : RembgRuntimeService.GetSetupButtonText(executionProvider);
         }
 
         StickerDownloadRembgBtn.Visibility = Visibility.Visible;
-        StickerOpenLocalEngineRepoBtn.Content = "Open engine project";
-        StickerDownloadRembgBtn.Content = downloaded ? "Remove model" : "Download model";
+        StickerOpenLocalEngineRepoBtn.Content = LocalizationService.Translate("Open engine project");
+        StickerDownloadRembgBtn.Content = LocalizationService.Translate(downloaded ? "Remove model" : "Download model");
         StickerRemoveAllModelsBtn.Visibility = RembgRuntimeService.HasAnyCachedModels() ? Visibility.Visible : Visibility.Collapsed;
         StickerCopyErrorBtn.Visibility = string.IsNullOrWhiteSpace(stickerFailure) ? Visibility.Collapsed : Visibility.Visible;
         StickerInstallDriversBtn.IsEnabled = true;
@@ -375,12 +377,14 @@ public partial class SettingsWindow
             UpscaleLocalEngineStatusText.Text = downloaded
                 ? $"{LocalUpscaleEngineService.GetEngineLabel(engine)} is downloaded and ready to use for upscale captures."
                 : $"{LocalUpscaleEngineService.GetQualityHint(engine)}: {LocalUpscaleEngineService.GetEngineDescription(engine)}";
-            UpscaleInstallDriversBtn.Content = runtimeReady ? "Uninstall runtime" : UpscaleRuntimeService.GetSetupButtonText(executionProvider);
+            UpscaleInstallDriversBtn.Content = runtimeReady
+            ? LocalizationService.Translate("Uninstall runtime")
+            : UpscaleRuntimeService.GetSetupButtonText(executionProvider);
         }
 
         UpscaleDownloadModelBtn.Visibility = Visibility.Visible;
-        UpscaleOpenLocalEngineRepoBtn.Content = "Open engine project";
-        UpscaleDownloadModelBtn.Content = downloaded ? "Remove model" : "Download model";
+        UpscaleOpenLocalEngineRepoBtn.Content = LocalizationService.Translate("Open engine project");
+        UpscaleDownloadModelBtn.Content = LocalizationService.Translate(downloaded ? "Remove model" : "Download model");
         UpscaleRemoveAllModelsBtn.Visibility = UpscaleRuntimeService.HasAnyCachedModels() ? Visibility.Visible : Visibility.Collapsed;
         UpscaleCopyErrorBtn.Visibility = string.IsNullOrWhiteSpace(upscaleFailure) ? Visibility.Collapsed : Visibility.Visible;
         UpscaleInstallDriversBtn.IsEnabled = true;

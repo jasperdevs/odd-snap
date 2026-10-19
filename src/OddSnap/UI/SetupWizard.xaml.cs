@@ -323,7 +323,7 @@ public partial class SetupWizard : Window
         }
         BackBtn.Visibility = page > 1 ? Visibility.Visible : Visibility.Collapsed;
         SkipBtn.Visibility = page == TotalPages ? Visibility.Collapsed : Visibility.Visible;
-        NextBtn.Content = page == TotalPages ? "Get Started" : "Next";
+        NextBtn.Content = LocalizationService.Translate(page == TotalPages ? "Get Started" : "Next");
     }
 
     private bool SaveCurrentPage()

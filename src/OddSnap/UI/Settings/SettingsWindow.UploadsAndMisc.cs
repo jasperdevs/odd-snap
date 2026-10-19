@@ -593,7 +593,7 @@ public partial class SettingsWindow
             _aiRedirectTestInProgress = false;
             if (!_isClosed)
             {
-                AiRedirectTestBtn.Content = "Test Redirect";
+                AiRedirectTestBtn.Content = LocalizationService.Translate("Test Redirect");
                 UpdateAiRedirectTestAvailability();
             }
         }

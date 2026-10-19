@@ -563,7 +563,7 @@ public partial class SettingsWindow
 
     private static void UpdateSelectionBadgeAccessibility(FrameworkElement badge, bool isSelected)
     {
-        badge.ToolTip = isSelected ? "Selected history item" : "History item selection marker";
+        badge.ToolTip = LocalizationService.Translate(isSelected ? "Selected history item" : "History item selection marker");
         AutomationProperties.SetName(badge, isSelected ? "Selected history item" : "History item selection marker");
         AutomationProperties.SetHelpText(badge, isSelected
             ? "This history item is selected."

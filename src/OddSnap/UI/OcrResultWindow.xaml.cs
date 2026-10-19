@@ -595,16 +595,16 @@ public partial class OcrResultWindow : Window
     {
         TranslatedTextBox.Text = string.Empty;
         TranslateStatus.Visibility = Visibility.Visible;
-        TranslateStatus.Text = "Checking translation setup...";
+        TranslateStatus.Text = LocalizationService.Translate("Checking translation setup...");
         CopyTranslationBtn.Visibility = Visibility.Collapsed;
         TranslateBtn.IsEnabled = true;
-        TranslateBtn.Content = "Cancel";
+        TranslateBtn.Content = LocalizationService.Translate("Cancel");
     }
 
     private void StopTranslationConfigurationCheck()
     {
         TranslateBtn.IsEnabled = true;
-        TranslateBtn.Content = "Translate";
+        TranslateBtn.Content = LocalizationService.Translate("Translate");
     }
 
     private void StartTranslationLoading(TranslationModel model)
@@ -614,7 +614,7 @@ public partial class OcrResultWindow : Window
         TranslationLoadingOverlay.Visibility = Visibility.Visible;
         CopyTranslationBtn.Visibility = Visibility.Collapsed;
         TranslateBtn.IsEnabled = true;
-        TranslateBtn.Content = "Cancel";
+        TranslateBtn.Content = LocalizationService.Translate("Cancel");
         FromLanguageCombo.IsEnabled = false;
         ToLanguageCombo.IsEnabled = false;
         ModelCombo.IsEnabled = false;
@@ -630,7 +630,7 @@ public partial class OcrResultWindow : Window
         TranslationLoadingOverlay.Visibility = Visibility.Collapsed;
         TranslateProgressBar.IsIndeterminate = false;
         TranslateBtn.IsEnabled = true;
-        TranslateBtn.Content = "Translate";
+        TranslateBtn.Content = LocalizationService.Translate("Translate");
         FromLanguageCombo.IsEnabled = true;
         ToLanguageCombo.IsEnabled = true;
         ModelCombo.IsEnabled = true;
@@ -642,7 +642,7 @@ public partial class OcrResultWindow : Window
     private void ShowTranslateError(string message)
     {
         StopTranslationLoading(keepStatusVisible: true);
-        TranslateStatus.Text = $"Error: {message}";
+        TranslateStatus.Text = string.Format(LocalizationService.Translate("Error: {0}"), message);
     }
 
     private void UpdateTranslateStatusText(int elapsedSeconds)
