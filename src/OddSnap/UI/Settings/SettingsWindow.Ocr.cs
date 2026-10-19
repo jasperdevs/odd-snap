@@ -55,23 +55,23 @@ public partial class SettingsWindow
         else if (OpenSourceTranslationRuntimeService.TryGetCachedStatus(out var openSourceReady, out var openSourceStatus))
         {
             _openSourceLocalInstalled = openSourceReady;
-            OpenSourceLocalStatusText.Text = FormatRuntimeReadinessStatus(openSourceReady, openSourceStatus, openSourceJob, "Open-source local");
+            SetRuntimeReadinessStatus(OpenSourceLocalStatusText, openSourceReady, openSourceStatus, openSourceJob, "Open-source local");
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = true;
-            OpenSourceLocalInstallBtn.Content = openSourceReady ? "Uninstall" : "Install";
+            OpenSourceLocalInstallBtn.Content = LocalizationService.Translate(openSourceReady ? "Uninstall" : "Install");
             SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
         }
         else if (hasOpenSourceJob && openSourceJob is { LastSucceeded: false })
         {
-            OpenSourceLocalStatusText.Text = FormatRuntimeActionFailedStatus(openSourceJob.LastError, "Open-source local");
+            SetRuntimeActionFailedStatus(OpenSourceLocalStatusText, openSourceJob.LastError, "Open-source local");
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = true;
-            OpenSourceLocalInstallBtn.Content = "Install";
+            OpenSourceLocalInstallBtn.Content = LocalizationService.Translate("Install");
             SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
         }
         else
         {
-            OpenSourceLocalStatusText.Text = "Checking install state...";
+            OpenSourceLocalStatusText.Text = LocalizationService.Translate("Checking install state...");
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
             OpenSourceLocalInstallBtn.IsEnabled = false;
             SetLoadingTextShimmer(OpenSourceLocalStatusText, true, 0.7, 0.45);
@@ -88,23 +88,23 @@ public partial class SettingsWindow
         else if (TranslationService.TryGetArgosCachedStatus(out var argosReady, out var argosStatus))
         {
             _argosInstalled = argosReady;
-            ArgosStatusText.Text = FormatRuntimeReadinessStatus(argosReady, argosStatus, argosJob, "Argos Translate");
+            SetRuntimeReadinessStatus(ArgosStatusText, argosReady, argosStatus, argosJob, "Argos Translate");
             ArgosProgressBar.Visibility = Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = true;
-            ArgosInstallBtn.Content = argosReady ? "Uninstall" : "Install";
+            ArgosInstallBtn.Content = LocalizationService.Translate(argosReady ? "Uninstall" : "Install");
             SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
         }
         else if (hasArgosJob && argosJob is { LastSucceeded: false })
         {
-            ArgosStatusText.Text = FormatRuntimeActionFailedStatus(argosJob.LastError, "Argos Translate");
+            SetRuntimeActionFailedStatus(ArgosStatusText, argosJob.LastError, "Argos Translate");
             ArgosProgressBar.Visibility = Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = true;
-            ArgosInstallBtn.Content = "Install";
+            ArgosInstallBtn.Content = LocalizationService.Translate("Install");
             SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
         }
         else
         {
-            ArgosStatusText.Text = "Checking install state...";
+            ArgosStatusText.Text = LocalizationService.Translate("Checking install state...");
             ArgosProgressBar.Visibility = Visibility.Collapsed;
             ArgosInstallBtn.IsEnabled = false;
             SetLoadingTextShimmer(ArgosStatusText, true, 0.7, 0.45);
@@ -118,10 +118,10 @@ public partial class SettingsWindow
 
         // Auto at top — uses Windows system language
         var autoItem = CreateOcrLanguageItem(
-            "Auto (system language)",
+            LocalizationService.Translate("Auto (system language)"),
             "auto",
-            "Auto OCR language",
-            "Use the Windows system language for text recognition when available.");
+            LocalizationService.Translate("Auto OCR language"),
+            LocalizationService.Translate("Use the Windows system language for text recognition when available."));
         _ocrLanguageItems.Add(autoItem);
         OcrLanguageCombo.Items.Add(autoItem);
 
@@ -132,12 +132,13 @@ public partial class SettingsWindow
             try
             {
                 var lang = new Windows.Globalization.Language(tag);
+                // The display name and tag are data, not prose - keep them verbatim.
                 var label = $"{lang.DisplayName} ({tag})";
                 var item = CreateOcrLanguageItem(
                     label,
                     tag,
-                    $"{label} OCR language",
-                    $"Use {label} for text recognition.");
+                    string.Format(LocalizationService.Translate("{0} OCR language"), label),
+                    string.Format(LocalizationService.Translate("Use {0} for text recognition."), label));
                 _ocrLanguageItems.Add(item);
                 OcrLanguageCombo.Items.Add(item);
             }
@@ -146,8 +147,8 @@ public partial class SettingsWindow
                 var item = CreateOcrLanguageItem(
                     tag,
                     tag,
-                    $"{tag} OCR language",
-                    $"Use {tag} for text recognition.");
+                    string.Format(LocalizationService.Translate("{0} OCR language"), tag),
+                    string.Format(LocalizationService.Translate("Use {0} for text recognition."), tag));
                 _ocrLanguageItems.Add(item);
                 OcrLanguageCombo.Items.Add(item);
             }
@@ -160,7 +161,7 @@ public partial class SettingsWindow
             ?? OcrLanguageCombo.Items.OfType<ComboBoxItem>().First();
 
         OcrLanguageCombo.SelectedItem = selectedItem;
-        OcrLanguageStatusText.Text = $"{languages.Count} language{(languages.Count == 1 ? "" : "s")} available from Windows";
+        OcrLanguageStatusText.Text = string.Format(LocalizationService.Translate("{0} languages available from Windows"), languages.Count);
     }
 
     private void OcrLanguageCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -205,20 +206,22 @@ public partial class SettingsWindow
 
         foreach (var (code, name) in TranslationService.SupportedLanguages)
         {
+            // Register the English source with the shared combo metadata helper
+            // so the tooltip and accessibility text can be regenerated when the
+            // interface language changes. Building them here would leave the
+            // formatted sentence stuck in the previous language.
             var fromItem = CreateTranslationLanguageItem(
-                name,
+                LocalizationService.Translate(name),
                 code,
-                $"{name} source language",
-                $"Use {name} as the default translation source.");
+                new SettingsComboItemSource("TranslateFrom", name));
             _translateFromItems.Add(fromItem);
             TranslateFromCombo.Items.Add(fromItem);
 
-            var toName = code == "auto" ? "Auto (interface/system language)" : name;
+            var toSource = code == "auto" ? "Auto (interface/system language)" : name;
             var toItem = CreateTranslationLanguageItem(
-                toName,
+                LocalizationService.Translate(toSource),
                 code,
-                $"{toName} target language",
-                $"Use {toName} as the default translation target.");
+                new SettingsComboItemSource("TranslateTo", toSource));
             _translateToItems.Add(toItem);
             TranslateToCombo.Items.Add(toItem);
         }
@@ -235,11 +238,11 @@ public partial class SettingsWindow
         return item;
     }
 
-    private static ComboBoxItem CreateTranslationLanguageItem(string text, string tag, string automationName, string helpText)
+    private static ComboBoxItem CreateTranslationLanguageItem(string text, string tag, SettingsComboItemSource source)
     {
-        var item = new ComboBoxItem { Content = text, Tag = tag, ToolTip = helpText };
-        AutomationProperties.SetName(item, automationName);
-        AutomationProperties.SetHelpText(item, helpText);
+        var item = new ComboBoxItem { Content = text, Tag = tag };
+        SettingsComboSource.Set(item, source);
+        ApplySettingsComboItemMetadata(item);
         return item;
     }
 
@@ -316,15 +319,15 @@ public partial class SettingsWindow
 
         if (isUninstall && !ThemedConfirmDialog.Confirm(
                 this,
-                "Uninstall open-source local translation",
-                "Uninstall the open-source local translation runtime?\n\nIt will need to be installed again before open-source local translation can run.",
-                "Uninstall",
-                "Cancel",
+                LocalizationService.Translate("Uninstall open-source local translation"),
+                LocalizationService.Translate("Uninstall the open-source local translation runtime?\n\nIt will need to be installed again before open-source local translation can run."),
+                LocalizationService.Translate("Uninstall"),
+                LocalizationService.Translate("Cancel"),
                 danger: true))
         {
-            OpenSourceLocalStatusText.Text = "Open-source local uninstall canceled. Runtime was left installed.";
+            OpenSourceLocalStatusText.Text = LocalizationService.Translate("Open-source local uninstall canceled. Runtime was left installed.");
             OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
-            OpenSourceLocalInstallBtn.Content = "Uninstall";
+            OpenSourceLocalInstallBtn.Content = LocalizationService.Translate("Uninstall");
             OpenSourceLocalInstallBtn.IsEnabled = true;
             SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
             return;
@@ -390,15 +393,15 @@ public partial class SettingsWindow
 
         if (isUninstall && !ThemedConfirmDialog.Confirm(
                 this,
-                "Uninstall Argos Translate",
-                "Uninstall the Argos Translate runtime?\n\nIt will need to be installed again before Argos local translation can run.",
-                "Uninstall",
-                "Cancel",
+                LocalizationService.Translate("Uninstall Argos Translate"),
+                LocalizationService.Translate("Uninstall the Argos Translate runtime?\n\nIt will need to be installed again before Argos local translation can run."),
+                LocalizationService.Translate("Uninstall"),
+                LocalizationService.Translate("Cancel"),
                 danger: true))
         {
-            ArgosStatusText.Text = "Argos uninstall canceled. Runtime was left installed.";
+            ArgosStatusText.Text = LocalizationService.Translate("Argos uninstall canceled. Runtime was left installed.");
             ArgosProgressBar.Visibility = Visibility.Collapsed;
-            ArgosInstallBtn.Content = "Uninstall";
+            ArgosInstallBtn.Content = LocalizationService.Translate("Uninstall");
             ArgosInstallBtn.IsEnabled = true;
             SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
             return;
@@ -494,7 +497,7 @@ public partial class SettingsWindow
             {
                 _openSourceTranslationRuntimeActionInProgress = false;
                 _openSourceLocalInstalled = await OpenSourceTranslationRuntimeService.IsRuntimeReadyAsync();
-                OpenSourceLocalStatusText.Text = FormatRuntimeReadinessStatus(_openSourceLocalInstalled, "Installed", openSourceJob, "Open-source local");
+                SetRuntimeReadinessStatus(OpenSourceLocalStatusText, _openSourceLocalInstalled, "Installed", openSourceJob, "Open-source local");
                 OpenSourceLocalInstallBtn.Content = _openSourceLocalInstalled ? "Uninstall" : "Install";
                 OpenSourceLocalInstallBtn.IsEnabled = true;
                 OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
@@ -525,7 +528,7 @@ public partial class SettingsWindow
             {
                 _argosTranslationRuntimeActionInProgress = false;
                 _argosInstalled = await TranslationService.IsArgosReadyAsync();
-                ArgosStatusText.Text = FormatRuntimeReadinessStatus(_argosInstalled, "Installed", argosJob, "Argos Translate");
+                SetRuntimeReadinessStatus(ArgosStatusText, _argosInstalled, "Installed", argosJob, "Argos Translate");
                 ArgosInstallBtn.Content = _argosInstalled ? "Uninstall" : "Install";
                 ArgosInstallBtn.IsEnabled = true;
                 ArgosProgressBar.Visibility = Visibility.Collapsed;
@@ -548,7 +551,7 @@ public partial class SettingsWindow
     private void SetOpenSourceTranslationRuntimeStatusRefreshFailed(string message)
     {
         _openSourceTranslationRuntimeActionInProgress = false;
-        OpenSourceLocalStatusText.Text = FormatTranslationRuntimeRefreshFailureStatus(message);
+        SetTranslationRuntimeRefreshFailureStatus(OpenSourceLocalStatusText, message);
         OpenSourceLocalInstallBtn.IsEnabled = true;
         OpenSourceLocalProgressBar.Visibility = Visibility.Collapsed;
         SetLoadingTextShimmer(OpenSourceLocalStatusText, false, 0.7, 0.45);
@@ -557,38 +560,57 @@ public partial class SettingsWindow
     private void SetArgosTranslationRuntimeStatusRefreshFailed(string message)
     {
         _argosTranslationRuntimeActionInProgress = false;
-        ArgosStatusText.Text = FormatTranslationRuntimeRefreshFailureStatus(message);
+        SetTranslationRuntimeRefreshFailureStatus(ArgosStatusText, message);
         ArgosInstallBtn.IsEnabled = true;
         ArgosProgressBar.Visibility = Visibility.Collapsed;
         SetLoadingTextShimmer(ArgosStatusText, false, 0.7, 0.45);
     }
 
-    private static string FormatTranslationRuntimeRefreshFailureStatus(string message)
-        => string.IsNullOrWhiteSpace(message)
+    private static void SetTranslationRuntimeRefreshFailureStatus(TextBlock target, string message)
+    {
+        // A composed sentence cannot be reverse-translated on a language change,
+        // so register the template and let ApplyTo regenerate it.
+        var key = string.IsNullOrWhiteSpace(message)
             ? "Status refresh failed. Check Settings -> OCR and try again."
             : "Status refresh failed. Check Settings -> OCR and try again; details were logged.";
-
-    private static string FormatRuntimeReadinessStatus(bool isInstalled, string installedStatus, AppJobSnapshot? lastJob, string runtimeName)
-    {
-        if (isInstalled)
-            return installedStatus;
-
-        if (lastJob is { LastSucceeded: false })
-            return FormatRuntimeActionFailedStatus(lastJob.LastError, runtimeName);
-
-        return "Not installed";
+        LocalizationService.SetLocalizedText(target, new LocalizedTextSegment(key));
     }
 
-    private static string FormatRuntimeActionFailedStatus(string? message, string runtimeName)
+    private static void SetRuntimeReadinessStatus(TextBlock target, bool isInstalled, string installedStatus, AppJobSnapshot? lastJob, string runtimeName)
     {
-        var recovery = $"{runtimeName} action failed. Check Settings -> OCR and try again.";
-        return string.IsNullOrWhiteSpace(message) ? recovery : $"{recovery} Details were logged.";
+        if (isInstalled)
+        {
+            LocalizationService.ClearLocalizedText(target);
+            target.Text = LocalizationService.Translate(installedStatus);
+            return;
+        }
+
+        if (lastJob is { LastSucceeded: false })
+        {
+            SetRuntimeActionFailedStatus(target, lastJob.LastError, runtimeName);
+            return;
+        }
+
+        LocalizationService.ClearLocalizedText(target);
+        target.Text = LocalizationService.Translate("Not installed");
+    }
+
+    private static void SetRuntimeActionFailedStatus(TextBlock target, string? message, string runtimeName)
+    {
+        // "{0} action failed…" is formatted with the runtime name, and may be
+        // followed by a second sentence. Store both pieces so the sentence is
+        // rebuilt in the new language instead of being left in the old one.
+        var recovery = new LocalizedTextSegment("{0} action failed. Check Settings -> OCR and try again.", runtimeName);
+        if (string.IsNullOrWhiteSpace(message))
+            LocalizationService.SetLocalizedText(target, recovery);
+        else
+            LocalizationService.SetLocalizedText(target, recovery, new LocalizedTextSegment("Details were logged."));
     }
 
     private static string FormatRuntimeStatus(string? status)
     {
         if (string.IsNullOrWhiteSpace(status))
-            return "Unknown error";
+            return LocalizationService.Translate("Unknown error");
 
         var text = status.Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal)
@@ -692,10 +714,10 @@ public partial class SettingsWindow
             }
 
             applyRuntime?.Invoke(previous);
-            setStatus($"{label} change was not saved. Previous setting restored.");
+            setStatus(string.Format(LocalizationService.Translate("{0} change was not saved. Previous setting restored."), LocalizationService.Translate(label)));
             ToastWindow.ShowError(
-                $"{label} failed",
-                $"The previous OCR setting was restored. Check Settings -> OCR and try again.\n{ex.Message}");
+                string.Format(LocalizationService.Translate("{0} failed"), LocalizationService.Translate(label)),
+                LocalizationService.Translate("The previous OCR setting was restored. Check Settings -> OCR and try again.") + "\n" + ex.Message);
         }
     }
 

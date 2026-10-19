@@ -352,11 +352,14 @@ public partial class SettingsWindow
     private static string FormatTimeAgo(DateTime dt)
     {
         var span = DateTime.Now - dt;
-        if (span.TotalMinutes < 1) return "Just now";
-        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
-        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
-        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
-        return dt.ToString("MMM d");
+        if (span.TotalMinutes < 1) return LocalizationService.Translate("Just now");
+        if (span.TotalMinutes < 60)
+            return string.Format(LocalizationService.Translate("{0}m ago"), (int)span.TotalMinutes);
+        if (span.TotalHours < 24)
+            return string.Format(LocalizationService.Translate("{0}h ago"), (int)span.TotalHours);
+        if (span.TotalDays < 7)
+            return string.Format(LocalizationService.Translate("{0}d ago"), (int)span.TotalDays);
+        return dt.ToString("MMM d", LocalizationService.CurrentCulture);
     }
 }
 

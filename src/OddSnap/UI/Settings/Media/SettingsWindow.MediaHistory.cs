@@ -73,6 +73,7 @@ public partial class SettingsWindow
         RenderMediaItems();
         QueueMissingVideoThumbnailWarmup(_filteredGifItems);
         UpdateHistoryActionButtons();
+        LocalizeHistoryContent();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-media",
@@ -430,7 +431,7 @@ public partial class SettingsWindow
         {
             Text = fileName,
             FontSize = 11,
-            FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+            FontFamily = UiChrome.UiFontFamily,
             TextTrimming = TextTrimming.CharacterEllipsis,
             ToolTip = fileName
         });
@@ -442,34 +443,31 @@ public partial class SettingsWindow
 
         if (!string.IsNullOrEmpty(sizeStr))
         {
-            panel.Children.Add(new TextBlock
+            var sizeBlock = new TextBlock
             {
                 Text = sizeStr,
                 FontSize = 10,
-                FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+                FontFamily = UiChrome.UiFontFamily,
                 Opacity = 0.35,
-                ToolTip = $"Media file size: {sizeStr}"
-            });
-            if (panel.Children[^1] is TextBlock sizeBlock)
-            {
-                AutomationProperties.SetName(sizeBlock, "Media file size");
-                AutomationProperties.SetHelpText(sizeBlock, sizeStr);
-            }
+            };
+            // Template + argument so the tooltip is not stuck in one language.
+            LocalizationService.SetLocalizedToolTip(sizeBlock, new LocalizedTextSegment("Media file size: {0}", sizeStr));
+            panel.Children.Add(sizeBlock);
+            AutomationProperties.SetName(sizeBlock, "Media file size");
+            AutomationProperties.SetHelpText(sizeBlock, sizeStr);
         }
 
-        panel.Children.Add(new TextBlock
+        var capturedBlock = new TextBlock
         {
             Text = timeAgo,
             FontSize = 10,
-            FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+            FontFamily = UiChrome.UiFontFamily,
             Opacity = 0.3,
-            ToolTip = $"Captured {timeAgo}"
-        });
-        if (panel.Children[^1] is TextBlock capturedBlock)
-        {
-            AutomationProperties.SetName(capturedBlock, "Media capture time");
-            AutomationProperties.SetHelpText(capturedBlock, timeAgo);
-        }
+        };
+        LocalizationService.SetLocalizedToolTip(capturedBlock, new LocalizedTextSegment("Captured {0}", timeAgo));
+        panel.Children.Add(capturedBlock);
+        AutomationProperties.SetName(capturedBlock, "Media capture time");
+        AutomationProperties.SetHelpText(capturedBlock, timeAgo);
     }
 
     private static string TryGetMediaSizeText(string filePath)

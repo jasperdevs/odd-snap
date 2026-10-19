@@ -92,19 +92,22 @@ public partial class SettingsWindow
         if (entries.Count == 0)
         {
             if (allEntries.Count == 0)
-                ShowHistoryEmptyState("No text captures yet", "OCR results will appear here after text capture.");
+                ShowHistoryEmptyState(
+                    LocalizationService.Translate("No text captures yet"),
+                    LocalizationService.Translate("OCR results will appear here after text capture."));
             else
-                ShowHistoryEmptyState("No text captures match your search", "Search matched 0 text captures.");
+                ShowHistoryEmptyState(
+                    LocalizationService.Translate("No text captures match your search"),
+                    LocalizationService.Translate("Search matched 0 text captures."));
         }
         else
         {
             HideHistoryEmptyState();
         }
 
-        if (string.IsNullOrWhiteSpace(query))
-            HistoryCountText.Text = $"{entries.Count} text capture{(entries.Count == 1 ? "" : "s")}";
-        else
-            HistoryCountText.Text = $"{entries.Count} of {allEntries.Count} text capture{(allEntries.Count == 1 ? "" : "s")}";
+        HistoryCountText.Text = string.IsNullOrWhiteSpace(query)
+            ? string.Format(LocalizationService.Translate("{0} text captures"), entries.Count)
+            : string.Format(LocalizationService.Translate("{0} of {1} text captures"), entries.Count, allEntries.Count);
 
         _filteredOcrEntries = entries;
         _ocrRenderCount = Math.Min(HistoryInitialPageSize, _filteredOcrEntries.Count);
@@ -112,6 +115,7 @@ public partial class SettingsWindow
         AppendOcrHistoryEntries(_filteredOcrEntries, 0, _ocrRenderCount);
         PruneOcrSearchCache(allEntries);
         UpdateHistoryActionButtons();
+        LocalizeHistoryContent();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-text",
@@ -134,23 +138,28 @@ public partial class SettingsWindow
         if (entries.Count == 0)
         {
             if (allEntries.Count == 0)
-                ShowHistoryEmptyState("No colors yet", "Picked colors will appear here.");
+                ShowHistoryEmptyState(
+                    LocalizationService.Translate("No colors yet"),
+                    LocalizationService.Translate("Picked colors will appear here."));
             else
-                ShowHistoryEmptyState("No colors match your search", "Search matched 0 saved colors.");
+                ShowHistoryEmptyState(
+                    LocalizationService.Translate("No colors match your search"),
+                    LocalizationService.Translate("Search matched 0 saved colors."));
         }
         else
         {
             HideHistoryEmptyState();
         }
         HistoryCountText.Text = string.IsNullOrWhiteSpace(query)
-            ? $"{entries.Count} color{(entries.Count == 1 ? "" : "s")}"
-            : $"{entries.Count} of {allEntries.Count} color{(allEntries.Count == 1 ? "" : "s")}";
+            ? string.Format(LocalizationService.Translate("{0} colors"), entries.Count)
+            : string.Format(LocalizationService.Translate("{0} of {1} colors"), entries.Count, allEntries.Count);
         _filteredColorEntries = entries;
         _colorRenderCount = Math.Min(HistoryInitialPageSize, _filteredColorEntries.Count);
         _colorLastRenderedDate = null;
         AppendColorHistoryEntries(_filteredColorEntries, 0, _colorRenderCount);
         PruneColorSearchCache(allEntries);
         UpdateHistoryActionButtons();
+        LocalizeHistoryContent();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-colors",
@@ -292,8 +301,8 @@ public partial class SettingsWindow
             FontSize = 10,
             Opacity = 0.3,
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = $"Captured {capturedTimeText}"
         };
+        LocalizationService.SetLocalizedToolTip(capturedBlock, new LocalizedTextSegment("Captured {0}", capturedTimeText));
         AutomationProperties.SetName(capturedBlock, "Text capture time");
         AutomationProperties.SetHelpText(capturedBlock, capturedTimeText);
         footer.Children.Add(capturedBlock);
@@ -327,13 +336,13 @@ public partial class SettingsWindow
                 {
                     textBlock.Text = capturedText;
                     textBlock.MaxHeight = double.PositiveInfinity;
-                    showMoreBtn.Content = "Show less";
+                    showMoreBtn.Content = LocalizationService.Translate("Show less");
                 }
                 else
                 {
                     textBlock.Text = BuildTextHistoryPreview(capturedText, TextHistoryCollapsedPreviewChars);
                     textBlock.MaxHeight = 74;
-                    showMoreBtn.Content = "Show more";
+                    showMoreBtn.Content = LocalizationService.Translate("Show more");
                 }
 
                 UpdateShowMoreTextButtonLabel(showMoreBtn, expanded);
@@ -514,7 +523,7 @@ public partial class SettingsWindow
             FontSize = 13,
             FontWeight = FontWeights.Medium,
             Foreground = Theme.Brush(Theme.TextPrimary),
-            FontFamily = new System.Windows.Media.FontFamily("Cascadia Code, Consolas, Segoe UI Variable Text"),
+            FontFamily = new System.Windows.Media.FontFamily("Cascadia Code, Consolas, Microsoft YaHei UI, Microsoft JhengHei UI, Malgun Gothic, Yu Gothic UI, Segoe UI Variable Text"),
             ToolTip = displayHex
         };
         AutomationProperties.SetName(hexBlock, "Color hex value");
@@ -636,7 +645,7 @@ public partial class SettingsWindow
             Text = FormatHistoryGroupLabel(date),
             FontSize = 12,
             FontWeight = FontWeights.SemiBold,
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            FontFamily = new System.Windows.Media.FontFamily(LocalizationService.UiFontStack()),
             Foreground = Theme.Brush(Theme.TextPrimary),
             Opacity = 0.45,
             Margin = new Thickness(6, 12, 0, 6)

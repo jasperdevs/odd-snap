@@ -3,6 +3,13 @@ namespace OddSnap.Models;
 /// <summary>Definition of a toolbar tool with id, label, icon, mode, and group.</summary>
 public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mode, int Group)
 {
+    /// <summary>
+    /// The label as shown to the user. English is the lookup key, so this
+    /// resolves through the active language; it falls back to <see cref="Label"/>
+    /// when no translation exists. Callers that need the stable English form
+    /// (persistence, icon lookup) keep using <see cref="Label"/>.
+    /// </summary>
+    public string DisplayLabel => Services.LocalizationService.Translate(Label);
     /// <summary>All available tools in display order. Group 0=capture, 1=annotation.</summary>
     public static readonly ToolDef[] AllTools =
     {

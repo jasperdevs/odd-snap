@@ -44,23 +44,28 @@ public partial class SettingsWindow
         if (entries.Count == 0)
         {
             if (allEntries.Count == 0)
-                ShowHistoryEmptyState("No QR/barcode scans yet", "Scanned codes will appear here.");
+                ShowHistoryEmptyState(
+                    LocalizationService.Translate("No QR/barcode scans yet"),
+                    LocalizationService.Translate("Scanned codes will appear here."));
             else
-                ShowHistoryEmptyState("No QR/barcode scans match your search", "Search matched 0 saved codes.");
+                ShowHistoryEmptyState(
+                    LocalizationService.Translate("No QR/barcode scans match your search"),
+                    LocalizationService.Translate("Search matched 0 saved codes."));
         }
         else
         {
             HideHistoryEmptyState();
         }
         HistoryCountText.Text = string.IsNullOrWhiteSpace(query)
-            ? $"{entries.Count} code{(entries.Count == 1 ? "" : "s")}"
-            : $"{entries.Count} of {allEntries.Count} code{(allEntries.Count == 1 ? "" : "s")}";
+            ? string.Format(LocalizationService.Translate("{0} codes"), entries.Count)
+            : string.Format(LocalizationService.Translate("{0} of {1} codes"), entries.Count, allEntries.Count);
         _filteredCodeEntries = entries;
         _codeRenderCount = Math.Min(HistoryInitialPageSize, _filteredCodeEntries.Count);
         _codeLastRenderedDate = null;
         AppendCodeHistoryEntries(_filteredCodeEntries, 0, _codeRenderCount);
         PruneCodeSearchCache(allEntries);
         UpdateHistoryActionButtons();
+        LocalizeHistoryContent();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-codes",
@@ -171,11 +176,11 @@ public partial class SettingsWindow
         var formatLabel = HumanizeBarcodeFormat(entry.Format);
         var isUrl = TryNormalizeUrl(entry.Text, out var url);
         var capturedText = entry.Text ?? "";
-        AutomationProperties.SetName(card, $"{formatLabel} history item");
-        AutomationProperties.SetHelpText(card, "Press Enter or Space to copy this QR/barcode text. In select mode, press Enter or Space to select it.");
-        preview.ToolTip = $"{formatLabel} preview";
-        AutomationProperties.SetName(preview, $"{formatLabel} preview");
-        AutomationProperties.SetHelpText(preview, $"Preview image for this {formatLabel} history item.");
+        AutomationProperties.SetName(card, string.Format(LocalizationService.Translate("{0} history item"), formatLabel));
+        AutomationProperties.SetHelpText(card, LocalizationService.Translate("Press Enter or Space to copy this QR/barcode text. In select mode, press Enter or Space to select it."));
+        preview.ToolTip = string.Format(LocalizationService.Translate("{0} preview"), formatLabel);
+        AutomationProperties.SetName(preview, string.Format(LocalizationService.Translate("{0} preview"), formatLabel));
+        AutomationProperties.SetHelpText(preview, string.Format(LocalizationService.Translate("Preview image for this {0} history item."), formatLabel));
 
         var primary = new TextBlock
         {

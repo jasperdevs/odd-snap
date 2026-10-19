@@ -292,10 +292,10 @@ public partial class SettingsWindow
 
     private void ShowStickerSettingSaveFailed(string label, Exception ex)
     {
-        SetStickerRemovalStatus($"{label} change was not saved. Previous setting restored.");
+        SetStickerRemovalStatus(FormatSettingReverted(label));
         ToastWindow.ShowError(
             "Sticker setting failed",
-            $"The previous sticker setting was restored. Check Settings -> Stickers and try again.\n{ex.Message}");
+            LocalizationService.Translate("The previous sticker setting was restored. Check Settings -> Stickers and try again.") + "\n" + ex.Message);
     }
 
     private void StickerDownloadRembgBtn_Click(object sender, RoutedEventArgs e)
@@ -489,13 +489,13 @@ public partial class SettingsWindow
 
     private void SetStickerRuntimeRemovalStatus(string message)
     {
-        StickerLocalEngineStatusText.Text = "Runtime uninstall failed";
+        StickerLocalEngineStatusText.Text = LocalizationService.Translate("Runtime uninstall failed");
         SetStickerRemovalStatus(message);
     }
 
     private void SetStickerRuntimeCancellationStatus(string message)
     {
-        StickerLocalEngineStatusText.Text = "Runtime uninstall canceled";
+        StickerLocalEngineStatusText.Text = LocalizationService.Translate("Runtime uninstall canceled");
         SetStickerRemovalStatus(message);
     }
 

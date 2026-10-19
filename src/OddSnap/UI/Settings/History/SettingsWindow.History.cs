@@ -80,6 +80,10 @@ public partial class SettingsWindow
 
     private void ShowHistoryEmptyState(string title, string detail, bool showRetry = false)
     {
+        // Translate here rather than at each call site: every caller passes a
+        // plain English literal, and this is the single choke point.
+        title = LocalizationService.Translate(title);
+        detail = LocalizationService.Translate(detail);
         HistoryEmptyTitle.Text = title;
         HistoryEmptyTitle.ToolTip = title;
         AutomationProperties.SetHelpText(HistoryEmptyTitle, title);
@@ -89,7 +93,6 @@ public partial class SettingsWindow
         HistoryEmptyRetryButton.Visibility = showRetry ? Visibility.Visible : Visibility.Collapsed;
         HistoryEmptyText.Visibility = Visibility.Visible;
     }
-
     private void HideHistoryEmptyState()
     {
         HistoryEmptyRetryButton.Visibility = Visibility.Collapsed;
@@ -268,7 +271,7 @@ public partial class SettingsWindow
         _deferHistoryMonitor = true;
         HistoryStack.Children.Clear();
         HideHistoryEmptyState();
-        HistoryCountText.Text = "Loading captures...";
+        HistoryCountText.Text = LocalizationService.Translate("Loading captures...");
         _imageSearchRowAutoHidden = false;
         _lastImmediateSearchQuery = "";
         _lastImmediateSearchSources = ImageSearchSourceOptions.None;
@@ -330,7 +333,7 @@ public partial class SettingsWindow
             _filteredHistoryItems.Clear();
             _historyItems.Clear();
             ShowHistoryEmptyState("Couldn't load captures", "Retry loading history. If it still fails, check the app log.", showRetry: true);
-            HistoryCountText.Text = "History unavailable";
+            HistoryCountText.Text = LocalizationService.Translate("History unavailable");
             UpdateHistoryActionButtons();
         }
         finally
@@ -363,6 +366,7 @@ public partial class SettingsWindow
         if (_useVirtualizedImageHistory)
         {
             RenderVirtualizedHistoryItems(resetScrollPosition: true);
+            LocalizeHistoryContent();
             return;
         }
 
@@ -375,6 +379,24 @@ public partial class SettingsWindow
         AppDiagnostics.LogInfo(
             "history.render-images",
             $"rendered={_historyItems.Count} filtered={_filteredHistoryItems.Count} elapsedMs={sw.ElapsedMilliseconds}");
+        LocalizeHistoryContent();
+    }
+
+    /// <summary>
+    /// Localizes the history panel after its cards are built. The cards are
+    /// created asynchronously, long after the settings window's own
+    /// <see cref="LocalizationService.ApplyTo"/> ran, so without this the first
+    /// visit to the tab shows English labels that only turn Chinese after the
+    /// user switches tabs and back.
+    /// </summary>
+    private void LocalizeHistoryContent()
+    {
+        if (_settingsService is null || !IsLoaded)
+            return;
+
+        LocalizationService.ApplyTo(
+            HistoryPanel.Visibility == Visibility.Visible ? HistoryPanel : (DependencyObject)HistoryStack,
+            _settingsService.Settings.InterfaceLanguage);
     }
 
     private void AppendNextImageHistoryPage()
@@ -420,9 +442,9 @@ public partial class SettingsWindow
             visibleBytes += GetHistoryItemFileSize(item);
 
         var loadedPrefix = totalCount > loadedCount
-            ? $"{loadedCount} of {totalCount} captures loaded"
-            : $"{loadedCount} capture{(loadedCount == 1 ? "" : "s")}";
-        HistoryCountText.Text = $"{loadedPrefix} · {FormatStorageSize(visibleBytes)}";
+            ? string.Format(LocalizationService.Translate("{0} of {1} captures loaded"), loadedCount, totalCount)
+            : string.Format(LocalizationService.Translate("{0} captures"), loadedCount);
+        HistoryCountText.Text = loadedPrefix + " · " + FormatStorageSize(visibleBytes);
     }
 
     private void RenderVirtualizedHistoryItems(bool resetScrollPosition)
@@ -595,16 +617,18 @@ public partial class SettingsWindow
 
                 using var bmp = BitmapPerf.LoadDetached(vm.Entry.FilePath);
                 Services.ClipboardService.CopyToClipboard(bmp);
-                ToastWindow.Show("Copied", $"{vm.Dimensions} screenshot copied");
+                ToastWindow.Show(
+                    LocalizationService.Translate("Copied"),
+                    string.Format(LocalizationService.Translate("{0} screenshot copied"), vm.Dimensions));
             }
             catch (Exception ex)
             {
                 var recovery = !string.IsNullOrWhiteSpace(vm.Entry.UploadUrl)
-                    ? "Open History and copy the visible upload link manually."
-                    : "Try again from Settings -> History, or open the saved screenshot manually.";
+                    ? LocalizationService.Translate("Open History and copy the visible upload link manually.")
+                    : LocalizationService.Translate("Try again from Settings -> History, or open the saved screenshot manually.");
                 ToastWindow.ShowError(
-                    "Copy failed",
-                    $"OddSnap could not copy this history item. {recovery}\n{ex.Message}",
+                    LocalizationService.Translate("Copy failed"),
+                    LocalizationService.Translate("OddSnap could not copy this history item.") + " " + recovery + "\n" + ex.Message,
                     vm.Entry.FilePath);
             }
         });
@@ -619,7 +643,7 @@ public partial class SettingsWindow
         {
             Text = vm.Entry.FileName,
             FontSize = 11,
-            FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
+            FontFamily = UiChrome.UiFontFamily,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
         vm.FileNameTextBlock = fileNameBlock;
@@ -633,7 +657,7 @@ public partial class SettingsWindow
         {
             Text = timeAndStatus,
             FontSize = 10,
-            FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
+            FontFamily = UiChrome.UiFontFamily,
             Opacity = 0.3,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
@@ -649,7 +673,7 @@ public partial class SettingsWindow
                 {
                     Text = vm.ImageSearchMatchText,
                     FontSize = 9.5,
-                    FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
+                    FontFamily = UiChrome.UiFontFamily,
                     Opacity = 0.38,
                     TextTrimming = TextTrimming.CharacterEllipsis
                 };
@@ -797,7 +821,7 @@ public partial class SettingsWindow
         {
             vm.FileNameTextBlock.Text = vm.Entry.FileName;
             vm.FileNameTextBlock.ToolTip = vm.Entry.FileName;
-            AutomationProperties.SetName(vm.FileNameTextBlock, "History file name");
+            AutomationProperties.SetName(vm.FileNameTextBlock, LocalizationService.Translate("History file name"));
             AutomationProperties.SetHelpText(vm.FileNameTextBlock, vm.Entry.FileName);
         }
 
@@ -809,9 +833,9 @@ public partial class SettingsWindow
                 : $"{vm.TimeAgo} · {visibleStatus}";
             vm.TimeStatusTextBlock.Text = timeAndStatus;
             vm.TimeStatusTextBlock.ToolTip = timeAndStatus;
-            AutomationProperties.SetName(vm.TimeStatusTextBlock, string.IsNullOrWhiteSpace(visibleStatus)
+            AutomationProperties.SetName(vm.TimeStatusTextBlock, LocalizationService.Translate(string.IsNullOrWhiteSpace(visibleStatus)
                 ? "History capture time"
-                : "History capture time and search status");
+                : "History capture time and search status"));
             AutomationProperties.SetHelpText(vm.TimeStatusTextBlock, timeAndStatus);
         }
 
@@ -819,7 +843,7 @@ public partial class SettingsWindow
         {
             vm.ImageSearchMatchTextBlock.Text = vm.ImageSearchMatchText;
             vm.ImageSearchMatchTextBlock.ToolTip = vm.ImageSearchMatchText;
-            AutomationProperties.SetName(vm.ImageSearchMatchTextBlock, "Image search match");
+            AutomationProperties.SetName(vm.ImageSearchMatchTextBlock, LocalizationService.Translate("Image search match"));
             AutomationProperties.SetHelpText(vm.ImageSearchMatchTextBlock, vm.ImageSearchMatchText);
         }
 
@@ -827,7 +851,7 @@ public partial class SettingsWindow
         {
             vm.Card.ToolTip = _settingsService.Settings.ShowImageSearchDiagnostics && !string.IsNullOrWhiteSpace(vm.ImageSearchDiagnosticsText)
                 ? vm.ImageSearchDiagnosticsText
-                : $"Open this {GetHistoryKindLabel(vm.Entry.Kind)} history item";
+                : string.Format(LocalizationService.Translate("Open this {0} history item"), LocalizationService.Translate(GetHistoryKindLabel(vm.Entry.Kind)));
         }
     }
 
@@ -896,7 +920,7 @@ public partial class SettingsWindow
 
     private void UpdateSelectModeControls()
     {
-        SelectBtn.Content = _selectMode ? "Done" : "Select";
+        SelectBtn.Content = LocalizationService.Translate(_selectMode ? "Done" : "Select");
         UpdateHistoryActionButtons();
     }
 
@@ -918,23 +942,25 @@ public partial class SettingsWindow
         DeleteSelectedBtn.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
         DeleteSelectedBtn.IsEnabled = !historyUnavailable && _selectMode && selectedCount > 0;
         DeleteSelectedBtn.Content = selectedCount > 0
-            ? $"Delete selected ({selectedCount})"
-            : "Delete selected";
+            ? string.Format(LocalizationService.Translate("Delete selected ({0})"), selectedCount)
+            : LocalizationService.Translate("Delete selected");
 
-        var selectHelp = _selectMode ? $"Finish selecting {categoryLabel}" : $"Select {categoryLabel}";
-        var selectName = _selectMode ? $"Finish selecting {categoryLabel}" : $"Select {categoryLabel}";
+        var selectHelp = _selectMode
+            ? string.Format(LocalizationService.Translate("Finish selecting {0}"), categoryLabel)
+            : string.Format(LocalizationService.Translate("Select {0}"), categoryLabel);
+        var selectName = selectHelp;
         var deleteAllHelp = totalCount > 0
-            ? $"Delete all {totalCount} {totalCategoryLabel} in the current history category"
-            : $"No {categoryLabel} to delete in the current category";
+            ? string.Format(LocalizationService.Translate("Delete all {0} {1} in the current history category"), totalCount, totalCategoryLabel)
+            : string.Format(LocalizationService.Translate("No {0} to delete in the current category"), categoryLabel);
         var deleteAllName = totalCount > 0
-            ? $"Delete all {totalCount} {totalCategoryLabel}"
-            : $"Clear {categoryLabel}";
+            ? string.Format(LocalizationService.Translate("Delete all {0} {1}"), totalCount, totalCategoryLabel)
+            : string.Format(LocalizationService.Translate("Clear {0}"), categoryLabel);
         var deleteSelectedHelp = selectedCount > 0
-            ? $"Delete {selectedCount} selected {selectedCategoryLabel}"
-            : $"Select {categoryLabel} before deleting selected items";
+            ? string.Format(LocalizationService.Translate("Delete {0} selected {1}"), selectedCount, selectedCategoryLabel)
+            : string.Format(LocalizationService.Translate("Select {0} before deleting selected items"), categoryLabel);
         var deleteSelectedName = selectedCount > 0
-            ? $"Delete {selectedCount} selected {selectedCategoryLabel}"
-            : $"Delete selected {categoryLabel}";
+            ? string.Format(LocalizationService.Translate("Delete {0} selected {1}"), selectedCount, selectedCategoryLabel)
+            : string.Format(LocalizationService.Translate("Delete selected {0}"), categoryLabel);
 
         SelectBtn.ToolTip = selectHelp;
         DeleteAllBtn.ToolTip = deleteAllHelp;
@@ -950,13 +976,16 @@ public partial class SettingsWindow
     private string GetCurrentHistoryCategoryLabel(int count)
         => HistoryCategoryCombo.SelectedIndex switch
         {
-            0 => count == 1 ? "screenshot" : "screenshots",
-            1 => count == 1 ? "text capture" : "text captures",
-            2 => count == 1 ? "video/GIF" : "videos/GIFs",
-            3 => count == 1 ? "color" : "colors",
-            4 => count == 1 ? "sticker" : "stickers",
-            5 => count == 1 ? "QR/barcode scan" : "QR/barcode scans",
-            _ => count == 1 ? "history item" : "history items"
+            // Chinese has no plural, so the same word serves both counts.
+            // Each word is returned already translated - callers embed it in
+            // a format string, never concatenate English grammar around it.
+            0 => LocalizationService.Translate("screenshot"),
+            1 => LocalizationService.Translate("text capture"),
+            2 => LocalizationService.Translate("video/GIF"),
+            3 => LocalizationService.Translate("color"),
+            4 => LocalizationService.Translate("sticker"),
+            5 => LocalizationService.Translate("QR/barcode scan"),
+            _ => LocalizationService.Translate("history item")
         };
 
     private int GetCurrentVisibleHistoryItemCount()
@@ -1086,7 +1115,7 @@ public partial class SettingsWindow
             var tab = GetCurrentHistoryCategoryLabel(totalCount);
             if (totalCount <= 0)
             {
-                SetHistoryDeleteStatus($"No {tab} to delete.");
+                SetHistoryDeleteStatus(string.Format(LocalizationService.Translate("No {0} to delete."), tab));
                 UpdateHistoryActionButtons();
                 return;
             }
@@ -1109,15 +1138,15 @@ public partial class SettingsWindow
             LoadCurrentHistoryTab();
             UpdateImageSearchActionButtons();
             UpdateHistoryActionButtons();
-            SetHistoryDeleteStatus($"Deleted all {tab}.");
+            SetHistoryDeleteStatus(string.Format(LocalizationService.Translate("Deleted all {0}."), tab));
         }
         catch (Exception ex)
         {
             AppDiagnostics.LogError("settings.history-delete-all", ex);
-            SetHistoryDeleteStatus($"Delete failed for {GetCurrentHistoryCategoryLabel(2)}. Refresh History and try again.");
+            SetHistoryDeleteStatus(string.Format(LocalizationService.Translate("Delete failed for {0}. Refresh History and try again."), GetCurrentHistoryCategoryLabel(2)));
             ToastWindow.ShowError(
-                "Delete failed",
-                $"OddSnap could not finish deleting {GetCurrentHistoryCategoryLabel(2)}. Refresh History and try again.\n{ex.Message}");
+                LocalizationService.Translate("Delete failed"),
+                string.Format(LocalizationService.Translate("OddSnap could not finish deleting {0}. Refresh History and try again."), GetCurrentHistoryCategoryLabel(2)) + "\n" + ex.Message);
         }
     }
 
@@ -1129,7 +1158,7 @@ public partial class SettingsWindow
             var selectedLabel = GetCurrentHistoryCategoryLabel(selectedCount);
             if (selectedCount <= 0)
             {
-                SetHistoryDeleteStatus($"Select {GetCurrentHistoryCategoryLabel(2)} to delete.");
+                SetHistoryDeleteStatus(string.Format(LocalizationService.Translate("Select {0} to delete."), GetCurrentHistoryCategoryLabel(2)));
                 UpdateHistoryActionButtons();
                 return;
             }
@@ -1180,15 +1209,15 @@ public partial class SettingsWindow
             LoadCurrentHistoryTab();
             UpdateImageSearchActionButtons();
             UpdateHistoryActionButtons();
-            SetHistoryDeleteStatus($"Deleted {selectedCount} selected {selectedLabel}.");
+            SetHistoryDeleteStatus(string.Format(LocalizationService.Translate("Deleted {0} selected {1}."), selectedCount, selectedLabel));
         }
         catch (Exception ex)
         {
             AppDiagnostics.LogError("settings.history-delete-selected", ex);
-            SetHistoryDeleteStatus($"Delete failed for selected {GetCurrentHistoryCategoryLabel(2)}. Refresh History and try again.");
+            SetHistoryDeleteStatus(string.Format(LocalizationService.Translate("Delete failed for selected {0}. Refresh History and try again."), GetCurrentHistoryCategoryLabel(2)));
             ToastWindow.ShowError(
-                "Delete failed",
-                $"OddSnap could not finish deleting the selected {GetCurrentHistoryCategoryLabel(2)}. Refresh History and try again.\n{ex.Message}");
+                LocalizationService.Translate("Delete failed"),
+                string.Format(LocalizationService.Translate("OddSnap could not finish deleting the selected {0}. Refresh History and try again."), GetCurrentHistoryCategoryLabel(2)) + "\n" + ex.Message);
         }
     }
 
@@ -1202,7 +1231,7 @@ public partial class SettingsWindow
         if (ThemedConfirmDialog.Confirm(this, BuildDeleteAllConfirmationTitle(step, totalCount, categoryLabel), BuildDeleteAllConfirmationMessage(step, totalCount, categoryLabel), "Delete", "Cancel"))
             return true;
 
-        SetHistoryDeleteStatus($"Delete canceled. Kept {totalCount} {categoryLabel}.");
+        SetHistoryDeleteStatus(string.Format(LocalizationService.Translate("Delete canceled. Kept {0} {1}."), totalCount, categoryLabel));
         UpdateHistoryActionButtons();
         return false;
     }
@@ -1211,29 +1240,29 @@ public partial class SettingsWindow
     {
         if (ThemedConfirmDialog.Confirm(
                 this,
-                $"Delete {selectedCount} selected {categoryLabel}",
-                $"Delete {selectedCount} selected {categoryLabel}? This cannot be undone.",
-                "Delete",
-                "Cancel"))
+                string.Format(LocalizationService.Translate("Delete {0} selected {1}"), selectedCount, categoryLabel),
+                string.Format(LocalizationService.Translate("Delete {0} selected {1}? This cannot be undone."), selectedCount, categoryLabel),
+                LocalizationService.Translate("Delete"),
+                LocalizationService.Translate("Cancel")))
             return true;
 
-        SetHistoryDeleteStatus($"Delete canceled. Kept {selectedCount} selected {categoryLabel}.");
+        SetHistoryDeleteStatus(string.Format(LocalizationService.Translate("Delete canceled. Kept {0} selected {1}."), selectedCount, categoryLabel));
         UpdateHistoryActionButtons();
         return false;
     }
 
     private static string BuildDeleteAllConfirmationTitle(int step, int totalCount, string categoryLabel)
     {
-        return $"Delete {totalCount} {categoryLabel} ({step}/3)";
+        return string.Format(LocalizationService.Translate("Delete {0} {1} ({2}/3)"), totalCount, categoryLabel, step);
     }
 
     private static string BuildDeleteAllConfirmationMessage(int step, int totalCount, string categoryLabel)
         => step switch
         {
-            1 => $"Delete all {totalCount} {categoryLabel} in this history tab?",
-            2 => $"Really delete all {totalCount} {categoryLabel}?",
-            3 => $"This cannot be undone. Delete all {totalCount} {categoryLabel}?",
-            _ => $"Delete all {totalCount} {categoryLabel}?"
+            1 => string.Format(LocalizationService.Translate("Delete all {0} {1} in this history tab?"), totalCount, categoryLabel),
+            2 => string.Format(LocalizationService.Translate("Really delete all {0} {1}?"), totalCount, categoryLabel),
+            3 => string.Format(LocalizationService.Translate("This cannot be undone. Delete all {0} {1}?"), totalCount, categoryLabel),
+            _ => string.Format(LocalizationService.Translate("Delete all {0} {1}?"), totalCount, categoryLabel)
         };
 
     private void LoadStickerHistory()
@@ -1274,9 +1303,13 @@ public partial class SettingsWindow
         if (_filteredStickerItems.Count == 0)
         {
             if (entries.Count == 0)
-                ShowHistoryEmptyState("No stickers yet", "Sticker captures will appear here.");
+                ShowHistoryEmptyState(
+                    LocalizationService.Translate("No stickers yet"),
+                    LocalizationService.Translate("Sticker captures will appear here."));
             else
-                ShowHistoryEmptyState("No stickers match the upload filter", "Upload filters matched 0 saved stickers.");
+                ShowHistoryEmptyState(
+                    LocalizationService.Translate("No stickers match the upload filter"),
+                    LocalizationService.Translate("Upload filters matched 0 saved stickers."));
         }
         else
         {
@@ -1284,6 +1317,7 @@ public partial class SettingsWindow
         }
         RenderStickerItems();
         UpdateHistoryActionButtons();
+        LocalizeHistoryContent();
         sw.Stop();
         AppDiagnostics.LogInfo(
             "history.load-stickers",
@@ -1374,7 +1408,7 @@ public partial class SettingsWindow
                     Text = FormatHistoryGroupLabel(itemDate),
                     FontSize = 12,
                     FontWeight = FontWeights.SemiBold,
-                    FontFamily = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName),
+                    FontFamily = UiChrome.UiFontFamily,
                     Foreground = Theme.Brush(Theme.TextPrimary),
                     Opacity = 0.45,
                     Margin = new Thickness(6, 12, 0, 6)
@@ -1444,17 +1478,20 @@ public partial class SettingsWindow
     }
 
     private static string FormatHistoryGroupLabel(DateTime date) =>
-        date == DateTime.Today ? "Today"
-        : date == DateTime.Today.AddDays(-1) ? "Yesterday"
-        : date.ToString("MMMM d, yyyy");
+        date == DateTime.Today ? LocalizationService.Translate("Today")
+        : date == DateTime.Today.AddDays(-1) ? LocalizationService.Translate("Yesterday")
+        : date.ToString("MMMM d, yyyy", LocalizationService.CurrentCulture);
 
     private static void ShowHistoryFileMissingError(string? filePath = null)
     {
         var fileName = string.IsNullOrWhiteSpace(filePath) ? "" : Path.GetFileName(filePath);
         var detail = string.IsNullOrWhiteSpace(fileName)
-            ? "The saved file is no longer on disk."
-            : $"The saved file is no longer on disk: {fileName}";
-        ToastWindow.ShowError("File missing", $"{detail}\nRestore the file or capture it again from History.", filePath);
+            ? LocalizationService.Translate("The saved file is no longer on disk.")
+            : string.Format(LocalizationService.Translate("The saved file is no longer on disk: {0}"), fileName);
+        ToastWindow.ShowError(
+            LocalizationService.Translate("File missing"),
+            detail + "\n" + LocalizationService.Translate("Restore the file or capture it again from History."),
+            filePath);
     }
 
     private static long TryGetFileLength(string filePath)
@@ -1474,13 +1511,18 @@ public partial class SettingsWindow
         string sizeText,
         bool filterActive)
     {
+        // Callers pass the English singular/plural nouns; translate here, the
+        // single entry point, so the count line is never a mix of languages.
+        var singular = LocalizationService.Translate(singularLabel);
+        var plural = LocalizationService.Translate(pluralLabel);
+
         if (filterActive)
         {
-            var totalLabel = totalCount == 1 ? singularLabel : pluralLabel;
-            return $"{visibleCount} of {totalCount} {totalLabel} shown by filter · {sizeText}";
+            var totalLabel = totalCount == 1 ? singular : plural;
+            return string.Format(LocalizationService.Translate("{0} of {1} {2} shown by filter"), visibleCount, totalCount, totalLabel) + " · " + sizeText;
         }
 
-        var visibleLabel = visibleCount == 1 ? singularLabel : pluralLabel;
+        var visibleLabel = visibleCount == 1 ? singular : plural;
         return $"{visibleCount} {visibleLabel} · {sizeText}";
     }
 }

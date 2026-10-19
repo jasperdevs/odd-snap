@@ -89,10 +89,10 @@ public partial class SettingsWindow
                 _suppressHistoryPreferenceChange = false;
             }
 
-            SetHistoryPreferenceStatus($"{label} change was not saved. Previous setting restored.");
+            SetHistoryPreferenceStatus(FormatSettingReverted(label));
             ToastWindow.ShowError(
-                $"{label} failed",
-                $"The previous history setting was restored. Check Settings -> Recording and try again.\n{ex.Message}");
+                string.Format(LocalizationService.Translate("{0} failed"), LocalizationService.Translate(label)),
+                LocalizationService.Translate("The previous history setting was restored. Check Settings -> Recording and try again.") + "\n" + ex.Message);
         }
     }
 
@@ -278,11 +278,7 @@ public partial class SettingsWindow
             ?? AudioService.GetDefaultMicrophoneId();
         foreach (var mic in mics)
         {
-            var item = CreateAudioDeviceItem(
-                mic.Name,
-                mic.Id,
-                $"Microphone device {mic.Name}",
-                $"Use {mic.Name} for microphone recording.");
+            var item = CreateAudioDeviceItem(mic.Name, mic.Id, "MicrophoneDevice");
             MicDeviceCombo.Items.Add(item);
             if (mic.Id == preferredMicId)
                 MicDeviceCombo.SelectedItem = item;
@@ -296,11 +292,7 @@ public partial class SettingsWindow
             ?? AudioService.GetDefaultDesktopAudioId();
         foreach (var dev in outputs)
         {
-            var item = CreateAudioDeviceItem(
-                dev.Name,
-                dev.Id,
-                $"Desktop audio device {dev.Name}",
-                $"Use {dev.Name} for desktop audio recording.");
+            var item = CreateAudioDeviceItem(dev.Name, dev.Id, "DesktopAudioDevice");
             DesktopAudioDeviceCombo.Items.Add(item);
             if (dev.Id == preferredDesktopAudioId)
                 DesktopAudioDeviceCombo.SelectedItem = item;
@@ -309,11 +301,15 @@ public partial class SettingsWindow
             DesktopAudioDeviceCombo.SelectedIndex = 0;
     }
 
-    private static ComboBoxItem CreateAudioDeviceItem(string name, string id, string automationName, string helpText)
+    private static ComboBoxItem CreateAudioDeviceItem(string name, string id, string kind)
     {
-        var item = new ComboBoxItem { Content = name, Tag = id, ToolTip = helpText };
-        AutomationProperties.SetName(item, automationName);
-        AutomationProperties.SetHelpText(item, helpText);
+        // The device name comes from Windows (it is already localized by the
+        // operating system), so it is data: shown as-is and never translated.
+        // Only the surrounding prose is localized, via the shared combo helper.
+        var item = new ComboBoxItem { Content = name, Tag = id };
+        LocalizationService.SetSkipContentLocalization(item, true);
+        SettingsComboSource.Set(item, new SettingsComboItemSource(kind, name));
+        ApplySettingsComboItemMetadata(item);
         return item;
     }
 
@@ -431,10 +427,10 @@ public partial class SettingsWindow
                 _suppressRecordingPreferenceChange = false;
             }
 
-            SetRecordingPreferenceStatus($"{label} change was not saved. Previous setting restored.");
+            SetRecordingPreferenceStatus(FormatSettingReverted(label));
             ToastWindow.ShowError(
-                $"{label} failed",
-                $"The previous recording setting was restored. Check Settings -> Recording and try again.\n{ex.Message}");
+                string.Format(LocalizationService.Translate("{0} failed"), LocalizationService.Translate(label)),
+                LocalizationService.Translate("The previous recording setting was restored. Check Settings -> Recording and try again.") + "\n" + ex.Message);
         }
     }
 

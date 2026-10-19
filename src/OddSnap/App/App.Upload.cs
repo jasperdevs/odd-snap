@@ -129,7 +129,7 @@ public partial class App
                 try
                 {
                     ClipboardService.CopyTextToClipboard(result.Url);
-                    ToastWindow.Show(ToastSpec.Standard("Uploaded", $"Link copied · {host}", filePath) with { SuppressSound = true });
+                    ToastWindow.Show(ToastSpec.Standard("Uploaded", string.Format(LocalizationService.Translate("Link copied · {0}"), host), filePath) with { SuppressSound = true });
                 }
                 catch (Exception ex)
                 {
@@ -248,7 +248,10 @@ public partial class App
                     var errMsg = CleanErrorMessage(lensUpload.Error);
                     var saved = Path.GetFileName(filePath);
                     SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
-                    ToastWindow.ShowError("Google Lens upload failed", $"Saved to {saved}\n{errMsg}", filePath);
+                    ToastWindow.ShowError(
+                        "Google Lens upload failed",
+                        string.Format(LocalizationService.Translate("Saved to {0}"), saved) + "\n" + errMsg,
+                        filePath);
                     return;
                 }
 
@@ -258,17 +261,20 @@ public partial class App
                     return;
 
                 SoundService.PlayUploadDoneSound();
-                ToastWindow.Show(ToastSpec.Standard("Google Lens Ready", $"Opened from {lensUpload.ProviderName}.", filePath) with { SuppressSound = true });
+                ToastWindow.Show(ToastSpec.Standard("Google Lens Ready", string.Format(LocalizationService.Translate("Opened from {0}."), lensUpload.ProviderName), filePath) with { SuppressSound = true });
                 return;
             }
 
             var startUrl = UploadService.BuildAiChatStartUrl(settings.AiChatProvider);
             if (string.IsNullOrWhiteSpace(startUrl))
             {
-                var errMsg = "Choose an AI Redirect provider in Settings -> Uploads.";
+                var errMsg = LocalizationService.Translate("Choose an AI Redirect provider in Settings -> Uploads.");
                 var saved = Path.GetFileName(filePath);
                 SaveUploadFailure(filePath, historyEntry, providerName, errMsg);
-                ToastWindow.ShowError("AI Redirect not configured", $"Saved to {saved}\n{errMsg}", filePath);
+                ToastWindow.ShowError(
+                    "AI Redirect not configured",
+                    string.Format(LocalizationService.Translate("Saved to {0}"), saved) + "\n" + errMsg,
+                    filePath);
                 return;
             }
 
@@ -297,7 +303,7 @@ public partial class App
             }
             else
             {
-                ToastWindow.Show(ToastSpec.Standard("AI Redirect Ready", $"Opened {providerName}. Use Ctrl+V in the chat box.", filePath) with { SuppressSound = true });
+                ToastWindow.Show(ToastSpec.Standard("AI Redirect Ready", string.Format(LocalizationService.Translate("Opened {0}. Use Ctrl+V in the chat box."), providerName), filePath) with { SuppressSound = true });
             }
         }
         finally

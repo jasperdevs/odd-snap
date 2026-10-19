@@ -170,10 +170,10 @@ public partial class SettingsWindow
 
     private void ShowUpscaleSettingSaveFailed(string label, Exception ex)
     {
-        SetUpscaleRemovalStatus($"{label} change was not saved. Previous setting restored.");
+        SetUpscaleRemovalStatus(FormatSettingReverted(label));
         ToastWindow.ShowError(
             "Upscale setting failed",
-            $"The previous upscale setting was restored. Check Settings -> Upscale and try again.\n{ex.Message}");
+            LocalizationService.Translate("The previous upscale setting was restored. Check Settings -> Upscale and try again.") + "\n" + ex.Message);
     }
 
     private LocalUpscaleEngine GetSelectedLocalUpscaleEngine()
@@ -461,13 +461,13 @@ public partial class SettingsWindow
 
     private void SetUpscaleRuntimeRemovalStatus(string message)
     {
-        UpscaleLocalEngineStatusText.Text = "Runtime uninstall failed";
+        UpscaleLocalEngineStatusText.Text = LocalizationService.Translate("Runtime uninstall failed");
         SetUpscaleRemovalStatus(message);
     }
 
     private void SetUpscaleRuntimeCancellationStatus(string message)
     {
-        UpscaleLocalEngineStatusText.Text = "Runtime uninstall canceled";
+        UpscaleLocalEngineStatusText.Text = LocalizationService.Translate("Runtime uninstall canceled");
         SetUpscaleRemovalStatus(message);
     }
 

@@ -18,7 +18,48 @@ public partial class SettingsWindow
         string PageTitle,
         FrameworkElement Target,
         string Title,
-        string Description);
+        string Description)
+    {
+        /// <summary>English source wording of the title.</summary>
+        public string TitleSource { get; init; } = "";
+
+        public string DescriptionSource { get; init; } = "";
+
+        /// <summary>
+        /// Title rendered in the active interface language. Search matches the
+        /// displayed text, the English source, and this translation, so the user
+        /// can type in either language no matter which one the index was built in.
+        /// </summary>
+        public string TitleLocalized { get; init; } = "";
+
+        public string DescriptionLocalized { get; init; } = "";
+
+        public bool Matches(string query) =>
+            Contains(Title, query) ||
+            Contains(Description, query) ||
+            Contains(TitleSource, query) ||
+            Contains(DescriptionSource, query) ||
+            Contains(TitleLocalized, query) ||
+            Contains(DescriptionLocalized, query);
+
+        public bool StartsWithQuery(string query) =>
+            StartsWith(Title, query) ||
+            StartsWith(TitleSource, query) ||
+            StartsWith(TitleLocalized, query);
+
+        private static bool Contains(string value, string query) =>
+            value.Length > 0 && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+        private static bool StartsWith(string value, string query) =>
+            value.Length > 0 && value.StartsWith(query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Captures both the text currently shown and its English source, so a
+    /// search hits the entry in either language.
+    /// </summary>
+    private static string SourceOf(string value) =>
+        string.IsNullOrWhiteSpace(value) ? "" : LocalizationService.ToSourceKey(value);
 
     private List<SearchEntry>? _searchIndex;
     private Border? _flashedCard;
@@ -88,31 +129,55 @@ public partial class SettingsWindow
                     {
                         case TextBlock tb when ReferenceEquals(tb.Style, titleStyle) && !string.IsNullOrWhiteSpace(tb.Text):
                             if (pendingTitle is not null)
-                                index.Add(new SearchEntry(tab, page, card, pendingTitle, ""));
+                                index.Add(CreateSearchEntry(tab, page, card, pendingTitle, ""));
                             pendingTitle = tb.Text.Trim();
                             break;
                         case TextBlock tb when ReferenceEquals(tb.Style, descStyle) && pendingTitle is not null:
-                            index.Add(new SearchEntry(tab, page, card, pendingTitle, tb.Text?.Trim() ?? ""));
+                            index.Add(CreateSearchEntry(tab, page, card, pendingTitle, tb.Text?.Trim() ?? ""));
                             pendingTitle = null;
                             break;
                         case System.Windows.Controls.CheckBox { Content: string label } when !string.IsNullOrWhiteSpace(label):
-                            index.Add(new SearchEntry(tab, page, card, label.Trim(), ""));
+                            index.Add(CreateSearchEntry(tab, page, card, label.Trim(), ""));
                             break;
                     }
                 }
                 if (pendingTitle is not null)
-                    index.Add(new SearchEntry(tab, page, card, pendingTitle, ""));
+                    index.Add(CreateSearchEntry(tab, page, card, pendingTitle, ""));
             }
 
             // Section headers are useful hits too ("Sound & Motion", "Search"…).
             foreach (var tb in EnumerateLogicalDescendants(panel).OfType<TextBlock>())
             {
                 if (ReferenceEquals(tb.Style, sectionStyle) && !string.IsNullOrWhiteSpace(tb.Text))
-                    index.Add(new SearchEntry(tab, page, tb, tb.Text.Trim(), ""));
+                    index.Add(CreateSearchEntry(tab, page, tb, tb.Text.Trim(), ""));
             }
         }
 
         return index;
+    }
+
+    /// <summary>
+    /// Builds an index entry that carries the displayed text, its English
+    /// source, and its translation, so the search works in either language even
+    /// when the index was built before the interface switched languages.
+    /// </summary>
+    private static SearchEntry CreateSearchEntry(
+        System.Windows.Controls.RadioButton tab,
+        string page,
+        FrameworkElement target,
+        string title,
+        string description)
+    {
+        var titleSource = SourceOf(title);
+        var descriptionSource = SourceOf(description);
+
+        return new SearchEntry(tab, page, target, title, description)
+        {
+            TitleSource = titleSource,
+            DescriptionSource = descriptionSource,
+            TitleLocalized = LocalizationService.Translate(titleSource),
+            DescriptionLocalized = LocalizationService.Translate(descriptionSource),
+        };
     }
 
     private IEnumerable<(System.Windows.Controls.RadioButton Tab, string Page, FrameworkElement Panel)> EnumerateSearchPages()
@@ -158,11 +223,10 @@ public partial class SettingsWindow
         _searchIndex ??= BuildSearchIndex();
 
         var matches = _searchIndex
-            .Where(x => x.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
-                     || x.Description.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .GroupBy(x => (x.Title, x.PageTitle))
+            .Where(x => x.Matches(query))
+            .GroupBy(x => (Source: x.TitleSource.Length > 0 ? x.TitleSource : x.Title, x.PageTitle))
             .Select(g => g.First())
-            .OrderByDescending(x => x.Title.StartsWith(query, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(x => x.StartsWithQuery(query))
             .Take(12)
             .ToList();
 
@@ -187,21 +251,24 @@ public partial class SettingsWindow
 
     private ListBoxItem CreateSearchResultItem(SearchEntry entry)
     {
+        // Prefer the translation for the active language; fall back to whatever
+        // text the index captured if no translation exists for this entry.
+        var displayTitle = entry.TitleLocalized.Length > 0 ? entry.TitleLocalized : entry.Title;
         var title = new TextBlock
         {
-            Text = entry.Title,
+            Text = displayTitle,
             FontSize = 12.5,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            FontFamily = new System.Windows.Media.FontFamily(LocalizationService.UiFontStack()),
         };
         title.SetResourceReference(TextBlock.ForegroundProperty, "ThemeTextPrimaryBrush");
 
         var page = new TextBlock
         {
-            Text = entry.PageTitle,
+            Text = LocalizationService.Translate(entry.PageTitle),
             FontSize = 10.5,
             Margin = new Thickness(0, 1, 0, 0),
-            FontFamily = new System.Windows.Media.FontFamily("Segoe UI Variable Text"),
+            FontFamily = new System.Windows.Media.FontFamily(LocalizationService.UiFontStack()),
         };
         page.SetResourceReference(TextBlock.ForegroundProperty, "ThemeTextSecondaryBrush");
 
