@@ -160,7 +160,8 @@ public partial class SettingsWindow
                 "Reset Settings",
                 "Reset all settings to defaults?\n\nThis cannot be undone.",
                 "Reset",
-                "Cancel"))        {
+                "Cancel"))
+        {
             SetSettingsImportExportStatus("Reset canceled. Existing settings kept.");
             return;
         }
