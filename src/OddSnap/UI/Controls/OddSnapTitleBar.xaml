@@ -21,7 +21,7 @@
                 <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                            FontSize="12"
                            FontWeight="SemiBold"
-                           FontFamily="Segoe UI Variable Text"
+                           FontFamily="{DynamicResource UiFontFamily}"
                            Foreground="{DynamicResource ThemeTextPrimaryBrush}"
                            VerticalAlignment="Center"/>
             </StackPanel>

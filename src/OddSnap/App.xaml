@@ -4,6 +4,19 @@
              ThemeMode="System"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
+        <!-- Global UI font stack.
+             "Segoe UI Variable Text/Display" is the Windows 11 UI face and has NO
+             CJK coverage, so Chinese/Japanese/Korean glyphs depend on WPF's built-in
+             language-based fallback. That fallback resolves zh-Hant to
+             "Microsoft JhengHei UI", which is clearly lighter than the YaHei used for
+             zh-Hans and breaks into faint, jagged strokes at the 11-13px UI sizes.
+             Listing the CJK families explicitly keeps the Latin face unchanged while
+             pinning CJK to a known screen font. LocalizationService swaps these two
+             resources when the interface language changes. Keep the default stack in
+             sync with UiChrome.UiFontStack. -->
+        <FontFamily x:Key="UiFontFamily">Segoe UI Variable Text, Microsoft YaHei UI, Malgun Gothic, Yu Gothic UI, Segoe UI</FontFamily>
+        <FontFamily x:Key="UiDisplayFontFamily">Segoe UI Variable Display, Microsoft YaHei UI, Malgun Gothic, Yu Gothic UI, Segoe UI</FontFamily>
+
         <!-- Keyboard focus ring (shown only during keyboard navigation, like the Windows 11 focus rect) -->
         <Style x:Key="OddSnapFocusVisual">
             <Setter Property="Control.Template">
@@ -23,7 +36,7 @@
         <Style x:Key="ChromeButtonBase" TargetType="Button">
             <Setter Property="FocusVisualStyle" Value="{StaticResource OddSnapFocusVisual}"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
+            <Setter Property="FontFamily" Value="{DynamicResource UiFontFamily}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="MinHeight" Value="32"/>
             <Setter Property="MinWidth" Value="40"/>
@@ -107,7 +120,7 @@
             <Setter Property="MinHeight" Value="40"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
+            <Setter Property="FontFamily" Value="{DynamicResource UiFontFamily}"/>
             <Setter Property="Padding" Value="12,0"/>
             <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>

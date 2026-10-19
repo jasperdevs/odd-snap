@@ -17,6 +17,18 @@ public partial class OddSnapTitleBar : UserControl
             typeof(OddSnapTitleBar),
             new PropertyMetadata(string.Empty));
 
+    /// <summary>
+    /// The English author text. <see cref="Title"/> holds the localized value so
+    /// the binding inside the template keeps working, while this records what to
+    /// translate from when the interface language changes.
+    /// </summary>
+    public static readonly DependencyProperty SourceTitleProperty =
+        DependencyProperty.Register(
+            nameof(SourceTitle),
+            typeof(string),
+            typeof(OddSnapTitleBar),
+            new PropertyMetadata(string.Empty));
+
     public event EventHandler? CloseRequested;
 
     public OddSnapTitleBar()
@@ -24,12 +36,43 @@ public partial class OddSnapTitleBar : UserControl
         InitializeComponent();
         Loaded += (_, _) => RefreshIcons();
         IsVisibleChanged += (_, _) => RefreshIcons();
+        Loaded += (_, _) => ApplyLocalizedTitle();
+        IsVisibleChanged += (_, _) => ApplyLocalizedTitle();
     }
 
     public string Title
     {
         get => (string)GetValue(TitleProperty);
-        set => SetValue(TitleProperty, value);
+        set
+        {
+            // Remember the authored (English) text once, then show the
+            // translation. XAML assigns the literal, code assigns the key.
+            SourceTitle = LocalizationService.ToSourceKey(value);
+            SetValue(TitleProperty, LocalizationService.Translate(SourceTitle));
+        }
+    }
+
+    public string SourceTitle
+    {
+        get => (string)GetValue(SourceTitleProperty);
+        set => SetValue(SourceTitleProperty, value);
+    }
+
+    private void ApplyLocalizedTitle()
+    {
+        // Prefer the recorded source. When the control is created entirely in
+        // XAML the setter already ran and SourceTitle is set; when it is reused
+        // across windows the current Title may be a stale translation.
+        var source = SourceTitle;
+        if (string.IsNullOrEmpty(source))
+            source = LocalizationService.ToSourceKey(Title);
+        if (string.IsNullOrEmpty(source))
+            return;
+
+        SourceTitle = source;
+        var localized = LocalizationService.Translate(source);
+        if (!string.Equals(Title, localized, StringComparison.Ordinal))
+            SetValue(TitleProperty, localized);
     }
 
     public void RefreshIcons()
