@@ -492,9 +492,10 @@ public partial class SettingsWindow
         HistoryPanel.Visibility = HistoryTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         UploadsPanel.Visibility = UploadsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         AboutPanel.Visibility = AboutTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        // English source text; ApplyTo below rewrites it for the active
-        // language and again whenever the language changes.
-        PageTitleText.Text = GetSelectedSettingsPageTitle();
+        // The page title is a plain TextBlock.Text assignment, so the value
+        // watcher cannot follow it. Translate here and again on language change
+        // (see RefreshPageTitle).
+        PageTitleText.Text = LocalizationService.Translate(GetSelectedSettingsPageTitle());
 
         if (HistoryTab.IsChecked != true || HistoryCategoryCombo.SelectedIndex != 0)
             CancelImageSearchWork();
