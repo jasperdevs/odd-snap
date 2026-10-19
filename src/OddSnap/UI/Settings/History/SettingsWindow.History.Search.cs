@@ -102,9 +102,9 @@ public partial class SettingsWindow
         {
             var loadedCount = _filteredHistoryItems.Count;
             var loadedPrefix = totalCount > loadedCount
-                ? $"{loadedCount} of {totalCount} captures loaded"
-                : $"{loadedCount} capture{(loadedCount == 1 ? "" : "s")}";
-            HistoryCountText.Text = $"{loadedPrefix} · {sizeStr}";
+                ? string.Format(LocalizationService.Translate("{0} of {1} captures loaded"), loadedCount, totalCount)
+                : string.Format(LocalizationService.Translate("{0} captures"), loadedCount);
+            HistoryCountText.Text = loadedPrefix + " · " + sizeStr;
         }
 
         if (_filteredHistoryItems.Count == 0)
@@ -287,27 +287,27 @@ public partial class SettingsWindow
                 SetImageSearchLoading(false, forceIndexed: true);
 
             if (!_isClosed && IsLoaded && version == _searchFilterVersion && searchFailed)
-                HistorySearchStatusText.Text = "Search failed";
+                HistorySearchStatusText.Text = LocalizationService.Translate("Search failed");
         }
     }
 
     private static string FormatImageSearchVisibleCountText(int visibleCount, int matchedCount, string sizeText)
     {
-        var matchLabel = matchedCount == 1 ? "match" : "matches";
-        return $"{visibleCount} visible of {matchedCount} {matchLabel} · {sizeText}";
+        return string.Format(LocalizationService.Translate("{0} visible of {1} match"), visibleCount, matchedCount)
+            + " · " + sizeText;
     }
 
     private static string FormatImageSearchMatchCountText(int matchedCount, bool uploadFilterActive, string sizeText)
     {
-        var matchLabel = matchedCount == 1 ? "match" : "matches";
-        var sourceLabel = uploadFilterActive ? "search/filter" : "search";
-        return $"{matchedCount} {sourceLabel} {matchLabel} · {sizeText}";
+        var sourceLabel = LocalizationService.Translate(uploadFilterActive ? "search/filter" : "search");
+        return string.Format(LocalizationService.Translate("{0} {1} match"), matchedCount, sourceLabel)
+            + " · " + sizeText;
     }
 
     private static string FormatImageUploadFilterCountText(int filteredCount, int totalCount, string sizeText)
     {
-        var captureLabel = totalCount == 1 ? "capture" : "captures";
-        return $"{filteredCount} of {totalCount} {captureLabel} shown by filter · {sizeText}";
+        return string.Format(LocalizationService.Translate("{0} of {1} captures shown by filter"), filteredCount, totalCount)
+            + " · " + sizeText;
     }
 
     private List<HistoryItemVM> FilterSearchResultsForLoadedThumbnails(List<HistoryItemVM> rankedItems, string query)
@@ -393,7 +393,7 @@ public partial class SettingsWindow
         var sources = _settingsService.Settings.ImageSearchSources;
         if (sources == ImageSearchSourceOptions.None)
         {
-            HistorySearchStatusText.Text = "Search off";
+            HistorySearchStatusText.Text = LocalizationService.Translate("Search off");
             return;
         }
 

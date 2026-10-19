@@ -34,7 +34,7 @@ public partial class App
 
         void TryRegister(bool ok, string label, uint mod, uint key)
         {
-            if (!ok) failed.Add($"{label} ({HotkeyFormatter.Format(mod, key)})");
+            if (!ok) failed.Add($"{LocalizationService.Translate(label)} ({HotkeyFormatter.Format(mod, key)})");
         }
 
         TryRegister(_hotkeyService.Register(s.HotkeyModifiers, s.HotkeyKey), "Capture", s.HotkeyModifiers, s.HotkeyKey);
@@ -54,7 +54,9 @@ public partial class App
         TryRegister(_hotkeyService.RegisterLastRegion(lastRegionModifiers, lastRegionKey), "Last captured region", lastRegionModifiers, lastRegionKey);
 
         if (failed.Count > 0)
-            ToastWindow.ShowError("Hotkey conflict", $"{string.Join(", ", failed)} — already in use by another app");
+            ToastWindow.ShowError(
+                "Hotkey conflict",
+                string.Format(LocalizationService.Translate("{0} - already in use by another app"), string.Join(", ", failed)));
         else if (!_readyToastShown)
         {
             _readyToastShown = true;
@@ -68,15 +70,24 @@ public partial class App
         var pickerHotkey = FormatConfiguredHotkey(settings.PickerHotkeyModifiers, settings.PickerHotkeyKey);
 
         if (captureHotkey is not null && pickerHotkey is not null)
-            return $"{captureHotkey} to capture, {pickerHotkey} for colors";
+            return T("{0} to capture, {1} for colors", captureHotkey, pickerHotkey);
 
         if (captureHotkey is not null)
-            return $"{captureHotkey} to capture. Right-click the tray icon for more tools.";
+            return T("{0} to capture. Right-click the tray icon for more tools.", captureHotkey);
 
         if (pickerHotkey is not null)
-            return $"{pickerHotkey} for colors. Left-click the tray icon to capture.";
+            return T("{0} for colors. Left-click the tray icon to capture.", pickerHotkey);
 
-        return "Left-click the tray icon to capture; right-click it for tools.";
+        return T("Left-click the tray icon to capture; right-click it for tools.");
+    }
+
+    // Placeholder-based lookup: the translation key is the template, and
+    // string.Format fills the hotkey names in. Chinese word order often needs
+    // the placeholder moved, so a plain concatenation would not be translatable.
+    private static string T(string template, params object[] args)
+    {
+        var translated = LocalizationService.Translate(template);
+        return args.Length == 0 ? translated : string.Format(translated, args);
     }
 
     private static string? FormatConfiguredHotkey(uint modifiers, uint key) =>
@@ -186,7 +197,7 @@ public partial class App
         if (delay > 0)
         {
             int remaining = delay;
-            ToastWindow.Show($"Capturing in {remaining}...", "");
+            ToastWindow.Show(string.Format(LocalizationService.Translate("Capturing in {0}..."), remaining), "");
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             timer.Tick += (_, _) =>
             {
@@ -205,7 +216,7 @@ public partial class App
 
                 remaining--;
                 if (remaining > 0)
-                    ToastWindow.Show($"Capturing in {remaining}...", "");
+                    ToastWindow.Show(string.Format(LocalizationService.Translate("Capturing in {0}..."), remaining), "");
                 else
                 {
                     CancelCaptureDelay();

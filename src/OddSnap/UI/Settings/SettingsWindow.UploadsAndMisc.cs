@@ -11,6 +11,37 @@ using OddSnap.Services;
 
 namespace OddSnap.UI;
 
+/// <summary>
+/// The English pieces a combo item tooltip is built from, remembered so the
+/// tooltip can be regenerated when the interface language changes. Formatted
+/// help text is not a translation lookup key, so it cannot simply be re-read
+/// from the control.
+/// </summary>
+internal sealed record SettingsComboItemSource(
+    string ComboName,
+    string Text,
+    object? Payload = null,
+    bool ForLensUpload = false);
+
+/// <summary>
+/// Attached property that carries a <see cref="SettingsComboItemSource"/> on a
+/// combo item.
+/// </summary>
+internal static class SettingsComboSource
+{
+    internal static readonly DependencyProperty Property =
+        DependencyProperty.RegisterAttached(
+            "Source",
+            typeof(SettingsComboItemSource),
+            typeof(SettingsComboSource));
+
+    internal static void Set(DependencyObject element, SettingsComboItemSource value)
+        => element.SetValue(Property, value);
+
+    internal static SettingsComboItemSource? Get(DependencyObject element)
+        => element.GetValue(Property) as SettingsComboItemSource;
+}
+
 public partial class SettingsWindow
 {
     private const double SettingsComboItemWidth = 300;
@@ -212,10 +243,13 @@ public partial class SettingsWindow
 
     private void ShowAutoUploadSaveFailed(string label, Exception ex)
     {
-        SetAutoUploadStatus($"Auto-upload {label} change was not saved. Previous setting restored.");
+        SetAutoUploadStatus(string.Format(
+            LocalizationService.Translate("Auto-upload {0} change was not saved. Previous setting restored."),
+            LocalizationService.Translate(label)));
         ToastWindow.ShowError(
             "Auto-upload setting failed",
-            $"The {label} auto-upload setting was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
+            string.Format(LocalizationService.Translate("The {0} auto-upload setting was restored. Check Settings -> Uploads and try again."), LocalizationService.Translate(label))
+                + "\n" + ex.Message);
     }
 
     private void SetAutoUploadStatus(string message)
@@ -463,9 +497,9 @@ public partial class SettingsWindow
         }
 
         _aiRedirectTestInProgress = true;
-        AiRedirectTestBtn.Content = "Testing...";
+        AiRedirectTestBtn.Content = LocalizationService.Translate("Testing...");
         AiRedirectTestBtn.IsEnabled = false;
-        SetAiRedirectTestStatus("Testing AI redirect...");
+        SetAiRedirectTestStatus(LocalizationService.Translate("Testing AI redirect..."));
 
         string? tempPath = null;
         using var timeoutCts = BeginUploadTestTimeout(ref _aiRedirectTestCts);
@@ -495,7 +529,8 @@ public partial class SettingsWindow
                 {
                     var providerName = Services.UploadService.GetName(hostDest);
                     var error = GetUploadResultError(uploadResult, timeoutCts);
-                    SetAiRedirectTestStatus($"Google Lens upload failed: {providerName}: {error}");
+                    SetAiRedirectTestStatus(
+                        new LocalizedTextSegment("Google Lens upload failed: {0}: {1}", providerName, error));
                     ToastWindow.ShowError("Google Lens upload failed", BuildTestUploadFailureToastBody(providerName, error, uploadResult.IsRateLimit));
                 }
             }
@@ -510,7 +545,8 @@ public partial class SettingsWindow
                 }
                 else
                 {
-                    SetAiRedirectTestStatus($"AI redirect test could not open {providerName}. Check your default browser and try again.");
+                    SetAiRedirectTestStatus(
+                        new LocalizedTextSegment("AI redirect test could not open {0}. Check your default browser and try again.", providerName));
                 }
             }
         }
@@ -521,8 +557,10 @@ public partial class SettingsWindow
 
             var providerName = Services.UploadService.GetAiChatProviderName(provider);
             var error = BuildUploadTestTimeoutMessage();
-            SetAiRedirectTestStatus($"{providerName} redirect test timed out.");
-            ToastWindow.ShowError($"{providerName} redirect test timed out", BuildAiRedirectTestFailureToastBody(providerName, error));
+            SetAiRedirectTestStatus(new LocalizedTextSegment("{0} redirect test timed out.", providerName));
+            ToastWindow.ShowError(
+                string.Format(LocalizationService.Translate("{0} redirect test timed out"), providerName),
+                BuildAiRedirectTestFailureToastBody(providerName, error));
         }
         catch (Exception ex)
         {
@@ -531,8 +569,11 @@ public partial class SettingsWindow
 
             AppDiagnostics.LogError("settings.ai-redirect-test", ex);
             var providerName = Services.UploadService.GetAiChatProviderName(provider);
-            SetAiRedirectTestStatus($"{providerName} redirect test failed. Check Settings -> Uploads and try again.");
-            ToastWindow.ShowError($"{providerName} redirect test failed", BuildAiRedirectTestFailureToastBody(providerName, ex.Message));
+            SetAiRedirectTestStatus(
+                new LocalizedTextSegment("{0} redirect test failed. Check Settings -> Uploads and try again.", providerName));
+            ToastWindow.ShowError(
+                string.Format(LocalizationService.Translate("{0} redirect test failed"), providerName),
+                BuildAiRedirectTestFailureToastBody(providerName, ex.Message));
         }
         finally
         {
@@ -552,7 +593,7 @@ public partial class SettingsWindow
             _aiRedirectTestInProgress = false;
             if (!_isClosed)
             {
-                AiRedirectTestBtn.Content = "Test Redirect";
+                AiRedirectTestBtn.Content = LocalizationService.Translate("Test Redirect");
                 UpdateAiRedirectTestAvailability();
             }
         }
@@ -560,8 +601,23 @@ public partial class SettingsWindow
 
     private void SetAiRedirectTestStatus(string message)
     {
-        AiRedirectTestStatusText.Text = message;
+        // TextBlock.Text is a plain CLR property, so the localization hook never
+        // sees this assignment. Translate here, single entry point.
+        LocalizationService.ClearLocalizedText(AiRedirectTestStatusText);
+        AiRedirectTestStatusText.Text = LocalizationService.Translate(message);
         AiRedirectTestStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Sets a composed status message (template plus arguments) and registers it
+    /// so a language change regenerates it rather than leaving the old language.
+    /// </summary>
+    private void SetAiRedirectTestStatus(params LocalizedTextSegment[] segments)
+    {
+        LocalizationService.SetLocalizedText(AiRedirectTestStatusText, segments);
+        AiRedirectTestStatusText.Visibility = segments.Length == 0
             ? Visibility.Collapsed
             : Visibility.Visible;
     }
@@ -702,7 +758,8 @@ public partial class SettingsWindow
 
     private void ShowAiRedirectHotkeySaveFailed(string action, Exception ex)
     {
-        SetAiRedirectTestStatus($"AI redirect hotkey {action} was not saved. Previous hotkey restored.");
+        SetAiRedirectTestStatus(
+            new LocalizedTextSegment("AI redirect hotkey {0} was not saved. Previous hotkey restored.", action));
         ToastWindow.ShowError(
             "AI redirect hotkey failed",
             $"The previous AI redirect hotkey was restored. Check Settings -> Uploads and try again.\n{ex.Message}");
@@ -719,7 +776,7 @@ public partial class SettingsWindow
         {
             var (existingModifiers, existingKey) = settings.GetToolHotkey(tool.Id);
             if (existingModifiers == modifiers && existingKey == key)
-                return tool.Label;
+                return tool.DisplayLabel;
         }
 
         foreach (var (id, label, _) in ExtraTools)
@@ -1133,9 +1190,9 @@ public partial class SettingsWindow
         }
 
         _testUploadInProgress = true;
-        TestUploadBtn.Content = "Uploading...";
+        TestUploadBtn.Content = LocalizationService.Translate("Uploading...");
         TestUploadBtn.IsEnabled = false;
-        SetTestUploadStatus("Uploading test image...");
+        SetTestUploadStatus(LocalizationService.Translate("Uploading test image..."));
 
         string tempPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "oddsnap_test.png");
         using var timeoutCts = BeginUploadTestTimeout(ref _testUploadCts);
@@ -1166,7 +1223,8 @@ public partial class SettingsWindow
                     {
                         var providerName = Services.UploadService.GetName(hostDest);
                         var error = GetUploadResultError(uploadResult, timeoutCts);
-                        SetTestUploadStatus($"Google Lens upload failed: {providerName}: {error}");
+                        SetTestUploadStatus(
+                            new LocalizedTextSegment("Google Lens upload failed: {0}: {1}", providerName, error));
                         ToastWindow.ShowError("Google Lens upload failed", BuildTestUploadFailureToastBody(providerName, error, uploadResult.IsRateLimit));
                     }
                 }
@@ -1205,7 +1263,7 @@ public partial class SettingsWindow
                         ? Services.UploadService.GetName(_settingsService.Settings.ImageUploadDestination)
                         : result.ProviderName;
                     var error = GetUploadResultError(result, timeoutCts);
-                    SetTestUploadStatus($"Upload failed: {providerName}: {error}");
+                    SetTestUploadStatus(new LocalizedTextSegment("Upload failed: {0}: {1}", providerName, error));
                     ToastWindow.ShowError("Upload failed", BuildTestUploadFailureToastBody(providerName, error, result.IsRateLimit));
                 }
             }
@@ -1244,7 +1302,7 @@ public partial class SettingsWindow
             _testUploadInProgress = false;
             if (!_isClosed)
             {
-                TestUploadBtn.Content = "Test Upload";
+                TestUploadBtn.Content = LocalizationService.Translate("Test upload");
                 UpdateTestUploadAvailability();
             }
         }
@@ -1252,8 +1310,23 @@ public partial class SettingsWindow
 
     private void SetTestUploadStatus(string message)
     {
-        TestUploadStatusText.Text = message;
+        // TextBlock.Text is a plain CLR property, so the localization hook never
+        // sees this assignment. Translate here, single entry point.
+        LocalizationService.ClearLocalizedText(TestUploadStatusText);
+        TestUploadStatusText.Text = LocalizationService.Translate(message);
         TestUploadStatusText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Sets a composed status message (template plus arguments) and registers it
+    /// so a language change regenerates it rather than leaving the old language.
+    /// </summary>
+    private void SetTestUploadStatus(params LocalizedTextSegment[] segments)
+    {
+        LocalizationService.SetLocalizedText(TestUploadStatusText, segments);
+        TestUploadStatusText.Visibility = segments.Length == 0
             ? Visibility.Collapsed
             : Visibility.Visible;
     }
@@ -1491,7 +1564,7 @@ public partial class SettingsWindow
             item.Padding = new Thickness(8, 5, 8, 5);
             item.ContentTemplate = GetSettingsComboItemTemplate();
             item.Content = BuildProviderComboItem(text, assetSelector(raw));
-            SetSettingsComboItemMetadata(item, combo.Name, text, GetSettingsComboItemHelpText(combo.Name, text));
+            SetSettingsComboItemMetadata(item, combo.Name, text);
         }
     }
 
@@ -1506,19 +1579,38 @@ public partial class SettingsWindow
             item.Padding = new Thickness(8, 5, 8, 5);
             item.ContentTemplate = GetSettingsComboItemTemplate();
             item.Content = BuildFallbackComboItem(text, iconSelector(text));
-            SetSettingsComboItemMetadata(item, combo.Name, text, GetSettingsComboItemHelpText(combo.Name, text));
+            SetSettingsComboItemMetadata(item, combo.Name, text);
         }
     }
 
-    private static void SetSettingsComboItemMetadata(ComboBoxItem item, string comboName, string text, string helpText)
+    private static void SetSettingsComboItemMetadata(ComboBoxItem item, string comboName, string text)
     {
+        // The help text is formatted from a template ("Open {0} after a
+        // capture"), so the formatted result is not a lookup key and ApplyTo can
+        // never re-translate it. Remember the pieces and rebuild on a language
+        // change instead.
+        SettingsComboSource.Set(item, new SettingsComboItemSource(comboName, text));
+        ApplySettingsComboItemMetadata(item);
+    }
+
+    /// <summary>
+    /// Recomputes the tooltip and accessibility strings for a combo item from
+    /// its remembered English source. Called at build time and again whenever
+    /// the interface language changes.
+    /// </summary>
+    private static void ApplySettingsComboItemMetadata(ComboBoxItem item)
+    {
+        if (SettingsComboSource.Get(item) is not { } source)
+            return;
+
+        var helpText = GetSettingsComboItemHelpText(source.ComboName, source.Text);
         item.ToolTip = helpText;
-        AutomationProperties.SetName(item, GetSettingsComboItemAutomationName(comboName, text));
+        AutomationProperties.SetName(item, LocalizationService.Translate(GetSettingsComboItemAutomationName(source.ComboName, source.Text)));
         AutomationProperties.SetHelpText(item, helpText);
     }
 
     private static string GetSettingsComboItemAutomationName(string comboName, string text)
-        => comboName switch
+        => LocalizationService.Translate(comboName switch
         {
             "AiRedirectProviderCombo" => string.Equals(text, "None", StringComparison.OrdinalIgnoreCase)
                 ? "No AI redirect provider"
@@ -1533,32 +1625,40 @@ public partial class SettingsWindow
             "UpscaleLocalExecutionCombo" => $"{text} upscale execution mode",
             "StickerLocalCpuEngineCombo" or "StickerLocalGpuEngineCombo" => $"{text} sticker model",
             "UpscaleLocalCpuEngineCombo" or "UpscaleLocalGpuEngineCombo" => $"{text} upscale model",
+            "TranslateFrom" => string.Format(LocalizationService.Translate("{0} source language"), LocalizationService.Translate(text)),
+            "TranslateTo" => string.Format(LocalizationService.Translate("{0} target language"), LocalizationService.Translate(text)),
+            "MicrophoneDevice" => string.Format(LocalizationService.Translate("Microphone device {0}"), text),
+            "DesktopAudioDevice" => string.Format(LocalizationService.Translate("Desktop audio device {0}"), text),
             _ => text
-        };
+        });
 
     private static string GetSettingsComboItemHelpText(string comboName, string text)
         => comboName switch
         {
             "AiRedirectProviderCombo" => string.Equals(text, "None", StringComparison.OrdinalIgnoreCase)
-                ? "Do not open an AI tool after AI Redirect captures."
-                : $"Open {text} after an AI Redirect capture.",
+                ? LocalizationService.Translate("Do not open an AI tool after AI Redirect captures.")
+                : string.Format(LocalizationService.Translate("Open {0} after an AI Redirect capture."), text),
             "StickerProviderCombo" => text switch
             {
-                "None" => "Do not run background removal for sticker captures.",
-                "Local (CPU/GPU)" => "Use the local sticker runtime configured below.",
-                _ => $"Use {text} for cloud background removal."
+                "None" => LocalizationService.Translate("Do not run background removal for sticker captures."),
+                "Local (CPU/GPU)" => LocalizationService.Translate("Use the local sticker runtime configured below."),
+                _ => string.Format(LocalizationService.Translate("Use {0} for cloud background removal."), text)
             },
             "UpscaleProviderCombo" => text switch
             {
-                "None" => "Do not upscale captures.",
-                "Local (CPU/GPU)" => "Use the local upscale runtime configured below.",
-                _ => $"Use {text} for cloud upscaling."
+                "None" => LocalizationService.Translate("Do not upscale captures."),
+                "Local (CPU/GPU)" => LocalizationService.Translate("Use the local upscale runtime configured below."),
+                _ => string.Format(LocalizationService.Translate("Use {0} for cloud upscaling."), text)
             },
-            "StickerLocalExecutionCombo" => $"Run local sticker processing on {text}.",
-            "UpscaleLocalExecutionCombo" => $"Run local upscaling on {text}.",
-            "StickerLocalCpuEngineCombo" or "StickerLocalGpuEngineCombo" => $"Use {text} for local sticker background removal.",
-            "UpscaleLocalCpuEngineCombo" or "UpscaleLocalGpuEngineCombo" => $"Use {text} for local upscaling.",
-            _ => $"Choose {text}."
+            "StickerLocalExecutionCombo" => string.Format(LocalizationService.Translate("Run local sticker processing on {0}."), LocalizationService.Translate(text)),
+            "UpscaleLocalExecutionCombo" => string.Format(LocalizationService.Translate("Run local upscaling on {0}."), LocalizationService.Translate(text)),
+            "StickerLocalCpuEngineCombo" or "StickerLocalGpuEngineCombo" => string.Format(LocalizationService.Translate("Use {0} for local sticker background removal."), text),
+            "UpscaleLocalCpuEngineCombo" or "UpscaleLocalGpuEngineCombo" => string.Format(LocalizationService.Translate("Use {0} for local upscaling."), text),
+            "TranslateFrom" => string.Format(LocalizationService.Translate("Use {0} as the default translation source."), LocalizationService.Translate(text)),
+            "TranslateTo" => string.Format(LocalizationService.Translate("Use {0} as the default translation target."), LocalizationService.Translate(text)),
+            "MicrophoneDevice" => string.Format(LocalizationService.Translate("Use {0} for microphone recording."), text),
+            "DesktopAudioDevice" => string.Format(LocalizationService.Translate("Use {0} for desktop audio recording."), text),
+            _ => string.Format(LocalizationService.Translate("Choose {0}."), text)
         };
 
     private SettingsComboOption BuildProviderComboItem(string text, string? asset)
@@ -1611,16 +1711,30 @@ public partial class SettingsWindow
         string text,
         bool forLensUpload)
     {
+        SettingsComboSource.Set(item, new SettingsComboItemSource(
+            forLensUpload ? "LensUploadDestination" : "UploadDestination",
+            text,
+            destination,
+            forLensUpload));
+        ApplyUploadDestinationItemMetadata(item, destination, text, forLensUpload);
+    }
+
+    private static void ApplyUploadDestinationItemMetadata(
+        ComboBoxItem item,
+        Services.UploadDestination destination,
+        string text,
+        bool forLensUpload)
+    {
         var helpText = forLensUpload
-            ? $"Use {text} as the hosted image service before opening Google Lens."
+            ? string.Format(LocalizationService.Translate("Use {0} as the hosted image service before opening Google Lens."), text)
             : GetUploadDestinationHelpText(destination, text);
         item.ToolTip = helpText;
         var automationName = (destination, forLensUpload) switch
         {
-            (Services.UploadDestination.None, true) => "No Lens upload destination",
-            (Services.UploadDestination.None, false) => "No upload destination",
-            (_, true) => $"{text} Lens upload destination",
-            _ => $"{text} upload destination"
+            (Services.UploadDestination.None, true) => LocalizationService.Translate("No Lens upload destination"),
+            (Services.UploadDestination.None, false) => LocalizationService.Translate("No upload destination"),
+            (_, true) => string.Format(LocalizationService.Translate("{0} Lens upload destination"), text),
+            _ => string.Format(LocalizationService.Translate("{0} upload destination"), text)
         };
         AutomationProperties.SetName(item, automationName);
         AutomationProperties.SetHelpText(item, helpText);
@@ -1629,31 +1743,31 @@ public partial class SettingsWindow
     private static string GetUploadDestinationHelpText(Services.UploadDestination destination, string text)
         => destination switch
         {
-            Services.UploadDestination.None => "Do not upload captures automatically.",
-            Services.UploadDestination.TempHosts => "Automatically try free, no-setup public hosts until one works.",
+            Services.UploadDestination.None => LocalizationService.Translate("Do not upload captures automatically."),
+            Services.UploadDestination.TempHosts => LocalizationService.Translate("Automatically try free, no-setup public hosts until one works."),
             Services.UploadDestination.Litterbox or
             Services.UploadDestination.TmpFiles or
             Services.UploadDestination.Uguu or
-            Services.UploadDestination.FileIo => $"Upload to {text}. This is a temporary public host and needs no setup.",
+            Services.UploadDestination.FileIo => string.Format(LocalizationService.Translate("Upload to {0}. This is a temporary public host and needs no setup."), text),
             Services.UploadDestination.Gofile or
-            Services.UploadDestination.Catbox => $"Upload to {text}. This is a free public host and needs no setup.",
+            Services.UploadDestination.Catbox => string.Format(LocalizationService.Translate("Upload to {0}. This is a free public host and needs no setup."), text),
             Services.UploadDestination.Imgur or
             Services.UploadDestination.ImgBB or
             Services.UploadDestination.ImgPile or
-            Services.UploadDestination.Gyazo => $"Upload to {text}. Configure the required API key, token, or client ID below.",
+            Services.UploadDestination.Gyazo => string.Format(LocalizationService.Translate("Upload to {0}. Configure the required API key, token, or client ID below."), text),
             Services.UploadDestination.Dropbox or
             Services.UploadDestination.GoogleDrive or
             Services.UploadDestination.OneDrive or
             Services.UploadDestination.AzureBlob or
             Services.UploadDestination.GitHub or
-            Services.UploadDestination.Immich => $"Upload to {text}. Configure the account or server settings below.",
+            Services.UploadDestination.Immich => string.Format(LocalizationService.Translate("Upload to {0}. Configure the account or server settings below."), text),
             Services.UploadDestination.Ftp or
             Services.UploadDestination.Sftp or
             Services.UploadDestination.WebDav or
             Services.UploadDestination.S3Compatible or
-            Services.UploadDestination.CustomHttp => $"Upload to {text}. Configure the endpoint settings below.",
-            Services.UploadDestination.AiChat => "Open the selected AI tool after capture; hosted image upload is configured in AI Redirect settings.",
-            _ => $"Use {text} for uploads."
+            Services.UploadDestination.CustomHttp => string.Format(LocalizationService.Translate("Upload to {0}. Configure the endpoint settings below."), text),
+            Services.UploadDestination.AiChat => LocalizationService.Translate("Open the selected AI tool after capture; hosted image upload is configured in AI Redirect settings."),
+            _ => string.Format(LocalizationService.Translate("Use {0} for uploads."), text)
         };
 
     private static DataTemplate GetSettingsComboItemTemplate()

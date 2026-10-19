@@ -114,7 +114,7 @@ public partial class UpscaleResultWindow : Window
         ScaleSlider.Minimum = minScale;
         ScaleSlider.Maximum = maxScale;
         ScaleSlider.Value = Math.Clamp(ScaleSlider.Value, minScale, maxScale);
-        StatusText.Text = "Click Upscale to generate a comparison.";
+        StatusText.Text = LocalizationService.Translate("Click Upscale to generate a comparison.");
     }
 
     private void ApplyTheme()
@@ -162,7 +162,7 @@ public partial class UpscaleResultWindow : Window
         UseResultBtn.IsEnabled = false;
         AfterLoadingOverlay.Visibility = Visibility.Visible;
         StartLoadingAnimation();
-        StatusText.Text = "Generating upscale...";
+        StatusText.Text = LocalizationService.Translate("Generating upscale...");
 
         try
         {
@@ -233,12 +233,12 @@ public partial class UpscaleResultWindow : Window
             SetCompareMode(true);
 
         StatusText.Text = _processedBitmap is null
-            ? "Upscale failed. Try again, or check Settings -> Upscale."
-            : "Upscale failed. Previous result is still available.";
+            ? LocalizationService.Translate("Upscale failed. Try again, or check Settings -> Upscale.")
+            : LocalizationService.Translate("Upscale failed. Previous result is still available.");
 
         ToastWindow.ShowError(
             "Upscale failed",
-            $"OddSnap could not generate the upscale preview. Try again, or check Settings -> Upscale.\n{details}");
+            LocalizationService.Translate("OddSnap could not generate the upscale preview. Try again, or check Settings -> Upscale.") + "\n" + details);
     }
 
     private void UseResultBtn_Click(object sender, RoutedEventArgs e)
@@ -260,7 +260,7 @@ public partial class UpscaleResultWindow : Window
             AppDiagnostics.LogError("upscale.window.accept", ex);
             ToastWindow.ShowError(
                 "Upscale result failed",
-                $"OddSnap could not use this upscale result. Keep the preview open and try again.\n{ex.Message}");
+                LocalizationService.Translate("OddSnap could not use this upscale result. Keep the preview open and try again.") + "\n" + ex.Message);
         }
     }
 
@@ -271,8 +271,8 @@ public partial class UpscaleResultWindow : Window
         CompareHandle.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
         BeforeCornerLabel.Visibility = Visibility.Visible;
         StatusText.Text = enabled
-            ? "Click or drag on the image to compare."
-            : "Click Upscale to generate a comparison.";
+            ? LocalizationService.Translate("Click or drag on the image to compare.")
+            : LocalizationService.Translate("Click Upscale to generate a comparison.");
         AfterCornerLabel.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -412,7 +412,7 @@ public partial class UpscaleResultWindow : Window
         if (IsLoaded && !_isProcessing)
             ClearProcessedResult();
         else
-            StatusText.Text = "Click Upscale to generate a comparison.";
+            StatusText.Text = LocalizationService.Translate("Click Upscale to generate a comparison.");
     }
 
     private void TitleBar_CloseRequested(object? sender, EventArgs e) => Close();

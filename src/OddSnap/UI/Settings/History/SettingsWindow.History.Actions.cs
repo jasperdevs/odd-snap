@@ -34,14 +34,18 @@ public partial class SettingsWindow
             ReindexAllProgressPanel.Visibility = Visibility.Visible;
             ReindexAllBtn.Content = status;
             ReindexAllBtn.IsEnabled = false;
-            UpdateReindexAllButtonLabel(status, "Image search indexing is already running.");
+            UpdateReindexAllButtonLabel(
+                LocalizationService.Translate("Image search indexing is already running."),
+                LocalizationService.Translate("Image search indexing is already running."));
         }
         else if (total >= HistoryVirtualizationThreshold)
         {
             ReindexAllProgressPanel.Visibility = Visibility.Collapsed;
-            ReindexAllBtn.Content = "Refresh index";
+            ReindexAllBtn.Content = LocalizationService.Translate("Refresh index");
             ReindexAllBtn.IsEnabled = total > 0;
-            UpdateReindexAllButtonLabel("Refresh image search index", "Refresh the image search index for all screenshot history items.");
+            UpdateReindexAllButtonLabel(
+                LocalizationService.Translate("Refresh image search index"),
+                LocalizationService.Translate("Refresh the image search index for all screenshot history items."));
         }
         else
         {
@@ -49,22 +53,28 @@ public partial class SettingsWindow
             if (indexed < total)
             {
                 ReindexAllProgressPanel.Visibility = Visibility.Visible;
-                ReindexAllBtn.Content = $"Index {total - indexed} remaining";
+                ReindexAllBtn.Content = string.Format(LocalizationService.Translate("Index {0} remaining"), total - indexed);
                 ReindexAllBtn.IsEnabled = true;
-                UpdateReindexAllButtonLabel("Index remaining screenshots", $"Index {total - indexed} screenshots for History search.");
+                UpdateReindexAllButtonLabel(
+                    LocalizationService.Translate("Index remaining screenshots"),
+                    string.Format(LocalizationService.Translate("Index {0} screenshots for History search."), total - indexed));
             }
             else
             {
                 ReindexAllProgressPanel.Visibility = Visibility.Collapsed;
-                ReindexAllBtn.Content = $"{indexed}/{total} indexed";
+                ReindexAllBtn.Content = string.Format(LocalizationService.Translate("{0}/{1} indexed"), indexed, total);
                 ReindexAllBtn.IsEnabled = false;
-                UpdateReindexAllButtonLabel("Image search index complete", "All visible screenshot history items are indexed.");
+                UpdateReindexAllButtonLabel(
+                    LocalizationService.Translate("Image search index complete"),
+                    LocalizationService.Translate("All visible screenshot history items are indexed."));
             }
         }
     }
 
     private void UpdateReindexAllButtonLabel(string automationName, string helpText)
     {
+        automationName = LocalizationService.Translate(automationName);
+        helpText = LocalizationService.Translate(helpText);
         ReindexAllBtn.ToolTip = helpText;
         AutomationProperties.SetName(ReindexAllBtn, automationName);
         AutomationProperties.SetHelpText(ReindexAllBtn, helpText);
@@ -109,10 +119,10 @@ public partial class SettingsWindow
                 : "Search screenshots by file name or indexed OCR text.";
         }
 
-        ImageSearchPlaceholder.Text = placeholder;
-        ImageSearchBox.ToolTip = helpText;
-        AutomationProperties.SetName(ImageSearchBox, automationName);
-        AutomationProperties.SetHelpText(ImageSearchBox, helpText);
+        ImageSearchPlaceholder.Text = LocalizationService.Translate(placeholder);
+        ImageSearchBox.ToolTip = LocalizationService.Translate(helpText);
+        AutomationProperties.SetName(ImageSearchBox, LocalizationService.Translate(automationName));
+        AutomationProperties.SetHelpText(ImageSearchBox, LocalizationService.Translate(helpText));
     }
 
     private void UpdateImageSearchSourceSummary()
@@ -230,10 +240,12 @@ public partial class SettingsWindow
             }
 
             UpdateImageSearchSourceSummary();
-            HistorySearchStatusText.Text = $"{label} change was not saved. Previous setting restored.";
+            HistorySearchStatusText.Text = string.Format(
+                LocalizationService.Translate("{0} change was not saved. Previous setting restored."),
+                LocalizationService.Translate(label));
             ToastWindow.ShowError(
-                $"{label} failed",
-                $"The previous search setting was restored. Check Settings -> History and try again.\n{ex.Message}");
+                string.Format(LocalizationService.Translate("{0} failed"), LocalizationService.Translate(label)),
+                LocalizationService.Translate("The previous search setting was restored. Check Settings -> History and try again.") + "\n" + ex.Message);
         }
     }
 
@@ -309,10 +321,10 @@ public partial class SettingsWindow
         catch (Exception ex)
         {
             SetImageSearchLoading(false, forceIndexed: true);
-            HistorySearchStatusText.Text = "Search failed. Edit the query or retry from History.";
+            HistorySearchStatusText.Text = LocalizationService.Translate("Search failed. Edit the query or retry from History.");
             ToastWindow.ShowError(
-                "Search failed",
-                $"OddSnap could not update history search. Edit the query or retry from History.\n{ex.Message}");
+                LocalizationService.Translate("Search failed"),
+                LocalizationService.Translate("OddSnap could not update history search. Edit the query or retry from History.") + "\n" + ex.Message);
         }
     }
 
@@ -349,10 +361,10 @@ public partial class SettingsWindow
         catch (Exception ex)
         {
             SetImageSearchLoading(false, forceIndexed: true);
-            HistorySearchStatusText.Text = "Search failed. Edit the query or retry from History.";
+            HistorySearchStatusText.Text = LocalizationService.Translate("Search failed. Edit the query or retry from History.");
             ToastWindow.ShowError(
-                "Search failed",
-                $"OddSnap could not update history search. Edit the query or retry from History.\n{ex.Message}");
+                LocalizationService.Translate("Search failed"),
+                LocalizationService.Translate("OddSnap could not update history search. Edit the query or retry from History.") + "\n" + ex.Message);
         }
     }
 
@@ -362,10 +374,10 @@ public partial class SettingsWindow
             return;
 
         ReindexAllBtn.IsEnabled = false;
-        ReindexAllBtn.Content = "Starting index...";
+        ReindexAllBtn.Content = LocalizationService.Translate("Starting index...");
         ReindexAllProgressPanel.Visibility = Visibility.Visible;
         ReindexAllProgressBar.Visibility = Visibility.Visible;
-        HistorySearchStatusText.Text = "Starting image index refresh...";
+        HistorySearchStatusText.Text = LocalizationService.Translate("Starting image index refresh...");
 
         try
         {
@@ -379,11 +391,11 @@ public partial class SettingsWindow
         {
             AppDiagnostics.LogError("settings.history-reindex-refresh", ex);
             SetImageSearchLoading(false, forceIndexed: true);
-            HistorySearchStatusText.Text = "Index refresh failed. Existing search data is still available.";
+            HistorySearchStatusText.Text = LocalizationService.Translate("Index refresh failed. Existing search data is still available.");
             UpdateImageSearchActionButtons();
             ToastWindow.ShowError(
-                "Index refresh failed",
-                $"OddSnap could not refresh the image search index. Existing search data is still available; try again from History.\n{ex.Message}");
+                LocalizationService.Translate("Index refresh failed"),
+                LocalizationService.Translate("OddSnap could not refresh the image search index. Existing search data is still available; try again from History.") + "\n" + ex.Message);
         }
     }
 

@@ -162,8 +162,13 @@ public partial class App
                             string size = fi.Length > 1024 * 1024
                                 ? $"{fi.Length / 1024.0 / 1024.0:F1} MB"
                                 : $"{fi.Length / 1024:N0} KB";
-                            var copyStatus = copiedToClipboard ? "File copied to clipboard" : "Saved; clipboard copy failed";
-                            ToastWindow.Show($"{label} recorded", $"{fi.Name} · {size} · {copyStatus}", path);
+                            var copyStatus = copiedToClipboard
+                                ? LocalizationService.Translate("File copied to clipboard")
+                                : LocalizationService.Translate("Saved; clipboard copy failed");
+                            ToastWindow.Show(
+                                string.Format(LocalizationService.Translate("{0} recorded"), LocalizationService.Translate(label)),
+                                fi.Name + " · " + size + " · " + copyStatus,
+                                path);
                         }
 
                         ScheduleIdleMemoryTrim();

@@ -31,7 +31,7 @@ public static class ToolListBuilder
         var enabled = s.EnabledTools ?? ToolDef.DefaultEnabledIds();
         // Icon color for rendering Fluent glyphs to bitmaps
         var iconColor = Theme.IsDark ? System.Drawing.Color.FromArgb(225, 255, 255, 255) : System.Drawing.Color.FromArgb(210, 0, 0, 0);
-        var segoe = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName);
+        var segoe = UiChrome.UiFontFamily;
 
         void AddHeader(string text)
         {

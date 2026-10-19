@@ -49,7 +49,7 @@ public partial class SetupWizard : Window
 
     private void BuildHotkeyRows()
     {
-        var segoe = new System.Windows.Media.FontFamily(UiChrome.PreferredFamilyName);
+        var segoe = UiChrome.UiFontFamily;
         var iconColor = Theme.IsDark
             ? System.Drawing.Color.FromArgb(160, 255, 255, 255)
             : System.Drawing.Color.FromArgb(170, 0, 0, 0);
@@ -323,7 +323,7 @@ public partial class SetupWizard : Window
         }
         BackBtn.Visibility = page > 1 ? Visibility.Visible : Visibility.Collapsed;
         SkipBtn.Visibility = page == TotalPages ? Visibility.Collapsed : Visibility.Visible;
-        NextBtn.Content = page == TotalPages ? "Get Started" : "Next";
+        NextBtn.Content = LocalizationService.Translate(page == TotalPages ? "Get Started" : "Next");
     }
 
     private bool SaveCurrentPage()

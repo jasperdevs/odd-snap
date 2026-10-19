@@ -127,19 +127,24 @@ public partial class SettingsWindow
             4 => "Sticker",
             _ => "Upload"
         };
+        // Compose from templates and register them, so the tooltips are rebuilt
+        // on a language change instead of being stuck in one language. An
+        // interpolated string would never match a translation key.
         var stateHelp = supportsUploadFilter
-            ? $"Filter {categoryLabel} by upload state."
-            : "Upload filters are available for screenshots, videos/GIFs, and stickers.";
+            ? new LocalizedTextSegment("Filter {0} by upload state.", categoryLabel)
+            : new LocalizedTextSegment("Upload filters are available for screenshots, videos/GIFs, and stickers.");
         var providerHelp = supportsUploadFilter
-            ? $"Filter {categoryLabel} by upload provider."
-            : "Upload provider filters are available for screenshots, videos/GIFs, and stickers.";
+            ? new LocalizedTextSegment("Filter {0} by upload provider.", categoryLabel)
+            : new LocalizedTextSegment("Upload provider filters are available for screenshots, videos/GIFs, and stickers.");
+        var stateName = new LocalizedTextSegment("{0} upload state filter", categoryName);
+        var providerName = new LocalizedTextSegment("{0} upload provider filter", categoryName);
 
-        HistoryUploadFilterCombo.ToolTip = stateHelp;
-        HistoryUploadProviderCombo.ToolTip = providerHelp;
-        AutomationProperties.SetName(HistoryUploadFilterCombo, $"{categoryName} upload state filter");
-        AutomationProperties.SetName(HistoryUploadProviderCombo, $"{categoryName} upload provider filter");
-        AutomationProperties.SetHelpText(HistoryUploadFilterCombo, stateHelp);
-        AutomationProperties.SetHelpText(HistoryUploadProviderCombo, providerHelp);
+        LocalizationService.SetLocalizedToolTip(HistoryUploadFilterCombo, stateHelp);
+        LocalizationService.SetLocalizedToolTip(HistoryUploadProviderCombo, providerHelp);
+        LocalizationService.SetLocalizedAutomationName(HistoryUploadFilterCombo, stateName);
+        LocalizationService.SetLocalizedAutomationName(HistoryUploadProviderCombo, providerName);
+        LocalizationService.SetLocalizedAutomationHelpText(HistoryUploadFilterCombo, stateHelp);
+        LocalizationService.SetLocalizedAutomationHelpText(HistoryUploadProviderCombo, providerHelp);
     }
 
     private bool SupportsHistoryUploadFilter()

@@ -466,7 +466,9 @@ public partial class App
 
     private static void ShowCaptureProcessingFailed(string title, string recoveryMessage, string details)
     {
-        ToastWindow.ShowError(title, $"{recoveryMessage}\n{details}");
+        ToastWindow.ShowError(
+            title,
+            LocalizationService.Translate(recoveryMessage) + "\n" + details);
     }
 
     private void HandleOcrResult(Bitmap result)

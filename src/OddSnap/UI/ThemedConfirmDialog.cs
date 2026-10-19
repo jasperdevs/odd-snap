@@ -21,7 +21,7 @@ internal sealed class ThemedConfirmDialog : Window
     {
         Theme.Refresh();
         title = Services.LocalizationService.Translate(title);
-        message = Services.LocalizationService.Translate(message);
+        message = TranslateParagraphs(message);
         primaryText = Services.LocalizationService.Translate(primaryText);
         secondaryText = Services.LocalizationService.Translate(secondaryText);
 
@@ -36,14 +36,13 @@ internal sealed class ThemedConfirmDialog : Window
         AllowsTransparency = true;
         Background = WpfBrushes.Transparent;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        FontFamily = new WpfFontFamily(UiChrome.PreferredFamilyName);
+        FontFamily = UiChrome.UiFontFamily;
         Foreground = Theme.Brush(Theme.TextPrimary);
 
         var content = BuildContent(title, message, primaryText, secondaryText, danger);
         Content = content;
         OddSnapUiCaptureVisibility.Track(this);
         UiScale.ApplyToWindow(this, content, scaleWindowBounds: false);
-
         PreviewKeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape)
@@ -52,6 +51,25 @@ internal sealed class ThemedConfirmDialog : Window
                 Close();
             }
         };
+    }
+
+    /// <summary>
+    /// Translates a message that may consist of several blank-line separated
+    /// paragraphs. Callers often pass one combined literal such as
+    /// "Reset all settings to defaults?\n\nThis cannot be undone.", but the
+    /// translation table stores each sentence separately, so translating the
+    /// whole block would never match.
+    /// </summary>
+    private static string TranslateParagraphs(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return message;
+
+        var parts = message.Split("\n\n", StringSplitOptions.None);
+        for (var i = 0; i < parts.Length; i++)
+            parts[i] = Services.LocalizationService.Translate(parts[i]);
+
+        return string.Join("\n\n", parts);
     }
 
     public static bool Confirm(

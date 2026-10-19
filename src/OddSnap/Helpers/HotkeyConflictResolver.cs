@@ -18,7 +18,7 @@ internal static class HotkeyConflictResolver
 
             var (existingModifiers, existingKey) = settings.GetToolHotkey(tool.Id);
             if (existingModifiers == modifiers && existingKey == key)
-                return new HotkeyConflict(tool.Id, tool.Label, IsAiRedirect: false);
+                return new HotkeyConflict(tool.Id, tool.DisplayLabel, IsAiRedirect: false);
         }
 
         if (settings.AiRedirectHotkeyKey != 0 &&

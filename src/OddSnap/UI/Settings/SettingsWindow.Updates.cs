@@ -33,12 +33,12 @@ public partial class SettingsWindow
             if (_isClosed)
                 return;
 
-            UpdateStatusText.Text = "Update failed";
-            UpdateDetailText.Text = "Try checking again, or open the latest release manually.";
+            UpdateStatusText.Text = LocalizationService.Translate("Update failed");
+            UpdateDetailText.Text = LocalizationService.Translate("Try checking again, or open the latest release manually.");
             SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
             ToastWindow.ShowError(
-                "Update failed",
-                $"OddSnap could not finish the update. Try checking again, or open the release manually from Settings -> Updates.\n{ex.Message}");
+                LocalizationService.Translate("Update failed"),
+                LocalizationService.Translate("OddSnap could not finish the update. Try checking again, or open the release manually from Settings -> Updates.") + "\n" + ex.Message);
         }
         finally
         {
@@ -53,10 +53,10 @@ public partial class SettingsWindow
 
         _updateCheckInFlight = true;
         CheckUpdatesButton.IsEnabled = false;
-        CheckUpdatesButton.Content = "Checking...";
+        CheckUpdatesButton.Content = LocalizationService.Translate("Checking...");
         DownloadUpdateButton.Visibility = Visibility.Collapsed;
-        UpdateStatusText.Text = "Checking GitHub releases...";
-        UpdateDetailText.Text = "Looking for the newest production build.";
+        UpdateStatusText.Text = LocalizationService.Translate("Checking GitHub releases...");
+        UpdateDetailText.Text = LocalizationService.Translate("Looking for the newest production build.");
         SetLoadingTextShimmer(UpdateStatusText, true, 1.0, 1.0);
 
         try
@@ -71,15 +71,17 @@ public partial class SettingsWindow
             if (_latestUpdate.IsUpdateAvailable)
             {
                 var published = _latestUpdate.PublishedAt.HasValue
-                    ? $"Published {FormatTimeAgo(_latestUpdate.PublishedAt.Value.LocalDateTime)}"
-                    : "Published recently";
-                UpdateDetailText.Text = $"Current build: {UpdateService.GetCurrentVersionLabel()}. {published}.";
-                DownloadUpdateButton.Content = CanInstallUpdate() ? "Update now" : "Open release";
+                    ? string.Format(LocalizationService.Translate("Published {0}"), FormatTimeAgo(_latestUpdate.PublishedAt.Value.LocalDateTime))
+                    : LocalizationService.Translate("Published recently");
+                UpdateDetailText.Text = string.Format(LocalizationService.Translate("Current build: {0}. {1}."), UpdateService.GetCurrentVersionLabel(), published);
+                DownloadUpdateButton.Content = CanInstallUpdate()
+                    ? LocalizationService.Translate("Update now")
+                    : LocalizationService.Translate("Open release");
                 DownloadUpdateButton.Visibility = Visibility.Visible;
             }
             else
             {
-                UpdateDetailText.Text = $"Current build: {UpdateService.GetCurrentVersionLabel()}";
+                UpdateDetailText.Text = string.Format(LocalizationService.Translate("Current build: {0}"), UpdateService.GetCurrentVersionLabel());
                 if (isManualCheck)
                     ToastWindow.Show("OddSnap is up to date", UpdateService.GetCurrentVersionLabel());
             }
@@ -90,14 +92,14 @@ public partial class SettingsWindow
                 return;
 
             _latestUpdate = null;
-            UpdateStatusText.Text = "Update check failed";
-            UpdateDetailText.Text = "Check your connection and try again from Settings -> Updates.";
+            UpdateStatusText.Text = LocalizationService.Translate("Update check failed");
+            UpdateDetailText.Text = LocalizationService.Translate("Check your connection and try again from Settings -> Updates.");
             SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
             if (isManualCheck)
             {
                 ToastWindow.ShowError(
-                    "Update check failed",
-                    $"OddSnap could not check GitHub Releases. Check your connection and try again.\n{ex.Message}");
+                    LocalizationService.Translate("Update check failed"),
+                    LocalizationService.Translate("OddSnap could not check GitHub Releases. Check your connection and try again.") + "\n" + ex.Message);
             }
         }
         finally
@@ -108,7 +110,7 @@ public partial class SettingsWindow
                 CheckUpdatesButton.IsEnabled = true;
                 if (!_updateActionInProgress)
                     DownloadUpdateButton.IsEnabled = true;
-                CheckUpdatesButton.Content = "Check now";
+                CheckUpdatesButton.Content = LocalizationService.Translate("Check now");
             }
         }
     }
@@ -117,14 +119,18 @@ public partial class SettingsWindow
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            ToastWindow.ShowError("Open failed", "No update link is available.");
+            ToastWindow.ShowError(
+                LocalizationService.Translate("Open failed"),
+                LocalizationService.Translate("No update link is available."));
             return false;
         }
 
         if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            ToastWindow.ShowError("Open failed", "The update link is not a valid web link.");
+            ToastWindow.ShowError(
+                LocalizationService.Translate("Open failed"),
+                LocalizationService.Translate("The update link is not a valid web link."));
             return false;
         }
 
@@ -137,7 +143,9 @@ public partial class SettingsWindow
             });
             if (process is null)
             {
-                ToastWindow.ShowError("Open failed", "Windows did not open the update link. Copy the link from Settings -> Updates and open it manually.");
+                ToastWindow.ShowError(
+                    LocalizationService.Translate("Open failed"),
+                    LocalizationService.Translate("Windows did not open the update link. Copy the link from Settings -> Updates and open it manually."));
                 return false;
             }
 
@@ -146,8 +154,8 @@ public partial class SettingsWindow
         catch (Exception ex)
         {
             ToastWindow.ShowError(
-                "Open failed",
-                $"OddSnap could not open the update link. Copy the link from Settings -> Updates and open it manually.\n{ex.Message}");
+                LocalizationService.Translate("Open failed"),
+                LocalizationService.Translate("OddSnap could not open the update link. Copy the link from Settings -> Updates and open it manually.") + "\n" + ex.Message);
             return false;
         }
     }
@@ -165,20 +173,22 @@ public partial class SettingsWindow
         if (!CanInstallUpdate())
         {
             var opened = OpenExternalUrl(GetUpdateFallbackUrl(latestUpdate));
-            UpdateStatusText.Text = opened ? "Release opened" : "Open release failed";
+            UpdateStatusText.Text = opened
+                ? LocalizationService.Translate("Release opened")
+                : LocalizationService.Translate("Open release failed");
             UpdateDetailText.Text = opened
-                ? "Use the installer from GitHub Releases to update this build."
-                : "Windows did not open the release link. Try checking again or open GitHub Releases manually.";
+                ? LocalizationService.Translate("Use the installer from GitHub Releases to update this build.")
+                : LocalizationService.Translate("Windows did not open the release link. Try checking again or open GitHub Releases manually.");
             return;
         }
 
         _updateCheckInFlight = true;
         CheckUpdatesButton.IsEnabled = false;
         DownloadUpdateButton.IsEnabled = false;
-        CheckUpdatesButton.Content = "Checking...";
-        DownloadUpdateButton.Content = "Updating...";
-        UpdateStatusText.Text = "Preparing update...";
-        UpdateDetailText.Text = "OddSnap will close, update, and reopen automatically.";
+        CheckUpdatesButton.Content = LocalizationService.Translate("Checking...");
+        DownloadUpdateButton.Content = LocalizationService.Translate("Updating...");
+        UpdateStatusText.Text = LocalizationService.Translate("Preparing update...");
+        UpdateDetailText.Text = LocalizationService.Translate("OddSnap will close, update, and reopen automatically.");
         SetLoadingTextShimmer(UpdateStatusText, true, 1.0, 1.0);
 
         try
@@ -193,13 +203,13 @@ public partial class SettingsWindow
 
             if (update is null)
             {
-                UpdateStatusText.Text = "You're up to date";
+                UpdateStatusText.Text = LocalizationService.Translate("You're up to date");
                 UpdateDetailText.Text = UpdateService.GetCurrentVersionLabel();
                 SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
                 return;
             }
 
-            UpdateStatusText.Text = "Downloading update...";
+            UpdateStatusText.Text = LocalizationService.Translate("Downloading update...");
             SetLoadingTextShimmer(UpdateStatusText, true, 1.0, 1.0);
             using var downloadTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(VelopackUpdateDownloadTimeoutSeconds));
             await manager.DownloadUpdatesAsync(update, progress =>
@@ -212,8 +222,8 @@ public partial class SettingsWindow
                     if (_isClosed)
                         return;
 
-                    UpdateStatusText.Text = $"Downloading update... {progress}%";
-                    UpdateDetailText.Text = "Keep OddSnap open until the download finishes.";
+                    UpdateStatusText.Text = string.Format(LocalizationService.Translate("Downloading update... {0}%"), progress);
+                    UpdateDetailText.Text = LocalizationService.Translate("Keep OddSnap open until the download finishes.");
                 }, diagnosticKey: "settings.update-download-progress");
             }, downloadTimeout.Token);
             if (_isClosed)
@@ -224,30 +234,30 @@ public partial class SettingsWindow
         }
         catch (OperationCanceledException ex) when (!_isClosed)
         {
-            UpdateStatusText.Text = "Update timed out";
+            UpdateStatusText.Text = LocalizationService.Translate("Update timed out");
             SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
             ToastWindow.ShowError(
-                "Update timed out",
-                $"OddSnap could not finish downloading the update after {VelopackUpdateDownloadTimeoutSeconds} seconds. OddSnap will open the latest setup download so you can install it manually.\n{ex.Message}");
+                LocalizationService.Translate("Update timed out"),
+                string.Format(LocalizationService.Translate("OddSnap could not finish downloading the update after {0} seconds. OddSnap will open the latest setup download so you can install it manually."), VelopackUpdateDownloadTimeoutSeconds) + "\n" + ex.Message);
             var opened = OpenExternalUrl(GetUpdateFallbackUrl(latestUpdate));
             UpdateDetailText.Text = opened
-                ? "Opened the latest setup download so you can install it manually."
-                : "Automatic update timed out and Windows did not open the fallback download.";
+                ? LocalizationService.Translate("Opened the latest setup download so you can install it manually.")
+                : LocalizationService.Translate("Automatic update timed out and Windows did not open the fallback download.");
         }
         catch (Exception ex)
         {
             if (_isClosed)
                 return;
 
-            UpdateStatusText.Text = "Update failed";
+            UpdateStatusText.Text = LocalizationService.Translate("Update failed");
             SetLoadingTextShimmer(UpdateStatusText, false, 1.0, 1.0);
             ToastWindow.ShowError(
-                "Update failed",
-                $"OddSnap could not install the update automatically. OddSnap will try to open the latest setup download.\n{ex.Message}");
+                LocalizationService.Translate("Update failed"),
+                LocalizationService.Translate("OddSnap could not install the update automatically. OddSnap will try to open the latest setup download.") + "\n" + ex.Message);
             var opened = OpenExternalUrl(GetUpdateFallbackUrl(latestUpdate));
             UpdateDetailText.Text = opened
-                ? "Opened the latest setup download so you can install it manually."
-                : "Automatic update failed and Windows did not open the fallback download.";
+                ? LocalizationService.Translate("Opened the latest setup download so you can install it manually.")
+                : LocalizationService.Translate("Automatic update failed and Windows did not open the fallback download.");
         }
         finally
         {
@@ -257,7 +267,7 @@ public partial class SettingsWindow
                 CheckUpdatesButton.IsEnabled = true;
                 if (!_updateActionInProgress)
                     DownloadUpdateButton.IsEnabled = true;
-                CheckUpdatesButton.Content = "Check now";
+                CheckUpdatesButton.Content = LocalizationService.Translate("Check now");
             }
         }
     }

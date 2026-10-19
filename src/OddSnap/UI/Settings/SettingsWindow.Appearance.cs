@@ -8,6 +8,8 @@ using OddSnap.Models;
 using OddSnap.Services;
 using Button = System.Windows.Controls.Button;
 using CheckBox = System.Windows.Controls.CheckBox;
+using ComboBox = System.Windows.Controls.ComboBox;
+using ComboBoxItem = System.Windows.Controls.ComboBoxItem;
 using MediaBrush = System.Windows.Media.Brush;
 using MediaColor = System.Windows.Media.Color;
 
@@ -243,6 +245,7 @@ public partial class SettingsWindow
         InterfaceLanguageCombo.Items.Clear();
         var autoLanguageItem = new ComboBoxItem
         {
+            // English source text; ApplyTo localizes it and the tooltip.
             Content = "Auto (system language)",
             Tag = LocalizationService.AutoLanguageCode,
             ToolTip = "Uses Windows language when OddSnap has translations for it.",
@@ -254,22 +257,34 @@ public partial class SettingsWindow
         foreach (var language in LocalizationService.Languages)
         {
             bool available = LocalizationService.HasInterfaceTranslations(language.Code);
+            // Language names are data, not prose: "English" and "繁體中文" must
+            // stay in their own script whatever the UI language is. Wrapping
+            // them in a TextBlock keeps LocalizationService.ApplyTo from
+            // treating the name as a translatable string, which would turn
+            // "English" into its Chinese translation.
             var label = string.Equals(language.EnglishName, language.NativeName, StringComparison.OrdinalIgnoreCase)
                 ? language.EnglishName
                 : $"{language.EnglishName} - {language.NativeName}";
+
             var item = new ComboBoxItem
             {
+                // Language names are data and must never be translated. The
+                // tooltip is prose built from a template; the whole list is
+                // rebuilt by ApplyLocalization on a language change, so the
+                // finished sentence only ever needs the current language.
                 Content = available ? label : $"{label} (not translated yet)",
                 Tag = language.Code,
                 IsEnabled = available,
                 ToolTip = available
-                    ? $"Use {label} for the OddSnap interface."
-                    : "This language is recognized, but OddSnap does not have app translations for it yet.",
+                    ? string.Format(LocalizationService.Translate("Use {0} for the OddSnap interface."), label)
+                    : LocalizationService.Translate("This language is recognized, but OddSnap does not have app translations for it yet."),
             };
-            AutomationProperties.SetName(item, $"{label} interface language");
+            // Keep ApplyTo away from the language name itself.
+            LocalizationService.SetSkipContentLocalization(item, true);
+            AutomationProperties.SetName(item, string.Format(LocalizationService.Translate("{0} interface language"), label));
             AutomationProperties.SetHelpText(item, available
-                ? $"Use {label} for OddSnap menus, settings, and prompts."
-                : $"{label} is recognized, but OddSnap does not have app translations for it yet.");
+                ? string.Format(LocalizationService.Translate("Use {0} for OddSnap menus, settings, and prompts."), label)
+                : string.Format(LocalizationService.Translate("{0} is recognized, but OddSnap does not have app translations for it yet."), label));
             InterfaceLanguageCombo.Items.Add(item);
         }
     }
@@ -336,8 +351,110 @@ public partial class SettingsWindow
     private void ApplyLocalization()
     {
         LocalizationService.ApplyCurrentCulture(_settingsService.Settings.InterfaceLanguage);
+
+        // The language list is composed from a template, and ApplyTo cannot
+        // re-run string.Format, so it has to be built again for the tooltips to
+        // follow a language change. Rebuilding raises SelectionChanged, which
+        // itself calls back into this method, so suppress that while we work.
+        var wasSuppressed = _suppressGeneralPreferenceChange;
+        _suppressGeneralPreferenceChange = true;
+        try
+        {
+            PopulateInterfaceLanguageOptions();
+            SelectInterfaceLanguage(_settingsService.Settings.InterfaceLanguage);
+        }
+        finally
+        {
+            _suppressGeneralPreferenceChange = wasSuppressed;
+        }
+
         LocalizationService.ApplyTo(this, _settingsService.Settings.InterfaceLanguage);
         InvalidateSearchIndex();
+
+        // Combo item tooltips are formatted from templates ("Open {0} after a
+        // capture"), so ApplyTo cannot re-translate the formatted result. Rebuild
+        // them from the remembered English source instead.
+        RefreshComboItemLocalization();
+
+        // History cards store pre-formatted strings (relative times such as
+        // "29m ago", file sizes, counts). Those cannot be re-translated by
+        // ApplyTo because the formatted value is not a lookup key, so the
+        // caches have to be dropped and the cards rebuilt in the new language.
+        ResetHistoryCachesForLanguageChange();
+
+        // Several panels build their content in code and the page title is a
+        // runtime assignment, so re-run the tab selection to refresh anything
+        // ApplyTo could not reach on its own.
+        ApplyMainTabSelection();
+    }
+
+    /// <summary>
+    /// Drops every cached history view model so relative timestamps and other
+    /// pre-formatted labels are recomputed with the newly selected language.
+    /// </summary>
+    private void ResetHistoryCachesForLanguageChange()
+    {
+        InvalidateHistoryCategoryCaches();
+        ResetMaterializedImageHistory();
+    }
+
+    /// <summary>
+    /// Rebuilds every combo item tooltip and accessibility string from its
+    /// remembered English source. Called on a language change, because those
+    /// strings are produced by <c>string.Format</c> and therefore cannot be
+    /// matched against the translation table.
+    /// </summary>
+    private void RefreshComboItemLocalization()
+    {
+        foreach (var item in EnumerateComboItemsWithSource(this))
+        {
+            if (SettingsComboSource.Get(item) is not { } source)
+                continue;
+
+            if (source.Payload is Services.UploadDestination destination)
+            {
+                ApplyUploadDestinationItemMetadata(item, destination, source.Text, source.ForLensUpload);
+                continue;
+            }
+
+            ApplySettingsComboItemMetadata(item);
+        }
+    }
+
+    /// <summary>
+    /// Walks the visual tree looking for <see cref="T:System.Windows.Controls.ComboBox"/> controls and
+    /// yields the items that carry a <see cref="SettingsComboItemSource"/>.
+    /// Combo items live inside the combo box's own popup, so they are not
+    /// reachable by a plain tree walk of the items themselves.
+    /// </summary>
+    private static IEnumerable<ComboBoxItem> EnumerateComboItemsWithSource(DependencyObject root)
+    {
+        var stack = new Stack<DependencyObject>();
+        stack.Push(root);
+
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+
+            if (current is ComboBox combo)
+            {
+                foreach (var raw in combo.Items)
+                {
+                    if (raw is ComboBoxItem item && SettingsComboSource.Get(item) is not null)
+                        yield return item;
+                }
+            }
+
+            int count;
+            try { count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(current); }
+            catch { count = 0; }
+
+            for (var i = 0; i < count; i++)
+            {
+                try { stack.Push(System.Windows.Media.VisualTreeHelper.GetChild(current, i)); }
+                catch { }
+            }
+        }
     }
 
     private void SelectUiScale(double scale)
@@ -374,7 +491,10 @@ public partial class SettingsWindow
         HistoryPanel.Visibility = HistoryTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         UploadsPanel.Visibility = UploadsTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         AboutPanel.Visibility = AboutTab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        PageTitleText.Text = GetSelectedSettingsPageTitle();
+        // The page title is a plain TextBlock.Text assignment, so the value
+        // watcher cannot follow it. Translate here and again on language change
+        // (see RefreshPageTitle).
+        PageTitleText.Text = LocalizationService.Translate(GetSelectedSettingsPageTitle());
 
         if (HistoryTab.IsChecked != true || HistoryCategoryCombo.SelectedIndex != 0)
             CancelImageSearchWork();
@@ -386,6 +506,11 @@ public partial class SettingsWindow
         if (OcrTab.IsChecked == true)
             LoadOcrTab();
         UpdateHistoryMonitorState();
+
+        // The panel that just became visible may have been built while hidden,
+        // and the page title was assigned in English above. Localize both now.
+        if (_settingsService is not null && IsLoaded)
+            LocalizationService.ApplyTo(this, _settingsService.Settings.InterfaceLanguage);
     }
 
     private string GetSelectedSettingsPageTitle()

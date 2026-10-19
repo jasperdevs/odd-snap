@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using OddSnap.Helpers;
 using OddSnap.Models;
+using OddSnap.Services;
 using Color = System.Windows.Media.Color;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
@@ -52,8 +53,8 @@ public partial class SettingsWindow
     private void RefreshToastButtonLayoutDesigner()
     {
         var selectionText = _toastButtonDragActive
-            ? $"Dragging {_selectedToastButton}. Drop on a slot, another button, or the shelf."
-            : $"Selected: {_selectedToastButton}";
+            ? string.Format(LocalizationService.Translate("Dragging {0}. Drop on a slot, another button, or the shelf."), LocalizationService.Translate(FormatToastButtonLabel(_selectedToastButton)))
+            : string.Format(LocalizationService.Translate("Selected: {0}"), LocalizationService.Translate(FormatToastButtonLabel(_selectedToastButton)));
         ToastLayoutSelectionText.Text = selectionText;
         ToastLayoutSelectionText.ToolTip = selectionText;
         AutomationProperties.SetHelpText(ToastLayoutSelectionText, selectionText);
@@ -77,10 +78,11 @@ public partial class SettingsWindow
     private void UpdateToastLayoutButton(Border border, ToastButtonKind button)
     {
         var label = FormatToastButtonLabel(button);
+        var translatedLabel = LocalizationService.Translate(label);
         border.Focusable = true;
-        border.ToolTip = $"Move the {label} toast button";
-        AutomationProperties.SetName(border, $"{label} toast button");
-        AutomationProperties.SetHelpText(border, "Press Enter or Space to move the selected button here.");
+        border.ToolTip = string.Format(LocalizationService.Translate("Move the {0} toast button"), translatedLabel);
+        AutomationProperties.SetName(border, string.Format(LocalizationService.Translate("{0} toast button"), translatedLabel));
+        AutomationProperties.SetHelpText(border, LocalizationService.Translate("Press Enter or Space to move the selected button here."));
         border.KeyDown -= ToastLayoutButton_KeyDown;
         border.KeyDown += ToastLayoutButton_KeyDown;
 
@@ -133,9 +135,9 @@ public partial class SettingsWindow
     {
         var label = FormatToastSlotLabel(slot);
         slotBorder.Focusable = true;
-        slotBorder.ToolTip = $"Move selected toast button to {label}";
-        AutomationProperties.SetName(slotBorder, $"{label} toast slot");
-        AutomationProperties.SetHelpText(slotBorder, "Press Enter or Space to place the selected toast button here.");
+        slotBorder.ToolTip = string.Format(LocalizationService.Translate("Move selected toast button to {0}"), LocalizationService.Translate(label));
+        AutomationProperties.SetName(slotBorder, string.Format(LocalizationService.Translate("{0} toast slot"), LocalizationService.Translate(label)));
+        AutomationProperties.SetHelpText(slotBorder, LocalizationService.Translate("Press Enter or Space to place the selected toast button here."));
         slotBorder.KeyDown -= ToastLayoutSlot_KeyDown;
         slotBorder.KeyDown += ToastLayoutSlot_KeyDown;
 
@@ -391,9 +393,9 @@ public partial class SettingsWindow
     private void RefreshToastHiddenShelf()
     {
         ToastHiddenShelf.Focusable = true;
-        ToastHiddenShelf.ToolTip = "Hide the selected toast button";
-        AutomationProperties.SetName(ToastHiddenShelf, "Hidden toast button shelf");
-        AutomationProperties.SetHelpText(ToastHiddenShelf, "Press Enter or Space to hide the selected toast button.");
+        ToastHiddenShelf.ToolTip = LocalizationService.Translate("Hide the selected toast button");
+        AutomationProperties.SetName(ToastHiddenShelf, LocalizationService.Translate("Hidden toast button shelf"));
+        AutomationProperties.SetHelpText(ToastHiddenShelf, LocalizationService.Translate("Press Enter or Space to hide the selected toast button."));
         ToastHiddenShelf.KeyDown -= ToastHiddenShelf_KeyDown;
         ToastHiddenShelf.KeyDown += ToastHiddenShelf_KeyDown;
 
@@ -417,6 +419,7 @@ public partial class SettingsWindow
     private Border CreateHiddenToastButtonChip(ToastButtonKind button)
     {
         var label = FormatToastButtonLabel(button);
+        var translatedLabel = LocalizationService.Translate(label);
         var chip = new Border
         {
             Width = 44,
@@ -428,12 +431,12 @@ public partial class SettingsWindow
             BorderThickness = new Thickness(1),
             Cursor = System.Windows.Input.Cursors.Hand,
             Focusable = true,
-            ToolTip = $"Select hidden {label} toast button",
+            ToolTip = string.Format(LocalizationService.Translate("Select hidden {0} toast button"), translatedLabel),
             Tag = button.ToString()
         };
 
-        AutomationProperties.SetName(chip, $"Hidden {label} toast button");
-        AutomationProperties.SetHelpText(chip, "Press Enter or Space to select this hidden button, then choose a slot.");
+        AutomationProperties.SetName(chip, string.Format(LocalizationService.Translate("Hidden {0} toast button"), translatedLabel));
+        AutomationProperties.SetHelpText(chip, LocalizationService.Translate("Press Enter or Space to select this hidden button, then choose a slot."));
 
         chip.Child = button switch
         {

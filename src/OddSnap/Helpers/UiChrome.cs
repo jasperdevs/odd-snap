@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
+using OddSnap.Services;
 
 namespace OddSnap.Helpers;
 
@@ -76,6 +77,30 @@ public static class UiChrome
     public static bool IsDark => Theme.IsDark;
     public static string PreferredFamilyName => "Segoe UI Variable Text";
     public static string FallbackFamilyName => "Segoe UI";
+
+    /// <summary>
+    /// Language-aware WPF font stack for elements built in code. Mirrors the
+    /// <c>{DynamicResource UiFontFamily}</c> used in XAML so code-built and XAML surfaces
+    /// render CJK identically (see <see cref="LocalizationService.UiFontStack"/>). Cached
+    /// because it is read while building long history/media lists.
+    /// </summary>
+    public static System.Windows.Media.FontFamily UiFontFamily
+    {
+        get
+        {
+            var stack = LocalizationService.UiFontStack();
+            if (!string.Equals(_uiFontFamilyKey, stack, StringComparison.Ordinal))
+            {
+                _uiFontFamilyKey = stack;
+                _uiFontFamily = new System.Windows.Media.FontFamily(stack);
+            }
+
+            return _uiFontFamily!;
+        }
+    }
+
+    private static string? _uiFontFamilyKey;
+    private static System.Windows.Media.FontFamily? _uiFontFamily;
 
     public static FontFamily FontFamily =>
         TryCreateFontFamily(PreferredFamilyName) ?? TryCreateFontFamily(FallbackFamilyName) ?? SystemFonts.DefaultFont.FontFamily;

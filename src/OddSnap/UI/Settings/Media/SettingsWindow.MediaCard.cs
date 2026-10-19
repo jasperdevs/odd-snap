@@ -207,11 +207,11 @@ public partial class SettingsWindow
             BorderThickness = new Thickness(1),
             Cursor = Cursors.Hand,
             Focusable = true,
-            ToolTip = $"Open this {kindLabel} history item",
             Child = root,
             Tag = vm,
         };
-        AutomationProperties.SetName(card, $"{kindLabel} history item");
+        LocalizationService.SetLocalizedToolTip(card, new LocalizedTextSegment("Open this {0} history item", kindLabel));
+        LocalizationService.SetLocalizedAutomationName(card, new LocalizedTextSegment("{0} history item", kindLabel));
         AutomationProperties.SetHelpText(card, "Press Enter or Space to open this history item. Press Ctrl+C to copy it or its upload link. In select mode, press Enter or Space to select it.");
 
         var cardClip = new System.Windows.Media.RectangleGeometry
@@ -385,37 +385,37 @@ public partial class SettingsWindow
     private static string GetHistoryUploadMenuLabel(HistoryEntry entry, bool isUploadInProgress)
     {
         if (isUploadInProgress)
-            return "Uploading...";
+            return LocalizationService.Translate("Uploading...");
 
         if (!string.IsNullOrWhiteSpace(entry.UploadError))
-            return "Retry upload";
+            return LocalizationService.Translate("Retry upload");
 
         if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
-            return "Re-upload";
+            return LocalizationService.Translate("Re-upload");
 
-        return "Upload now";
+        return LocalizationService.Translate("Upload now");
     }
 
     private static string GetHistoryUploadMenuHelpText(HistoryEntry entry, bool isUploadInProgress)
     {
         if (isUploadInProgress)
-            return "This history item upload is already running.";
+            return LocalizationService.Translate("This history item upload is already running.");
 
         if (!string.IsNullOrWhiteSpace(entry.UploadError))
-            return "Retry uploading this file with the current Uploads settings.";
+            return LocalizationService.Translate("Retry uploading this file with the current Uploads settings.");
 
         if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
-            return "Upload this file again with the current Uploads settings.";
+            return LocalizationService.Translate("Upload this file again with the current Uploads settings.");
 
-        return "Upload this file with the current Uploads settings.";
+        return LocalizationService.Translate("Upload this file with the current Uploads settings.");
     }
 
     private static string GetHistoryKindLabel(HistoryKind kind) => kind switch
     {
-        HistoryKind.Gif => "GIF",
-        HistoryKind.Video => "video",
-        HistoryKind.Sticker => "sticker",
-        _ => "screenshot"
+        HistoryKind.Gif => LocalizationService.Translate("GIF"),
+        HistoryKind.Video => LocalizationService.Translate("video"),
+        HistoryKind.Sticker => LocalizationService.Translate("sticker"),
+        _ => LocalizationService.Translate("screenshot")
     };
 
     private static string GetHistoryCopyMenuLabel(HistoryEntry entry)
@@ -423,18 +423,18 @@ public partial class SettingsWindow
         if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
         {
             if (!string.IsNullOrWhiteSpace(entry.UploadError))
-                return "Copy previous link";
+                return LocalizationService.Translate("Copy previous link");
 
-            return "Copy link";
+            return LocalizationService.Translate("Copy link");
         }
 
-        return entry.Kind switch
+        return LocalizationService.Translate(entry.Kind switch
         {
             HistoryKind.Gif => "Copy GIF",
             HistoryKind.Video => "Copy video",
             HistoryKind.Image or HistoryKind.Sticker => "Copy image",
             _ => "Copy"
-        };
+        });
     }
 
     private static string GetHistoryCopyMenuHelpText(HistoryEntry entry, string kindLabel)
@@ -442,21 +442,21 @@ public partial class SettingsWindow
         if (!string.IsNullOrWhiteSpace(entry.UploadUrl))
         {
             if (!string.IsNullOrWhiteSpace(entry.UploadError))
-                return "Copy the previous upload link for this history item.";
+                return LocalizationService.Translate("Copy the previous upload link for this history item.");
 
-            return "Copy this history item's upload link.";
+            return LocalizationService.Translate("Copy this history item's upload link.");
         }
 
-        return $"Copy this {kindLabel} history item.";
+        return string.Format(LocalizationService.Translate("Copy this {0} history item."), kindLabel);
     }
 
     private static string GetHistoryOpenUrlMenuLabel(HistoryEntry entry)
-        => !string.IsNullOrWhiteSpace(entry.UploadError) ? "Open previous link" : "Open URL";
+        => LocalizationService.Translate(!string.IsNullOrWhiteSpace(entry.UploadError) ? "Open previous link" : "Open URL");
 
     private static string GetHistoryOpenUrlMenuHelpText(HistoryEntry entry)
-        => !string.IsNullOrWhiteSpace(entry.UploadError)
+        => LocalizationService.Translate(!string.IsNullOrWhiteSpace(entry.UploadError)
             ? "Open the previous upload link for this history item."
-            : "Open this history item's upload URL.";
+            : "Open this history item's upload URL.");
 
     private static void AddUploadInfo(StackPanel panel, HistoryEntry entry)
     {
@@ -466,7 +466,7 @@ public partial class SettingsWindow
             {
                 Text = entry.UploadError,
                 FontSize = 9.5,
-                FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+                FontFamily = UiChrome.UiFontFamily,
                 Foreground = Theme.Brush(Theme.DangerHover),
                 Opacity = 0.9,
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -484,7 +484,7 @@ public partial class SettingsWindow
             {
                 Text = entry.UploadUrl,
                 FontSize = 9.5,
-                FontFamily = new FontFamily(UiChrome.PreferredFamilyName),
+                FontFamily = UiChrome.UiFontFamily,
                 Opacity = 0.45,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 ToolTip = entry.UploadUrl
@@ -505,14 +505,18 @@ public partial class SettingsWindow
     private MenuItem CreateCardActionMenuItem(string label, Action action, string? helpText = null)
     {
         helpText ??= "Run this history action.";
+        // Context menus live in their own popup tree, which ApplyTo never walks,
+        // so each item translates its own header and help text here.
+        var localizedLabel = LocalizationService.Translate(label);
+        var localizedHelp = LocalizationService.Translate(helpText);
         var item = new MenuItem
         {
-            Header = label,
-            ToolTip = helpText
+            Header = localizedLabel,
+            ToolTip = localizedHelp
         };
         item.SetResourceReference(MenuItem.StyleProperty, "HistoryActionsMenuItem");
-        AutomationProperties.SetName(item, label);
-        AutomationProperties.SetHelpText(item, helpText);
+        AutomationProperties.SetName(item, localizedLabel);
+        AutomationProperties.SetHelpText(item, localizedHelp);
         item.Click += (_, e) =>
         {
             e.Handled = true;
@@ -559,7 +563,7 @@ public partial class SettingsWindow
 
     private static void UpdateSelectionBadgeAccessibility(FrameworkElement badge, bool isSelected)
     {
-        badge.ToolTip = isSelected ? "Selected history item" : "History item selection marker";
+        badge.ToolTip = LocalizationService.Translate(isSelected ? "Selected history item" : "History item selection marker");
         AutomationProperties.SetName(badge, isSelected ? "Selected history item" : "History item selection marker");
         AutomationProperties.SetHelpText(badge, isSelected
             ? "This history item is selected."

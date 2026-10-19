@@ -659,6 +659,10 @@ public partial class ToastWindow : Window
 
     private static void SetToastElementAccessibility(FrameworkElement element, string name, string helpText)
     {
+        // Single choke point for every toast button's accessibility text.
+        // Translate here so each caller can keep passing plain English.
+        name = LocalizationService.Translate(name);
+        helpText = LocalizationService.Translate(helpText);
         element.ToolTip = helpText;
         AutomationProperties.SetName(element, name);
         AutomationProperties.SetHelpText(element, helpText);
@@ -1249,7 +1253,7 @@ public partial class ToastWindow : Window
             RefreshInteractiveTooltip(_spec);
             ApplyPinnedState(true);
             if (!copySucceeded)
-                ToolTip = $"Opened {providerName}. Clipboard copy failed; drag the image from this toast.";
+                LocalizationService.SetLocalizedToolTip(this, new LocalizedTextSegment("Opened {0}. Clipboard copy failed; drag the image from this toast.", providerName));
         }
         catch (Exception ex)
         {

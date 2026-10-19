@@ -52,6 +52,15 @@ public partial class SettingsWindow
 
         ToolbarPinnedEmptyText.Visibility = ToolbarPinnedList.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         ToolbarMoreEmptyText.Visibility = ToolbarMoreList.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        // The cards above are built in code with English source text, so run
+        // them through the localizer now.
+        if (_settingsService is not null)
+        {
+            var language = _settingsService.Settings.InterfaceLanguage;
+            LocalizationService.ApplyTo(ToolbarPinnedList, language);
+            LocalizationService.ApplyTo(ToolbarMoreList, language);
+        }
     }
 
     private Border CreateToolbarItemCard(ToolDef tool, bool pinned, int index, int count)
@@ -67,11 +76,17 @@ public partial class SettingsWindow
             Focusable = true,
             Tag = tool.Id,
             AllowDrop = true,
-            ToolTip = pinned ? $"Move {tool.Label} on the pinned toolbar" : $"Move {tool.Label} in the More menu"
         };
         card.SetResourceReference(Border.BackgroundProperty, "ThemeCardBrush");
         card.SetResourceReference(Border.BorderBrushProperty, "ThemeWindowBorderBrush");
-        AutomationProperties.SetName(card, $"{tool.Label} toolbar item");
+        // Compose the tooltip from a template plus the tool name, and register
+        // the pieces so a language change regenerates the sentence. Writing a
+        // pre-formatted string here would leave the previous language behind,
+        // and interpolating the English label would mix the two languages.
+        LocalizationService.SetLocalizedToolTip(card, pinned
+            ? new LocalizedTextSegment("Move {0} on the pinned toolbar", tool.Label)
+            : new LocalizedTextSegment("Move {0} in the More menu", tool.Label));
+        LocalizationService.SetLocalizedAutomationName(card, new LocalizedTextSegment("{0} toolbar item", tool.Label));
         AutomationProperties.SetHelpText(card, pinned ? "Pinned toolbar item." : "More menu toolbar item.");
 
         var grid = new Grid();
@@ -112,7 +127,7 @@ public partial class SettingsWindow
         {
             Text = tool.Label,
             FontSize = 12.5,
-            FontFamily = new WpfFontFamily(UiChrome.PreferredFamilyName),
+            FontFamily = UiChrome.UiFontFamily,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -135,11 +150,14 @@ public partial class SettingsWindow
             Content = pinned ? "More" : "Pin",
             MinWidth = 58,
             Margin = new Thickness(6, 0, 0, 0),
-            ToolTip = pinned ? $"Move {tool.Label} to More" : $"Pin {tool.Label} to the toolbar",
             Tag = tool.Id,
             Cursor = WpfCursors.Hand
         };
-        AutomationProperties.SetName(pinButton, pinned ? $"Move {tool.Label} to More" : $"Pin {tool.Label}");
+        var pinTip = pinned
+            ? new LocalizedTextSegment("Move {0} to More", tool.Label)
+            : new LocalizedTextSegment("Pin {0} to the toolbar", tool.Label);
+        LocalizationService.SetLocalizedToolTip(pinButton, pinTip);
+        LocalizationService.SetLocalizedAutomationName(pinButton, pinTip);
         pinButton.Click += (_, _) =>
         {
             if (pinned)
