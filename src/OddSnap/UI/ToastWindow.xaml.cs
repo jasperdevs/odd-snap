@@ -778,7 +778,7 @@ public partial class ToastWindow : Window
         {
             ClipboardService.CopyToClipboard(_previewBitmap, _savedFilePath);
             if (_closePreviewAfterCopy)
-                DismissAnimated();
+                CloseToast();
             else
                 ShowCopyFeedback(succeeded: true);
         }
