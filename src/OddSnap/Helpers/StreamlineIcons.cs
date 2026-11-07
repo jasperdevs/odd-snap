@@ -26,6 +26,7 @@ public static class StreamlineIcons
     private static readonly ConcurrentDictionary<string, BitmapSource?> WpfCache = new();
     private static readonly ConcurrentDictionary<string, Geometry?> GeometryCache = new();
     private static readonly ConcurrentDictionary<string, Bitmap> GdiBitmapCache = new();
+    private static readonly object GdiBitmapCacheLock = new();
 
     public static void Preload()
     {
@@ -97,17 +98,21 @@ public static class StreamlineIcons
         int width = Math.Max(1, (int)Math.Ceiling(bounds.Width - iconInset * 2f));
         int height = Math.Max(1, (int)Math.Ceiling(bounds.Height - iconInset * 2f));
         int size = Math.Max(width, height);
-        var bitmap = GetCachedGdiBitmap(id, color, size, active);
-        if (bitmap is null)
-            return;
+        // Eviction must not dispose an icon while another UI thread is drawing it.
+        lock (GdiBitmapCacheLock)
+        {
+            var bitmap = GetCachedGdiBitmap(id, color, size, active);
+            if (bitmap is null)
+                return;
 
-        var dest = new RectangleF(
-            bounds.X + iconInset,
-            bounds.Y + iconInset,
-            bounds.Width - iconInset * 2f,
-            bounds.Height - iconInset * 2f);
-        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-        g.DrawImage(bitmap, dest);
+            var dest = new RectangleF(
+                bounds.X + iconInset,
+                bounds.Y + iconInset,
+                bounds.Width - iconInset * 2f,
+                bounds.Height - iconInset * 2f);
+            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            g.DrawImage(bitmap, dest);
+        }
     }
 
     public static BitmapSource? RenderWpf(string id, DrawingColor color, int size, bool active = false)
