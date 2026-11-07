@@ -51,6 +51,7 @@ public sealed record ToolDef(string Id, string Label, char Icon, CaptureMode? Mo
     public static readonly ToolDef[] HotkeyOnlyActions =
     {
         new("_lastRegion", "Last captured region", '\uE257', null, 2),
+        new("_toolbar", "Show/hide toolbar", '\uE713', null, 2),
     };
 
     public static ToolDef[] AllToolbarItems() =>

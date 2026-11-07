@@ -33,6 +33,7 @@ public sealed class TrayIcon : IDisposable
     public event Action? OnSettings;
     public event Action? OnHistory;
     public event Action? OnQuit;
+    public event Action<string>? OnToolRequested;
 
     public TrayIcon(AppSettings? settings = null)
     {
@@ -107,38 +108,26 @@ public sealed class TrayIcon : IDisposable
         var menu = WindowsMenuRenderer.Create(showImages: true, minWidth: WindowsMenuRenderer.DefaultWidth);
         bool isRec = Capture.RecordingForm.Current != null;
 
-        var captureItem = WindowsMenuRenderer.Item(T("Screenshot"), HotkeyHint("rect"), "rect");
-        var fullscreenItem = WindowsMenuRenderer.Item(T("Full screen"), HotkeyHint("_fullscreen"), "fullscreen");
-        var ocrItem = WindowsMenuRenderer.Item(T("Text capture"), HotkeyHint("ocr"), "ocr");
-        var pickerItem = WindowsMenuRenderer.Item(T("Color picker"), HotkeyHint("picker"), "picker");
-        var recordItem = isRec
-            ? WindowsMenuRenderer.Item(T("Stop recording"), null, "record", active: true, danger: true)
-            : WindowsMenuRenderer.Item(T("Record"), HotkeyHint("_record"), "record");
-        _recordItem = recordItem;
-        var scrollItem = WindowsMenuRenderer.Item(T("Scroll capture"), HotkeyHint("_scrollCapture"), "scrollCapture");
+        _recordItem = null;
+        foreach (var tool in Helpers.ToolbarLayout.GetOrderedCaptureActions(_settings ?? new AppSettings()))
+        {
+            var item = tool.Id == "_record" && isRec
+                ? WindowsMenuRenderer.Item(T("Stop recording"), null, "record", active: true, danger: true)
+                : WindowsMenuRenderer.Item(T(tool.Label), HotkeyHint(tool.Id), Helpers.ToolbarLayout.GetActionIcon(tool.Id));
+            if (tool.Id == "_record") _recordItem = item;
+            item.Click += (_, _) => RequestTool(tool.Id);
+            menu.Items.Add(item);
+        }
         var settingsItem = WindowsMenuRenderer.Item(T("Settings"), iconId: "gear");
         var historyItem = WindowsMenuRenderer.Item(T("History"), iconId: "folder");
         var quitItem = WindowsMenuRenderer.Item(T("Quit"), iconId: "close", danger: true);
 
-        captureItem.Click += (_, _) => OnCapture?.Invoke();
-        fullscreenItem.Click += (_, _) => OnFullScreenCapture?.Invoke();
-        ocrItem.Click += (_, _) => OnOcr?.Invoke();
-        pickerItem.Click += (_, _) => OnColorPicker?.Invoke();
-        recordItem.Click += (_, _) =>
-        {
-            if (Capture.RecordingForm.Current != null)
-                Capture.RecordingForm.Current.RequestStop();
-            else
-                OnGifRecord?.Invoke();
-        };
-        scrollItem.Click += (_, _) => OnScrollCapture?.Invoke();
         settingsItem.Click += (_, _) => OnSettings?.Invoke();
         historyItem.Click += (_, _) => OnHistory?.Invoke();
         quitItem.Click += (_, _) => OnQuit?.Invoke();
 
         menu.Items.AddRange(new ToolStripItem[]
         {
-            captureItem, fullscreenItem, ocrItem, pickerItem, recordItem, scrollItem,
             new ToolStripSeparator(),
             settingsItem, historyItem,
             new ToolStripSeparator(),
@@ -147,6 +136,29 @@ public sealed class TrayIcon : IDisposable
 
         WindowsMenuRenderer.NormalizeItemWidths(menu);
         return menu;
+    }
+
+    private void RequestTool(string id)
+    {
+        if (id == "_record" && Capture.RecordingForm.Current is { } recording)
+        {
+            recording.RequestStop();
+            return;
+        }
+        if (OnToolRequested is { } requested)
+        {
+            requested(id);
+            return;
+        }
+        switch (id)
+        {
+            case "rect": OnCapture?.Invoke(); break;
+            case "ocr": OnOcr?.Invoke(); break;
+            case "picker": OnColorPicker?.Invoke(); break;
+            case "_fullscreen": OnFullScreenCapture?.Invoke(); break;
+            case "_scrollCapture": OnScrollCapture?.Invoke(); break;
+            case "_record": OnGifRecord?.Invoke(); break;
+        }
     }
 
     private void HandleMouseClick(MouseButtons button)

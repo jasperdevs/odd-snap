@@ -173,6 +173,7 @@ public partial class App
         _trayIcon.OnSettings += () => ShowSettings();
         _trayIcon.OnHistory += ShowHistory;
         _trayIcon.OnQuit += () => Shutdown();
+        _trayIcon.OnToolRequested += OnTrayToolRequested;
     }
 
     private static void WarmDxgiCapture()

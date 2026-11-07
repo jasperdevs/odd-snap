@@ -5,6 +5,27 @@ namespace OddSnap.Helpers;
 
 public static class ToolbarLayout
 {
+    public static ToolDef[] GetOrderedCaptureActions(AppSettings settings)
+    {
+        var available = ToolDef.AllToolbarItems().Where(tool => tool.Group != 1)
+            .Where(tool => tool.Mode is null || settings.EnabledTools is null || settings.EnabledTools.Contains(tool.Id, StringComparer.OrdinalIgnoreCase))
+            .ToDictionary(tool => tool.Id, StringComparer.OrdinalIgnoreCase);
+        var ordered = new List<ToolDef>();
+        foreach (var id in (settings.ToolbarToolOrderIds ?? ToolDef.DefaultToolbarOrderIds()).Concat(available.Keys).Distinct(StringComparer.OrdinalIgnoreCase))
+            if (available.TryGetValue(id, out var tool))
+                ordered.Add(tool);
+        return ordered.ToArray();
+    }
+
+    public static string GetActionIcon(string id) => id switch
+    {
+        "_fullscreen" => "fullscreen",
+        "_activeWindow" => "window",
+        "_scrollCapture" => "scrollCapture",
+        "_record" => "record",
+        _ => id
+    };
+
     public static Rectangle ResolveToolbarAnchorArea(
         Rectangle overlayBounds,
         Point? cursorScreenPoint,

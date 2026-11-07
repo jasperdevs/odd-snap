@@ -28,6 +28,7 @@ public partial class App
         _hotkeyService.ScrollCaptureHotkeyPressed += OnScrollCaptureHotkeyPressed;
         _hotkeyService.AiRedirectHotkeyPressed += OnAiRedirectHotkeyPressed;
         _hotkeyService.LastRegionHotkeyPressed += OnLastRegionHotkeyPressed;
+        _hotkeyService.ToolbarHotkeyPressed += ToggleCaptureToolbar;
 
         var s = _settingsService!.Settings;
         var failed = new List<string>();
@@ -52,6 +53,8 @@ public partial class App
         TryRegister(_hotkeyService.RegisterAiRedirect(s.AiRedirectHotkeyModifiers, s.AiRedirectHotkeyKey), "AI Redirects", s.AiRedirectHotkeyModifiers, s.AiRedirectHotkeyKey);
         var (lastRegionModifiers, lastRegionKey) = s.GetToolHotkey("_lastRegion");
         TryRegister(_hotkeyService.RegisterLastRegion(lastRegionModifiers, lastRegionKey), "Last captured region", lastRegionModifiers, lastRegionKey);
+        var (toolbarModifiers, toolbarKey) = s.GetToolHotkey("_toolbar");
+        TryRegister(_hotkeyService.RegisterToolbar(toolbarModifiers, toolbarKey), "Show/hide toolbar", toolbarModifiers, toolbarKey);
 
         if (failed.Count > 0)
             ToastWindow.ShowError(
