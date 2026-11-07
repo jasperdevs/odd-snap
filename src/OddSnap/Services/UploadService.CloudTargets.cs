@@ -49,17 +49,31 @@ public static partial class UploadService
             var listNode = TryParseJson(listBody);
             var existing = listNode?["links"]?.AsArray().FirstOrDefault()?["url"]?.GetValue<string>();
             if (!string.IsNullOrWhiteSpace(existing))
-                return new UploadResult { Success = true, Url = existing.Replace("?dl=0", "?raw=1") };
+                return new UploadResult { Success = true, Url = GetDropboxRawUrl(existing) };
         }
         else if (shareResp.IsSuccessStatusCode)
         {
             var shareNode = TryParseJson(shareBody);
             var url = shareNode?["url"]?.GetValue<string>();
             if (!string.IsNullOrWhiteSpace(url))
-                return new UploadResult { Success = true, Url = url.Replace("?dl=0", "?raw=1") };
+                return new UploadResult { Success = true, Url = GetDropboxRawUrl(url) };
         }
 
         return new UploadResult { Error = "Dropbox share link creation failed" };
+    }
+
+    internal static string GetDropboxRawUrl(string url)
+    {
+        var uri = new UriBuilder(url);
+        var parameters = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Where(parameter =>
+            {
+                var key = Uri.UnescapeDataString(parameter.Split('=', 2)[0]);
+                return !key.Equals("dl", StringComparison.OrdinalIgnoreCase)
+                    && !key.Equals("raw", StringComparison.OrdinalIgnoreCase);
+            });
+        uri.Query = string.Join("&", parameters.Append("raw=1"));
+        return uri.Uri.AbsoluteUri;
     }
 
     private static async Task<UploadResult> UploadGoogleDrive(string filePath, UploadSettings s, CancellationToken cancellationToken)

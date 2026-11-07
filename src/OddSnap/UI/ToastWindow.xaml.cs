@@ -736,7 +736,7 @@ public partial class ToastWindow : Window
     private static bool CanActivateMouseControl(object sender) =>
         sender is not UIElement { IsEnabled: false };
 
-    private void CloseToast() => DismissAnimated();
+    private void CloseToast() => RequestDismiss(force: true);
 
     private void TogglePinned() => ApplyPinnedState(!_isPinned);
 

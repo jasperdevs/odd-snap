@@ -6,6 +6,19 @@ namespace OddSnap.Tests;
 // Pure validation/formatting logic only — no upload method is ever invoked, so no network calls.
 public class UploadServiceTests
 {
+    [Theory]
+    [InlineData("https://www.dropbox.com/s/id/image.png?dl=0", "https://www.dropbox.com/s/id/image.png?raw=1")]
+    [InlineData("https://www.dropbox.com/scl/fi/id/image.png?rlkey=a%2Bb&e=1&dl=0", "https://www.dropbox.com/scl/fi/id/image.png?rlkey=a%2Bb&e=1&raw=1")]
+    [InlineData("https://www.dropbox.com/s/id/image.png?dl=1&rlkey=key", "https://www.dropbox.com/s/id/image.png?rlkey=key&raw=1")]
+    [InlineData("https://www.dropbox.com/s/id/image.png?raw=0", "https://www.dropbox.com/s/id/image.png?raw=1")]
+    [InlineData("https://www.dropbox.com/s/id/image.png", "https://www.dropbox.com/s/id/image.png?raw=1")]
+    [InlineData("https://www.dropbox.com/s/id/image.png?rlkey=key#preview", "https://www.dropbox.com/s/id/image.png?rlkey=key&raw=1#preview")]
+    [InlineData("https://www.dropbox.com/s/id/image.png?dl=0&raw=0&rlkey=key", "https://www.dropbox.com/s/id/image.png?rlkey=key&raw=1")]
+    public void DropboxRawUrl_PreservesAccessParametersAndReplacesPreviewFlags(string url, string expected)
+    {
+        Assert.Equal(expected, UploadService.GetDropboxRawUrl(url));
+    }
+
     // ── Transport security (HTTPS enforcement) ──────────────────────
 
     [Theory]

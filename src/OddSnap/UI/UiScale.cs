@@ -48,6 +48,12 @@ public static class UiScale
             w.MinWidth,
             w.MinHeight));
 
+        // Activation refreshes the theme without discarding the user's resized bounds.
+        if (Math.Abs(state.LastAppliedScale - scale) < 0.001)
+            return;
+
+        state.LastAppliedScale = scale;
+
         window.MinWidth = Math.Max(320, state.MinWidth * scale);
         window.MinHeight = Math.Max(240, state.MinHeight * scale);
         if (!double.IsNaN(state.Width) && !double.IsInfinity(state.Width) && state.Width > 0)
@@ -93,5 +99,8 @@ public static class UiScale
         }
     }
 
-    private sealed record WindowScaleState(double Width, double Height, double MinWidth, double MinHeight);
+    private sealed record WindowScaleState(double Width, double Height, double MinWidth, double MinHeight)
+    {
+        public double LastAppliedScale { get; set; }
+    }
 }

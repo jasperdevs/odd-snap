@@ -232,6 +232,15 @@
                                                           Margin="0,0,6,0"
                                                           RecognizesAccessKey="True"
                                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                        <TextBox x:Name="PART_EditableTextBox"
+                                                 Margin="0,0,6,0"
+                                                 Padding="0"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 Foreground="{TemplateBinding Foreground}"
+                                                 CaretBrush="{TemplateBinding Foreground}"
+                                                 VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                 Visibility="Collapsed"/>
                                         <Path Grid.Column="1"
                                               Width="8"
                                               Height="4"
@@ -267,13 +276,17 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#35FFFFFF"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThemeTextSecondaryBrush}"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -3054,7 +3067,7 @@
                             <TextBlock>
                                 <Hyperlink NavigateUri="https://github.com/jasperdevs/odd-snap/blob/main/LICENSE" RequestNavigate="Hyperlink_Navigate"
                                            Style="{StaticResource AboutActionLink}" FontSize="12">License</Hyperlink>
-                                <Run Text=" — MIT" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
+                                <Run Text=" — GPL-3.0" FontSize="11" Foreground="{DynamicResource ThemeTextSecondaryBrush}"/>
                             </TextBlock>
                         </StackPanel>
                     </Border>
