@@ -171,6 +171,7 @@ public partial class App
                                 path);
                         }
 
+                        ShowRecentCapturesAfterCapture();
                         ScheduleIdleMemoryTrim();
                     }, DispatcherPriority.Normal, "capture.recording-completed-post"))
                     {

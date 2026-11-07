@@ -34,6 +34,7 @@ public sealed class TrayIcon : IDisposable
     public event Action? OnHistory;
     public event Action? OnQuit;
     public event Action<string>? OnToolRequested;
+    public event Action? OnRecentCaptures;
 
     public TrayIcon(AppSettings? settings = null)
     {
@@ -120,16 +121,18 @@ public sealed class TrayIcon : IDisposable
         }
         var settingsItem = WindowsMenuRenderer.Item(T("Settings"), iconId: "gear");
         var historyItem = WindowsMenuRenderer.Item(T("History"), iconId: "folder");
+        var recentItem = WindowsMenuRenderer.Item(T("Recent captures"), iconId: "folder");
         var quitItem = WindowsMenuRenderer.Item(T("Quit"), iconId: "close", danger: true);
 
         settingsItem.Click += (_, _) => OnSettings?.Invoke();
         historyItem.Click += (_, _) => OnHistory?.Invoke();
+        recentItem.Click += (_, _) => OnRecentCaptures?.Invoke();
         quitItem.Click += (_, _) => OnQuit?.Invoke();
 
         menu.Items.AddRange(new ToolStripItem[]
         {
             new ToolStripSeparator(),
-            settingsItem, historyItem,
+            settingsItem, recentItem, historyItem,
             new ToolStripSeparator(),
             quitItem,
         });

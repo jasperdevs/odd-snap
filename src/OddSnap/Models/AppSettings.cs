@@ -192,6 +192,7 @@ public sealed class AppSettings
     public int GifFps { get; set; } = 15;
 
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.PreviewAndCopy;
+    public bool ShowRecentCapturesAfterCapture { get; set; }
     public bool SaveToFile { get; set; } = true;
     public bool AskForFileNameOnSave { get; set; }
     public string FileNameTemplate { get; set; } = DefaultFileNameTemplate;

@@ -90,6 +90,7 @@ public partial class App
                         }
                     }
 
+                    ShowRecentCapturesAfterCapture();
                     ScheduleIdleMemoryTrim();
                 }, DispatcherPriority.Normal, "capture.result-complete-post"))
                 {
@@ -161,6 +162,7 @@ public partial class App
                         _ = UploadFileAsync(persisted.FilePath, "Sticker", persisted.HistoryEntry);
                     }
 
+                    ShowRecentCapturesAfterCapture();
                     ScheduleIdleMemoryTrim();
                 }, DispatcherPriority.Normal, "capture.sticker-result-complete-post"))
                 {
@@ -232,6 +234,7 @@ public partial class App
                         _ = UploadFileAsync(persisted.FilePath, "Upscale", persisted.HistoryEntry);
                     }
 
+                    ShowRecentCapturesAfterCapture();
                     ScheduleIdleMemoryTrim();
                 }, DispatcherPriority.Normal, "capture.upscale-result-complete-post"))
                 {

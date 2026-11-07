@@ -30,6 +30,18 @@ public partial class SettingsWindow
             value => SaveHistoryCheck.IsChecked = value);
     }
 
+    private void ShowRecentCapturesCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _suppressHistoryPreferenceChange) return;
+        UpdateHistoryPreference(
+            "settings.recent-captures",
+            "Show recent captures after capture",
+            _settingsService.Settings.ShowRecentCapturesAfterCapture,
+            ShowRecentCapturesCheck.IsChecked == true,
+            value => _settingsService.Settings.ShowRecentCapturesAfterCapture = value,
+            value => ShowRecentCapturesCheck.IsChecked = value);
+    }
+
     private void HistoryRetentionCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded || _suppressHistoryPreferenceChange) return;

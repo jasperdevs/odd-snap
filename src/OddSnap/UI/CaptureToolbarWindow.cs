@@ -6,6 +6,7 @@ using OddSnap.Helpers;
 using OddSnap.Models;
 using OddSnap.Services;
 using Button = System.Windows.Controls.Button;
+using Control = System.Windows.Controls.Control;
 
 namespace OddSnap.UI;
 
@@ -39,6 +40,12 @@ internal sealed class CaptureToolbarWindow : Window
                 Style = TryFindResource("ChromeButtonBase") as Style
             };
             AutomationProperties.SetName(button, label);
+            button.SetResourceReference(Control.BackgroundProperty, "ChromeButtonBackground");
+            button.SetResourceReference(Control.ForegroundProperty, "ChromeButtonForeground");
+            button.SetResourceReference(Control.BorderBrushProperty, "ChromeButtonBorderBrush");
+            button.SetResourceReference(Control.PaddingProperty, "SettingsControlPadding");
+            button.SetResourceReference(Control.FontSizeProperty, "SettingsControlFontSize");
+            button.SetResourceReference(Control.MinHeightProperty, "SettingsControlHeight");
             var (modifiers, key) = settings.GetToolHotkey(tool.Id);
             if (key != 0) button.ToolTip = label + " (" + HotkeyFormatter.Format(modifiers, key) + ")";
             button.Click += (_, _) =>

@@ -9,6 +9,7 @@ public partial class App
     {
         Interlocked.Exchange(ref _isShuttingDown, 1);
         _captureToolbarWindow?.Close();
+        _recentCapturesWindow?.Close();
         try { _settingsWindow?.Close(); } catch (Exception ex) { AppDiagnostics.LogError("shutdown.close-settings-window", ex); }
         _settingsWindow = null;
         CancelCaptureDelay();

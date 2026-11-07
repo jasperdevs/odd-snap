@@ -148,6 +148,7 @@ public partial class SettingsWindow
             : 0;
         AutoUpdateCheck.IsChecked = s.AutoCheckForUpdates;
         SaveHistoryCheck.IsChecked = s.SaveHistory;
+        ShowRecentCapturesCheck.IsChecked = s.ShowRecentCapturesAfterCapture;
         HistoryRetentionCombo.SelectedIndex = (int)s.HistoryRetention;
         ImageSearchFileNameCheck.IsChecked = (s.ImageSearchSources & ImageSearchSourceOptions.FileName) != 0;
         ImageSearchOcrCheck.IsChecked = (s.ImageSearchSources & ImageSearchSourceOptions.OcrText) != 0;

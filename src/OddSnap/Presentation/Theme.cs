@@ -111,6 +111,7 @@ public static class Theme
         resources["ThemeTextSecondaryBrush"] = Brush(TextSecondary);
         resources["ThemeMutedBrush"] = Brush(TextMuted);
         resources["ThemeCardBrush"] = Brush(BgCard);
+        resources["ThemeWindowBackgroundBrush"] = Brush(BgPrimary);
         resources["ThemeInputBackgroundBrush"] = Brush(BgSecondary);
         resources["ThemeInputBorderBrush"] = Brush(BorderSubtle);
         resources["ThemeTabHoverBrush"] = Brush(TabHoverBg);

@@ -19,10 +19,6 @@
              sourced from the UI.Theme token set. App-level copies exist as parse-time
              fallback via Theme.ApplyTo(Application.Current.Resources). Do not add
              hardcoded brush values here — they would be dark-only and drift. -->
-        <sys:Double x:Key="SettingsControlHeight">30</sys:Double>
-        <Thickness x:Key="SettingsControlPadding">10,5</Thickness>
-        <sys:Double x:Key="SettingsControlFontSize">12</sys:Double>
-        <sys:Double x:Key="SettingsControlMinWidth">88</sys:Double>
 
         <Style x:Key="TabPill" TargetType="RadioButton">
             <Setter Property="FocusVisualStyle" Value="{StaticResource OddSnapFocusVisual}"/>
@@ -528,66 +524,7 @@
             <Setter Property="MinWidth" Value="82"/>
         </Style>
 
-        <Style x:Key="HistoryActionsMenuStyle" TargetType="ContextMenu">
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="MinWidth" Value="156"/>
-            <Setter Property="Background" Value="{DynamicResource ThemeCardBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource ThemeInputBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="4"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ContextMenu">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6"
-                                Padding="{TemplateBinding Padding}"
-                                SnapsToDevicePixels="True">
-                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
 
-        <Style x:Key="HistoryActionsMenuItem" TargetType="MenuItem">
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextPrimaryBrush}"/>
-            <Setter Property="FontFamily" Value="Segoe UI Variable Text"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="MinWidth" Value="148"/>
-            <Setter Property="MinHeight" Value="36"/>
-            <Setter Property="Padding" Value="12,0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="Bd"
-                                MinHeight="{TemplateBinding MinHeight}"
-                                CornerRadius="4"
-                                Background="Transparent"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter ContentSource="Header"
-                                              RecognizesAccessKey="True"
-                                              HorizontalAlignment="Left"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeTabHoverBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.45"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
 
         <Style x:Key="ProviderIconFrame" TargetType="Border">
             <Setter Property="Width" Value="24"/>
@@ -1525,6 +1462,21 @@
                                           ToolTip="Keep captures available in the History page"
                                           AutomationProperties.Name="Save capture history"
                                           Checked="SaveHistoryCheck_Changed" Unchecked="SaveHistoryCheck_Changed"/>
+                            </Grid>
+                            <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Margin="44,0,10,0">
+                                    <TextBlock Text="Show recent captures after capture" Style="{StaticResource SettingTitle}"/>
+                                    <TextBlock Text="Open the compact sidebar without taking focus. Requires capture history." Style="{StaticResource SettingDescription}"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ShowRecentCapturesCheck" Grid.Column="1"
+                                          IsEnabled="{Binding IsChecked, ElementName=SaveHistoryCheck}"
+                                          AutomationProperties.Name="Show recent captures after capture"
+                                          Checked="ShowRecentCapturesCheck_Changed" Unchecked="ShowRecentCapturesCheck_Changed"/>
                             </Grid>
                             <Border Height="1" Background="{DynamicResource ThemeSeparatorBrush}" Margin="0,9,0,9"/>
                             <Grid Style="{StaticResource SettingRow}">
