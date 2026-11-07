@@ -30,6 +30,13 @@ internal static class DxgiScreenCapture
 
     public static Bitmap CaptureRegion(Rectangle region)
     {
+        // Cache eviction also takes this lock, so a device cannot be disposed in use.
+        lock (CacheLock)
+            return CaptureRegionWithCachedDevice(region);
+    }
+
+    private static Bitmap CaptureRegionWithCachedDevice(Rectangle region)
+    {
         var deviceBundle = GetOrCreateDeviceBundle();
         Bitmap? result = null;
         try
@@ -85,6 +92,12 @@ internal static class DxgiScreenCapture
 
     public static void WarmUp()
     {
+        lock (CacheLock)
+            WarmUpCachedDevice();
+    }
+
+    private static void WarmUpCachedDevice()
+    {
         var deviceBundle = GetOrCreateDeviceBundle();
         if (!Monitor.TryEnter(deviceBundle.CaptureSyncRoot))
             return;
@@ -120,9 +133,9 @@ internal static class DxgiScreenCapture
     {
         try
         {
-            var deviceBundle = GetOrCreateDeviceBundle();
-            lock (deviceBundle.CaptureSyncRoot)
+            lock (CacheLock)
             {
+                var deviceBundle = GetOrCreateDeviceBundle();
                 return deviceBundle.GetOutputs().Any(output =>
                     Rectangle.Intersect(region, ToRectangle(output.Description.DesktopCoordinates)) is { Width: > 0, Height: > 0 }
                     && output.UsesAdvancedColor());
