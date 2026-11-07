@@ -61,6 +61,7 @@ public sealed partial class ScrollingCaptureForm : Form
 
     // Control bar
     private CaptureControlBar? _controlBar;
+    private RecordingBorderForm? _captureBorder;
     private System.Windows.Forms.Timer? _captureTimer;
     private CaptureEscapeKeyHook? _escapeHook;
 
@@ -266,6 +267,10 @@ public sealed partial class ScrollingCaptureForm : Form
         _controlBar.ManualFrameClicked += () => CaptureFrame(forceAccept: true);
         _controlBar.Show();
 
+        _captureBorder = new RecordingBorderForm(_screenRegion);
+        _captureBorder.Show();
+        _captureBorder.UpdateSurface();
+
         _state = State.Capturing;
         Services.SoundService.PlayRecordStartSound();
 
@@ -464,6 +469,7 @@ public sealed partial class ScrollingCaptureForm : Form
 
     private void FinishCapture()
     {
+        CloseCaptureBorder();
         _controlBar?.Close();
         _controlBar?.Dispose();
         _controlBar = null;
@@ -507,6 +513,7 @@ public sealed partial class ScrollingCaptureForm : Form
         _captureCts.Cancel();
 
         RunFailureCleanup("stop-timer", StopAutomaticTimer);
+        RunFailureCleanup("close-capture-border", CloseCaptureBorder);
         RunFailureCleanup("clear-pending-frame", ClearPendingAutoFrame);
         RunFailureCleanup("set-control-status", () => _controlBar?.SetStatus("Capture failed"));
         RunFailureCleanup("close-control-bar", () => _controlBar?.Close());
@@ -538,6 +545,7 @@ public sealed partial class ScrollingCaptureForm : Form
 
     private void Cancel()
     {
+        CloseCaptureBorder();
         _captureCts.Cancel();
         StopAutomaticTimer();
         ClearPendingAutoFrame();
@@ -705,6 +713,7 @@ public sealed partial class ScrollingCaptureForm : Form
     {
         if (disposing)
         {
+            CloseCaptureBorder();
             if (IsHandleCreated)
                 CaptureWindowExclusion.Unregister(Handle);
             _captureCts.Cancel();
@@ -725,6 +734,13 @@ public sealed partial class ScrollingCaptureForm : Form
             _captureCts.Dispose();
         }
         base.Dispose(disposing);
+    }
+
+    private void CloseCaptureBorder()
+    {
+        var border = _captureBorder;
+        _captureBorder = null;
+        border?.Dispose();
     }
 
     /// <summary>
