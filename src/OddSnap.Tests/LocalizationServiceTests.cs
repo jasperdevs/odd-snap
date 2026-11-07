@@ -158,6 +158,25 @@ public class LocalizationServiceTests
     }
 
     [Fact]
+    public void LocalizationCatalogs_PreserveCompositeFormatArguments()
+    {
+        var directory = Path.Combine(AppContext.BaseDirectory, "Localization");
+        foreach (var catalogPath in Directory.GetFiles(directory, "*.json"))
+        {
+            foreach (var pair in ReadCatalog(catalogPath))
+            {
+                if (!System.Text.RegularExpressions.Regex.IsMatch(pair.Key, @"\{\d+[,:}]"))
+                    continue;
+
+                var source = System.Text.CompositeFormat.Parse(pair.Key);
+                var translation = System.Text.CompositeFormat.Parse(pair.Value);
+                Assert.True(source.MinimumArgumentCount == translation.MinimumArgumentCount,
+                    $"{Path.GetFileName(catalogPath)} changes the arguments of '{pair.Key}'.");
+            }
+        }
+    }
+
+    [Fact]
     public void Translate_EnglishTarget_ReturnsSourceText()
     {
         Assert.Equal("History", LocalizationService.Translate("en", "History"));

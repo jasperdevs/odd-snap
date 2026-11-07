@@ -92,6 +92,9 @@ public static class LocalizationService
     private static readonly DependencyProperty LocalizationHookedProperty =
         DependencyProperty.RegisterAttached("LocalizationHooked", typeof(bool), typeof(LocalizationService));
 
+    private static readonly DependencyProperty LocalizationPendingProperty =
+        DependencyProperty.RegisterAttached("LocalizationPending", typeof(bool), typeof(LocalizationService));
+
     /// <summary>
     /// Set while our own callback is writing a translated value, so the value
     /// watcher does not treat our write as a fresh assignment from app code and
@@ -576,6 +579,8 @@ public static class LocalizationService
         if (sender is not FrameworkElement element)
             return;
 
+        RefreshSourceFromCurrentValues(element);
+        EnsureHooked(element);
         var code = CurrentLanguageCode;
         if (string.Equals(code, DefaultLanguageCode, StringComparison.OrdinalIgnoreCase))
             return;
@@ -612,29 +617,52 @@ public static class LocalizationService
     /// translated as well. Without this the UI would show English or Chinese
     /// depending on whether the assignment happened before or after the last
     /// <see cref="ApplyTo"/> call — the flicker between translated and untranslated
-    /// labels. TextBlock.Text is a plain CLR property, so it is covered by the
-    /// Loaded handler and by explicit <see cref="Translate(string)"/> calls instead.
+    /// labels. Hooks are removed when controls leave the visual tree.
     /// </summary>
     private static void EnsureHooked(DependencyObject element)
     {
+        if (element is not FrameworkElement frameworkElement)
+            return;
+
         if (element.GetValue(LocalizationHookedProperty) is bool hooked && hooked)
             return;
 
         var ownerType = element.GetType();
         var any = false;
-
-        any |= TryHook(element, ownerType, ContentControl.ContentProperty);
-        any |= TryHook(element, ownerType, HeaderedContentControl.HeaderProperty);
-        any |= TryHook(element, ownerType, ToolTipService.ToolTipProperty);
-
-        if (element is Window)
-            any |= TryHook(element, ownerType, Window.TitleProperty);
-
-        any |= TryHook(element, ownerType, AutomationProperties.NameProperty);
-        any |= TryHook(element, ownerType, AutomationProperties.HelpTextProperty);
+        foreach (var property in GetWatchedProperties(element))
+            any |= TryHook(element, ownerType, property);
 
         if (any)
+        {
             element.SetValue(LocalizationHookedProperty, true);
+            frameworkElement.Loaded -= OnElementLoaded;
+            frameworkElement.Loaded += OnElementLoaded;
+            frameworkElement.Unloaded -= OnElementUnloaded;
+            frameworkElement.Unloaded += OnElementUnloaded;
+        }
+    }
+
+    private static IEnumerable<DependencyProperty> GetWatchedProperties(DependencyObject element)
+    {
+        if (element is ContentControl) yield return ContentControl.ContentProperty;
+        if (element is HeaderedContentControl) yield return HeaderedContentControl.HeaderProperty;
+        if (element is HeaderedItemsControl) yield return HeaderedItemsControl.HeaderProperty;
+        if (element is TextBlock) yield return TextBlock.TextProperty;
+        if (element is Window) yield return Window.TitleProperty;
+        yield return ToolTipService.ToolTipProperty;
+        yield return AutomationProperties.NameProperty;
+        yield return AutomationProperties.HelpTextProperty;
+    }
+
+    private static void OnElementUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element)
+            return;
+
+        foreach (var property in GetWatchedProperties(element))
+            System.ComponentModel.DependencyPropertyDescriptor.FromProperty(property, element.GetType())
+                ?.RemoveValueChanged(element, OnWatchedValueChanged);
+        element.SetValue(LocalizationHookedProperty, false);
     }
 
     private static bool TryHook(DependencyObject element, Type ownerType, DependencyProperty property)
@@ -668,6 +696,26 @@ public static class LocalizationService
         if (element.GetValue(SuppressHookProperty) is bool suppressed && suppressed)
             return;
 
+        if (element is TextBlock textBlock)
+        {
+            if (element.GetValue(LocalizationPendingProperty) is true)
+                return;
+
+            element.SetValue(LocalizationPendingProperty, true);
+            _ = textBlock.Dispatcher.InvokeAsync(() =>
+            {
+                element.SetValue(LocalizationPendingProperty, false);
+                if (element.GetValue(LocalizationHookedProperty) is true)
+                    LocalizeWatchedElement(element);
+            }, System.Windows.Threading.DispatcherPriority.DataBind);
+            return;
+        }
+
+        LocalizeWatchedElement(element);
+    }
+
+    private static void LocalizeWatchedElement(DependencyObject element)
+    {
         // This is a fresh assignment from app code, so whatever it just wrote is
         // the new source text. Refresh the remembered originals first, otherwise
         // GetOrSetSource would hand back the value from the previous assignment
@@ -708,6 +756,12 @@ public static class LocalizationService
 
         if (element is HeaderedContentControl headered && headered.Header is string header)
             headered.SetValue(SourceHeaderProperty, ToSourceKey(header));
+
+        if (element is HeaderedItemsControl headeredItems && headeredItems.Header is string itemHeader)
+            headeredItems.SetValue(SourceHeaderProperty, ToSourceKey(itemHeader));
+
+        if (element is TextBlock text && !HasTextBinding(text))
+            text.SetValue(SourceTextProperty, ToSourceKey(text.Text));
 
         if (element is ContentControl contentControl && contentControl.Content is string content)
             contentControl.SetValue(SourceContentProperty, ToSourceKey(content));
@@ -778,17 +832,14 @@ public static class LocalizationService
                 return;
             }
 
-            if (textBlock.Inlines.Count > 0)
+            if (textBlock.GetValue(LocalizedTextSpecProperty) is LocalizedTextSegment[] spec && spec.Length > 0)
+            {
+                textBlock.Text = RenderSegments(spec);
+            }
+            else if (textBlock.Inlines.Count > 0)
             {
                 foreach (var inline in textBlock.Inlines.ToArray())
                     ApplyToInline(inline, languageCode);
-            }
-            else if (textBlock.GetValue(LocalizedTextSpecProperty) is LocalizedTextSegment[] spec && spec.Length > 0)
-            {
-                // The text is composed from a template and arguments, so it is
-                // regenerated rather than reverse-translated. This is the only
-                // correct treatment: the formatted result is not a key.
-                textBlock.Text = RenderSegments(spec);
             }
             else if (!string.IsNullOrEmpty(textBlock.Text) && !HasTextBinding(textBlock))
             {
