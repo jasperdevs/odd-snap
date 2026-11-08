@@ -66,6 +66,7 @@ internal sealed class RecentCapturesWindow : Window
         layout.RowDefinitions.Add(new RowDefinition());
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var titleBar = new OddSnapTitleBar { Title = "OddSnap" };
+        titleBar.MinimizeRequested += (_, _) => Hide();
         titleBar.CloseRequested += (_, _) => Close();
         layout.Children.Add(titleBar);
         var heading = new TextBlock { Text = T("Recent captures"), FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(18, 8, 18, 14) };
@@ -126,6 +127,7 @@ internal sealed class RecentCapturesWindow : Window
         border.SetResourceReference(Border.BorderBrushProperty, "ThemeWindowBorderBrush");
         Content = border;
         OddSnapWindowChrome.Apply(this);
+        StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) Hide(); };
         OddSnapUiCaptureVisibility.Track(this);
         void ApplyTheme()
         {

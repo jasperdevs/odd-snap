@@ -27,6 +27,27 @@ internal static class SensitiveSettingsProtection
     public static void Unprotect(AppSettings settings)
         => Transform(settings, Unprotect);
 
+    public static void PreserveMissingSecrets(AppSettings imported, AppSettings current, JsonSerializerOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(imported.GoogleTranslateApiKey))
+            imported.GoogleTranslateApiKey = current.GoogleTranslateApiKey;
+
+        var previous = Clone(current, options);
+        var secrets = new Queue<string>();
+        string Collect(string value) { secrets.Enqueue(value); return value; }
+        Transform(previous.ImageUploadSettings, Collect);
+        Transform(previous.StickerUploadSettings, Collect);
+        Transform(previous.UpscaleUploadSettings, Collect);
+        string Restore(string value)
+        {
+            var existing = secrets.Dequeue();
+            return string.IsNullOrWhiteSpace(value) ? existing : value;
+        }
+        Transform(imported.ImageUploadSettings, Restore);
+        Transform(imported.StickerUploadSettings, Restore);
+        Transform(imported.UpscaleUploadSettings, Restore);
+    }
+
     internal static string Redact(string value)
         => "";
 

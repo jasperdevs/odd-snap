@@ -26,10 +26,9 @@ public partial class SettingsWindow
             };
             if (dlg.ShowDialog(this) != true) return;
 
-            var json = SettingsService.ExportRedactedJson(_settingsService.Settings);
             var outputPath = dlg.FileName;
             SetSettingsImportExportBusy(true);
-            await File.WriteAllTextAsync(outputPath, json);
+            await SettingsService.ExportToFileAsync(_settingsService.Settings, outputPath);
             if (_isClosed)
                 return;
 
@@ -53,6 +52,7 @@ public partial class SettingsWindow
             return;
 
         AppSettings? previous = null;
+        var applyImportedSettings = SettingsImported ?? HotkeyChanged;
         try
         {
             var dlg = new Microsoft.Win32.OpenFileDialog
@@ -75,7 +75,7 @@ public partial class SettingsWindow
             if (_isClosed)
                 return;
 
-            if (!SettingsService.TryDeserialize(json, out var imported))
+            if (!SettingsService.TryDeserializeImport(json, _settingsService.Settings, out var imported))
             {
                 SetSettingsImportExportStatus("Import failed: invalid settings file.");
                 ToastWindow.ShowError("Import failed", "Invalid settings file.");
@@ -85,16 +85,15 @@ public partial class SettingsWindow
             previous = _settingsService.Settings;
             _settingsService.Settings = imported;
             _settingsService.Save();
-            HotkeyChanged?.Invoke();
+            await Task.Run(_settingsService.FlushPendingWritesOrThrow);
+            applyImportedSettings?.Invoke();
+            if (_isClosed) return;
             LoadSettings();
             SetSettingsImportExportStatus("Settings imported and applied.");
             ToastWindow.Show("Settings imported", "Settings have been applied.");
         }
         catch (Exception ex)
         {
-            if (_isClosed)
-                return;
-
             AppDiagnostics.LogError("settings.import", ex);
             if (previous is not null)
             {
@@ -102,16 +101,18 @@ public partial class SettingsWindow
                 try
                 {
                     _settingsService.Save();
+                    await Task.Run(_settingsService.FlushPendingWritesOrThrow);
+                    applyImportedSettings?.Invoke();
                 }
                 catch (Exception rollbackEx)
                 {
                     AppDiagnostics.LogError("settings.import-rollback", rollbackEx);
                 }
 
-                RestoreSettingsUiAfterFailedReset();
+                if (!_isClosed) RestoreSettingsUiAfterFailedReset();
             }
 
-            ShowSettingsImportFailed(previous is not null, ex);
+            if (!_isClosed) ShowSettingsImportFailed(previous is not null, ex);
         }
         finally
         {

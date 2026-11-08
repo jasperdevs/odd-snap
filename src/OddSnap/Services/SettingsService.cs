@@ -151,6 +151,15 @@ public sealed class SettingsService : IDisposable
             NotifySaveFailed(saveFailure);
     }
 
+    public void FlushPendingWritesOrThrow()
+    {
+        string? failure;
+        lock (_gate)
+            failure = FlushPendingWrites_NoLock();
+        if (failure is not null)
+            throw new IOException("Settings could not be saved: " + failure);
+    }
+
     public void Dispose()
     {
         string? saveFailure = null;
@@ -347,6 +356,43 @@ public sealed class SettingsService : IDisposable
     {
         var redacted = SensitiveSettingsProtection.RedactForExport(settings, JsonOptions);
         return JsonSerializer.Serialize(redacted, JsonOptions);
+    }
+
+    public static async Task ExportToFileAsync(AppSettings settings, string outputPath)
+    {
+        var json = ExportRedactedJson(settings);
+        var fullPath = Path.GetFullPath(outputPath);
+        var temporaryPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(temporaryPath, json).ConfigureAwait(false);
+            File.Move(temporaryPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
+    }
+
+    public static bool TryDeserializeImport(string json, AppSettings current, out AppSettings imported)
+    {
+        imported = new AppSettings();
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.EnumerateObject().Any(property => typeof(AppSettings).GetProperty(property.Name) is { CanWrite: true }))
+                return false;
+            if (!TryDeserialize(json, out imported))
+                return false;
+            SensitiveSettingsProtection.PreserveMissingSecrets(imported, current, JsonOptions);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static AppSettings DeserializeSettings(string json)

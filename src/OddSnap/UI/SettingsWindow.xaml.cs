@@ -118,6 +118,7 @@ public partial class SettingsWindow : Window
     public event Action? UninstallRequested;
     public event Action? LocalizationChanged;
     public event Action? TraySettingsChanged;
+    public event Action? SettingsImported;
 
     public SettingsWindow(SettingsService settingsService, HistoryService historyService, ImageSearchIndexService imageSearchIndexService)
     {
@@ -126,6 +127,7 @@ public partial class SettingsWindow : Window
         _imageSearchIndexService = imageSearchIndexService;
         InitializeComponent();
         OddSnapWindowChrome.Apply(this);
+        StateChanged += (_, _) => { if (WindowState == WindowState.Minimized) Hide(); };
         Theme.Refresh();
         Theme.ApplyTo(Application.Current.Resources);
         ApplyThemeColors();
@@ -794,6 +796,7 @@ public partial class SettingsWindow : Window
     }
 
     private void TitleBar_CloseRequested(object? sender, EventArgs e) => Close();
+    private void TitleBar_MinimizeRequested(object? sender, EventArgs e) => Hide();
 
     private void ApplyMicaBackdrop()
     {

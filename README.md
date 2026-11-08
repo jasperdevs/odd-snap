@@ -38,6 +38,8 @@
   <img src="assets/mainshot.png" alt="oddsnap screenshot" width="780" />
 </p>
 
+> **Star count:** OddSnap had around 300 stars before I accidentally made the repository private, which reset the count.
+
 <h2 align="center">Download</h2>
 
 <p align="center">

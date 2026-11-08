@@ -18,9 +18,10 @@ public partial class App
         if (Volatile.Read(ref _isShuttingDown) != 0) return;
         if (_recentCapturesWindow is { } existing)
         {
+            if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
+            if (!existing.IsVisible) existing.Show();
             if (activate)
             {
-                if (existing.WindowState == WindowState.Minimized) existing.WindowState = WindowState.Normal;
                 existing.Activate();
             }
             _ = existing.RefreshAsync();

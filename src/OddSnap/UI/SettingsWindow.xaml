@@ -609,6 +609,7 @@
 
         <controls:OddSnapTitleBar Grid.Row="0"
                                   Title="Settings"
+                                  MinimizeRequested="TitleBar_MinimizeRequested"
                                   CloseRequested="TitleBar_CloseRequested"/>
 
         <!-- Sidebar + Content -->

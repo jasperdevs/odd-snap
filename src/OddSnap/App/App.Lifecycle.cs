@@ -26,11 +26,11 @@ public partial class App
         if (Volatile.Read(ref _isShuttingDown) != 0)
             return;
 
-        if (_settingsWindow is { IsVisible: true })
+        if (_settingsWindow is { } existing)
         {
+            RestoreAndActivateSettingsWindow(existing);
             if (openHistory)
-                _settingsWindow.OpenHistoryFromTray();
-            RestoreAndActivateSettingsWindow(_settingsWindow);
+                existing.OpenHistoryFromTray();
             return;
         }
 
@@ -124,12 +124,14 @@ public partial class App
         win.UninstallRequested += uninstallHandler;
         win.LocalizationChanged += localizationHandler;
         win.TraySettingsChanged += traySettingsHandler;
+        win.SettingsImported += ApplyImportedSettings;
         win.Closed += (_, _) =>
         {
             win.HotkeyChanged -= hotkeyHandler;
             win.UninstallRequested -= uninstallHandler;
             win.LocalizationChanged -= localizationHandler;
             win.TraySettingsChanged -= traySettingsHandler;
+            win.SettingsImported -= ApplyImportedSettings;
             _settingsWindow = null;
             ScheduleIdleMemoryTrim();
         };
@@ -149,7 +151,32 @@ public partial class App
         if (window.WindowState == WindowState.Minimized)
             window.WindowState = WindowState.Normal;
 
+        if (!window.IsVisible)
+            window.Show();
+
         window.Activate();
+    }
+
+    private void ApplyImportedSettings()
+    {
+        if (Volatile.Read(ref _isShuttingDown) != 0) return;
+        var settings = _settingsService!.Settings;
+        SoundService.Muted = settings.MuteSounds;
+        SoundService.SetPack(settings.SoundPack);
+        UI.Motion.Disabled = settings.DisableAnimations;
+        UiScale.Set(settings.UiScale);
+        LocalizationService.ApplyCurrentCulture(settings.InterfaceLanguage);
+        foreach (Window window in Windows)
+            LocalizationService.ApplyTo(window, settings.InterfaceLanguage);
+        ToastWindow.SetPosition(settings.ToastPosition);
+        ToastWindow.SetDuration(settings.ToastDurationSeconds);
+        ToastWindow.SetButtonLayout(settings.ToastButtons);
+        ToastWindow.SetFadeOutBehavior(settings.ToastFadeOutEnabled, settings.ToastFadeOutSeconds);
+        ToastWindow.SetClosePreviewAfterCopy(settings.ClosePreviewAfterCopy);
+        if (_historyService is not null) _historyService.RetentionPeriod = settings.HistoryRetention;
+        SyncStartupRegistry(settings.StartWithWindows);
+        _trayIcon?.RefreshLocalization();
+        ApplyRuntimeSettings();
     }
 
     private void HandleSingleInstanceActivation(SingleInstanceActivationRequest request)

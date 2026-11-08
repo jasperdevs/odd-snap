@@ -30,6 +30,7 @@ public partial class OddSnapTitleBar : UserControl
             new PropertyMetadata(string.Empty));
 
     public event EventHandler? CloseRequested;
+    public event EventHandler? MinimizeRequested;
 
     public OddSnapTitleBar()
     {
@@ -95,6 +96,11 @@ public partial class OddSnapTitleBar : UserControl
     private void MinimizeBtn_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
+        if (MinimizeRequested is { } minimize)
+        {
+            minimize(this, EventArgs.Empty);
+            return;
+        }
         if (OwnerWindow is { } window)
             window.WindowState = WindowState.Minimized;
     }
